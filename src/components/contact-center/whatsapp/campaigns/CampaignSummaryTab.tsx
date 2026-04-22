@@ -401,21 +401,21 @@ export default function CampaignSummaryTab({ campaign }: Props) {
         <Card>
           <CardContent className="p-3 text-center">
             <Send className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-            <p className="text-xl font-bold">{campaign.sent_count}</p>
+            <p className="text-xl font-bold">{liveSent}</p>
             <p className="text-xs text-muted-foreground">Enviados</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
             <CheckCircle className="w-5 h-5 mx-auto mb-1 text-green-500" />
-            <p className="text-xl font-bold">{campaign.delivered_count}</p>
+            <p className="text-xl font-bold">{liveDelivered}</p>
             <p className="text-xs text-muted-foreground">Entregues</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
             <XCircle className="w-5 h-5 mx-auto mb-1 text-destructive" />
-            <p className="text-xl font-bold">{campaign.failed_count}</p>
+            <p className="text-xl font-bold">{liveFailed}</p>
             <p className="text-xs text-muted-foreground">Falhas</p>
           </CardContent>
         </Card>
@@ -423,8 +423,8 @@ export default function CampaignSummaryTab({ campaign }: Props) {
           <CardContent className="p-3 text-center">
             <TrendingUp className="w-5 h-5 mx-auto mb-1 text-yellow-500" />
             <p className="text-xl font-bold">
-              {deliveryRate}
-              {deliveryRate !== "—" ? "%" : ""}
+              {liveDeliveryRate}
+              {liveDeliveryRate !== "—" ? "%" : ""}
             </p>
             <p className="text-xs text-muted-foreground">Taxa de Entrega</p>
           </CardContent>
