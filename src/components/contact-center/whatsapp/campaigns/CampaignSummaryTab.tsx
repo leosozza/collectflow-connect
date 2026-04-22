@@ -43,7 +43,14 @@ import {
   PieChart,
   Pie,
   Cell,
+  LabelList,
 } from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { useQuery } from "@tanstack/react-query";
 
 const statusLabels: Record<string, string> = {
