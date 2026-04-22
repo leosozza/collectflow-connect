@@ -216,26 +216,33 @@ Deno.serve(async (req) => {
                 totalSent++;
 
                 // Timeline: client_events
-                try {
-                  await supabase.from("client_events").insert({
-                    tenant_id: tenant.id,
-                    client_id: client.id,
-                    client_cpf: client.cpf,
-                    event_type: "message_sent",
-                    event_source: eventSource,
-                    event_channel: "whatsapp",
-                    event_value: message.slice(0, 200),
-                    metadata: {
-                      rule_id: rule.id,
-                      rule_name: rule.name,
-                      days_offset: rule.days_offset,
-                      provider: providerName,
-                      provider_message_id: providerMessageId,
-                      instance_id: rule.instance_id || null,
-                    },
-                  });
-                } catch (evtErr: any) {
-                  console.error(`[send-notifications] client_events insert failed:`, evtErr?.message || evtErr);
+                // Timeline: client_events (apenas se temos client_id)
+                if (client.client_id) {
+                  try {
+                    await supabase.from("client_events").insert({
+                      tenant_id: tenant.id,
+                      client_id: client.client_id,
+                      client_cpf: client.cpf,
+                      event_type: "message_sent",
+                      event_source: eventSource,
+                      event_channel: "whatsapp",
+                      event_value: message.slice(0, 200),
+                      metadata: {
+                        rule_id: rule.id,
+                        rule_name: rule.name,
+                        rule_type: ruleType,
+                        source: client.source || ruleType,
+                        days_offset: rule.days_offset,
+                        provider: providerName,
+                        provider_message_id: providerMessageId,
+                        instance_id: rule.instance_id || null,
+                        agreement_id: client.agreement_id || null,
+                        installment_key: client.installment_key || null,
+                      },
+                    });
+                  } catch (evtErr: any) {
+                    console.error(`[send-notifications] client_events insert failed:`, evtErr?.message || evtErr);
+                  }
                 }
               } else {
                 totalFailed++;
