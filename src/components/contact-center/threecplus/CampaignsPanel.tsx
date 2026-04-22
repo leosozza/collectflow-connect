@@ -9,10 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Slider } from "@/components/ui/slider";
+
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, Gauge, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
+import { Loader2, RefreshCw, Plus, ChevronDown, ChevronUp, Users, Trash2, Pause, Play, BarChart3, ListChecks, Phone, AlertTriangle, Webhook, Coffee } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { extractList, extractObject, normalizeCampaignStatus } from "@/lib/threecplusUtils";
@@ -46,9 +46,7 @@ const CampaignsPanel = () => {
   const [loadingLists, setLoadingLists] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Record<string, string>>({});
 
-  // Aggressiveness
-  const [aggressiveness, setAggressiveness] = useState<Record<string, number>>({});
-  const [savingAggr, setSavingAggr] = useState<string | null>(null);
+  // (Aggressiveness removed — 3CPlus does not honor this setting)
 
   // Work break group per campaign
   const [campaignWBG, setCampaignWBG] = useState<Record<string, string>>({});
@@ -123,14 +121,15 @@ const CampaignsPanel = () => {
       const data = await invoke("list_campaigns");
       const list = extractList(data);
       setCampaigns(list);
-      const aggrMap: Record<string, number> = {};
       const wbgMap: Record<string, string> = {};
       list.forEach((c: any) => {
-        const n = normalizeCampaignStatus(c);
-        aggrMap[String(c.id)] = n.aggressiveness;
-        if (c.work_break_group_id) wbgMap[String(c.id)] = String(c.work_break_group_id);
+        // 3CPlus may return work_break_group_id in multiple shapes
+        const wbgId =
+          c.work_break_group_id ??
+          c.work_break_group?.id ??
+          c.dialer_settings?.work_break_group_id;
+        if (wbgId) wbgMap[String(c.id)] = String(wbgId);
       });
-      setAggressiveness(prev => ({ ...prev, ...aggrMap }));
       setCampaignWBG(prev => ({ ...prev, ...wbgMap }));
     } catch {
       toast.error("Erro ao carregar campanhas");
@@ -208,17 +207,7 @@ const CampaignsPanel = () => {
     }
   };
 
-  const handleSaveAggressiveness = async (campaignId: string) => {
-    setSavingAggr(campaignId);
-    try {
-      await invoke("update_campaign", { campaign_id: campaignId, aggressiveness: aggressiveness[campaignId] ?? 1 });
-      toast.success("Agressividade atualizada!");
-    } catch {
-      toast.error("Erro ao atualizar agressividade");
-    } finally {
-      setSavingAggr(null);
-    }
-  };
+  // (handleSaveAggressiveness removed — feature deprecated)
 
   const handleSaveWorkBreakGroup = async (campaignId: string) => {
     setSavingWBG(campaignId);
