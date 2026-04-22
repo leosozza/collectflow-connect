@@ -38,10 +38,10 @@ Deno.serve(async (req) => {
     let totalSkippedDup = 0;
 
     for (const tenant of tenants || []) {
-      // 2. Regras ativas
+      // 2. Regras ativas (com nome do credor para filtrar clientes via coluna textual `credor`)
       const { data: rules, error: rErr } = await supabase
         .from("collection_rules")
-        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id")
+        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id, credor:credores(razao_social)")
         .eq("tenant_id", tenant.id)
         .eq("is_active", true);
       if (rErr) {
@@ -83,16 +83,17 @@ Deno.serve(async (req) => {
           };
         }
 
-        // 5. Buscar clientes elegíveis
+        // 5. Buscar clientes elegíveis (clients.credor é texto = razao_social)
         let clientQ = supabase
           .from("clients")
-          .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, credor_id, phone, email")
+          .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone, email")
           .eq("tenant_id", tenant.id)
           .in("status", ALLOWED_STATUSES)
           .eq("data_vencimento", dateStr);
 
-        if (rule.credor_id) {
-          clientQ = clientQ.eq("credor_id", rule.credor_id);
+        const credorNome = (rule as any).credor?.razao_social;
+        if (credorNome) {
+          clientQ = clientQ.eq("credor", credorNome);
         }
 
         const { data: clients, error: cErr } = await clientQ;
