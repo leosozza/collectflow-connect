@@ -512,10 +512,6 @@ export default function CampaignSummaryTab({ campaign }: Props) {
               {campaign.message_mode === "template" ? "Template" : "Personalizada"}
             </p>
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs">Provider</p>
-            <p className="font-medium">{campaign.provider_category}</p>
-          </div>
         </CardContent>
       </Card>
 
