@@ -87,7 +87,7 @@ const statusColors: Record<string, string> = {
   scheduled: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
   sending: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
   completed: "bg-green-500/20 text-green-700 dark:text-green-300",
-  completed_with_errors: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300",
+  completed_with_errors: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
   failed: "bg-destructive/20 text-destructive",
   paused: "bg-orange-500/20 text-orange-700 dark:text-orange-300",
   cancelled: "bg-muted text-muted-foreground",
