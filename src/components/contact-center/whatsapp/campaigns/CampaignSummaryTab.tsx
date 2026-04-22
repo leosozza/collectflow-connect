@@ -141,7 +141,10 @@ export default function CampaignSummaryTab({ campaign }: Props) {
 
   const barData = instanceMetrics.map((m) => ({
     name: m.instance_name,
-    count: m.recipients,
+    recipients: m.recipients,
+    sent: m.sent,
+    delivered: m.delivered,
+    failed: m.failed,
   }));
 
   // ----------------- W2.2 — Preview de mensagem -----------------
