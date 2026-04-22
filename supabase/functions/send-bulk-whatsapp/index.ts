@@ -234,6 +234,23 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     });
   }
 
+  // ===== AUTO-HEAL: free orphan recipients stuck in `processing` (>5min) =====
+  // A previous worker died mid-chunk leaving recipients flagged as `processing`.
+  // Now that we hold the lock, reclaim them so this run can actually drain the queue.
+  try {
+    const orphanCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { error: healErr, count: healed } = await supabase
+      .from("whatsapp_campaign_recipients")
+      .update({ status: "pending", updated_at: new Date().toISOString() }, { count: "exact" })
+      .eq("campaign_id", campaignId)
+      .eq("status", "processing")
+      .lt("updated_at", orphanCutoff);
+    if (healErr) console.error(`[Campaign ${campaignId}] auto-heal orphan recipients failed:`, healErr.message);
+    else if ((healed || 0) > 0) console.log(`[Campaign ${campaignId}] auto-heal: requeued ${healed} orphan recipient(s)`);
+  } catch (e: any) {
+    console.error(`[Campaign ${campaignId}] auto-heal exception:`, e?.message);
+  }
+
   const originType: string = campaign.origin_type || "OP_CARTEIRA";
   const providerCategory: string = campaign.provider_category || "unofficial";
   const throttle = getThrottleConfig(providerCategory, originType);
