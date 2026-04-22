@@ -45,12 +45,180 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const supabase = createClient(supabaseUrl, serviceKey);
+
+  // Parse optional payload (on-demand mode)
+  let payload: { credor_id?: string; tenant_id?: string } = {};
+  if (req.method === "POST") {
+    try {
+      const text = await req.text();
+      if (text) payload = JSON.parse(text);
+    } catch {
+      // ignore — empty body means cron call
+    }
+  }
+
+  const onDemand = !!payload.credor_id;
+  let triggeredBy: string | null = null;
+  let onDemandTenantId: string | null = null;
+  let onDemandCredorName: string | null = null;
+
+  // Auth gate for on-demand mode
+  if (onDemand) {
+    const authHeader = req.headers.get("Authorization") || "";
+    const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const isSystemCall = bearer === serviceKey;
+
+    // Resolve credor → tenant + name
+    const { data: credorRow, error: credorErr } = await supabase
+      .from("credores")
+      .select("id, tenant_id, razao_social, nome_fantasia")
+      .eq("id", payload.credor_id!)
+      .maybeSingle();
+    if (credorErr || !credorRow) {
+      return new Response(JSON.stringify({ error: "Credor não encontrado" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    onDemandTenantId = credorRow.tenant_id;
+    onDemandCredorName = credorRow.razao_social || credorRow.nome_fantasia;
+
+    if (!isSystemCall) {
+      // Validate user JWT and tenant role
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData, error: userErr } = await userClient.auth.getUser();
+      if (userErr || !userData?.user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      triggeredBy = userData.user.id;
+
+      const { data: tu } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("user_id", triggeredBy)
+        .eq("tenant_id", onDemandTenantId)
+        .maybeSingle();
+
+      const { data: isSuper } = await supabase.rpc("is_super_admin", { _user_id: triggeredBy });
+      const allowedRoles = ["admin", "gerente", "supervisor"];
+      if (!isSuper && !(tu && allowedRoles.includes((tu as any).role))) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+  }
 
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0];
 
   try {
+    // ============= ON-DEMAND MODE: only cancel overdue for one credor =============
+    if (onDemand) {
+      let query = supabase
+        .from("agreements")
+        .select("id, tenant_id, created_by, client_name, client_cpf, credor, first_due_date, entrada_date, entrada_value")
+        .eq("status", "overdue")
+        .eq("tenant_id", onDemandTenantId!);
+      // Filter by credor name (agreements.credor stores the name string)
+      if (onDemandCredorName) query = query.eq("credor", onDemandCredorName);
+      const { data: overdueAgreements, error: errOd } = await query;
+      if (errOd) throw errOd;
+
+      const { data: credorPrazo } = await supabase
+        .from("credores")
+        .select("prazo_dias_acordo")
+        .eq("id", payload.credor_id!)
+        .maybeSingle();
+      const prazo = (credorPrazo as any)?.prazo_dias_acordo;
+
+      let expiredCount = 0;
+      let clientsUpdated = 0;
+      const errors: string[] = [];
+
+      if (prazo && prazo > 0 && overdueAgreements && overdueAgreements.length > 0) {
+        const toCancel: any[] = [];
+        for (const a of overdueAgreements) {
+          const earliestDue = (a.entrada_value > 0 && a.entrada_date) ? a.entrada_date : a.first_due_date;
+          const dueDate = new Date(earliestDue);
+          const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays >= prazo) toCancel.push(a);
+        }
+
+        if (toCancel.length > 0) {
+          const ids = toCancel.map((a: any) => a.id);
+          const { error: updErr } = await supabase
+            .from("agreements")
+            .update({ status: "cancelled", cancellation_type: "auto_expired" })
+            .in("id", ids);
+          if (updErr) errors.push(updErr.message);
+          expiredCount = toCancel.length;
+
+          const { data: quebraStatus } = await supabase
+            .from("tipos_status")
+            .select("id")
+            .eq("nome", "Quebra de Acordo")
+            .eq("tenant_id", onDemandTenantId!)
+            .maybeSingle();
+
+          const updateData: any = { status: "pendente" };
+          if (quebraStatus?.id) updateData.status_cobranca_id = quebraStatus.id;
+
+          const cpfVariants: string[] = [];
+          for (const a of toCancel) {
+            const rawCpf = (a.client_cpf || "").replace(/[.\-]/g, "");
+            const fmtCpf = rawCpf.length === 11
+              ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+              : rawCpf;
+            cpfVariants.push(rawCpf, fmtCpf, a.client_cpf);
+          }
+          const uniqueCpfs = [...new Set(cpfVariants)];
+
+          const { count } = await supabase
+            .from("clients")
+            .update(updateData, { count: "exact" })
+            .eq("status", "em_acordo")
+            .in("cpf", uniqueCpfs)
+            .eq("tenant_id", onDemandTenantId!);
+          clientsUpdated = count || 0;
+
+          const notifications = toCancel.map((a: any) => ({
+            tenant_id: a.tenant_id,
+            user_id: a.created_by,
+            title: "Acordo cancelado automaticamente",
+            message: `O acordo de ${a.client_name} (${a.client_cpf}) foi cancelado após ${prazo} dias de vencimento.`,
+            type: "error",
+            reference_type: "agreement",
+            reference_id: a.id,
+          }));
+          await supabase.from("notifications").insert(notifications);
+        }
+      }
+
+      // Audit log
+      if (triggeredBy) {
+        await supabase.from("audit_logs").insert({
+          tenant_id: onDemandTenantId,
+          user_id: triggeredBy,
+          action: "auto_expire_agreements_manual",
+          entity_type: "credor",
+          entity_id: payload.credor_id,
+          details: { credor_id: payload.credor_id, expired_count: expiredCount, clients_updated: clientsUpdated, prazo_dias_acordo: prazo },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({ expired_count: expiredCount, clients_updated: clientsUpdated, errors }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ============= CRON MODE (unchanged) =============
     // 1. Fetch all active agreements
     const { data: activeAgreements, error: err1 } = await supabase
       .from("agreements")

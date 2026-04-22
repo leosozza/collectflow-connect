@@ -96,6 +96,15 @@ export const deleteCredor = async (id: string) => {
   if (error) throw error;
 };
 
+// ====== ON-DEMAND: expirar acordos vencidos de um credor ======
+export const triggerExpireAgreementsForCredor = async (credorId: string, tenantId: string) => {
+  const { data, error } = await supabase.functions.invoke("auto-expire-agreements", {
+    body: { credor_id: credorId, tenant_id: tenantId },
+  });
+  if (error) throw error;
+  return data as { expired_count: number; clients_updated: number; errors: string[] };
+};
+
 // ====== EQUIPES ======
 export const fetchEquipes = async (tenantId: string) => {
   const { data, error } = await supabase

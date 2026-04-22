@@ -1,10 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
-import { upsertCredor } from "@/services/cadastrosService";
+import { upsertCredor, triggerExpireAgreementsForCredor } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import CredorReguaTab from "./CredorReguaTab";
 import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
@@ -58,7 +68,7 @@ const FORMATTING_TOOLS = [
 ];
 
 const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
-  const { tenant } = useTenant();
+  const { tenant, tenantUser } = useTenant();
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState<any>({});
@@ -68,6 +78,13 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  // Captura o prazo original ao abrir, para detectar reduções no save
+  const [prazoOriginal, setPrazoOriginal] = useState<number | null>(null);
+  const [prazoConfirm, setPrazoConfirm] = useState<{ oldPrazo: number; newPrazo: number; closeAfter: boolean } | null>(null);
+  const [applyingExpire, setApplyingExpire] = useState(false);
+
+  const canApplyExpireNow = !!tenantUser && ["super_admin", "admin", "gerente", "supervisor"].includes(tenantUser.role);
 
   useEffect(() => {
     if (open) {
@@ -81,6 +98,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         setForm(editData);
         setHonorarios(editing.honorarios_grade || []);
         setEnderecoOpen(!!(editing.cep || editing.endereco || editing.numero || editing.bairro || editing.cidade || editing.uf));
+        setPrazoOriginal(typeof editing.prazo_dias_acordo === "number" ? editing.prazo_dias_acordo : null);
       } else {
         setForm({
           status: "ativo", tipo_conta: "corrente", gateway_ambiente: "producao", gateway_status: "ativo",
@@ -89,6 +107,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           ...Object.fromEntries(Object.entries(TEMPLATE_DEFAULTS).map(([k, v]) => [k, v])),
         });
         setHonorarios([]);
+        setPrazoOriginal(null);
       }
     }
   }, [open, editing]);
@@ -105,7 +124,21 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => upsertCredor(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["credores"] }); toast.success("Credor salvo!"); onOpenChange(false); },
+    onSuccess: (_data, variables: any) => {
+      queryClient.invalidateQueries({ queryKey: ["credores"] });
+      toast.success("Credor salvo!");
+      const newPrazo = parseInt(variables?.prazo_dias_acordo) || 30;
+      if (
+        canApplyExpireNow &&
+        editing?.id &&
+        prazoOriginal != null &&
+        newPrazo < prazoOriginal
+      ) {
+        setPrazoConfirm({ oldPrazo: prazoOriginal, newPrazo, closeAfter: true });
+      } else {
+        onOpenChange(false);
+      }
+    },
     onError: () => toast.error("Erro ao salvar credor"),
   });
 
@@ -117,6 +150,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     if (!editing?.id) return;
     setSavingNegociacao(true);
     try {
+      const newPrazo = parseInt(form.prazo_dias_acordo) || 30;
       const { error } = await supabase
         .from("credores" as any)
         .update({
@@ -127,18 +161,52 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           desconto_maximo: parseFloat(form.desconto_maximo) || 0,
           juros_mes: parseFloat(form.juros_mes) || 0,
           multa: parseFloat(form.multa) || 0,
-          prazo_dias_acordo: parseInt(form.prazo_dias_acordo) || 30,
+          prazo_dias_acordo: newPrazo,
           indice_correcao_monetaria: form.indice_correcao_monetaria || null,
         } as any)
         .eq("id", editing.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Regras de negociação salvas!");
+      if (canApplyExpireNow && prazoOriginal != null && newPrazo < prazoOriginal) {
+        setPrazoConfirm({ oldPrazo: prazoOriginal, newPrazo, closeAfter: false });
+      }
+      setPrazoOriginal(newPrazo);
     } catch {
       toast.error("Erro ao salvar regras");
     } finally {
       setSavingNegociacao(false);
     }
+  };
+
+  const runApplyExpireNow = async () => {
+    if (!editing?.id || !tenant?.id) return;
+    setApplyingExpire(true);
+    try {
+      const result = await triggerExpireAgreementsForCredor(editing.id, tenant.id);
+      toast.success(
+        `${result.expired_count} acordo(s) expirado(s), ${result.clients_updated} cliente(s) movidos para Quebra de Acordo.`
+      );
+      queryClient.invalidateQueries({ queryKey: ["credores"] });
+      queryClient.invalidateQueries({ queryKey: ["agreements"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      const closeAfter = prazoConfirm?.closeAfter;
+      setPrazoConfirm(null);
+      if (closeAfter) onOpenChange(false);
+    } catch (e: any) {
+      toast.error("Erro ao reprocessar acordos", {
+        description: e?.message || "Tente novamente.",
+        action: { label: "Tentar novamente", onClick: () => runApplyExpireNow() },
+      });
+    } finally {
+      setApplyingExpire(false);
+    }
+  };
+
+  const skipApplyExpireNow = () => {
+    const closeAfter = prazoConfirm?.closeAfter;
+    setPrazoConfirm(null);
+    if (closeAfter) onOpenChange(false);
   };
 
   const handleSaveGrade = async () => {
@@ -866,6 +934,30 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           <Button onClick={handleSave} disabled={saveMutation.isPending}>{saveMutation.isPending ? "Salvando..." : "Salvar Credor"}</Button>
         </div>
       </SheetContent>
+
+      <AlertDialog open={!!prazoConfirm} onOpenChange={(o) => { if (!o && !applyingExpire) skipApplyExpireNow(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Aplicar novo prazo aos acordos vencidos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você reduziu o prazo de pagamento de <strong>{prazoConfirm?.oldPrazo}</strong> para{" "}
+              <strong>{prazoConfirm?.newPrazo}</strong> dias. Deseja aplicar essa nova regra agora aos acordos
+              vencidos deste credor? Acordos com mais de {prazoConfirm?.newPrazo} dias de atraso serão marcados
+              como <strong>Quebra de Acordo</strong> imediatamente.
+              <br /><br />
+              Caso contrário, a nova regra entra em vigor automaticamente na próxima rotina diária (03:00 BRT).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={applyingExpire} onClick={skipApplyExpireNow}>
+              Aplicar somente na próxima rotina
+            </AlertDialogCancel>
+            <AlertDialogAction disabled={applyingExpire} onClick={(e) => { e.preventDefault(); runApplyExpireNow(); }}>
+              {applyingExpire ? "Processando..." : "Aplicar agora"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 };
