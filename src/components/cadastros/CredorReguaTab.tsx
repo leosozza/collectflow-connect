@@ -11,12 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   fetchCollectionRules,
   createCollectionRule,
   updateCollectionRule,
   deleteCollectionRule,
   CollectionRule,
+  RuleType,
 } from "@/services/automacaoService";
 import { fetchEligibleInstances, EligibleInstance } from "@/services/whatsappCampaignService";
 
@@ -24,19 +26,28 @@ interface CredorReguaTabProps {
   credorId: string | undefined;
 }
 
-const TEMPLATE_VARS = ["{{nome}}", "{{cpf}}", "{{valor_parcela}}", "{{data_vencimento}}", "{{credor}}"];
+const WALLET_VARS = ["{{nome}}", "{{cpf}}", "{{credor}}", "{{valor}}", "{{data_vencimento}}"];
+const AGREEMENT_VARS = ["{{nome}}", "{{cpf}}", "{{credor}}", "{{valor_parcela}}", "{{vencimento_parcela}}", "{{n_parcela}}", "{{total_parcelas}}", "{{linha_digitavel}}"];
 const SAMPLE_DATA: Record<string, string> = {
   "{{nome}}": "João Silva",
   "{{cpf}}": "123.456.789-00",
-  "{{valor_parcela}}": "R$ 350,00",
-  "{{data_vencimento}}": "15/03/2026",
   "{{credor}}": "Empresa Exemplo",
+  "{{valor}}": "R$ 350,00",
+  "{{data_vencimento}}": "15/03/2026",
+  "{{valor_parcela}}": "R$ 350,00",
+  "{{vencimento_parcela}}": "15/03/2026",
+  "{{n_parcela}}": "2",
+  "{{total_parcelas}}": "6",
+  "{{linha_digitavel}}": "23793.38128 60082...",
 };
 
-const DEFAULT_TEMPLATE =
-  "Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}. Entre em contato para regularizar.";
+const DEFAULT_TEMPLATES: Record<RuleType, string> = {
+  wallet: "Olá {{nome}}, identificamos um débito em aberto no valor de {{valor}} com vencimento em {{data_vencimento}}. Entre em contato para regularizar.",
+  agreement: "Olá {{nome}}, sua parcela {{n_parcela}}/{{total_parcelas}} no valor de {{valor_parcela}} vence em {{vencimento_parcela}}. Conte com a gente!",
+};
 
 const channelLabel: Record<string, string> = { whatsapp: "WhatsApp", email: "Email", both: "Ambos" };
+const ruleTypeLabel: Record<RuleType, string> = { wallet: "Carteira", agreement: "Acordo" };
 
 const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const { tenant } = useTenant();
