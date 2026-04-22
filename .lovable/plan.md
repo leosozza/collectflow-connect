@@ -1,81 +1,100 @@
 
+## Plano: corrigir a falsa “pausa” da campanha e parar o watchdog de ficar ressuscitando campanhas antigas
 
-## Plano: campanha de WhatsApp para no meio do disparo (nunca finaliza)
+### O que está acontecendo agora
 
-### Por que não termina
+A campanha `Disparo carteira 10:32` **não está parada de verdade neste momento**. No banco ela continua em `sending`, com `last_chunk_at` recente e os contadores subindo (já passou de 71/6 para 80/7 depois do print). O problema é duplo:
 
-A campanha **`Disparo carteira 10:32`** está agora em `sending` com **59 enviados, 5 falhas, 135 pendentes**, lock travado em `worker_25c1373f` desde 19:32 UTC e o último checkpoint às 19:33:50 — ou seja, o worker morreu há ~10 minutos atrás e ninguém reiniciou.
+1. **A UI fica presa no estado “pausado pelo limite de execução”**
+   - `send-bulk-whatsapp` grava `progress_metadata.timed_out = true` quando um ciclo bate no limite.
+   - Quando o próximo worker retoma, `updateCheckpoint()` **não limpa esse flag**.
+   - Resultado: o banner continua dizendo “pausado”, mesmo com envio retomado.
 
-Investigando, descobri o que está faltando:
+2. **Os cards do resumo ficam com números antigos**
+   - `CampaignSummaryTab` só atualiza ao vivo `status` + `progress_metadata`.
+   - Os KPIs (`sent_count`, `failed_count`) continuam vindo do objeto `campaign` carregado uma vez em `CampaignDetailView`.
+   - Resultado: a tela mostra 71/6 enquanto o banco já está em 80/7.
 
-1. O `send-bulk-whatsapp` tem limite forçado de **120 s por execução** (`MAX_EXECUTION_MS`) por causa do hard-limit de 150 s do edge runtime. Ao expirar, ele:
-   - libera o lock,
-   - re-marca recipients `processing` → `pending`,
-   - dispara um **self-retrigger** via `fetch()` para si mesmo (fire-and-forget).
-2. Esse self-retrigger é frágil: qualquer falha de rede, restart do runtime ou race com outro worker faz a corrente parar — e **não tem ninguém para ressuscitar**.
-3. Existe um watchdog perfeito embutido no `dispatch-scheduled-campaigns` (linhas 432-466): ele varre toda hora campanhas em `sending` com lock vazio/stale e dispara um novo worker. **Mas a função nunca foi agendada no `pg_cron`.** Conferi todas as migrations: `pg_cron` está habilitado, mas nenhum `cron.schedule(...)` aponta para `dispatch-scheduled-campaigns`. Sem o cron, o watchdog nunca roda.
+3. **O watchdog está gastando energia com campanhas antigas que nunca foram encerradas**
+   - Hoje há várias campanhas antigas ainda marcadas como `sending`, com `last_chunk_at` de dias atrás e pendências residuais.
+   - O `dispatch-scheduled-campaigns` tenta reativá-las a cada minuto, poluindo o watchdog e confundindo o diagnóstico operacional.
 
-A frase do usuário "para quando saio da tela" é **engano de causalidade**: sair/entrar da tela não interrompe nada (`startCampaign` é `fire-and-forget` server-side). O que acontece é coincidência temporal — a primeira janela de 120 s aconteceu enquanto a tela estava aberta (49 enviados), depois a corrente quebrou e ninguém retomou.
+### Correção proposta
 
-### O usuário pediu: "sem limitador, mas respeitando o período de envio"
+#### 1. Fazer a UI refletir o estado real da campanha em tempo quase real
 
-Entendo que isso significa:
-- **Manter** os delays anti-ban entre mensagens (8-15 s não-oficial, 1-3 s oficial) e a pausa de lote (2 min a cada 15 mensagens). Esses são o "período de envio" que protege contra ban.
-- **Remover** a sensação de "pára sozinho" — a campanha precisa drenar até o último destinatário sem depender de o usuário ficar com a tela aberta nem de o navegador retransmitir nada.
+Em `CampaignDetailView.tsx`:
+- adicionar polling do detalhe completo da campanha enquanto `status === "sending"` (ex.: a cada 5s);
+- passar a versão atualizada do objeto `campaign` para `CampaignSummaryTab`.
 
-### Correção (3 frentes, cirúrgica)
+Em `CampaignSummaryTab.tsx`:
+- usar os contadores live (`sent_count`, `failed_count`, `delivered_count`, `updated_at`, `progress_metadata`) da consulta mais recente;
+- recalcular cards, badge de status e métricas a partir da campanha live, não do snapshot inicial;
+- exibir banner de timeout **só se realmente estiver sem progresso recente**.
 
-#### 1. Agendar o cron do dispatcher (raiz do problema)
+#### 2. Limpar o estado de “timeout” assim que um novo worker reassume
 
-Migration nova que cria:
-```sql
-SELECT cron.schedule(
-  'whatsapp-dispatch-scheduled-campaigns',
-  '* * * * *',  -- a cada minuto
-  $$ SELECT net.http_post(
-       url := 'https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/dispatch-scheduled-campaigns',
-       headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <service_role>'),
-       body := '{}'::jsonb
-     ); $$
-);
-```
+Em `supabase/functions/send-bulk-whatsapp/index.ts`:
+- ao adquirir lock com sucesso, limpar flags transitórias do `progress_metadata`, como:
+  - `timed_out`
+  - `batch_resting`
+  - `resting_instance`
+- no `updateCheckpoint()`, gravar explicitamente que a campanha voltou a processar, por exemplo:
+  - `timed_out: false`
+  - `batch_resting: false`
+  - `resumed_at`
+  - `worker_id`
+- no final da campanha, garantir que o `progress_metadata` final não carregue restos de ciclo anterior.
 
-A partir desse momento, **toda campanha em `sending` com worker morto é ressuscitada em até 60 s automaticamente**, até drenar todos os pendentes. Sem aumentar nada nos delays.
+Isso faz o banner sair automaticamente quando a campanha já retomou.
 
-#### 2. Reforçar o self-retrigger do worker para ser mais resiliente
+#### 3. Melhorar a lógica visual do banner “Disparo pausado”
 
-Em `send-bulk-whatsapp` (final do `handleCampaignFlow`), trocar o `fetch().catch()` por `EdgeRuntime.waitUntil(fetch(...))`. Isso garante que o runtime não mate o socket antes da requisição sair. Hoje, sob carga, o `catch()` engole o erro e o retrigger morre.
+Hoje o banner depende muito de `timed_out`. Vou ajustar para priorizar o comportamento real:
+- se `status === sending` e `last_chunk_at` é recente: mostrar “Em envio / retomado automaticamente”, não “pausado”;
+- se está em pausa anti-ban: mostrar o painel de pausa anti-ban;
+- se `timed_out === true` **e** o tempo sem progresso passou do limiar: mostrar banner de retomada manual;
+- se o watchdog já retomou e o progresso voltou a andar: esconder o banner de pausa.
 
-#### 3. Reset manual da campanha travada da Bárbara
+#### 4. Encerrar campanhas antigas órfãs para limpar o watchdog
 
-Migration one-shot só para essa campanha:
-- Liberar `processing_locked_at = NULL` em `whatsapp_campaigns` para `6c97163b…`.
-- Resetar `processing` → `pending` nos recipients dela (se houver).
-- Disparar manualmente `send-bulk-whatsapp` via `pg_net` para retomar imediatamente sem esperar 60 s do cron.
+Há 13 campanhas antigas em `sending` com `last_chunk_at` de dias atrás. Vou fazer um cleanup controlado:
+- identificar campanhas `sending` com:
+  - `pending = 0` e `processing = 0` → marcar como `completed` / `completed_with_errors`;
+  - `pending > 0` mas claramente órfãs/antigas → avaliar caso a caso e retomar ou encerrar corretamente;
+- evitar que o `dispatch-scheduled-campaigns` fique reinvocando lixo histórico todo minuto.
 
-### O que **não** vou alterar (proteção anti-ban permanece)
+Isso melhora a confiabilidade do watchdog para as campanhas realmente ativas.
 
-- `MIN_DELAY_MS` / `MAX_DELAY_MS` por categoria (8-15 s não-oficial) — mantidos.
-- `BATCH_THRESHOLD` / `BATCH_REST_MS` (15 msgs → pausa 2 min) — mantidos.
-- `MAX_EXECUTION_MS = 120000` por worker — mantido (é limite do runtime, não do produto).
+#### 5. Validação específica da campanha da Bárbara
 
-A "sem limitador" do pedido vira: sem limite de quantos workers serão acionados em sequência. O cron + self-retrigger garantem que a corrente continue de onde parou, indefinidamente, até `pending = 0`.
+Após aplicar:
+1. Abrir `Disparo carteira 10:32`.
+2. Confirmar que:
+   - banner de “pausado” some quando houver novo progresso;
+   - cards passam a refletir o número real enviado/falhado sem precisar recarregar a página;
+   - ao bater novo ciclo de execução, a campanha entra em retomada automática sem ficar “travada visualmente”.
+3. Acompanhar logs do dispatcher e da função de envio para garantir que:
+   - há novo worker assumindo;
+   - o `last_chunk_at` avança;
+   - o watchdog não fica preso reprocessando campanhas históricas inúteis.
 
-### Arquivos alterados
+### Arquivos a alterar
 
-- `supabase/migrations/<novo>.sql` — `cron.schedule('whatsapp-dispatch-scheduled-campaigns', '* * * * *', …)` + reset da campanha `6c97163b…` + `net.http_post` para retomar imediatamente.
-- `supabase/functions/send-bulk-whatsapp/index.ts` — envolver o self-retrigger em `EdgeRuntime.waitUntil(...)` para garantir a saída do request mesmo no fim do ciclo de vida do worker.
+- `src/components/contact-center/whatsapp/campaigns/CampaignDetailView.tsx`
+- `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx`
+- `supabase/functions/send-bulk-whatsapp/index.ts`
+- migration SQL para cleanup/normalização das campanhas antigas em `sending`
 
-### Validação pós-deploy
+### Resultado esperado
 
-1. Em ≤ 60 s, a campanha `Disparo carteira 10:32` da Bárbara volta a `processing_locked_at` preenchido com novo `worker_*` e `sent_count` começa a subir de 59 em diante.
-2. Em ~30-40 min (135 pendentes × ~12 s + 9 pausas de 2 min), a campanha vira `completed` ou `completed_with_errors` automaticamente, sem ninguém precisar manter tela aberta.
-3. Logs do `dispatch-scheduled-campaigns` mostram, a cada minuto: `watchdog re-invoking ... (pending=N)` enquanto há pendentes; depois para de aparecer.
-4. Criar uma campanha-teste com 30 destinatários e fechar a aba imediatamente após disparar → conferir que finaliza sozinha.
+- A campanha pode continuar trabalhando em ciclos, respeitando os delays anti-ban, **sem parecer pausada quando já retomou**.
+- O admin vê os números reais subindo na tela.
+- O botão “Retomar agora” só aparece quando houver travamento de verdade.
+- O watchdog deixa de desperdiçar tentativas com campanhas velhas penduradas.
 
 ### Fora de escopo
 
-- Trocar o motor anti-ban (delays continuam exatos como estão).
-- Refatorar `send-bulk-whatsapp` para multiprocessing por instância (já é round-robin por instância na arquitetura atual).
-- Adicionar UI de "pausar campanha" (existe outra história, fora deste fix).
-
+- Alterar o ritmo anti-ban (8–15s e pausas por lote continuam iguais).
+- Reescrever o motor de envio em outro modelo.
+- Mudar regras de distribuição por instância.
