@@ -82,18 +82,18 @@ const recipientStatusLabels: Record<string, string> = {
   skipped: "Ignorado",
 };
 
-// Cores semânticas alinhadas ao design system (tokens HSL do tema)
+// Cores fixas por status semântico (Falhou=vermelho, Enviado=azul, Entregue=verde, Pendente=cinza)
 const STATUS_PIE_COLORS: Record<string, string> = {
   Pendente: "hsl(var(--muted-foreground))",
-  Processando: "hsl(var(--accent))",
-  Enviado: "hsl(var(--primary))",
-  Entregue: "hsl(var(--success, 142 76% 36%))",
-  Lido: "hsl(var(--info, 199 89% 48%))",
+  Processando: "hsl(var(--muted))",
+  Enviado: "hsl(217 91% 60%)",
+  Entregue: "hsl(142 71% 45%)",
+  Lido: "hsl(142 71% 35%)",
   Falhou: "hsl(var(--destructive))",
   Ignorado: "hsl(var(--muted))",
 };
 
-const PIE_FALLBACK = "hsl(var(--primary))";
+const PIE_FALLBACK = "hsl(var(--muted-foreground))";
 
 // W2.3 — anti-ban constants (mirror of supabase/functions/send-bulk-whatsapp)
 const RATE_CONSTANTS = {
