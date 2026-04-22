@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTenant } from "@/hooks/useTenant";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Clock, MessageSquare, Mail, ArrowDown, ArrowUp, Minus, Smartphone } from "lucide-react";
@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
   fetchCollectionRules,
   createCollectionRule,
@@ -32,6 +33,9 @@ const SAMPLE_DATA: Record<string, string> = {
   "{{credor}}": "Empresa Exemplo",
 };
 
+const DEFAULT_TEMPLATE =
+  "Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}. Entre em contato para regularizar.";
+
 const channelLabel: Record<string, string> = { whatsapp: "WhatsApp", email: "Email", both: "Ambos" };
 
 const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
@@ -42,15 +46,14 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState<CollectionRule | null>(null);
   const [saving, setSaving] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   // Form state
   const [name, setName] = useState("");
   const [channel, setChannel] = useState("whatsapp");
   const [daysOffset, setDaysOffset] = useState("0");
   const [instanceId, setInstanceId] = useState<string>("none");
-  const [template, setTemplate] = useState(
-    "Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}. Entre em contato para regularizar."
-  );
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
 
   const loadData = useCallback(async () => {
     if (!tenant || !credorId) return;
@@ -71,14 +74,39 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const resetForm = () => {
+  const resetFormFields = () => {
+    setName("");
+    setDaysOffset("0");
+    setTemplate(DEFAULT_TEMPLATE);
+  };
+
+  const closeAndReset = () => {
     setName("");
     setChannel("whatsapp");
     setDaysOffset("0");
     setInstanceId("none");
-    setTemplate("Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}. Entre em contato para regularizar.");
+    setTemplate(DEFAULT_TEMPLATE);
     setEditingRule(null);
     setShowForm(false);
+  };
+
+  const isDirty = () => name.trim().length > 0 || (template.trim() !== DEFAULT_TEMPLATE.trim() && template.trim().length > 0);
+
+  const tryClose = () => {
+    if (isDirty() && !editingRule) {
+      if (!confirm("Descartar esta regra? As alterações não foram salvas.")) return;
+    }
+    closeAndReset();
+  };
+
+  const openNew = () => {
+    setEditingRule(null);
+    setName("");
+    setChannel("whatsapp");
+    setDaysOffset("0");
+    setInstanceId("none");
+    setTemplate(DEFAULT_TEMPLATE);
+    setShowForm(true);
   };
 
   const openEdit = (rule: CollectionRule) => {
@@ -91,7 +119,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     setShowForm(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (closeAfter: boolean) => {
     if (!tenant || !credorId) return;
     if (!name.trim()) {
       toast.error("Informe um nome para a regra");
@@ -115,15 +143,24 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
         message_template: template,
         instance_id: instanceId === "none" ? null : instanceId,
       };
+      console.log("[CredorReguaTab] saving rule payload:", { ...payload, tenant_id: tenant.id, credor_id: credorId, editing: !!editingRule });
       if (editingRule) {
         await updateCollectionRule(editingRule.id, payload as any);
+        await loadData();
         toast.success("Regra atualizada!");
+        closeAndReset();
       } else {
         await createCollectionRule({ ...payload, tenant_id: tenant.id, credor_id: credorId, is_active: true } as any);
-        toast.success("Regra criada!");
+        await loadData();
+        if (closeAfter) {
+          toast.success("Regra criada!");
+          closeAndReset();
+        } else {
+          toast.success("Regra criada — pronto para a próxima");
+          resetFormFields();
+          setTimeout(() => nameInputRef.current?.focus(), 50);
+        }
       }
-      resetForm();
-      await loadData();
     } catch (err: any) {
       console.error("[CredorReguaTab] save error:", err);
       const msg = err?.message || err?.error_description || err?.hint || "Erro ao salvar regra";
@@ -182,86 +219,6 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     );
   }
 
-  if (showForm) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-foreground">{editingRule ? "Editar Regra" : "Nova Regra"}</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Nome da regra</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Lembrete 3 dias antes" className="h-9" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Canal</Label>
-            <Select value={channel} onValueChange={setChannel}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                <SelectItem value="email">Email</SelectItem>
-                <SelectItem value="both">Ambos</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Dias em relação ao vencimento</Label>
-            <Input type="number" value={daysOffset} onChange={e => setDaysOffset(e.target.value)} min={-30} max={90} className="h-9 w-32" />
-            <p className="text-xs text-muted-foreground">{daysLabel(parseInt(daysOffset) || 0)}</p>
-            <p className="text-[11px] text-muted-foreground leading-tight">
-              Negativo = antes do vencimento (prevenção). 0 = no dia. Positivo = após (cobrança).
-            </p>
-          </div>
-          {showInstanceSelect && (
-            <div className="space-y-1.5">
-              <Label className="text-xs flex items-center gap-1">
-                <Smartphone className="w-3 h-3" /> Instância WhatsApp
-              </Label>
-              <Select value={instanceId} onValueChange={setInstanceId}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar instância" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma (padrão)</SelectItem>
-                  {instances.map((inst) => (
-                    <SelectItem key={inst.id} value={inst.id}>
-                      {inst.name} ({inst.provider_category === "unofficial" ? "Não oficial" : "Oficial"})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Instância que executará o disparo desta regra</p>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs">Template da mensagem</Label>
-          <div className="flex flex-wrap gap-1 mb-1">
-            {TEMPLATE_VARS.map(v => (
-              <button key={v} type="button" onClick={() => setTemplate(t => t + " " + v)}
-                className="text-xs px-1.5 py-0.5 rounded bg-muted hover:bg-accent transition-colors font-mono"
-              >{v}</button>
-            ))}
-          </div>
-          <Textarea value={template} onChange={e => setTemplate(e.target.value)} rows={3} className="text-xs" />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs">Preview</Label>
-          <div className="p-2.5 rounded-md bg-muted text-xs whitespace-pre-wrap">{preview}</div>
-        </div>
-
-        <div className="flex gap-2">
-          <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
-          <Button size="sm" variant="outline" onClick={resetForm}>Cancelar</Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -269,7 +226,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           <p className="text-sm font-medium text-foreground">Régua de Cobrança</p>
           <p className="text-xs text-muted-foreground">Configure disparos automáticos antes e depois do vencimento</p>
         </div>
-        <Button size="sm" onClick={() => setShowForm(true)}>
+        <Button size="sm" type="button" onClick={openNew}>
           <Plus className="w-3 h-3 mr-1" /> Nova Regra
         </Button>
       </div>
@@ -338,8 +295,8 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
                 <TableCell><Switch checked={rule.is_active} onCheckedChange={() => handleToggle(rule)} /></TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(rule)}><Pencil className="w-3.5 h-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(rule)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
+                    <Button variant="ghost" size="icon" type="button" className="h-7 w-7" onClick={() => openEdit(rule)}><Pencil className="w-3.5 h-3.5" /></Button>
+                    <Button variant="ghost" size="icon" type="button" className="h-7 w-7" onClick={() => handleDelete(rule)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -347,6 +304,98 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           </TableBody>
         </Table>
       )}
+
+      <Dialog open={showForm} onOpenChange={(open) => { if (!open) tryClose(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingRule ? "Editar Regra" : "Nova Regra de Cobrança"}</DialogTitle>
+            <DialogDescription>
+              Configure quando e como uma mensagem automática será disparada para esta carteira.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nome da regra</Label>
+                <Input ref={nameInputRef} value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Lembrete 3 dias antes" className="h-9" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Canal</Label>
+                <Select value={channel} onValueChange={setChannel}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="both">Ambos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Dias em relação ao vencimento</Label>
+                <Input type="number" value={daysOffset} onChange={e => setDaysOffset(e.target.value)} min={-30} max={90} className="h-9 w-32" />
+                <p className="text-xs text-muted-foreground">{daysLabel(parseInt(daysOffset) || 0)}</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Negativo = antes do vencimento (prevenção). 0 = no dia. Positivo = após (cobrança).
+                </p>
+              </div>
+              {showInstanceSelect && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Smartphone className="w-3 h-3" /> Instância WhatsApp
+                  </Label>
+                  <Select value={instanceId} onValueChange={setInstanceId}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Selecionar instância" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma (padrão)</SelectItem>
+                      {instances.map((inst) => (
+                        <SelectItem key={inst.id} value={inst.id}>
+                          {inst.name} ({inst.provider_category === "unofficial" ? "Não oficial" : "Oficial"})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Instância que executará o disparo desta regra</p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Template da mensagem</Label>
+              <div className="flex flex-wrap gap-1 mb-1">
+                {TEMPLATE_VARS.map(v => (
+                  <button key={v} type="button" onClick={() => setTemplate(t => t + " " + v)}
+                    className="text-xs px-1.5 py-0.5 rounded bg-muted hover:bg-accent transition-colors font-mono"
+                  >{v}</button>
+                ))}
+              </div>
+              <Textarea value={template} onChange={e => setTemplate(e.target.value)} rows={3} className="text-xs" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Preview</Label>
+              <div className="p-2.5 rounded-md bg-muted text-xs whitespace-pre-wrap">{preview}</div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={tryClose} disabled={saving}>
+              Cancelar
+            </Button>
+            {!editingRule && (
+              <Button type="button" size="sm" variant="secondary" onClick={() => handleSave(false)} disabled={saving}>
+                {saving ? "Salvando..." : "Salvar e criar outra"}
+              </Button>
+            )}
+            <Button type="button" size="sm" onClick={() => handleSave(true)} disabled={saving}>
+              {saving ? "Salvando..." : "Salvar Regra"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
