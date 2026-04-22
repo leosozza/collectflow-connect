@@ -397,6 +397,38 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ---------- Auto-heal: free orphan recipients & stale locks ----------
+    // Workers that died mid-chunk leave recipients in `processing` and a fresh
+    // `processing_locked_at` on the campaign. We free both so the watchdog
+    // below can re-invoke and the next worker actually finds work to do.
+    const orphanRecipientCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const staleLockCutoff10m = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    const { data: sendingCampaigns } = await supabase
+      .from("whatsapp_campaigns")
+      .select("id")
+      .eq("status", "sending");
+
+    const sendingIds = (sendingCampaigns || []).map((c: any) => c.id);
+    if (sendingIds.length > 0) {
+      const { error: orphanErr, count: orphanCount } = await supabase
+        .from("whatsapp_campaign_recipients")
+        .update({ status: "pending", updated_at: new Date().toISOString() }, { count: "exact" })
+        .in("campaign_id", sendingIds)
+        .eq("status", "processing")
+        .lt("updated_at", orphanRecipientCutoff);
+      if (orphanErr) console.error("[dispatcher] auto-heal orphan recipients failed:", orphanErr.message);
+      else if ((orphanCount || 0) > 0) console.log(`[dispatcher] auto-heal: freed ${orphanCount} orphan recipients`);
+
+      const { error: lockErr, count: lockCount } = await supabase
+        .from("whatsapp_campaigns")
+        .update({ processing_locked_at: null, processing_locked_by: null }, { count: "exact" })
+        .eq("status", "sending")
+        .lt("processing_locked_at", staleLockCutoff10m);
+      if (lockErr) console.error("[dispatcher] auto-heal stale locks failed:", lockErr.message);
+      else if ((lockCount || 0) > 0) console.log(`[dispatcher] auto-heal: cleared ${lockCount} stale campaign locks`);
+    }
+
     // ---------- Watchdog: re-invoke orphaned `sending` campaigns ----------
     // A campaign is orphaned when it's still in `sending` but no worker is
     // actively processing it (lock null OR stale > 2min) and there are still
