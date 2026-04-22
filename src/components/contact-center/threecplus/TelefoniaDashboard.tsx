@@ -808,17 +808,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals, loadCampaignQualifications]);
 
-  // Detect external pause (status 6) and resolve pause name from loaded intervals
+  // Detect external pause (status 3 manual or 6 work_break) and resolve a label
   useEffect(() => {
-    if (isOperatorView && myAgent?.status === 6 && !activePauseName) {
-      // Try to find the interval name from the loaded pauseIntervals
-      // The API doesn't return pause_name for status 6, so we use a generic fallback
+    if (!isOperatorView) return;
+    const s = myAgent?.status;
+    if ((s === 3 || s === 6) && !activePauseName) {
       const storedName = sessionStorage.getItem("3cp_active_pause_name");
       if (storedName) {
         setActivePauseName(storedName);
-      } else if (pauseIntervals.length > 0) {
-        // Can't determine exact interval from API, show generic
-        setActivePauseName("Intervalo");
+      } else {
+        // Generic label so the header stays consistent and "Retomar" is reachable
+        setActivePauseName(s === 6 ? "Intervalo" : "Pausa");
       }
     }
   }, [isOperatorView, myAgent?.status, activePauseName, pauseIntervals]);
@@ -826,7 +826,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   // No longer needed — widget was removed
 
   // Derived telephony state: distinguish TPA from manual pause
-  const isManualPause = (myAgent?.status === 3 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break") && (!!activePauseName || myAgent?.status === 6);
+  // Treat status 3 (paused) and 6 (work_break) ALWAYS as manual pause so the "Retomar" button is always available,
+  // even when the operator was paused externally and we don't have a local activePauseName yet.
+  const isManualPause = myAgent?.status === 3 || myAgent?.status === 6 || ["paused", "work_break"].includes(String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_"));
   const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
 
   // No longer needed — pause controls were part of the widget
