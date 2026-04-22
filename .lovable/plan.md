@@ -1,67 +1,79 @@
 
 
-## Por que o disparo parou em 14/199 e como tornar verdadeiramente "background"
+## Horário de disparo na Régua + janela e throttle anti-ban
 
-### Causa raiz (confirmada)
+### Conceito
 
-**Campanha:** `Disparo carteira 10:32` — id `6c97163b…`, status `sending`, 14 processados, **184 pendentes**, lock ativo desde 13:32 (worker `worker_5b826c4d`), último chunk às 13:35:42 (sem progresso há ~12min).
+Cada regra ganha **horário próprio** de disparo. O motor (`send-notifications`) passa a rodar de 15 em 15 minutos e, a cada execução, só dispara regras cuja **janela horária** (timezone America/Sao_Paulo) esteja ativa naquele instante. Entre mensagens, aplica delay aleatório para não rajar.
 
-A função `send-bulk-whatsapp` tem janela máxima de **380s** por execução (`MAX_EXECUTION_MS = 380000`). Quando estoura:
-1. Marca `progress_metadata.timed_out=true`, libera o lock e devolve `status:partial`.
-2. **Não dispara nada para retomar.**
+### 1) Schema — novos campos em `collection_rules`
 
-A retomada depende exclusivamente do cron `wa-campaign-scheduler`, mas esse cron (`dispatch-scheduled-campaigns`) só busca campanhas com `status='scheduled' AND scheduled_for <= now()`. Campanhas em `sending` com `pending` restantes ficam **órfãs para sempre** até alguém reabrir manualmente.
+| Campo | Tipo | Default | Função |
+|---|---|---|---|
+| `send_time_start` | `time` | `09:00` | Hora local (BRT) para começar a disparar |
+| `send_time_end` | `time` | `18:00` | Hora limite — após isso, regra não dispara mais hoje |
+| `min_delay_seconds` | `int` | `8` | Delay mínimo entre 2 envios da regra |
+| `max_delay_seconds` | `int` | `15` | Delay máximo (random uniforme entre min e max) |
+| `daily_cap` | `int` | `null` | Teto opcional de envios/dia por regra (null = ilimitado) |
 
-Adicionalmente, a saída do navegador **não interfere** no processamento (já é fire-and-forget pelo dispatcher), mas como não há watchdog, o usuário percebe como "parou quando saí da página" — coincidência: o timeout de 380s bate quase com o tempo que ele ficou na tela.
+Validação por trigger: `send_time_start < send_time_end`, `min_delay_seconds <= max_delay_seconds`, `min_delay_seconds >= 3`.
 
-### Correções
+Defaults seguros mantêm comportamento atual para regras existentes (todas passam a rodar 09–18h com delay 8–15s).
 
-**1) Watchdog no `dispatch-scheduled-campaigns` (cron já roda a cada 1min)**
+### 2) Motor `send-notifications` — janela + throttle + cap
 
-Adicionar segunda query no scan: campanhas `status='sending'` com `processing_locked_at IS NULL` (ou `< now() - 2 min`) **E** com recipients pendentes. Para cada uma, fazer fire-and-forget POST para `send-bulk-whatsapp` com `{ campaign_id }` (mesmo padrão de `dispatchOneShot`). O `try_lock_campaign` já protege contra dupla execução (lock de 10min).
+- Computar `nowBRT` via `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' })`.
+- Para cada regra ativa: pular se `nowBRT.time < send_time_start` ou `>= send_time_end`.
+- Antes do loop de envios, contar `message_logs` `sent` da regra hoje; se já atingiu `daily_cap`, pular.
+- Após cada envio bem-sucedido, `await sleep(random(min,max)*1000)` antes do próximo. Se durante o sleep o relógio ultrapassar `send_time_end`, parar a regra (logar `skipped_after_window`).
+- Como a edge function tem ~400s de teto, o motor processa o que conseguir e o **próximo ciclo do cron (15min depois)** continua de onde parou — idempotência por `message_logs` já garante não duplicar.
 
-```sql
-SELECT id FROM whatsapp_campaigns
-WHERE status = 'sending'
-  AND (processing_locked_at IS NULL OR processing_locked_at < now() - interval '2 minutes')
-  AND EXISTS (SELECT 1 FROM whatsapp_campaign_recipients
-              WHERE campaign_id = whatsapp_campaigns.id AND status IN ('pending','processing'))
-LIMIT 20;
+### 3) Cron — de 1x/dia para a cada 15min
+
+Atualizar job `send-notifications-daily` (atual `0 11 * * *`) para `*/15 * * * *` e renomear para `send-notifications-tick`. Com a janela por regra, disparos ficam concentrados no horário configurado mesmo rodando 96x/dia.
+
+### 4) UI — card "Agendamento e Anti-Ban" no Dialog (`CredorReguaTab.tsx`)
+
+Novo bloco abaixo de "Dias em relação ao vencimento":
+
+```text
+┌─ Agendamento e Boas Práticas ──────────────────────┐
+│ Janela de envio:  [09:00] até [18:00] (horário BRT)│
+│ Delay entre msgs: [ 8 ] a [ 15 ] segundos          │
+│ Limite diário:    [____]  (vazio = sem limite)     │
+│ ℹ Sistema espalha disparos dentro da janela e usa  │
+│   delay aleatório para evitar bloqueio do WhatsApp.│
+└────────────────────────────────────────────────────┘
 ```
 
-**2) Self-retrigger no `send-bulk-whatsapp`**
+- 2 inputs `type="time"` (start/end), 2 numéricos (min/max delay), 1 numérico opcional (cap).
+- Validação client-side espelhando o trigger SQL.
+- Estado e payload incluídos em `handleSave` (criar/editar).
+- Tabela de regras ganha coluna **"Horário"** mostrando `09:00–18:00`.
 
-Antes de retornar `status:partial` (linha ~514), fazer fire-and-forget POST para si mesma com o mesmo `campaign_id`. Isso garante continuidade imediata em vez de esperar o cron de 1min. Defensivo: o lock já foi liberado e `try_lock_campaign` re-protege a próxima invocação.
+### 5) Service `automacaoService.ts`
 
-**3) Recuperar a campanha travada agora (one-shot)**
+Adicionar 5 campos em `CollectionRule` e propagar em `createCollectionRule` / `updateCollectionRule` (já é `Omit/Partial`, basta o tipo).
 
-Como a `Disparo carteira 10:32` está parada, basta forçar um chamado da edge function (o watchdog faria isso automaticamente após o deploy). Faço via SQL `net.http_post` ou pelo próprio cron quando rodar.
+### 6) Validação
 
-**4) Endpoint manual "Retomar" na UI da campanha** (opcional, mas útil)
-
-Botão "Retomar disparo" no header da página de detalhes (já mostra "Em ritmo / Próximo envio em breve") quando `status='sending'` e `progress_metadata.timed_out=true` ou `last_chunk_at` > 3min. Chama `send-bulk-whatsapp` com `{campaign_id}`. Permite intervenção sem esperar 1min do cron.
-
-**5) Bug não-crítico colateral**
-
-`dispatch-scheduled-campaigns` registra erros no boot (`utf-8-validate` / `bufferutil` not found). Vem do `@supabase/supabase-js@2.50.0` tentando carregar deps opcionais de WebSocket. **Não afeta runtime** (warnings inertes), mas poluem logs. Trocar import para `@2.39.0` (versão usada pelas demais functions, sem warning) opcionalmente.
-
-### Validação pós-implementação
-
-1. Deploy do watchdog + self-retrigger.
-2. Em ≤1 min, cron detecta `Disparo carteira 10:32` órfã e re-invoca → contador sobe acima de 14.
-3. Rodar até completar 199 (em ~3 ciclos de 380s ≈ 20min com anti-ban unofficial 8-15s + descanso de 2min a cada 15 msgs).
-4. Verificar no SQL: `status='completed'`, `sent_count + failed_count = 199`, `progress_metadata.remaining = 0`.
-5. Conferir logs: cada ciclo registra `[Campaign] Lock not acquired` em invocações concorrentes (prova que o lock funciona) e `[dispatcher] watchdog re-invoked X` para rastreio.
+1. Aplicar migration (defaults seguros).
+2. Editar a regra "DIA D" — setar janela 14:00–15:00 e cap 5.
+3. Trocar cron para `*/15`.
+4. Aguardar próximo tick: `message_logs` mostra ≤5 sent dentro da janela; logs do edge mostram delay 8–15s entre `sent_at` consecutivos.
+5. Tick fora da janela (ex: 16h): regra é pulada, log `[send-notifications] rule=X out-of-window`.
+6. Re-tick dentro da janela mesmo dia: cap respeitado, `skipped_cap` logado.
 
 ### Arquivos alterados
 
-- `supabase/functions/dispatch-scheduled-campaigns/index.ts` — adicionar bloco watchdog antes do scan de `scheduled`.
-- `supabase/functions/send-bulk-whatsapp/index.ts` — self-retrigger no caminho `timedOut && remaining > 0`.
-- `src/pages/CampanhasWhatsAppDetail.tsx` (ou equivalente) — botão "Retomar disparo" condicional.
+- `supabase/migrations/<nova>.sql` — 5 colunas + trigger de validação + atualizar `cron.job` (`*/15 * * * *`).
+- `supabase/functions/send-notifications/index.ts` — janela BRT, sleep entre envios, daily cap.
+- `src/services/automacaoService.ts` — tipo `CollectionRule` com novos campos.
+- `src/components/cadastros/CredorReguaTab.tsx` — card "Agendamento e Boas Práticas", coluna "Horário" na tabela.
 
 ### Fora de escopo
 
-- Aumentar `MAX_EXECUTION_MS` (limite hard do edge runtime ~400s — não compensa).
-- Mexer em janelas/throttle anti-ban (já calibrado).
-- Refatorar dispatcher para fila externa (Redis/BullMQ) — fora do stack Lovable Cloud.
+- Janela diferente por dia da semana (seg–sex vs sáb).
+- Pausa em feriados.
+- Dashboard de "ritmo de disparo da régua" em tempo real.
 
