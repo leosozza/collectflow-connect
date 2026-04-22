@@ -360,6 +360,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
               <TableHead>Disparo</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Canal</TableHead>
+              <TableHead>Horário</TableHead>
               <TableHead>Instância</TableHead>
               <TableHead>Ativo</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -368,6 +369,8 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           <TableBody>
             {filteredRules.sort((a, b) => a.days_offset - b.days_offset).map(rule => {
               const rt = (rule.rule_type || "wallet") as RuleType;
+              const startH = (rule.send_time_start || "09:00").slice(0, 5);
+              const endH = (rule.send_time_end || "18:00").slice(0, 5);
               return (
               <TableRow key={rule.id}>
                 <TableCell>
@@ -386,6 +389,12 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
                 </TableCell>
                 <TableCell className="text-sm font-medium">{rule.name}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{channelLabel[rule.channel] || rule.channel}</Badge></TableCell>
+                <TableCell>
+                  <span className="text-xs font-mono text-muted-foreground">{startH}–{endH}</span>
+                  {rule.daily_cap ? (
+                    <span className="ml-1 text-[10px] text-muted-foreground">(máx {rule.daily_cap}/dia)</span>
+                  ) : null}
+                </TableCell>
                 <TableCell>
                   {getInstanceName(rule.instance_id) ? (
                     <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
