@@ -6920,6 +6920,10 @@ export type Database = {
           read_ct: number
         }[]
       }
+      recompute_campaign_counters: {
+        Args: { _campaign_id: string }
+        Returns: undefined
+      }
       release_campaign_lock: {
         Args: { _campaign_id: string; _worker_id: string }
         Returns: undefined

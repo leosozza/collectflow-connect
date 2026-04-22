@@ -315,6 +315,40 @@ Deno.serve(async (req) => {
             supabase.from("chat_messages").update({ status: mappedStatus }).eq("provider_message_id", gsMessageId),
           ]);
         }
+
+        // ===== Propagate to campaign recipient =====
+        if (mappedStatus === "delivered" || mappedStatus === "read" || mappedStatus === "failed") {
+          const { data: recipient } = await supabase
+            .from("whatsapp_campaign_recipients")
+            .select("id, campaign_id, status, delivered_at")
+            .eq("provider_message_id", gsMessageId)
+            .maybeSingle();
+
+          if (recipient) {
+            const currentRank: Record<string, number> = { pending: 0, sent: 1, delivered: 2, read: 3, failed: 1 };
+            const cur = currentRank[recipient.status as string] ?? 0;
+
+            const patch: Record<string, any> = {};
+            if (mappedStatus === "failed" && recipient.status !== "read" && recipient.status !== "delivered") {
+              patch.status = "failed";
+              if (errorReason || errorCode) {
+                patch.error_message = errorReason ? `${errorCode ? `[${errorCode}] ` : ""}${errorReason}` : `Código: ${errorCode}`;
+              }
+            } else if (mappedStatus === "delivered" && cur < 2) {
+              patch.status = "delivered";
+              patch.delivered_at = new Date().toISOString();
+            } else if (mappedStatus === "read" && cur < 3) {
+              patch.status = "read";
+              patch.read_at = new Date().toISOString();
+              if (!recipient.delivered_at) patch.delivered_at = new Date().toISOString();
+            }
+
+            if (Object.keys(patch).length > 0) {
+              await supabase.from("whatsapp_campaign_recipients").update(patch).eq("id", recipient.id);
+              await supabase.rpc("recompute_campaign_counters", { _campaign_id: recipient.campaign_id });
+            }
+          }
+        }
       }
     }
 

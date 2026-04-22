@@ -334,19 +334,58 @@ Deno.serve(async (req) => {
     if (event === "messages.update") {
       const updates = Array.isArray(body.data) ? body.data : [body.data];
       for (const update of updates) {
-        const externalId = update?.key?.id;
-        const statusMap: Record<number, string> = {
-          2: "sent",
-          3: "delivered",
-          4: "read",
-          5: "read",
-        };
-        const newStatus = statusMap[update?.status] || null;
-        if (externalId && newStatus) {
-          await supabase
-            .from("chat_messages")
-            .update({ status: newStatus })
-            .eq("external_id", externalId);
+        const externalId = update?.key?.id || update?.keyId;
+        const rawStatus = update?.status;
+        // Evolution sends both numeric (2/3/4/5) and string (SENT/DELIVERY_ACK/READ) statuses
+        let newStatus: string | null = null;
+        if (typeof rawStatus === "number") {
+          const map: Record<number, string> = { 2: "sent", 3: "delivered", 4: "read", 5: "read" };
+          newStatus = map[rawStatus] || null;
+        } else if (typeof rawStatus === "string") {
+          const s = rawStatus.toUpperCase();
+          if (s === "SENT" || s === "SERVER_ACK") newStatus = "sent";
+          else if (s === "DELIVERY_ACK" || s === "DELIVERED") newStatus = "delivered";
+          else if (s === "READ" || s === "PLAYED") newStatus = "read";
+          else if (s === "FAILED" || s === "ERROR") newStatus = "failed";
+        }
+
+        if (!externalId || !newStatus) continue;
+
+        // Update chat message
+        await supabase
+          .from("chat_messages")
+          .update({ status: newStatus })
+          .eq("external_id", externalId);
+
+        // Propagate to campaign recipient (no regression: read > delivered > sent)
+        if (newStatus === "delivered" || newStatus === "read" || newStatus === "failed") {
+          const { data: recipient } = await supabase
+            .from("whatsapp_campaign_recipients")
+            .select("id, campaign_id, status, delivered_at")
+            .eq("provider_message_id", externalId)
+            .maybeSingle();
+
+          if (recipient) {
+            const currentRank: Record<string, number> = { pending: 0, sent: 1, delivered: 2, read: 3, failed: 1 };
+            const cur = currentRank[recipient.status as string] ?? 0;
+
+            const patch: Record<string, any> = {};
+            if (newStatus === "failed" && recipient.status !== "read" && recipient.status !== "delivered") {
+              patch.status = "failed";
+            } else if (newStatus === "delivered" && cur < 2) {
+              patch.status = "delivered";
+              patch.delivered_at = new Date().toISOString();
+            } else if (newStatus === "read" && cur < 3) {
+              patch.status = "read";
+              patch.read_at = new Date().toISOString();
+              if (!recipient.delivered_at) patch.delivered_at = new Date().toISOString();
+            }
+
+            if (Object.keys(patch).length > 0) {
+              await supabase.from("whatsapp_campaign_recipients").update(patch).eq("id", recipient.id);
+              await supabase.rpc("recompute_campaign_counters", { _campaign_id: recipient.campaign_id });
+            }
+          }
         }
       }
 
