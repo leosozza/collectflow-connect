@@ -247,6 +247,20 @@ export const manualPaymentService = {
         throw new Error("Pagamento já foi processado");
       }
 
+      // Guard: block confirmation if another confirmed payment already exists for the same installment
+      const existingConfirmed = await findExistingActivePayment(
+        mp.agreement_id,
+        mp.installment_key,
+        mp.installment_number,
+        paymentId,
+      );
+      if (existingConfirmed && existingConfirmed.status === "confirmed") {
+        throw new Error(
+          `Esta parcela já tem uma baixa confirmada (${formatBR(existingConfirmed.amount_paid)} em ${formatDateBR(existingConfirmed.payment_date || existingConfirmed.created_at)}). ` +
+          `Para alterar o valor, edite a baixa existente em vez de confirmar uma nova. Esta solicitação deve ser recusada.`
+        );
+      }
+
       // Get agreement info
       const { data: agr } = await supabase
         .from("agreements")
