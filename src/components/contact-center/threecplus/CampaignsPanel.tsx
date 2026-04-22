@@ -439,24 +439,7 @@ const CampaignsPanel = () => {
                             <RefreshCw className="w-3.5 h-3.5" /> Atualizar Detalhes
                           </Button>
                         </div>
-                        {/* Aggressiveness Slider */}
-                        <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
-                          <Gauge className="w-5 h-5 text-primary shrink-0" />
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-xs font-medium">Agressividade</Label>
-                              <span className="text-xs font-bold text-primary">{aggressiveness[cid] ?? 1}</span>
-                            </div>
-                            <Slider
-                              min={1} max={10} step={1}
-                              value={[aggressiveness[cid] ?? 1]}
-                              onValueChange={([v]) => setAggressiveness(prev => ({ ...prev, [cid]: v }))}
-                            />
-                          </div>
-                          <Button size="sm" variant="outline" disabled={savingAggr === cid} onClick={() => handleSaveAggressiveness(cid)} className="shrink-0">
-                            {savingAggr === cid ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
-                          </Button>
-                        </div>
+                        {/* Aggressiveness removed — 3CPlus does not honor this setting */}
 
                         {/* Work Break Group Selector */}
                         <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/20">
