@@ -538,27 +538,64 @@ export default function CampaignSummaryTab({ campaign }: Props) {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Status dos Destinatários</CardTitle>
             </CardHeader>
-            <CardContent className="flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={200}>
+            <CardContent className="flex flex-col items-center justify-center gap-3">
+              <ChartContainer
+                config={pieData.reduce((acc, item) => {
+                  acc[item.name] = {
+                    label: item.name,
+                    color: STATUS_PIE_COLORS[item.name] ?? PIE_FALLBACK,
+                  };
+                  return acc;
+                }, {} as ChartConfig)}
+                className="mx-auto aspect-square max-h-[260px] w-full [&_.recharts-text]:fill-white"
+              >
                 <PieChart>
+                  <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
                   <Pie
                     data={pieData}
+                    dataKey="value"
+                    nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={70}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
+                    innerRadius={60}
+                    outerRadius={100}
+                    cornerRadius={8}
+                    paddingAngle={4}
                   >
                     {pieData.map((entry, i) => (
                       <Cell
                         key={i}
                         fill={STATUS_PIE_COLORS[entry.name] ?? PIE_FALLBACK}
+                        stroke="hsl(var(--background))"
+                        strokeWidth={2}
                       />
                     ))}
+                    <LabelList
+                      dataKey="value"
+                      position="inside"
+                      stroke="none"
+                      fontSize={13}
+                      fontWeight={600}
+                      fill="#ffffff"
+                      formatter={(v: number) => (v > 0 ? v.toString() : "")}
+                    />
                   </Pie>
-                  <Tooltip />
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
+              {/* Legenda customizada */}
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs">
+                {pieData.map((entry) => (
+                  <div key={entry.name} className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-sm"
+                      style={{ backgroundColor: STATUS_PIE_COLORS[entry.name] ?? PIE_FALLBACK }}
+                    />
+                    <span className="text-muted-foreground">
+                      {entry.name} <span className="font-medium text-foreground">({entry.value})</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
