@@ -230,9 +230,11 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   });
 
   if (!lockAcquired) {
-    console.log(`[Campaign] Lock not acquired for ${campaignId} — another worker is processing`);
-    return new Response(JSON.stringify({ error: "Campanha já está sendo processada por outro worker", status: "locked" }), {
-      status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Benign: another worker (cron watchdog or self-retrigger) already holds the lock.
+    // Return 200 so the caller doesn't surface this as an error to the UI.
+    console.log(`[Campaign] Lock not acquired for ${campaignId} — another worker is processing (skipping)`);
+    return new Response(JSON.stringify({ status: "already_running", message: "Outro worker já está processando esta campanha" }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
