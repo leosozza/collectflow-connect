@@ -11,12 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   fetchCollectionRules,
   createCollectionRule,
   updateCollectionRule,
   deleteCollectionRule,
   CollectionRule,
+  RuleType,
 } from "@/services/automacaoService";
 import { fetchEligibleInstances, EligibleInstance } from "@/services/whatsappCampaignService";
 
@@ -24,19 +26,28 @@ interface CredorReguaTabProps {
   credorId: string | undefined;
 }
 
-const TEMPLATE_VARS = ["{{nome}}", "{{cpf}}", "{{valor_parcela}}", "{{data_vencimento}}", "{{credor}}"];
+const WALLET_VARS = ["{{nome}}", "{{cpf}}", "{{credor}}", "{{valor}}", "{{data_vencimento}}"];
+const AGREEMENT_VARS = ["{{nome}}", "{{cpf}}", "{{credor}}", "{{valor_parcela}}", "{{vencimento_parcela}}", "{{n_parcela}}", "{{total_parcelas}}", "{{linha_digitavel}}"];
 const SAMPLE_DATA: Record<string, string> = {
   "{{nome}}": "João Silva",
   "{{cpf}}": "123.456.789-00",
-  "{{valor_parcela}}": "R$ 350,00",
-  "{{data_vencimento}}": "15/03/2026",
   "{{credor}}": "Empresa Exemplo",
+  "{{valor}}": "R$ 350,00",
+  "{{data_vencimento}}": "15/03/2026",
+  "{{valor_parcela}}": "R$ 350,00",
+  "{{vencimento_parcela}}": "15/03/2026",
+  "{{n_parcela}}": "2",
+  "{{total_parcelas}}": "6",
+  "{{linha_digitavel}}": "23793.38128 60082...",
 };
 
-const DEFAULT_TEMPLATE =
-  "Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}. Entre em contato para regularizar.";
+const DEFAULT_TEMPLATES: Record<RuleType, string> = {
+  wallet: "Olá {{nome}}, identificamos um débito em aberto no valor de {{valor}} com vencimento em {{data_vencimento}}. Entre em contato para regularizar.",
+  agreement: "Olá {{nome}}, sua parcela {{n_parcela}}/{{total_parcelas}} no valor de {{valor_parcela}} vence em {{vencimento_parcela}}. Conte com a gente!",
+};
 
 const channelLabel: Record<string, string> = { whatsapp: "WhatsApp", email: "Email", both: "Ambos" };
+const ruleTypeLabel: Record<RuleType, string> = { wallet: "Carteira", agreement: "Acordo" };
 
 const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const { tenant } = useTenant();
@@ -51,9 +62,11 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   // Form state
   const [name, setName] = useState("");
   const [channel, setChannel] = useState("whatsapp");
+  const [ruleType, setRuleType] = useState<RuleType>("wallet");
   const [daysOffset, setDaysOffset] = useState("0");
   const [instanceId, setInstanceId] = useState<string>("none");
-  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATES.wallet);
+  const [filterType, setFilterType] = useState<"all" | RuleType>("all");
 
   const loadData = useCallback(async () => {
     if (!tenant || !credorId) return;
@@ -77,20 +90,24 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const resetFormFields = () => {
     setName("");
     setDaysOffset("0");
-    setTemplate(DEFAULT_TEMPLATE);
+    setTemplate(DEFAULT_TEMPLATES[ruleType]);
   };
 
   const closeAndReset = () => {
     setName("");
     setChannel("whatsapp");
+    setRuleType("wallet");
     setDaysOffset("0");
     setInstanceId("none");
-    setTemplate(DEFAULT_TEMPLATE);
+    setTemplate(DEFAULT_TEMPLATES.wallet);
     setEditingRule(null);
     setShowForm(false);
   };
 
-  const isDirty = () => name.trim().length > 0 || (template.trim() !== DEFAULT_TEMPLATE.trim() && template.trim().length > 0);
+  const isDirty = () => {
+    const defaults = Object.values(DEFAULT_TEMPLATES).map((t) => t.trim());
+    return name.trim().length > 0 || (template.trim().length > 0 && !defaults.includes(template.trim()));
+  };
 
   const tryClose = () => {
     if (isDirty() && !editingRule) {
@@ -103,15 +120,25 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     setEditingRule(null);
     setName("");
     setChannel("whatsapp");
+    setRuleType("wallet");
     setDaysOffset("0");
     setInstanceId("none");
-    setTemplate(DEFAULT_TEMPLATE);
+    setTemplate(DEFAULT_TEMPLATES.wallet);
     setShowForm(true);
+  };
+
+  const handleRuleTypeChange = (newType: RuleType) => {
+    const defaults = Object.values(DEFAULT_TEMPLATES).map((t) => t.trim());
+    if (defaults.includes(template.trim()) || template.trim() === "") {
+      setTemplate(DEFAULT_TEMPLATES[newType]);
+    }
+    setRuleType(newType);
   };
 
   const openEdit = (rule: CollectionRule) => {
     setName(rule.name);
     setChannel(rule.channel);
+    setRuleType(rule.rule_type || "wallet");
     setDaysOffset(rule.days_offset.toString());
     setInstanceId(rule.instance_id || "none");
     setTemplate(rule.message_template);
@@ -139,6 +166,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
       const payload = {
         name: name.trim(),
         channel,
+        rule_type: ruleType,
         days_offset: parsedDays,
         message_template: template,
         instance_id: instanceId === "none" ? null : instanceId,
@@ -198,10 +226,13 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     return <ArrowDown className="w-3 h-3 text-red-500" />;
   };
 
-  const preview = TEMPLATE_VARS.reduce(
+  const currentVars = ruleType === "agreement" ? AGREEMENT_VARS : WALLET_VARS;
+  const preview = currentVars.reduce(
     (text, v) => text.split(v).join(SAMPLE_DATA[v] || v),
     template
   );
+
+  const filteredRules = filterType === "all" ? rules : rules.filter((r) => (r.rule_type || "wallet") === filterType);
 
   const getInstanceName = (id: string | null) => {
     if (!id) return null;
@@ -226,9 +257,19 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           <p className="text-sm font-medium text-foreground">Régua de Cobrança</p>
           <p className="text-xs text-muted-foreground">Configure disparos automáticos antes e depois do vencimento</p>
         </div>
-        <Button size="sm" type="button" onClick={openNew}>
-          <Plus className="w-3 h-3 mr-1" /> Nova Regra
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={filterType} onValueChange={(v) => setFilterType(v as any)}>
+            <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="wallet">Carteira</SelectItem>
+              <SelectItem value="agreement">Acordo</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" type="button" onClick={openNew}>
+            <Plus className="w-3 h-3 mr-1" /> Nova Regra
+          </Button>
+        </div>
       </div>
 
       {/* Visual timeline */}
@@ -263,6 +304,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Tipo</TableHead>
               <TableHead>Disparo</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Canal</TableHead>
@@ -272,8 +314,18 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rules.sort((a, b) => a.days_offset - b.days_offset).map(rule => (
+            {filteredRules.sort((a, b) => a.days_offset - b.days_offset).map(rule => {
+              const rt = (rule.rule_type || "wallet") as RuleType;
+              return (
               <TableRow key={rule.id}>
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${rt === "agreement" ? "border-primary text-primary" : "border-accent-foreground/40"}`}
+                  >
+                    {ruleTypeLabel[rt]}
+                  </Badge>
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
                     {daysIcon(rule.days_offset)}
@@ -300,7 +352,8 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       )}
@@ -315,6 +368,25 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo de régua</Label>
+              <RadioGroup value={ruleType} onValueChange={(v) => handleRuleTypeChange(v as RuleType)} className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <RadioGroupItem value="wallet" id="rt-wallet" />
+                  <span>Título da Carteira</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <RadioGroupItem value="agreement" id="rt-agreement" />
+                  <span>Parcela de Acordo</span>
+                </label>
+              </RadioGroup>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                {ruleType === "wallet"
+                  ? "Dispara para clientes com título original em aberto (sem acordo ativo)."
+                  : "Dispara para parcelas de acordos vigentes que ainda não foram pagas."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Nome da regra</Label>
@@ -366,7 +438,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
             <div className="space-y-1.5">
               <Label className="text-xs">Template da mensagem</Label>
               <div className="flex flex-wrap gap-1 mb-1">
-                {TEMPLATE_VARS.map(v => (
+                {currentVars.map(v => (
                   <button key={v} type="button" onClick={() => setTemplate(t => t + " " + v)}
                     className="text-xs px-1.5 py-0.5 rounded bg-muted hover:bg-accent transition-colors font-mono"
                   >{v}</button>

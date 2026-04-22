@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendByProvider } from "../_shared/whatsapp-sender.ts";
 import { logMessage } from "../_shared/message-logger.ts";
+import { resolveTemplate } from "../_shared/template-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,9 +23,6 @@ Deno.serve(async (req) => {
   const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
   const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
-  // Status tolerados para disparo (prevenção e cobrança)
-  const ALLOWED_STATUSES = ["pendente", "em_dia", "EM ABERTO", "INADIMPLENTE"];
-
   try {
     // 1. Tenants ativos
     const { data: tenants, error: tErr } = await supabase
@@ -38,10 +36,10 @@ Deno.serve(async (req) => {
     let totalSkippedDup = 0;
 
     for (const tenant of tenants || []) {
-      // 2. Regras ativas (com nome do credor para filtrar clientes via coluna textual `credor`)
+      // 2. Regras ativas
       const { data: rules, error: rErr } = await supabase
         .from("collection_rules")
-        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id, credor:credores(razao_social)")
+        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id, rule_type")
         .eq("tenant_id", tenant.id)
         .eq("is_active", true);
       if (rErr) {
@@ -58,6 +56,7 @@ Deno.serve(async (req) => {
         const dateStr = targetDate.toISOString().split("T")[0];
 
         const eventSource = rule.days_offset < 0 ? "prevention" : "collection";
+        const ruleType: "wallet" | "agreement" = (rule as any).rule_type || "wallet";
 
         // 4. Resolver instância (se a regra define uma)
         let inst: any = null;
@@ -83,39 +82,18 @@ Deno.serve(async (req) => {
           };
         }
 
-        // 5. Buscar clientes elegíveis (clients.credor é texto = razao_social)
-        let clientQ = supabase
-          .from("clients")
-          .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone, email")
-          .eq("tenant_id", tenant.id)
-          .in("status", ALLOWED_STATUSES)
-          .eq("data_vencimento", dateStr);
-
-        const credorNome = (rule as any).credor?.razao_social;
-        if (credorNome) {
-          clientQ = clientQ.eq("credor", credorNome);
-        }
-
-        const { data: clients, error: cErr } = await clientQ;
+        // 5. Buscar elegíveis via RPC unificada (ramifica wallet vs agreement)
+        const { data: targets, error: cErr } = await supabase.rpc("get_rule_eligible_targets", {
+          p_rule_id: rule.id,
+          p_target_date: dateStr,
+        });
         if (cErr) {
-          console.error(`[send-notifications] rule=${rule.id} clients error:`, cErr);
+          console.error(`[send-notifications] rule=${rule.id} targets error:`, cErr);
           continue;
         }
 
-        for (const client of clients || []) {
-          const message = rule.message_template
-            .replace(/\{\{nome\}\}/g, client.nome_completo || "")
-            .replace(/\{\{cpf\}\}/g, client.cpf || "")
-            .replace(/\{\{valor_parcela\}\}/g,
-              new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
-                .format(Number(client.valor_parcela) || 0)
-            )
-            .replace(/\{\{data_vencimento\}\}/g,
-              client.data_vencimento
-                ? new Date(client.data_vencimento + "T12:00:00").toLocaleDateString("pt-BR")
-                : ""
-            )
-            .replace(/\{\{credor\}\}/g, client.credor || "");
+        for (const client of (targets || []) as any[]) {
+          const message = resolveTemplate(rule.message_template, client);
 
           // 6. WhatsApp
           if (rule.channel === "whatsapp" || rule.channel === "both") {
@@ -123,23 +101,33 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Idempotência: já enviado hoje para este (rule, client)?
+            // Idempotência: já enviado hoje para este (rule, alvo)?
+            // Para agreement: chave = agreement_id+installment_key. Para wallet: client_id ou cpf.
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
-            const { data: dupLog } = await supabase
+            let dupQuery = supabase
               .from("message_logs")
               .select("id")
               .eq("tenant_id", tenant.id)
-              .eq("client_id", client.id)
               .eq("rule_id", rule.id)
               .eq("status", "sent")
-              .gte("created_at", todayStart.toISOString())
-              .limit(1)
-              .maybeSingle();
+              .gte("created_at", todayStart.toISOString());
+
+            if (ruleType === "agreement" && client.agreement_id) {
+              dupQuery = dupQuery
+                .eq("metadata->>agreement_id", client.agreement_id)
+                .eq("metadata->>installment_key", client.installment_key || "");
+            } else if (client.client_id) {
+              dupQuery = dupQuery.eq("client_id", client.client_id);
+            } else {
+              dupQuery = dupQuery.eq("client_cpf", client.cpf);
+            }
+
+            const { data: dupLog } = await dupQuery.limit(1).maybeSingle();
 
             if (dupLog) {
               totalSkippedDup++;
-              console.log(`[send-notifications] dup-skip rule=${rule.id} client=${client.id}`);
+              console.log(`[send-notifications] dup-skip rule=${rule.id} target=${client.cpf}`);
               continue;
             }
 
@@ -198,7 +186,7 @@ Deno.serve(async (req) => {
 
               await logMessage(supabase, {
                 tenant_id: tenant.id,
-                client_id: client.id,
+                client_id: client.client_id,
                 client_cpf: client.cpf,
                 phone: client.phone,
                 channel: "whatsapp",
@@ -209,13 +197,18 @@ Deno.serve(async (req) => {
                 rule_id: rule.id,
                 metadata: {
                   source_type: "trigger",
+                  source: client.source || ruleType,
                   rule_id: rule.id,
                   rule_name: rule.name,
+                  rule_type: ruleType,
                   days_offset: rule.days_offset,
                   event_source: eventSource,
                   provider: providerName,
                   provider_message_id: providerMessageId,
                   instance_id: rule.instance_id || null,
+                  agreement_id: client.agreement_id || null,
+                  installment_key: client.installment_key || null,
+                  installment_number: client.installment_number ?? null,
                 },
               });
 
@@ -223,26 +216,33 @@ Deno.serve(async (req) => {
                 totalSent++;
 
                 // Timeline: client_events
-                try {
-                  await supabase.from("client_events").insert({
-                    tenant_id: tenant.id,
-                    client_id: client.id,
-                    client_cpf: client.cpf,
-                    event_type: "message_sent",
-                    event_source: eventSource,
-                    event_channel: "whatsapp",
-                    event_value: message.slice(0, 200),
-                    metadata: {
-                      rule_id: rule.id,
-                      rule_name: rule.name,
-                      days_offset: rule.days_offset,
-                      provider: providerName,
-                      provider_message_id: providerMessageId,
-                      instance_id: rule.instance_id || null,
-                    },
-                  });
-                } catch (evtErr: any) {
-                  console.error(`[send-notifications] client_events insert failed:`, evtErr?.message || evtErr);
+                // Timeline: client_events (apenas se temos client_id)
+                if (client.client_id) {
+                  try {
+                    await supabase.from("client_events").insert({
+                      tenant_id: tenant.id,
+                      client_id: client.client_id,
+                      client_cpf: client.cpf,
+                      event_type: "message_sent",
+                      event_source: eventSource,
+                      event_channel: "whatsapp",
+                      event_value: message.slice(0, 200),
+                      metadata: {
+                        rule_id: rule.id,
+                        rule_name: rule.name,
+                        rule_type: ruleType,
+                        source: client.source || ruleType,
+                        days_offset: rule.days_offset,
+                        provider: providerName,
+                        provider_message_id: providerMessageId,
+                        instance_id: rule.instance_id || null,
+                        agreement_id: client.agreement_id || null,
+                        installment_key: client.installment_key || null,
+                      },
+                    });
+                  } catch (evtErr: any) {
+                    console.error(`[send-notifications] client_events insert failed:`, evtErr?.message || evtErr);
+                  }
                 }
               } else {
                 totalFailed++;
@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
             } catch (err: any) {
               await logMessage(supabase, {
                 tenant_id: tenant.id,
-                client_id: client.id,
+                client_id: client.client_id,
                 client_cpf: client.cpf,
                 phone: client.phone,
                 channel: "whatsapp",
@@ -260,10 +260,14 @@ Deno.serve(async (req) => {
                 rule_id: rule.id,
                 metadata: {
                   source_type: "trigger",
+                  source: client.source || ruleType,
                   rule_id: rule.id,
                   rule_name: rule.name,
+                  rule_type: ruleType,
                   event_source: eventSource,
                   instance_id: rule.instance_id || null,
+                  agreement_id: client.agreement_id || null,
+                  installment_key: client.installment_key || null,
                 },
               });
               totalFailed++;
@@ -275,7 +279,7 @@ Deno.serve(async (req) => {
             if (client.email) {
               await logMessage(supabase, {
                 tenant_id: tenant.id,
-                client_id: client.id,
+                client_id: client.client_id,
                 client_cpf: client.cpf,
                 channel: "email",
                 status: "pending",
@@ -285,10 +289,14 @@ Deno.serve(async (req) => {
                 email_to: client.email,
                 metadata: {
                   source_type: "trigger",
+                  source: client.source || ruleType,
                   rule_id: rule.id,
                   rule_name: rule.name,
+                  rule_type: ruleType,
                   event_source: eventSource,
                   email_to: client.email,
+                  agreement_id: client.agreement_id || null,
+                  installment_key: client.installment_key || null,
                 },
               });
             }
