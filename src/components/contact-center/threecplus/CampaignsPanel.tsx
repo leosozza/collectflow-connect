@@ -138,6 +138,9 @@ const CampaignsPanel = () => {
     }
   };
 
+  const [lastDetailsUpdate, setLastDetailsUpdate] = useState<Record<string, Date>>({});
+  const [detailsTick, setDetailsTick] = useState(0);
+
   const loadCampaignDetails = async (campaignId: string) => {
     setLoadingLists(campaignId);
     try {
@@ -156,6 +159,7 @@ const CampaignsPanel = () => {
       setCampaignListsMetrics(prev => ({ ...prev, [campaignId]: listsMetrics ? extractList(listsMetrics) : [] }));
       setCampaignAgentsMetrics(prev => ({ ...prev, [campaignId]: agentsMetricsRes ? extractList(agentsMetricsRes) : [] }));
       setCampaignQualifications(prev => ({ ...prev, [campaignId]: qualsRes ? extractList(qualsRes) : [] }));
+      setLastDetailsUpdate(prev => ({ ...prev, [campaignId]: new Date() }));
     } catch {
       toast.error("Erro ao carregar detalhes da campanha");
     } finally {
