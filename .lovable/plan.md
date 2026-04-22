@@ -1,75 +1,67 @@
 
 
-## Diferenciar régua: Títulos Originais (Carteira) vs. Acordos Gerados
+## Por que o disparo parou em 14/199 e como tornar verdadeiramente "background"
 
-### Conceito
+### Causa raiz (confirmada)
 
-Hoje a régua trata tudo como "lembrete genérico". Vamos separar em **dois tipos de régua**, cada um com seu universo de elegibilidade, templates próprios e gestão independente:
+**Campanha:** `Disparo carteira 10:32` — id `6c97163b…`, status `sending`, 14 processados, **184 pendentes**, lock ativo desde 13:32 (worker `worker_5b826c4d`), último chunk às 13:35:42 (sem progresso há ~12min).
 
-| Tipo | Fonte de dados | Quando dispara | Exemplo |
-|---|---|---|---|
-| **Carteira** (título original) | `clients.data_vencimento` | Cliente sem acordo ativo, título vencendo/vencido | "Olá {{nome}}, identificamos um débito em aberto..." |
-| **Acordo** (parcela de acordo) | Parcelas de `agreements` ativos | Parcela do acordo vencendo/vencida | "Sua parcela {{n_parcela}}/{{total_parcelas}} vence em {{vencimento_parcela}}..." |
+A função `send-bulk-whatsapp` tem janela máxima de **380s** por execução (`MAX_EXECUTION_MS = 380000`). Quando estoura:
+1. Marca `progress_metadata.timed_out=true`, libera o lock e devolve `status:partial`.
+2. **Não dispara nada para retomar.**
 
-### 1) Schema (`collection_rules`)
+A retomada depende exclusivamente do cron `wa-campaign-scheduler`, mas esse cron (`dispatch-scheduled-campaigns`) só busca campanhas com `status='scheduled' AND scheduled_for <= now()`. Campanhas em `sending` com `pending` restantes ficam **órfãs para sempre** até alguém reabrir manualmente.
 
-Adicionar coluna `rule_type` (enum: `wallet` | `agreement`), default `wallet` para regras existentes. Validação por trigger: regra `agreement` exige `credor_id` (idem `wallet`).
+Adicionalmente, a saída do navegador **não interfere** no processamento (já é fire-and-forget pelo dispatcher), mas como não há watchdog, o usuário percebe como "parou quando saí da página" — coincidência: o timeout de 380s bate quase com o tempo que ele ficou na tela.
 
-### 2) Motor de elegibilidade (`send-notifications/index.ts` + RPC)
+### Correções
 
-Criar **RPC `get_rule_eligible_targets(rule_id, target_date)`** que ramifica por `rule_type`:
+**1) Watchdog no `dispatch-scheduled-campaigns` (cron já roda a cada 1min)**
 
-- **`wallet`**: `clients` do credor com `data_vencimento = target_date`, `status in ('pendente','vencido')`, **e que NÃO têm acordo ativo** (`NOT EXISTS` em `agreements` com status in `pending|approved`). Retorna `source='wallet'`.
-- **`agreement`**: expande parcelas de `agreements` ativos do credor (entrada + parcelas via `custom_installment_dates`/`first_due_date`/`new_installments`), filtra `due_date = target_date`, exclui parcelas com `manual_payments` confirmados ou `cobrancas` pagas. Retorna `source='agreement'`, `agreement_id`, `installment_key`, `installment_number`, `total_installments`, `installment_value`.
+Adicionar segunda query no scan: campanhas `status='sending'` com `processing_locked_at IS NULL` (ou `< now() - 2 min`) **E** com recipients pendentes. Para cada uma, fazer fire-and-forget POST para `send-bulk-whatsapp` com `{ campaign_id }` (mesmo padrão de `dispatchOneShot`). O `try_lock_campaign` já protege contra dupla execução (lock de 10min).
 
-Edge function passa a chamar a RPC e logar `metadata.source` + `metadata.agreement_id`/`installment_key` em `message_logs`.
-
-### 3) Templates: variáveis específicas por tipo
-
-Atualizar `_shared/template-resolver.ts`:
-
-- **Comuns** (ambos): `{{nome}}`, `{{cpf}}`, `{{credor}}`
-- **Wallet**: `{{valor}}`, `{{data_vencimento}}` (do título original)
-- **Agreement**: `{{valor_parcela}}`, `{{vencimento_parcela}}`, `{{n_parcela}}`, `{{total_parcelas}}`, `{{linha_digitavel}}` (se boleto disponível)
-
-Variáveis irrelevantes ao tipo retornam string vazia (não quebram template antigo).
-
-### 4) UI (`CredorReguaTab.tsx`)
-
-No Dialog de criar/editar regra, **primeiro campo** passa a ser:
-
-```text
-Tipo de régua:  ( ) Título da Carteira  ( ) Parcela de Acordo
+```sql
+SELECT id FROM whatsapp_campaigns
+WHERE status = 'sending'
+  AND (processing_locked_at IS NULL OR processing_locked_at < now() - interval '2 minutes')
+  AND EXISTS (SELECT 1 FROM whatsapp_campaign_recipients
+              WHERE campaign_id = whatsapp_campaigns.id AND status IN ('pending','processing'))
+LIMIT 20;
 ```
 
-- Ao selecionar, o painel "Variáveis disponíveis" abaixo do textarea do template **muda dinamicamente** mostrando só as variáveis válidas para o tipo.
-- Lista de regras existentes ganha **badge** ("Carteira" laranja / "Acordo" azul) pra leitura rápida.
-- Filtro no topo da aba: "Todas | Carteira | Acordo".
+**2) Self-retrigger no `send-bulk-whatsapp`**
 
-### 5) Migração de dados existentes
+Antes de retornar `status:partial` (linha ~514), fazer fire-and-forget POST para si mesma com o mesmo `campaign_id`. Isso garante continuidade imediata em vez de esperar o cron de 1min. Defensivo: o lock já foi liberado e `try_lock_campaign` re-protege a próxima invocação.
 
-Regras atuais ficam como `wallet` (mantém comportamento). Usuário cria as `agreement` novas conforme necessidade. Sem perda de dados.
+**3) Recuperar a campanha travada agora (one-shot)**
 
-### 6) Validação
+Como a `Disparo carteira 10:32` está parada, basta forçar um chamado da edge function (o watchdog faria isso automaticamente após o deploy). Faço via SQL `net.http_post` ou pelo próprio cron quando rodar.
 
-1. Aplicar migration + RPC.
-2. Criar 1 regra `wallet` (D-3) e 1 regra `agreement` (D0) para TESS MODELS.
-3. Rodar RPC para cada → comparar listas, garantir que cliente com acordo ativo **não** aparece na régua wallet.
-4. Invocar `send-notifications` → `message_logs.metadata.source` reflete `wallet` ou `agreement` corretamente.
-5. Conferir templates renderizados com variáveis específicas de cada tipo.
+**4) Endpoint manual "Retomar" na UI da campanha** (opcional, mas útil)
+
+Botão "Retomar disparo" no header da página de detalhes (já mostra "Em ritmo / Próximo envio em breve") quando `status='sending'` e `progress_metadata.timed_out=true` ou `last_chunk_at` > 3min. Chama `send-bulk-whatsapp` com `{campaign_id}`. Permite intervenção sem esperar 1min do cron.
+
+**5) Bug não-crítico colateral**
+
+`dispatch-scheduled-campaigns` registra erros no boot (`utf-8-validate` / `bufferutil` not found). Vem do `@supabase/supabase-js@2.50.0` tentando carregar deps opcionais de WebSocket. **Não afeta runtime** (warnings inertes), mas poluem logs. Trocar import para `@2.39.0` (versão usada pelas demais functions, sem warning) opcionalmente.
+
+### Validação pós-implementação
+
+1. Deploy do watchdog + self-retrigger.
+2. Em ≤1 min, cron detecta `Disparo carteira 10:32` órfã e re-invoca → contador sobe acima de 14.
+3. Rodar até completar 199 (em ~3 ciclos de 380s ≈ 20min com anti-ban unofficial 8-15s + descanso de 2min a cada 15 msgs).
+4. Verificar no SQL: `status='completed'`, `sent_count + failed_count = 199`, `progress_metadata.remaining = 0`.
+5. Conferir logs: cada ciclo registra `[Campaign] Lock not acquired` em invocações concorrentes (prova que o lock funciona) e `[dispatcher] watchdog re-invoked X` para rastreio.
 
 ### Arquivos alterados
 
-- `supabase/migrations/<nova>.sql` — coluna `rule_type` + RPC `get_rule_eligible_targets`.
-- `supabase/functions/send-notifications/index.ts` — usar RPC, logar source.
-- `supabase/functions/_shared/template-resolver.ts` — variáveis condicionais por tipo.
-- `src/services/automacaoService.ts` — tipo `CollectionRule.rule_type`.
-- `src/components/cadastros/CredorReguaTab.tsx` — seletor de tipo, badge, filtro, painel de variáveis dinâmico.
+- `supabase/functions/dispatch-scheduled-campaigns/index.ts` — adicionar bloco watchdog antes do scan de `scheduled`.
+- `supabase/functions/send-bulk-whatsapp/index.ts` — self-retrigger no caminho `timedOut && remaining > 0`.
+- `src/pages/CampanhasWhatsAppDetail.tsx` (ou equivalente) — botão "Retomar disparo" condicional.
 
 ### Fora de escopo
 
-- Regras híbridas (uma regra que cobre ambos) — mantemos separação estrita.
-- Boleto/linha digitável real puxada do gateway (placeholder; integração com Asaas/Negociarie fica para próximo passo).
-- Janela de horário e throttle (seguem no backlog acordado anteriormente).
-- Automação/workflows.
+- Aumentar `MAX_EXECUTION_MS` (limite hard do edge runtime ~400s — não compensa).
+- Mexer em janelas/throttle anti-ban (já calibrado).
+- Refatorar dispatcher para fila externa (Redis/BullMQ) — fora do stack Lovable Cloud.
 
