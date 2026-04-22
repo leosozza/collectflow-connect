@@ -211,13 +211,13 @@ export default function CampaignSummaryTab({ campaign }: Props) {
   // ----------------- W2.3 — Indicador de rate-limit ativo -----------------
   const isSending = campaign.status === "sending";
 
-  // Re-busca metadata a cada 5s enquanto envia
-  const { data: liveMeta } = useQuery({
+  // Re-busca metadata + counters a cada 5s enquanto envia
+  const { data: liveData } = useQuery({
     queryKey: ["campaign-progress-meta", campaign.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("whatsapp_campaigns" as any)
-        .select("status, progress_metadata")
+        .select("status, progress_metadata, sent_count, failed_count, delivered_count, updated_at")
         .eq("id", campaign.id)
         .single();
       return data as any;
@@ -226,9 +226,17 @@ export default function CampaignSummaryTab({ campaign }: Props) {
     refetchInterval: 5000,
   });
 
+  const liveStatus: string = liveData?.status || campaign.status;
   const meta: Record<string, any> | null =
-    liveMeta?.progress_metadata || campaign.progress_metadata || null;
-  const liveStatus: string = liveMeta?.status || campaign.status;
+    liveData?.progress_metadata || campaign.progress_metadata || null;
+  const liveSent = liveData?.sent_count ?? campaign.sent_count;
+  const liveFailed = liveData?.failed_count ?? campaign.failed_count;
+  const liveDelivered = liveData?.delivered_count ?? campaign.delivered_count;
+  const liveUpdatedAt: string | null = liveData?.updated_at || campaign.updated_at || null;
+
+  const liveDeliveryRate =
+    liveSent > 0 ? ((liveDelivered / liveSent) * 100).toFixed(1) : "—";
+
   const showRateLimit = liveStatus === "sending";
 
   // Tick de 1s para countdown
@@ -251,10 +259,9 @@ export default function CampaignSummaryTab({ campaign }: Props) {
     const restStartedAt: string | null = meta.batch_resting_started_at || meta.resting_started_at || null;
 
     const now = Date.now();
-    void tick; // garante recompute a cada segundo
+    void tick;
 
     if (resting) {
-      // Calcula tempo restante de pausa
       const startedMs = restStartedAt ? new Date(restStartedAt).getTime() : (lastChunkAt ? new Date(lastChunkAt).getTime() : now);
       const remainingMs = Math.max(0, constants.restMs - (now - startedMs));
       return {
@@ -273,7 +280,6 @@ export default function CampaignSummaryTab({ campaign }: Props) {
       };
     }
 
-    // Sem dados ainda — exibir delay base
     return {
       kind: "next" as const,
       remainingSec: Math.ceil(constants.avgDelayMs / 1000),
@@ -281,14 +287,25 @@ export default function CampaignSummaryTab({ campaign }: Props) {
   }, [showRateLimit, meta, campaign.provider_category, tick]);
 
   // ----------------- Detect stalled campaign + manual resume -----------------
+  // Banner "pausado" SÓ aparece se realmente está sem progresso recente.
+  // Worker ativo move tanto last_chunk_at quanto updated_at — usa o mais recente como referência.
   const lastChunkAtMeta: string | null = (meta as any)?.last_chunk_at || null;
   const timedOutFlag: boolean = !!(meta as any)?.timed_out;
-  const minutesSinceLastChunk = lastChunkAtMeta
-    ? (Date.now() - new Date(lastChunkAtMeta).getTime()) / 60000
-    : null;
+
+  const referenceTimes = [lastChunkAtMeta, liveUpdatedAt]
+    .filter(Boolean)
+    .map((t) => new Date(t as string).getTime());
+  const lastActivityMs = referenceTimes.length ? Math.max(...referenceTimes) : null;
+  const minutesSinceLastChunk =
+    lastActivityMs != null ? (Date.now() - lastActivityMs) / 60000 : null;
+
+  // Só considera travado se: timed_out + sem progresso há ≥3min.
+  // Se o worker já retomou (updated_at recente), o banner some automaticamente.
   const isStalled =
     isSending &&
-    (timedOutFlag || (minutesSinceLastChunk != null && minutesSinceLastChunk >= 3));
+    timedOutFlag &&
+    minutesSinceLastChunk != null &&
+    minutesSinceLastChunk >= 3;
 
   const [resuming, setResuming] = useState(false);
   async function handleResume() {
