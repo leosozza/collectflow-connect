@@ -1309,8 +1309,22 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </span>
           </div>
 
-          {/* Right spacer */}
-          <div className="w-4" />
+          {/* Right side: Force unpause escape hatch when stuck in pause for >60s */}
+          {isPaused && timerSeconds > 60 ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleUnpause}
+              disabled={unpausing}
+              className="gap-1.5 h-8 text-xs bg-white/20 hover:bg-white/30 border-0"
+              title="Pausa travada? Force a saída"
+            >
+              <Play className={`w-3.5 h-3.5 ${unpausing ? "animate-spin" : ""}`} />
+              Forçar saída
+            </Button>
+          ) : (
+            <div className="w-4" />
+          )}
         </div>
 
         {/* ── 4 KPI Cards ── */}
