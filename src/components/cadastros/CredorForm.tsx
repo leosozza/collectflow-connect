@@ -1,10 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
-import { upsertCredor } from "@/services/cadastrosService";
+import { upsertCredor, triggerExpireAgreementsForCredor } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import CredorReguaTab from "./CredorReguaTab";
 import AtendimentoFieldsConfig from "./AtendimentoFieldsConfig";
