@@ -267,12 +267,25 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     .single();
   const tenantSettings = (tenantData?.settings || {}) as Record<string, any>;
 
-  // Update campaign status to sending
-  if (campaign.status !== "sending") {
-    await supabase
-      .from("whatsapp_campaigns")
-      .update({ status: "sending", started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq("id", campaignId);
+  // Update campaign status to sending + clear stale "paused/timed_out" flags from previous cycle
+  {
+    const cleanedMeta = {
+      ...((campaign.progress_metadata as Record<string, any>) || {}),
+      timed_out: false,
+      batch_resting: false,
+      resting_instance: null,
+      resumed_at: new Date().toISOString(),
+      worker_id: workerId,
+    };
+    const updatePayload: Record<string, any> = {
+      progress_metadata: cleanedMeta,
+      updated_at: new Date().toISOString(),
+    };
+    if (campaign.status !== "sending") {
+      updatePayload.status = "sending";
+      updatePayload.started_at = campaign.started_at || new Date().toISOString();
+    }
+    await supabase.from("whatsapp_campaigns").update(updatePayload).eq("id", campaignId);
   }
 
   const evolutionUrl = Deno.env.get("EVOLUTION_API_URL")?.replace(/\/+$/, "") || "";
@@ -582,7 +595,12 @@ async function updateCheckpoint(supabase: any, campaignId: string, totalSent: nu
     progress_metadata: {
       processed: totalSent + totalFailed,
       last_chunk_at: new Date().toISOString(),
-      anti_ban_active: true, provider_category: providerCategory,
+      anti_ban_active: true,
+      provider_category: providerCategory,
+      // Explicitly clear stale flags so the UI doesn't keep showing "paused" while the worker is actively progressing
+      timed_out: false,
+      batch_resting: false,
+      resting_instance: null,
     },
     updated_at: new Date().toISOString(),
   }).eq("id", campaignId);
