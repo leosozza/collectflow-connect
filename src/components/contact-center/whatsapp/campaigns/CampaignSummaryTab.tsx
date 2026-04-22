@@ -67,6 +67,7 @@ const originLabels: Record<string, string> = {
 
 const recipientStatusLabels: Record<string, string> = {
   pending: "Pendente",
+  processing: "Processando",
   sent: "Enviado",
   delivered: "Entregue",
   read: "Lido",
@@ -74,13 +75,18 @@ const recipientStatusLabels: Record<string, string> = {
   skipped: "Ignorado",
 };
 
-const PIE_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(142 76% 36%)",
-  "hsl(0 84% 60%)",
-  "hsl(45 93% 47%)",
-  "hsl(var(--muted-foreground))",
-];
+// Cores semânticas alinhadas ao design system (tokens HSL do tema)
+const STATUS_PIE_COLORS: Record<string, string> = {
+  Pendente: "hsl(var(--muted-foreground))",
+  Processando: "hsl(var(--accent))",
+  Enviado: "hsl(var(--primary))",
+  Entregue: "hsl(var(--success, 142 76% 36%))",
+  Lido: "hsl(var(--info, 199 89% 48%))",
+  Falhou: "hsl(var(--destructive))",
+  Ignorado: "hsl(var(--muted))",
+};
+
+const PIE_FALLBACK = "hsl(var(--primary))";
 
 // W2.3 — anti-ban constants (mirror of supabase/functions/send-bulk-whatsapp)
 const RATE_CONSTANTS = {
