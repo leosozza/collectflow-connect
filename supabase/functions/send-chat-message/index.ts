@@ -309,12 +309,31 @@ Deno.serve(async (req) => {
         .eq("id", rpcResult.message_id);
     }
 
-    // 11. Waiting → open for outbound
-    if (conv.status === "waiting") {
-      await supabase
+    // 11. Waiting → open for outbound + auto-assign to operator if unassigned
+    {
+      const updates: Record<string, unknown> = {};
+      if (conv.status === "waiting") updates.status = "open";
+
+      // Auto-assign to the sending operator when conversation has no owner
+      const { data: senderProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const { data: convOwner } = await supabase
         .from("conversations")
-        .update({ status: "open" })
-        .eq("id", conversationId);
+        .select("assigned_to")
+        .eq("id", conversationId)
+        .maybeSingle();
+
+      if (senderProfile?.id && !convOwner?.assigned_to) {
+        updates.assigned_to = senderProfile.id;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await supabase.from("conversations").update(updates).eq("id", conversationId);
+      }
     }
 
     // 12. Trigger transcription for outbound audio (operator recordings)
