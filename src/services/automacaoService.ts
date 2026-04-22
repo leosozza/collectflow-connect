@@ -1,11 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export type RuleType = "wallet" | "agreement";
+
 export interface CollectionRule {
   id: string;
   tenant_id: string;
   credor_id: string | null;
   name: string;
   channel: "whatsapp" | "email" | "both";
+  rule_type: RuleType;
   days_offset: number;
   message_template: string;
   is_active: boolean;

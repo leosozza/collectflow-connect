@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendByProvider } from "../_shared/whatsapp-sender.ts";
 import { logMessage } from "../_shared/message-logger.ts";
+import { resolveTemplate } from "../_shared/template-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,9 +23,6 @@ Deno.serve(async (req) => {
   const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
   const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
-  // Status tolerados para disparo (prevenção e cobrança)
-  const ALLOWED_STATUSES = ["pendente", "em_dia", "EM ABERTO", "INADIMPLENTE"];
-
   try {
     // 1. Tenants ativos
     const { data: tenants, error: tErr } = await supabase
@@ -38,10 +36,10 @@ Deno.serve(async (req) => {
     let totalSkippedDup = 0;
 
     for (const tenant of tenants || []) {
-      // 2. Regras ativas (com nome do credor para filtrar clientes via coluna textual `credor`)
+      // 2. Regras ativas
       const { data: rules, error: rErr } = await supabase
         .from("collection_rules")
-        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id, credor:credores(razao_social)")
+        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id, rule_type")
         .eq("tenant_id", tenant.id)
         .eq("is_active", true);
       if (rErr) {
@@ -58,6 +56,7 @@ Deno.serve(async (req) => {
         const dateStr = targetDate.toISOString().split("T")[0];
 
         const eventSource = rule.days_offset < 0 ? "prevention" : "collection";
+        const ruleType: "wallet" | "agreement" = (rule as any).rule_type || "wallet";
 
         // 4. Resolver instância (se a regra define uma)
         let inst: any = null;
@@ -83,39 +82,18 @@ Deno.serve(async (req) => {
           };
         }
 
-        // 5. Buscar clientes elegíveis (clients.credor é texto = razao_social)
-        let clientQ = supabase
-          .from("clients")
-          .select("id, nome_completo, cpf, valor_parcela, data_vencimento, credor, phone, email")
-          .eq("tenant_id", tenant.id)
-          .in("status", ALLOWED_STATUSES)
-          .eq("data_vencimento", dateStr);
-
-        const credorNome = (rule as any).credor?.razao_social;
-        if (credorNome) {
-          clientQ = clientQ.eq("credor", credorNome);
-        }
-
-        const { data: clients, error: cErr } = await clientQ;
+        // 5. Buscar elegíveis via RPC unificada (ramifica wallet vs agreement)
+        const { data: targets, error: cErr } = await supabase.rpc("get_rule_eligible_targets", {
+          p_rule_id: rule.id,
+          p_target_date: dateStr,
+        });
         if (cErr) {
-          console.error(`[send-notifications] rule=${rule.id} clients error:`, cErr);
+          console.error(`[send-notifications] rule=${rule.id} targets error:`, cErr);
           continue;
         }
 
-        for (const client of clients || []) {
-          const message = rule.message_template
-            .replace(/\{\{nome\}\}/g, client.nome_completo || "")
-            .replace(/\{\{cpf\}\}/g, client.cpf || "")
-            .replace(/\{\{valor_parcela\}\}/g,
-              new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
-                .format(Number(client.valor_parcela) || 0)
-            )
-            .replace(/\{\{data_vencimento\}\}/g,
-              client.data_vencimento
-                ? new Date(client.data_vencimento + "T12:00:00").toLocaleDateString("pt-BR")
-                : ""
-            )
-            .replace(/\{\{credor\}\}/g, client.credor || "");
+        for (const client of (targets || []) as any[]) {
+          const message = resolveTemplate(rule.message_template, client);
 
           // 6. WhatsApp
           if (rule.channel === "whatsapp" || rule.channel === "both") {
