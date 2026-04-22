@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
 
               await logMessage(supabase, {
                 tenant_id: tenant.id,
-                client_id: client.id,
+                client_id: client.client_id,
                 client_cpf: client.cpf,
                 phone: client.phone,
                 channel: "whatsapp",
@@ -197,13 +197,18 @@ Deno.serve(async (req) => {
                 rule_id: rule.id,
                 metadata: {
                   source_type: "trigger",
+                  source: client.source || ruleType,
                   rule_id: rule.id,
                   rule_name: rule.name,
+                  rule_type: ruleType,
                   days_offset: rule.days_offset,
                   event_source: eventSource,
                   provider: providerName,
                   provider_message_id: providerMessageId,
                   instance_id: rule.instance_id || null,
+                  agreement_id: client.agreement_id || null,
+                  installment_key: client.installment_key || null,
+                  installment_number: client.installment_number ?? null,
                 },
               });
 
