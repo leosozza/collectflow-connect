@@ -1,58 +1,74 @@
 
 
-## Plano: corrigir Telefonia (3CPlus) — 2 problemas
+## Análise: Gustavo aparece "Em Intervalo: Pausa" no RIVO mas está em TPA na 3CPlus
 
-### Problema 1 — Grupo de Intervalos aparece ao abrir a campanha
+### Causa raiz
 
-O usuário foi explícito: **"Grupo de Intervalos" só deve aparecer no formulário de criação**. Hoje o painel expandido (`CampaignsPanel.tsx`, linhas 469-491) mostra de novo o seletor + botão "Salvar" — daí a sensação de que "não foi salvo".
+A 3CPlus está retornando para o agente Gustavo `status=3` (paused) no endpoint `/agents/status`, mas internamente ela classifica esse estado como **TPA pós-atendimento** (não uma pausa manual). Por isso:
 
-Causa adicional do "parece vazio": o GET `/campaigns/{id}` retorna o grupo aninhado em `dialer_settings.work_break_group_id` (ou objeto `work_break_group.id`), mas o leitor em `loadCampaigns` só preenche o `campaignWBG[cid]` se algum desses campos existir — e como o seletor é exibido vazio quando a leitura falha, o operador acha que não persistiu.
+- O painel da 3CPlus mostra "TPA" (sabe interpretar o contexto pelo `last_call`).
+- O RIVO mostra "Em Intervalo: Pausa (21:24)" porque a lógica em `TelefoniaDashboard.tsx` linha 871 classifica qualquer `status===3` como `isManualPause`, e quando não há `activePauseName` na sessão, atribui o label genérico "Pausa" (linha 861).
+- Ao clicar **Retomar** → backend chama `unpause_agent` → 3CPlus retorna **"O agente não está em intervalo ou não pode ser removido"** (toast visível na screenshot) porque o estado real é TPA, que só sai com `qualify_call`.
 
-**Correção:**
-1. **Remover totalmente o bloco "Grupo de Intervalos"** do detalhe expandido (`CampaignsPanel.tsx` linhas 469-491). Junto, remover:
-   - `handleSaveWorkBreakGroup` (linhas 216-231)
-   - states `campaignWBG` / `savingWBG` (linhas 52-53)
-   - mapeamento `wbgMap` em `loadCampaigns` (linhas 124-133)
-   - import `Coffee` se não usado em outro lugar
-2. Manter o seletor **apenas** no diálogo "Nova Campanha" (já existe — `selectedWorkBreakGroup`).
-3. Manter no `threecplus-proxy` o envio aninhado `dialer_settings.work_break_group_id` no `create_campaign` (já está correto desde a última rodada).
+Resultado: o operador fica preso, sem conseguir tabular nem retomar.
 
-### Problema 2 — Métricas continuam zeradas mesmo clicando "Atualizar Detalhes"
+### Correção em 3 pontos
 
-Logs do edge function provam a causa raiz:
+#### 1. Detectar TPA disfarçada de pausa (`status=3` sem pause real)
+
+Em `TelefoniaDashboard.tsx`, alterar `isManualPause` para distinguir pausa real de TPA mascarada:
+
+```ts
+// Pausa manual REAL: status 3/6 COM identificação de intervalo conhecida
+// (intervalo selecionado pelo agente OU status === 6 work_break)
+const hasKnownPause = !!sessionStorage.getItem("3cp_active_pause_name");
+const hasFinishedCallPending = !!lastFinishedCall || !!sessionStorage.getItem("3cp_last_call_id");
+
+// status=3 sem pausa conhecida + chamada recente = TPA mascarada (não é pausa)
+const isTPAMasqueradedAsPause = myAgent?.status === 3 && !hasKnownPause && hasFinishedCallPending;
+
+const isManualPause = (myAgent?.status === 6) || (myAgent?.status === 3 && !isTPAMasqueradedAsPause);
 ```
-campaign_lists_total_metrics → 422
-campaign_lists_metrics       → 422
+
+E o `effectiveACW` (linha 1009) precisa incluir `isTPAMasqueradedAsPause` para forçar o painel de tabulação a aparecer.
+
+#### 2. Header: rotular como TPA quando for o caso
+
+Linha 1300-1310: priorizar `effectiveACW` (já faz). A correção do item 1 garante que `effectiveACW` será `true` no caso do Gustavo, e a barra ficará **"TPA — Pós-atendimento (21:24)"** em vez de "Em Intervalo: Pausa".
+
+#### 3. Botão Retomar inteligente: tentar `qualify_call` antes de `unpause_agent`
+
+Em `handleUnpause` (linha 756): se a tentativa de unpause retornar **"não está em intervalo"**, fazer fallback automático para `qualify_call` com a primeira qualificação disponível (mesma lógica que já existe em `finishFn` linhas 894-932). Isso quebra o loop em que o operador clica "Retomar" e nada acontece.
+
+Adicionar também o auto-trigger: quando o sistema detectar `isTPAMasqueradedAsPause === true` por mais de 3s, abrir automaticamente o painel de qualificação (já existe `disposition modal` — basta chamar `setIsACW(true)`).
+
+### Logs de diagnóstico (já existem)
+
+Linha 1019 já loga `myAgent.status, isPaused, isTPAStatus, effectiveACW, activePauseName`. Após o fix, o console mostrará para o caso do Gustavo:
 ```
-
-Esses dois endpoints (`/campaigns/{id}/lists/total_metrics` e `/lists/metrics`) **só funcionam quando a campanha tem mailing carregado**. A campanha 257548 ("13.04 Recentes jun-mar") foi criada agora e ainda não tem lista alimentada → 422 Unprocessable → `campaignMetrics[cid]` fica `{}` → todos os cards mostram 0.
-
-A 3CPlus expõe um endpoint mais geral que **funciona mesmo sem mailing**: `GET /campaigns/{id}/statistics?startDate=...&endDate=...` (já existe como `campaign_statistics` no proxy, linhas 267-274, mas **não está sendo chamado** no `loadCampaignDetails`). Ele retorna `total_dialed`, `answered`, `abandoned`, `asr`, `average_talk_time`, `in_queue`, `completed`, `no_answer` — exatamente os campos que o card "Visão Geral" tenta ler.
-
-**Correção:**
-1. Em `loadCampaignDetails` (`CampaignsPanel.tsx` linhas 144-168): adicionar chamada paralela a `campaign_statistics` com `startDate=hoje 00:00:00` e `endDate=hoje 23:59:59`. Usar `extractObject` no resultado para popular `campaignMetrics[cid]`.
-2. Manter `campaign_lists_total_metrics` como fallback (quando houver mailing, ele dá números mais granulares por lista). Se `campaign_statistics` falhar, cair no `total_metrics`. Se ambos falharem, mostrar zero (comportamento atual).
-3. No `threecplus-proxy` (linha 267): silenciar 422 — quando `lists/total_metrics` ou `lists/metrics` retornarem 422, devolver `{ data: {}, success: false, no_mailing: true }` em vez de propagar erro, para evitar ruído no console.
-4. Adicionar logs no proxy: imprimir os primeiros 300 chars da resposta de `campaign_statistics` para validar o shape real do tenant.
+status:3 isPaused:true isTPAStatus:false isACW:false 
+effectiveACW:true activePauseName:""
+isTPAMasqueradedAsPause:true
+```
 
 ### Arquivos alterados
 
-- `src/components/contact-center/threecplus/CampaignsPanel.tsx`
-  - Remover bloco "Grupo de Intervalos" do detalhe expandido + handlers/states associados.
-  - Adicionar `campaign_statistics` à lista de Promises em `loadCampaignDetails`.
-  - Priorizar `campaign_statistics` ao montar `campaignMetrics[cid]`; fallback para `campaign_lists_total_metrics`.
-- `supabase/functions/threecplus-proxy/index.ts`
-  - Tratar 422 em `campaign_lists_total_metrics` / `campaign_lists_metrics` como "sem mailing" (resposta silenciosa).
-  - Adicionar log do shape de `campaign_statistics` para diagnóstico.
+- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+  - Adicionar `isTPAMasqueradedAsPause` (após linha 1001).
+  - Ajustar `isManualPause` (linha 871) para excluir TPA mascarada.
+  - Ajustar `effectiveACW` (linha 1009) para incluir TPA mascarada.
+  - Em `handleUnpause` (linha 756): fallback automático para `qualify_call` quando 3CPlus rejeitar com "não está em intervalo".
+  - Auto-abrir painel de tabulação quando TPA mascarada for detectada.
 
-### Validação pós-deploy
+### Validação pós-deploy (peça ao Gustavo)
 
-1. Abrir campanha existente → **não** aparece mais o seletor "Grupo de Intervalos" no detalhe expandido. Só "Webhook Bidirecional" + abas.
-2. Criar nova campanha selecionando um Grupo → criada com sucesso (já estava funcionando no proxy).
-3. Métricas "Total Discado / Atendidas / ASR / Tempo Médio / Na Fila / etc." passam a refletir os números reais da 3CPlus, atualizando a cada 15s automaticamente — mesmo em campanhas sem mailing carregado (vai mostrar 0 legítimo, não 0 por erro).
+1. Após receber uma chamada e desligar → barra deve mostrar **"TPA — Pós-atendimento (Xs)"**, não mais "Em Intervalo: Pausa".
+2. Painel de qualificação abre automaticamente com lista de motivos.
+3. Selecionar motivo → tabula via `qualify_call` → volta para "Aguardando ligação" sem ficar preso.
+4. Se em algum momento ainda clicar "Retomar" e a 3CPlus rejeitar → fallback automático tabula a chamada com a primeira qualificação válida (escape).
 
 ### Fora de escopo
 
-- Mexer no fluxo de chamada/pausa do operador.
-- Adicionar histórico/gráficos das métricas (só estamos consertando o snapshot atual).
+- Mudar config de TPA na 3CPlus (lado do cliente — não temos acesso).
+- Refatorar `TelefoniaDashboard.tsx` em componentes menores.
 
