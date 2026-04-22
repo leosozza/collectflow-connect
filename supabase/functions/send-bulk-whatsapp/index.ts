@@ -99,95 +99,130 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // Validate auth
+    // Validate auth — allow service-role calls (watchdog/dispatcher/auto-retrigger) to bypass user auth
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    const isSystemCall = bearerToken === serviceRoleKey;
+
+    let userId: string | null = null;
+
+    if (!isSystemCall) {
+      if (!bearerToken) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader! } },
       });
+
+      const { data: userData, error: userError } = await userClient.auth.getUser();
+      if (userError || !userData?.user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      userId = userData.user.id;
     }
 
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    let tenantId: string | null = null;
+    let tenantUserForLegacy: any = null;
 
-    const { data: userData, error: userError } = await userClient.auth.getUser();
-    if (userError || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = userData.user.id;
-
-    const { data: tenantUser } = await supabase
-      .from("tenant_users")
-      .select("tenant_id, role")
-      .eq("user_id", userId)
-      .single();
-
-    if (!tenantUser) {
-      return new Response(JSON.stringify({ error: "Tenant not found" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Permission check
-    const isAdmin = ["admin", "super_admin"].includes(tenantUser.role);
-    let hasPermission = isAdmin;
-
-    if (!isAdmin) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, permission_profile_id")
-        .eq("user_id", userId)
+    if (!isSystemCall) {
+      const { data: tenantUser } = await supabase
+        .from("tenant_users")
+        .select("tenant_id, role")
+        .eq("user_id", userId!)
         .single();
 
-      if (profile) {
-        if (profile.permission_profile_id) {
-          const { data: permProfile } = await supabase
-            .from("permission_profiles")
-            .select("permissions")
-            .eq("id", profile.permission_profile_id)
-            .single();
+      if (!tenantUser) {
+        return new Response(JSON.stringify({ error: "Tenant not found" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
-          if (permProfile?.permissions) {
-            const perms = permProfile.permissions as Record<string, string[]>;
-            if (perms.campanhas_whatsapp?.includes("create")) hasPermission = true;
+      tenantId = tenantUser.tenant_id;
+      tenantUserForLegacy = tenantUser;
+
+      // Permission check
+      const isAdmin = ["admin", "super_admin"].includes(tenantUser.role);
+      let hasPermission = isAdmin;
+
+      if (!isAdmin) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id, permission_profile_id")
+          .eq("user_id", userId!)
+          .single();
+
+        if (profile) {
+          if (profile.permission_profile_id) {
+            const { data: permProfile } = await supabase
+              .from("permission_profiles")
+              .select("permissions")
+              .eq("id", profile.permission_profile_id)
+              .single();
+
+            if (permProfile?.permissions) {
+              const perms = permProfile.permissions as Record<string, string[]>;
+              if (perms.campanhas_whatsapp?.includes("create")) hasPermission = true;
+            }
           }
-        }
 
-        if (!hasPermission) {
-          const { data: overrides } = await supabase
-            .from("user_permissions")
-            .select("actions")
-            .eq("profile_id", profile.id)
-            .eq("tenant_id", tenantUser.tenant_id)
-            .eq("module", "campanhas_whatsapp")
-            .single();
+          if (!hasPermission) {
+            const { data: overrides } = await supabase
+              .from("user_permissions")
+              .select("actions")
+              .eq("profile_id", profile.id)
+              .eq("tenant_id", tenantUser.tenant_id)
+              .eq("module", "campanhas_whatsapp")
+              .single();
 
-          if (overrides?.actions && (overrides.actions as string[]).includes("create")) {
-            hasPermission = true;
+            if (overrides?.actions && (overrides.actions as string[]).includes("create")) {
+              hasPermission = true;
+            }
           }
         }
       }
-    }
 
-    if (!hasPermission) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (!hasPermission) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const body = await req.json();
 
     if (body.campaign_id) {
-      return await handleCampaignFlow(supabase, body.campaign_id, tenantUser.tenant_id);
+      // For system calls (watchdog/dispatcher/auto-retrigger), derive tenant from the campaign
+      if (isSystemCall) {
+        const { data: camp } = await supabase
+          .from("whatsapp_campaigns")
+          .select("tenant_id")
+          .eq("id", body.campaign_id)
+          .single();
+        if (!camp) {
+          return new Response(JSON.stringify({ error: "Campaign not found" }), {
+            status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        tenantId = camp.tenant_id;
+      }
+      return await handleCampaignFlow(supabase, body.campaign_id, tenantId!);
+    }
+
+    if (isSystemCall) {
+      return new Response(JSON.stringify({ error: "Legacy flow requires user authentication" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Legacy flow — apply same anti-ban rules
-    return await handleLegacyFlow(supabase, body, tenantUser);
+    return await handleLegacyFlow(supabase, body, tenantUserForLegacy);
   } catch (err: any) {
     console.error("send-bulk-whatsapp error:", err);
     return new Response(
