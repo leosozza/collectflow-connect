@@ -1,30 +1,32 @@
 
 
-## Plano: Opção A — esconder operador atribuído quando conversa está em "Aguardando"
+## Plano: remover campo "Provider" da tela de informações da campanha
 
-### Comportamento
+### Contexto
 
-Na lista de conversas (`ConversationList`) da Inbox WhatsApp, quando `status === 'waiting'`:
+O campo **Provider** mostra o valor de `campaign.provider_category` (ex: `official_meta`, `unofficial`). É um metadado técnico interno usado para definir limites anti-ban e roteamento — não tem utilidade operacional para o usuário final visualizar na tela de resumo da campanha.
 
-- **Esconder** avatar e nome do operador (`assigned_to`) do item da lista.
-- **Manter visível** apenas o badge "Aguardando aceite" (já existente).
-- Para `status === 'open'` ou `'closed'`: comportamento atual preservado (mostra operador).
+Importante: a remoção é **apenas visual**. A coluna `provider_category` continua sendo usada internamente em:
+- Cálculo dos limites de rate limit (`RATE_CONSTANTS[cat]`) no mesmo arquivo (linhas 270-306).
+- Roteamento de envio em backend.
 
-Dado preservado intacto no banco — apenas mudança visual.
+### Alteração
 
-### Arquivo alterado
+**Arquivo**: `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` (linhas 515-518)
 
-- `src/components/contact-center/whatsapp/ConversationList.tsx` — envolver o bloco de exibição do operador atribuído em condicional `conversation.status !== 'waiting' && (...)`.
+Remover o bloco:
+```tsx
+<div>
+  <p className="text-muted-foreground text-xs">Provider</p>
+  <p className="font-medium">{campaign.provider_category}</p>
+</div>
+```
+
+Manter os demais campos do card de informações intactos.
 
 ### Validação
 
-1. Cliente em conversa fechada manda nova mensagem → conversa volta para "Aguardando".
-2. Na lista, item aparece **apenas com badge "Aguardando aceite"**, sem avatar/nome do operador anterior.
-3. Após aceitar (status vira `open`) → operador volta a aparecer normalmente.
-4. Conversas fechadas continuam mostrando o último operador (histórico).
-
-### Fora de escopo
-
-- Alterações no banco ou em `assigned_to`.
-- Mudança no fluxo de aceite ou bloqueio de envio (já corretos).
+1. Abrir uma campanha em `/contact-center/whatsapp?tab=campanhas` → aba Resumo.
+2. Confirmar que o card de informações não exibe mais o campo "Provider".
+3. Confirmar que os indicadores de rate limit / anti-ban continuam funcionando normalmente (a lógica interna ainda lê `provider_category`).
 
