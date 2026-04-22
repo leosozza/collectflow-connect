@@ -1,70 +1,67 @@
 
 
-## Análise: valor da parcela não muda após edição na tela de Acordos
+## Plano: corrigir baixa manual com valor diferente da parcela (caso Camila/Bárbara)
 
-### Caso da Camila Silva dos Santos Martins
+### O que aconteceu de fato (investigação no banco)
 
-Acordo ativo `d825253a` — `entrada_value=246,00`, parcelas 4× R$ 236,61.
-Barbara fez baixa manual da entrada com valor real recebido = **R$ 246,48** (não R$ 246,00 — diferença provável de juros/centavos do PIX) e confirmou.
+1. O acordo onde Bárbara lançou **R$ 251,99** **não é da Camila** — é da cliente **Ezi Mitel de Souza Fleury** (acordo `3fee4f9c`), parcela 1 (valor agendado original: R$ 252,73). Camila tem outro acordo (`d825253a`), entrada R$ 246,48, e esse já está sincronizado.
+2. Bárbara confirmou a baixa de R$ 251,99 da Ezi em **17/04** — antes da correção de sync que entrou hoje. Naquele momento `custom_installment_values["1"]` ficou R$ 252,73 (valor original), e a UI continuou mostrando 252,73.
+3. Como "não atualizou", Bárbara hoje (22/04) **lançou uma segunda baixa** de R$ 251,99 para a mesma parcela 1 → confirmou de novo → agora `custom_installment_values["1"] = 251,99` ✅, mas o acordo tem **duas confirmações** para a mesma parcela (251,99 + 251,99 = R$ 503,98 contabilizados, em vez de R$ 251,99).
+4. Levantamento mostra **20+ acordos com baixas duplicadas** e **9+ acordos com `amount_paid` ainda divergente** que o backfill anterior não pegou.
 
-Estado no banco:
-- `agreements.entrada_value` = **246,00** (intacto)
-- `agreements.custom_installment_values["entrada"]` = **inexistente**
-- `manual_payments.amount_paid` = **246,48** (status confirmed)
+### Causa raiz de cada problema
 
-Resultado na UI: a parcela "Entrada" continua exibida como **R$ 246,00**, porque `buildInstallments` lê `customValues["entrada"] ?? agreement.entrada_value` → 246,00. O valor real (246,48) só aparece dentro do registro de `manual_payments`, nunca substitui o valor agendado da parcela.
+| Problema | Causa |
+|---|---|
+| **A. UI mostra valor original mesmo após edição** | Backfill anterior só cobriu casos com `installment_key` preenchido. Casos com `installment_key=NULL` (legado, só `installment_number`), `entrada_2/3` em multi-entrada, ou divergências < 1 centavo — ficaram de fora. |
+| **B. Sistema permite confirmar a mesma parcela 2× ou 3×** | `manualPaymentService.confirm` não verifica se já existe baixa confirmada para o mesmo `agreement_id + installment_key/number`. Resultado: `totalPaid` infla e o acordo pode ser marcado `completed` incorretamente. |
+| **C. Operador não percebe que o valor pode ser editado pelo admin** | Sem feedback visual no diálogo do operador quando o valor digitado difere do agendado (alerta amarelo já foi adicionado na rodada anterior, mas vamos reforçar no fluxo do admin também). |
 
-### Causa raiz (3 lugares desconectados)
+### Correção (3 frentes)
 
-A operação "alterar valor da parcela" hoje vive em **três fluxos isolados** que não se sincronizam entre si:
+#### 1. Bloquear baixa duplicada da mesma parcela
 
-1. **PaymentConfirmationTab → botão lápis (`handleEdit`):** edita só `manual_payments.amount_paid`. Propaga delta para `clients.valor_pago` e marca `agreements.completed` — mas **nunca grava o valor novo em `agreements.custom_installment_values[key]`**. A parcela continua com o valor original.
-2. **AgreementInstallments → ícone editar valor (`handleEditValue`):** grava em `custom_installment_values[customKey]` (inclusive `"entrada"`), mas só funciona para parcelas **ainda não pagas**. Não revisa `manual_payments` já confirmados.
-3. **ManualPaymentDialog (operador solicita baixa):** envia `amount_paid` livre, sem obrigar igual ao `installmentValue`. Aceita silenciosamente valores diferentes.
+Em `manualPaymentService.create` e `manualPaymentService.confirm`:
+- Antes de criar/confirmar, fazer `SELECT` por `agreement_id + installment_key (ou installment_number)` com `status='confirmed'`. Se existir → bloquear com mensagem clara: *"Esta parcela já tem uma baixa confirmada (R$ X,XX em DD/MM). Para alterar o valor, use o botão de editar (lápis) na linha da baixa existente."*
+- Mesmo bloqueio na UI: em `ManualPaymentDialog`, ao abrir, buscar baixas confirmadas para a parcela e mostrar aviso/desabilitar.
 
-Como Barbara confirma uma baixa de R$ 246,48 contra uma parcela agendada de R$ 246,00, a parcela fica "paga" (porque 246,48 ≥ 246,00 − 0,01), mas o valor exibido continua sendo o agendado. Para o operador parece "que o valor não foi alterado".
+Isso resolve o que Bárbara fez (ela criou uma 2ª baixa pra "forçar" o valor a aparecer — esse caminho deixa de existir).
 
-### Correção proposta
+#### 2. Garantir que **editar o valor** (lápis) realmente sincroniza — tornar `syncInstallmentValueFromPayment` mais robusto
 
-Tornar a confirmação/edição em `PaymentConfirmationTab` **autoritativa sobre o valor da parcela** quando o valor pago divergir do valor agendado. Em ambos `handleConfirm` e `handleEdit`, após gravar em `manual_payments`:
+Em `agreementService.syncInstallmentValueFromPayment`:
+- Quando `installment_key` for NULL, derivar a chave a partir de `installment_number` (`"entrada"` se 0, senão `String(installment_number)`).
+- Tolerância de 1 centavo já existe. Acrescentar log estruturado quando não conseguir resolver a parcela.
+- Quando `entrada_value` for atualizado (entrada única), atualizar **também** `custom_installment_values["entrada"]` (para o `buildInstallmentSchedule` ler de qualquer lugar).
 
-1. Calcular `instValue` da parcela alvo via `buildInstallmentSchedule(agreement)` filtrando por `installment_key`.
-2. Se `Math.abs(amount_paid - instValue) > 0.01`:
-   - Atualizar `agreements.custom_installment_values[installment_key] = amount_paid` (mesma lógica de `updateInstallmentValue`).
-   - Para parcela "entrada" sem múltiplas entradas, atualizar **também** `agreements.entrada_value = amount_paid` (para o `entrada_value` refletir a realidade).
-   - Registrar `client_event` `installment_value_synced` com old/new para auditoria.
-3. Invalidar queries `["client-agreements", cpf]` e `["agreement-cobrancas", ...]` para o detalhe do cliente atualizar imediatamente.
+#### 3. Backfill segundo round + limpeza de duplicatas
 
-Adicionalmente, no `ManualPaymentDialog` (lado do operador): exibir um aviso amarelo "Valor pago difere do valor da parcela em R$ X,XX — ao confirmar, o valor da parcela será atualizado" quando `amountPaid !== installmentValue`. Sem bloquear, só transparente.
-
-### Caso Camila — correção retroativa
-
-O acordo `d825253a` da Camila já tem o pagamento confirmado com 246,48 mas a parcela mostra 246,00. Após o deploy do fix, qualquer **nova edição via lápis** sincroniza. Para o registro existente, vou rodar uma migração one-shot:
-
-```sql
--- Backfill: para todo manual_payment confirmed onde amount_paid difere
--- do valor agendado da parcela em mais de R$ 0,01, gravar em custom_installment_values
--- e (se entrada única) em entrada_value.
-```
-Com `dry-run` antes do execute, mostrando quantos acordos serão tocados.
+Migration one-shot:
+- **Sync round 2**: para todas as `manual_payments` confirmed onde `amount_paid` ainda diverge da parcela agendada (incluindo `installment_key=NULL` e `entrada_2/3`), gravar em `custom_installment_values[chave_resolvida]`. ~9 registros estimados.
+- **Reverter duplicatas**: para os 20+ acordos com 2-3 baixas confirmadas no mesmo `installment_key`, **manter a mais recente como `confirmed`** e marcar as anteriores como `superseded` (novo status, ou `rejected` com `review_notes='Substituída por baixa posterior — duplicidade'`). Recalcular `clients.valor_pago` (decrementar a diferença) e re-avaliar `agreements.status` (pode voltar de `completed` para `pending` se overpayment for desfeito).
+- Dry-run primeiro: imprimir lista dos 20 acordos + delta de valor antes de executar.
 
 ### Arquivos alterados
 
-- `src/components/acordos/PaymentConfirmationTab.tsx` — adicionar sync `manual_payments.amount_paid` → `agreements.custom_installment_values` em `handleConfirm` e `handleEdit`.
-- `src/components/acordos/ManualPaymentDialog.tsx` — alerta visual quando `amountPaid !== installmentValue`.
-- `src/services/agreementService.ts` — extrair helper `syncInstallmentValueFromPayment(agreementId, installmentKey, paidAmount)` reutilizado por confirm/edit.
-- Migração SQL one-shot (backfill) — sincronizar acordos já confirmados com divergência (Camila incluída).
+- `src/services/manualPaymentService.ts` — adicionar guard contra duplicidade em `create` e `confirm`.
+- `src/services/agreementService.ts` — `syncInstallmentValueFromPayment` mais robusto (resolve key por number quando NULL; sincroniza `custom_installment_values["entrada"]` quando atualiza `entrada_value`).
+- `src/components/acordos/ManualPaymentDialog.tsx` — query de baixas existentes da parcela; aviso/bloqueio quando já houver baixa confirmada; botão alternativo "Editar baixa existente" levando ao admin.
+- `src/components/acordos/PaymentConfirmationTab.tsx` — exibir badge "duplicada" caso o backfill tenha marcado, e chamar a versão melhorada do sync.
+- Migration SQL one-shot:
+  - Sync round 2 para amount_paid divergente.
+  - Marcar duplicatas como `superseded` + reverter `valor_pago` e revalidar status do acordo.
 
 ### Validação pós-deploy
 
-1. Abrir acordo da Camila no detalhe → entrada deve aparecer como **R$ 246,48** (não 246,00).
-2. Criar novo acordo de teste, solicitar baixa com valor diferente do agendado, confirmar como admin → parcela exibida com o valor confirmado.
-3. Editar valor de pagamento já confirmado via lápis → parcela atualiza junto.
-4. Solicitar baixa com valor divergente do agendado → diálogo mostra alerta amarelo "Valor difere em R$ X,XX".
+1. Abrir acordo da Ezi (`3fee4f9c`) → parcela 1 mostra R$ 251,99 (já está correto), e o histórico mostra apenas **uma** baixa confirmada (a outra fica como "Substituída").
+2. Abrir acordo `6905fbe5` (Jaciele) → de 1.400 voltou para 700, parcela 1 = R$ 700,01.
+3. Operador tenta solicitar baixa de uma parcela já paga → diálogo bloqueia com mensagem clara apontando para a baixa existente.
+4. Admin edita valor de baixa via lápis → parcela atualiza imediatamente na tela do detalhe do acordo (mesmo para acordos legados sem `installment_key`).
+5. `client_events` recebe evento `manual_payment_superseded` para cada duplicata revertida (auditoria).
 
 ### Fora de escopo
 
-- Refatorar `AgreementInstallments` em componentes menores.
-- Mexer no `negociarie_cobrancas` — divergências de boletos PIX são tratadas em outro fluxo.
-- Recriar histórico antigo em `client_events` para edições já feitas antes do fix.
+- Refazer histórico de auditoria das baixas duplicadas anteriores ao deploy.
+- Mexer no fluxo de cobranças PIX/boleto da Negociarie (divergência por juros lá segue caminho diferente).
+- Permitir múltiplas baixas parciais na mesma parcela (não é o caso atual — sempre uma baixa = parcela inteira). Se o cliente quiser esse fluxo, pode ser próxima rodada.
 
