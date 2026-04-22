@@ -538,7 +538,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (supabaseUrl && serviceKey) {
       console.log(`[Campaign ${campaignId}] Timed out with ${remaining} pending — self-retriggering`);
-      fetch(`${supabaseUrl}/functions/v1/send-bulk-whatsapp`, {
+      const retriggerPromise = fetch(`${supabaseUrl}/functions/v1/send-bulk-whatsapp`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -546,6 +546,9 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         },
         body: JSON.stringify({ campaign_id: campaignId }),
       }).catch((e) => console.log(`[Campaign ${campaignId}] self-retrigger failed:`, e?.message));
+      // Keep the runtime alive until the retrigger request actually leaves the worker.
+      // @ts-ignore EdgeRuntime is provided by the Supabase Edge Runtime
+      try { EdgeRuntime.waitUntil(retriggerPromise); } catch { /* ignore in non-edge envs */ }
     }
 
     return new Response(
