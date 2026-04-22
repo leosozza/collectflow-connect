@@ -89,13 +89,44 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
       // 3. If already confirmed → propagate delta to wallet + agreement status
       if (wasConfirmed) {
         const delta = newAmount - oldAmount;
-        const { registerAgreementPayment, reverseAgreementPayment } = await import("@/services/agreementService");
+        const { registerAgreementPayment, reverseAgreementPayment, syncInstallmentValueFromPayment } = await import("@/services/agreementService");
         const agr = editDialog.agreement;
         if (agr && Math.abs(delta) > 0.001) {
           if (delta > 0) {
             await registerAgreementPayment(agr.client_cpf, agr.credor, delta);
           } else {
             await reverseAgreementPayment(agr.client_cpf, agr.credor, Math.abs(delta));
+          }
+        }
+
+        // 3b. Sync installment scheduled value to match new paid amount
+        if (agr) {
+          try {
+            const sync = await syncInstallmentValueFromPayment(
+              current.agreement_id,
+              current.installment_key,
+              current.installment_number,
+              newAmount,
+            );
+            if (sync.synced) {
+              await supabase.from("client_events").insert({
+                tenant_id: tenantId,
+                client_cpf: agr.client_cpf,
+                event_type: "installment_value_synced",
+                event_source: "admin",
+                event_value: "edit",
+                metadata: {
+                  manual_payment_id: editDialog.id,
+                  agreement_id: current.agreement_id,
+                  installment_key: sync.resolvedKey,
+                  old_value: sync.oldValue,
+                  new_value: sync.newValue,
+                  edited_by: profile?.id,
+                },
+              } as any);
+            }
+          } catch (e) {
+            console.warn("[PaymentConfirmationTab] sync installment value failed", e);
           }
         }
 
@@ -155,6 +186,12 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
         }
       }
 
+      // Invalidate detail queries so the agreement detail UI refreshes
+      if (editDialog.agreement?.client_cpf) {
+        queryClient.invalidateQueries({ queryKey: ["client-agreements", editDialog.agreement.client_cpf] });
+        queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas"] });
+      }
+
       toast({ title: "Dados da parcela atualizados!", description: wasConfirmed ? "Carteira e acordo sincronizados." : undefined });
       setEditDialog(null);
       refresh();
@@ -170,6 +207,42 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
     setProcessingId(payment.id);
     try {
       await manualPaymentService.confirm(payment.id, profile.id);
+
+      // After confirm: sync the scheduled installment value if it diverges
+      try {
+        const { syncInstallmentValueFromPayment } = await import("@/services/agreementService");
+        const sync = await syncInstallmentValueFromPayment(
+          (payment as any).agreement_id,
+          (payment as any).installment_key,
+          payment.installment_number,
+          Number(payment.amount_paid || 0),
+        );
+        if (sync.synced && payment.agreement?.client_cpf) {
+          await supabase.from("client_events").insert({
+            tenant_id: tenantId,
+            client_cpf: payment.agreement.client_cpf,
+            event_type: "installment_value_synced",
+            event_source: "admin",
+            event_value: "confirm",
+            metadata: {
+              manual_payment_id: payment.id,
+              agreement_id: (payment as any).agreement_id,
+              installment_key: sync.resolvedKey,
+              old_value: sync.oldValue,
+              new_value: sync.newValue,
+              confirmed_by: profile?.id,
+            },
+          } as any);
+        }
+      } catch (e) {
+        console.warn("[PaymentConfirmationTab] sync on confirm failed", e);
+      }
+
+      if (payment.agreement?.client_cpf) {
+        queryClient.invalidateQueries({ queryKey: ["client-agreements", payment.agreement.client_cpf] });
+        queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas"] });
+      }
+
       toast({ title: "Pagamento confirmado!", description: "A baixa foi efetivada com sucesso." });
       refresh();
     } catch (err: any) {
