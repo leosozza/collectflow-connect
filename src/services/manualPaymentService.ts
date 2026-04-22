@@ -48,9 +48,65 @@ export interface CreateManualPaymentData {
   notes?: string;
 }
 
+/**
+ * Returns an existing payment (confirmed or pending_confirmation) for the same
+ * agreement + installment, if any. Used to block duplicate manual payments.
+ */
+const findExistingActivePayment = async (
+  agreementId: string,
+  installmentKey: string | null | undefined,
+  installmentNumber: number,
+  excludeId?: string,
+): Promise<ManualPayment | null> => {
+  let query = supabase
+    .from("manual_payments" as any)
+    .select("*")
+    .eq("agreement_id", agreementId)
+    .in("status", ["confirmed", "pending_confirmation"]);
+
+  if (installmentKey) {
+    query = query.eq("installment_key", installmentKey);
+  } else {
+    query = query.is("installment_key", null).eq("installment_number", installmentNumber);
+  }
+  if (excludeId) query = query.neq("id", excludeId);
+
+  const { data } = await query.order("created_at", { ascending: false });
+  const rows = (data as any as ManualPayment[]) || [];
+  return rows[0] || null;
+};
+
+const formatBR = (n: number) =>
+  `R$ ${Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatDateBR = (iso: string) => {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("pt-BR");
+  } catch {
+    return iso;
+  }
+};
+
 export const manualPaymentService = {
+  findExistingActivePayment,
+
   async create(data: CreateManualPaymentData, tenantId: string, profileId: string): Promise<ManualPayment> {
     try {
+      // Guard: block duplicate manual payment for same installment
+      const existing = await findExistingActivePayment(
+        data.agreement_id,
+        data.installment_key ?? null,
+        data.installment_number,
+      );
+      if (existing) {
+        const statusLabel = existing.status === "confirmed" ? "confirmada" : "pendente de confirmação";
+        throw new Error(
+          `Esta parcela já tem uma baixa ${statusLabel} (${formatBR(existing.amount_paid)} em ${formatDateBR(existing.payment_date || existing.created_at)}). ` +
+          `Para alterar o valor, peça ao administrador para editar a baixa existente (ícone de lápis na aba "Confirmação de Pagamento").`
+        );
+      }
+
       const { data: result, error } = await supabase
         .from("manual_payments" as any)
         .insert({
@@ -189,6 +245,20 @@ export const manualPaymentService = {
 
       if (mp.status !== "pending_confirmation") {
         throw new Error("Pagamento já foi processado");
+      }
+
+      // Guard: block confirmation if another confirmed payment already exists for the same installment
+      const existingConfirmed = await findExistingActivePayment(
+        mp.agreement_id,
+        mp.installment_key,
+        mp.installment_number,
+        paymentId,
+      );
+      if (existingConfirmed && existingConfirmed.status === "confirmed") {
+        throw new Error(
+          `Esta parcela já tem uma baixa confirmada (${formatBR(existingConfirmed.amount_paid)} em ${formatDateBR(existingConfirmed.payment_date || existingConfirmed.created_at)}). ` +
+          `Para alterar o valor, edite a baixa existente em vez de confirmar uma nova. Esta solicitação deve ser recusada.`
+        );
       }
 
       // Get agreement info

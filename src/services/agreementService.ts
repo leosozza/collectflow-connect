@@ -608,14 +608,27 @@ export const syncInstallmentValueFromPayment = async (
     if (!agreement) return { synced: false, oldValue: 0, newValue: paidAmount, resolvedKey: null };
 
     const schedule = buildInstallmentSchedule(agreement as any);
-    // Resolve target installment by key, fallback to installment_number
+
+    // Resolve target installment:
+    //  1) by explicit key
+    //  2) by derived key when key is null/empty (legacy rows): "entrada" if number=0, else String(number)
+    //  3) fallback by installment_number directly
+    const derivedKey =
+      installmentKey && installmentKey.length > 0
+        ? installmentKey
+        : installmentNumber === 0
+          ? "entrada"
+          : String(installmentNumber);
+
     const target =
-      (installmentKey && schedule.find(s => s.key === installmentKey)) ||
+      schedule.find(s => s.key === derivedKey) ||
+      (installmentKey ? schedule.find(s => s.key === installmentKey) : undefined) ||
       schedule.find(s => s.number === installmentNumber);
 
     if (!target) {
       logger.warn(MODULE, "syncInstallmentValueFromPayment: installment not found", {
-        agreementId, installmentKey, installmentNumber,
+        agreementId, installmentKey, derivedKey, installmentNumber,
+        scheduleKeys: schedule.map(s => s.key),
       });
       return { synced: false, oldValue: 0, newValue: paidAmount, resolvedKey: null };
     }
@@ -631,7 +644,9 @@ export const syncInstallmentValueFromPayment = async (
 
     const updatePayload: any = { custom_installment_values: updatedCustom };
 
-    // For a single-entrada agreement, also update entrada_value
+    // For a single-entrada agreement, also update entrada_value AND ensure
+    // custom_installment_values["entrada"] is set so buildInstallmentSchedule reads it
+    // from any source consistently.
     if (target.isEntrada) {
       const otherEntradaKeys = Object.keys(currentCustom).filter(k => {
         if (k === target.key) return false;
@@ -640,6 +655,8 @@ export const syncInstallmentValueFromPayment = async (
       });
       if (otherEntradaKeys.length === 0) {
         updatePayload.entrada_value = paidAmount;
+        updatedCustom["entrada"] = paidAmount;
+        updatePayload.custom_installment_values = updatedCustom;
       }
     }
 
