@@ -1,7 +1,7 @@
 /**
  * Logger unificado de mensagens WhatsApp — Fase 3
  * Grava em message_logs com metadata padronizada de rastreabilidade.
- * Usado por campanhas e workflow-engine.
+ * Usado por campanhas, workflow-engine e régua de cobrança.
  */
 
 export interface LogMessageParams {
@@ -14,6 +14,8 @@ export interface LogMessageParams {
   message_body?: string | null;
   error_message?: string | null;
   sent_at?: string | null;
+  rule_id?: string | null;
+  email_to?: string | null;
   metadata?: {
     source_type: "campaign" | "workflow" | "trigger" | "system" | "legacy";
     campaign_id?: string;
@@ -30,7 +32,7 @@ export interface LogMessageParams {
 
 export async function logMessage(supabase: any, params: LogMessageParams): Promise<void> {
   try {
-    await supabase.from("message_logs").insert({
+    const { error } = await supabase.from("message_logs").insert({
       tenant_id: params.tenant_id,
       client_id: params.client_id || null,
       client_cpf: params.client_cpf || null,
@@ -40,8 +42,11 @@ export async function logMessage(supabase: any, params: LogMessageParams): Promi
       message_body: params.message_body || null,
       error_message: params.error_message || null,
       sent_at: params.sent_at || null,
+      rule_id: params.rule_id || null,
+      email_to: params.email_to || null,
       metadata: params.metadata || null,
     });
+    if (error) console.error("logMessage insert error:", error);
   } catch (err) {
     console.error("logMessage error:", err);
   }
