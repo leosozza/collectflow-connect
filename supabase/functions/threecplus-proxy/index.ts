@@ -1243,7 +1243,22 @@ Deno.serve(async (req) => {
       : data?.data ? (Array.isArray(data.data) ? `{data:array[${data.data.length}]}` : `{data:object}`)
       : 'object';
     console.log(`3CPlus response: ${response.status} shape=${shape} action=${action}`);
+
+    // Diagnostic: log first 300 chars of campaign_statistics body to validate tenant shape
+    if (action === 'campaign_statistics') {
+      console.log(`campaign_statistics body: ${JSON.stringify(data).substring(0, 300)}`);
+    }
+
     if (response.status >= 400) {
+      // Silence 422 "no mailing" noise on metric endpoints — return empty success-shaped body
+      const isMetricEndpoint = action === 'campaign_lists_total_metrics' || action === 'campaign_lists_metrics' || action === 'campaign_agents_metrics';
+      if (response.status === 422 && isMetricEndpoint) {
+        console.log(`${action}: 422 (likely no mailing/data for date range) — returning empty payload`);
+        return new Response(
+          JSON.stringify({ data: action === 'campaign_lists_total_metrics' ? {} : [], status: 200, success: false, no_data: true }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       console.log(`3CPlus error body: ${JSON.stringify(data).substring(0, 500)}`);
     }
 
