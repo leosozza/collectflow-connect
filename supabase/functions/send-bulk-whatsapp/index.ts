@@ -525,9 +525,6 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
 
   const remaining = remainingCount || 0;
 
-  // Release campaign lock
-  await supabase.rpc("release_campaign_lock", { _campaign_id: campaignId, _worker_id: workerId });
-
   if (timedOut && remaining > 0) {
     // Reset any "processing" back to "pending" for retry
     await supabase.from("whatsapp_campaign_recipients")
@@ -545,10 +542,10 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       updated_at: new Date().toISOString(),
     }).eq("id", campaignId);
 
-    // Self-retrigger: fire-and-forget POST to ourselves so processing
-    // resumes immediately instead of waiting up to 1min for the cron
-    // watchdog. The released lock + try_lock_campaign protect against
-    // duplicate workers.
+    // Self-retrigger BEFORE releasing the lock so the next worker is
+    // already in-flight when try_lock_campaign becomes available again.
+    // Eliminates the gap where the cron watchdog could see "lock=null + pending"
+    // and double-invoke while our retrigger is still queued.
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (supabaseUrl && serviceKey) {
@@ -566,11 +563,17 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
       try { EdgeRuntime.waitUntil(retriggerPromise); } catch { /* ignore in non-edge envs */ }
     }
 
+    // Release campaign lock AFTER scheduling the retrigger.
+    await supabase.rpc("release_campaign_lock", { _campaign_id: campaignId, _worker_id: workerId });
+
     return new Response(
       JSON.stringify({ status: "partial", sent: chunkSent, failed: chunkFailed, totalSent, totalFailed, remaining, errors }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
+
+  // Normal completion path: release lock here.
+  await supabase.rpc("release_campaign_lock", { _campaign_id: campaignId, _worker_id: workerId });
 
   let finalStatus = "completed";
   if (totalSent === 0 && totalFailed > 0) finalStatus = "failed";
