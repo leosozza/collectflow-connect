@@ -492,7 +492,39 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">Instância que executará o disparo desta regra</p>
+            </div>
+
+            <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                <Label className="text-xs font-semibold">Agendamento e Boas Práticas (Anti-Ban)</Label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Janela de envio (BRT)</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input type="time" value={sendTimeStart} onChange={e => setSendTimeStart(e.target.value)} className="h-8 w-[110px] text-xs" />
+                    <span className="text-xs text-muted-foreground">até</span>
+                    <Input type="time" value={sendTimeEnd} onChange={e => setSendTimeEnd(e.target.value)} className="h-8 w-[110px] text-xs" />
+                  </div>
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Delay entre mensagens (s)</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input type="number" min={3} value={minDelay} onChange={e => setMinDelay(e.target.value)} className="h-8 w-[70px] text-xs" />
+                    <span className="text-xs text-muted-foreground">a</span>
+                    <Input type="number" min={3} value={maxDelay} onChange={e => setMaxDelay(e.target.value)} className="h-8 w-[70px] text-xs" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Limite diário de envios (opcional)</Label>
+                <Input type="number" min={1} placeholder="Sem limite" value={dailyCap} onChange={e => setDailyCap(e.target.value)} className="h-8 w-[140px] text-xs" />
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                ℹ O sistema só dispara dentro da janela configurada (horário de Brasília) e aplica delay aleatório entre mensagens para evitar bloqueio do WhatsApp.
+              </p>
+            </div>
               )}
             </div>
 
