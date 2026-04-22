@@ -428,7 +428,7 @@ export default function CampaignManagementTab() {
                           </Badge>
                         </td>
                         <td className="p-3 text-right">{c.total_selected}</td>
-                        <td className="p-3 text-right">{c.total_unique_recipients}</td>
+                        
                         <td className="p-3 text-right">{c.sent_count}</td>
                         <td className="p-3 text-right text-destructive">{c.failed_count}</td>
                         <td className="p-3 w-[220px]">
