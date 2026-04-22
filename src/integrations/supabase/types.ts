@@ -3594,12 +3594,14 @@ export type Database = {
       message_logs: {
         Row: {
           channel: string
+          client_cpf: string | null
           client_id: string | null
           created_at: string | null
           email_to: string | null
           error_message: string | null
           id: string
           message_body: string | null
+          metadata: Json | null
           phone: string | null
           rule_id: string | null
           sent_at: string | null
@@ -3608,12 +3610,14 @@ export type Database = {
         }
         Insert: {
           channel: string
+          client_cpf?: string | null
           client_id?: string | null
           created_at?: string | null
           email_to?: string | null
           error_message?: string | null
           id?: string
           message_body?: string | null
+          metadata?: Json | null
           phone?: string | null
           rule_id?: string | null
           sent_at?: string | null
@@ -3622,12 +3626,14 @@ export type Database = {
         }
         Update: {
           channel?: string
+          client_cpf?: string | null
           client_id?: string | null
           created_at?: string | null
           email_to?: string | null
           error_message?: string | null
           id?: string
           message_body?: string | null
+          metadata?: Json | null
           phone?: string | null
           rule_id?: string | null
           sent_at?: string | null
