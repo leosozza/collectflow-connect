@@ -131,9 +131,9 @@ Deno.serve(async (req) => {
               .select("id")
               .eq("tenant_id", tenant.id)
               .eq("client_id", client.id)
+              .eq("rule_id", rule.id)
               .eq("status", "sent")
               .gte("created_at", todayStart.toISOString())
-              .filter("metadata->>rule_id", "eq", rule.id)
               .limit(1)
               .maybeSingle();
 
@@ -206,6 +206,7 @@ Deno.serve(async (req) => {
                 message_body: message,
                 error_message: sendOk ? null : (typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult)).slice(0, 500),
                 sent_at: sendOk ? new Date().toISOString() : null,
+                rule_id: rule.id,
                 metadata: {
                   source_type: "trigger",
                   rule_id: rule.id,
@@ -256,6 +257,7 @@ Deno.serve(async (req) => {
                 status: "failed",
                 message_body: message,
                 error_message: (err?.message || "unknown").slice(0, 500),
+                rule_id: rule.id,
                 metadata: {
                   source_type: "trigger",
                   rule_id: rule.id,
@@ -279,6 +281,8 @@ Deno.serve(async (req) => {
                 status: "pending",
                 message_body: message,
                 error_message: "Email provider not yet configured",
+                rule_id: rule.id,
+                email_to: client.email,
                 metadata: {
                   source_type: "trigger",
                   rule_id: rule.id,
