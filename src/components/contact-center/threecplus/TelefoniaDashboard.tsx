@@ -539,7 +539,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     previousStatusRef.current = currentStatus;
-  }, [isOperatorView, myAgent?.status, lastCallId, isACW]);
+  }, [isOperatorView, myAgent?.status, lastCallId, isACW, fetchAll]);
 
   const handleLogout = async (agentId: number) => {
     setLoggingOut(agentId);
