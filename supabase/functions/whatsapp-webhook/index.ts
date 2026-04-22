@@ -42,10 +42,63 @@ Deno.serve(async (req) => {
         updateData.phone_number = sender.replace("@s.whatsapp.net", "");
       }
 
+      // Lookup previous status to detect transition (anti-spam)
+      const { data: prevInst } = await supabase
+        .from("whatsapp_instances")
+        .select("id, name, tenant_id, status")
+        .eq("instance_name", instanceName)
+        .maybeSingle();
+
       await supabase
         .from("whatsapp_instances")
         .update(updateData)
         .eq("instance_name", instanceName);
+
+      // Notify on transition connected -> disconnected
+      if (state === "close" && prevInst && prevInst.status !== "disconnected" && prevInst.tenant_id) {
+        try {
+          const recipientIds = new Set<string>();
+
+          // Operators linked to this instance
+          const { data: ops } = await supabase
+            .from("operator_instances")
+            .select("profiles:profile_id(user_id)")
+            .eq("instance_id", prevInst.id);
+          for (const row of ops || []) {
+            const uid = (row as any)?.profiles?.user_id;
+            if (uid) recipientIds.add(uid);
+          }
+
+          // Tenant admins
+          const { data: admins } = await supabase
+            .from("profiles")
+            .select("user_id")
+            .eq("tenant_id", prevInst.tenant_id)
+            .in("role", ["admin", "tenant_admin"]);
+          for (const row of admins || []) {
+            if (row.user_id) recipientIds.add(row.user_id);
+          }
+
+          const instLabel = prevInst.name || instanceName;
+          const title = "WhatsApp desconectado";
+          const message = `A instância "${instLabel}" foi desconectada. Reconecte pelo painel para retomar os disparos.`;
+
+          for (const uid of recipientIds) {
+            await supabase.rpc("create_notification", {
+              _tenant_id: prevInst.tenant_id,
+              _user_id: uid,
+              _title: title,
+              _message: message,
+              _type: "warning",
+              _reference_type: "whatsapp_instance",
+              _reference_id: prevInst.id,
+            });
+          }
+          console.log(`[provider=unofficial] Disconnect notifications sent to ${recipientIds.size} users for instance ${instLabel}`);
+        } catch (notifyErr: any) {
+          console.error("[provider=unofficial] Notification dispatch failed:", notifyErr.message);
+        }
+      }
 
       return new Response(JSON.stringify({ ok: true, state }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
