@@ -452,8 +452,14 @@ const CampaignsPanel = () => {
                       </div>
                     ) : (
                       <>
-                        {/* Refresh button */}
-                        <div className="flex justify-end">
+                        {/* Refresh button + last update */}
+                        <div className="flex justify-end items-center gap-2">
+                          {lastDetailsUpdate[cid] && (
+                            <span className="text-[10px] text-muted-foreground">
+                              Atualizado há {Math.floor((Date.now() - lastDetailsUpdate[cid].getTime()) / 1000)}s
+                              {detailsTick >= 0 ? "" : ""}
+                            </span>
+                          )}
                           <Button variant="outline" size="sm" onClick={() => loadCampaignDetails(cid)} className="gap-2 text-xs">
                             <RefreshCw className="w-3.5 h-3.5" /> Atualizar Detalhes
                           </Button>
