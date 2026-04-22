@@ -1,98 +1,81 @@
 
 
-## Plano: corrigir duplicatas remanescentes + auditoria do dashboard
+## Plano: campanha de WhatsApp para no meio do disparo (nunca finaliza)
 
-### Diagnóstico
+### Por que não termina
 
-Após o cleanup anterior (44 duplicatas → `superseded`), restaram **4 acordos com duplicatas reais** que escaparam porque misturam `installment_key` `NULL` (legado) com a chave canônica (`"entrada"`, `"1"`, `"2"`). O guard de duplicidade atual (`findExistingActivePayment`) trata `NULL` e `"entrada"` como chaves diferentes, então ambas convivem. A migration anterior agrupou por `COALESCE(installment_key, installment_number::text)`, mas isso não unifica `NULL` da entrada com a string `"entrada"`.
+A campanha **`Disparo carteira 10:32`** está agora em `sending` com **59 enviados, 5 falhas, 135 pendentes**, lock travado em `worker_25c1373f` desde 19:32 UTC e o último checkpoint às 19:33:50 — ou seja, o worker morreu há ~10 minutos atrás e ninguém reiniciou.
 
-**Duplicatas reais remanescentes** (R$ 865,42 inflados no total):
+Investigando, descobri o que está faltando:
 
-| Acordo | Cliente | Parcela | Baixas | Manter | Reverter |
-|---|---|---|---|---|---|
-| `715e16a3` | Natani | entrada | 118,64 (entrada) + 118,64 (NULL) | mais recente | 118,64 |
-| `c888ddf6` | — | 1 | 466,00 (NULL) + 466,00 ("1") | mais recente ("1") | 466,00 |
-| `e66340e7` | — | entrada | 136,36 (entrada) + 144,42 (NULL) | **144,42 (mais recente, valor correto)** | 136,36 |
-| `e66340e7` | — | 2 | 136,36 ("2") + 136,36 (NULL) | mais recente | 136,36 |
+1. O `send-bulk-whatsapp` tem limite forçado de **120 s por execução** (`MAX_EXECUTION_MS`) por causa do hard-limit de 150 s do edge runtime. Ao expirar, ele:
+   - libera o lock,
+   - re-marca recipients `processing` → `pending`,
+   - dispara um **self-retrigger** via `fetch()` para si mesmo (fire-and-forget).
+2. Esse self-retrigger é frágil: qualquer falha de rede, restart do runtime ou race com outro worker faz a corrente parar — e **não tem ninguém para ressuscitar**.
+3. Existe um watchdog perfeito embutido no `dispatch-scheduled-campaigns` (linhas 432-466): ele varre toda hora campanhas em `sending` com lock vazio/stale e dispara um novo worker. **Mas a função nunca foi agendada no `pg_cron`.** Conferi todas as migrations: `pg_cron` está habilitado, mas nenhum `cron.schedule(...)` aponta para `dispatch-scheduled-campaigns`. Sem o cron, o watchdog nunca roda.
 
-**Falsos positivos** (NÃO mexer): `079bb3e1` (Raiane) e `c7493649` (Samantha) têm `entrada` + `entrada_2` como **duas parcelas legítimas** de multi-entrada — ambas baixas válidas.
+A frase do usuário "para quando saio da tela" é **engano de causalidade**: sair/entrar da tela não interrompe nada (`startCampaign` é `fire-and-forget` server-side). O que acontece é coincidência temporal — a primeira janela de 120 s aconteceu enquanto a tela estava aberta (49 enviados), depois a corrente quebrou e ninguém retomou.
 
-### Estado do dashboard
+### O usuário pediu: "sem limitador, mas respeitando o período de envio"
 
-- `manual_payments`: 193 confirmed, 44 superseded, 2 pending, 1 rejected.
-- O dashboard soma `amount_paid` de TODOS confirmed → hoje está **R$ 865,42 inflado** em 4 acordos.
-- 2 baixas pendentes aguardando admin (Maria de Fátima R$ 582,75 / Edivania R$ 153,25) — informativo, não é bug.
-- Sync round 2 anterior pegou todos os divergentes → **0 pagamentos** com `amount_paid` ≠ valor agendado restantes (depois de aplicar o fix abaixo).
+Entendo que isso significa:
+- **Manter** os delays anti-ban entre mensagens (8-15 s não-oficial, 1-3 s oficial) e a pausa de lote (2 min a cada 15 mensagens). Esses são o "período de envio" que protege contra ban.
+- **Remover** a sensação de "pára sozinho" — a campanha precisa drenar até o último destinatário sem depender de o usuário ficar com a tela aberta nem de o navegador retransmitir nada.
 
-### Correção em 2 frentes
+### Correção (3 frentes, cirúrgica)
 
-#### 1. Guard de duplicidade tratar `NULL` ≡ chave canônica derivada do `installment_number`
+#### 1. Agendar o cron do dispatcher (raiz do problema)
 
-Em `manualPaymentService.findExistingActivePayment`: ao buscar duplicatas, considerar **ambas as formas** da chave para a mesma parcela:
-- Para `installment_number = 0`: chaves equivalentes = `["entrada", NULL]` (não considera `entrada_2/3` — esses são parcelas distintas legítimas em multi-entrada).
-- Para `installment_number ≥ 1`: chaves equivalentes = `[String(installment_number), NULL]`.
-
-Query passa a usar `.or()` cobrindo as duas variantes simultaneamente, antes de validar com `.eq("installment_number", ...)`.
-
-**Importante**: para `installment_key` começando com `entrada_` (multi-entrada), NÃO aplicar a equivalência com NULL — são parcelas independentes.
-
-#### 2. Migration one-shot — cleanup das 4 duplicatas restantes + revalidação
-
+Migration nova que cria:
 ```sql
--- Marcar as baixas mais antigas como superseded
-UPDATE manual_payments SET status='superseded',
-  review_notes='Substituída por baixa posterior — duplicidade NULL/key (round 3)'
-WHERE id IN (
-  'dede2e2a-8451-4e79-92df-911003f2cfe0', -- Natani entrada antiga
-  '6328fb9b-ce42-4096-a243-476a7bc531f5', -- c888ddf6 parc 1 NULL antiga
-  'a7afd689-b2ea-4758-8cfb-820c30820ea5', -- e66340e7 entrada 136,36 antiga
-  'f2e424c6-754a-40fa-9fa7-6f37f3f502c3'  -- e66340e7 parc 2 antiga
+SELECT cron.schedule(
+  'whatsapp-dispatch-scheduled-campaigns',
+  '* * * * *',  -- a cada minuto
+  $$ SELECT net.http_post(
+       url := 'https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/dispatch-scheduled-campaigns',
+       headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <service_role>'),
+       body := '{}'::jsonb
+     ); $$
 );
-
--- Reverter clients.valor_pago (decrementar 865,42 distribuído por cliente)
--- + re-avaliar agreements.status (se algum tinha virado completed por overpayment)
--- + log client_events 'manual_payment_superseded'
-
--- Sincronizar custom_installment_values com a baixa que ficou (especialmente Ezi: 144,42)
 ```
 
-#### Validação dos números do dashboard pós-correção
+A partir desse momento, **toda campanha em `sending` com worker morto é ressuscitada em até 60 s automaticamente**, até drenar todos os pendentes. Sem aumentar nada nos delays.
 
-Após aplicar:
-- Total `manual_payments confirmed`: 189 (era 193 → −4 superseded).
-- Soma `amount_paid` confirmados: −R$ 865,42 vs. estado atual.
-- Acordo da Ezi (`e66340e7`) agora mostra entrada = R$ 144,42 (valor real recebido) e parcela 2 = R$ 136,36, com 1 baixa cada.
-- RPC `get_dashboard_stats` (que lê `manual_payments` confirmed + `negociarie_cobrancas` pago) refletirá o valor correto automaticamente.
+#### 2. Reforçar o self-retrigger do worker para ser mais resiliente
 
-### Teste end-to-end (admin altera valor → baixa correta)
+Em `send-bulk-whatsapp` (final do `handleCampaignFlow`), trocar o `fetch().catch()` por `EdgeRuntime.waitUntil(fetch(...))`. Isso garante que o runtime não mate o socket antes da requisição sair. Hoje, sob carga, o `catch()` engole o erro e o retrigger morre.
 
-Após o deploy, rodar este cenário no preview:
-1. Abrir aba **Confirmação de Pagamento** → criar baixa pendente para uma parcela de teste com valor R$ 200,00 (parcela agendada R$ 195,00).
-2. Confirmar como admin → verificar:
-   - `manual_payments.amount_paid` = 200,00 ✓
-   - `agreements.custom_installment_values[key]` = 200,00 ✓ (sync já implementado)
-   - UI do detalhe do acordo mostra parcela como **R$ 200,00** ✓
-   - `clients.valor_pago` incrementou +200,00 (não +195,00) ✓
-3. Editar via lápis para R$ 198,00 → repetir verificações com novo valor.
-4. Tentar criar 2ª baixa para mesma parcela → diálogo bloqueia ✓ (já implementado).
-5. Tentar criar baixa com `installment_key=NULL` (legado) quando já existe `"1"` → guard novo bloqueia ✓.
+#### 3. Reset manual da campanha travada da Bárbara
+
+Migration one-shot só para essa campanha:
+- Liberar `processing_locked_at = NULL` em `whatsapp_campaigns` para `6c97163b…`.
+- Resetar `processing` → `pending` nos recipients dela (se houver).
+- Disparar manualmente `send-bulk-whatsapp` via `pg_net` para retomar imediatamente sem esperar 60 s do cron.
+
+### O que **não** vou alterar (proteção anti-ban permanece)
+
+- `MIN_DELAY_MS` / `MAX_DELAY_MS` por categoria (8-15 s não-oficial) — mantidos.
+- `BATCH_THRESHOLD` / `BATCH_REST_MS` (15 msgs → pausa 2 min) — mantidos.
+- `MAX_EXECUTION_MS = 120000` por worker — mantido (é limite do runtime, não do produto).
+
+A "sem limitador" do pedido vira: sem limite de quantos workers serão acionados em sequência. O cron + self-retrigger garantem que a corrente continue de onde parou, indefinidamente, até `pending = 0`.
 
 ### Arquivos alterados
 
-- `src/services/manualPaymentService.ts` — `findExistingActivePayment` cobre equivalência `NULL ↔ chave canônica` para entrada/parcela numerada (excluindo `entrada_2/3`).
-- Migration SQL one-shot — superseded das 4 duplicatas reais + revert valor_pago + revalidate status + sync custom_installment_values do Ezi.
+- `supabase/migrations/<novo>.sql` — `cron.schedule('whatsapp-dispatch-scheduled-campaigns', '* * * * *', …)` + reset da campanha `6c97163b…` + `net.http_post` para retomar imediatamente.
+- `supabase/functions/send-bulk-whatsapp/index.ts` — envolver o self-retrigger em `EdgeRuntime.waitUntil(...)` para garantir a saída do request mesmo no fim do ciclo de vida do worker.
 
-### Validação manual pós-deploy
+### Validação pós-deploy
 
-1. Dashboard: comparar "Total Recebido" antes/depois (deve cair R$ 865,42).
-2. Acordo da Ezi: entrada = **R$ 144,42**, parcela 2 = **R$ 136,36**, sem duplicatas no histórico.
-3. Acordo Natani / `c888ddf6`: 1 baixa cada, valor correto.
-4. Raiane (`079bb3e1`) e Samantha (`c7493649`): **mantêm** ambas as entradas — verificar que NÃO foram marcadas como superseded.
-5. Teste end-to-end (acima) passa sem erro.
+1. Em ≤ 60 s, a campanha `Disparo carteira 10:32` da Bárbara volta a `processing_locked_at` preenchido com novo `worker_*` e `sent_count` começa a subir de 59 em diante.
+2. Em ~30-40 min (135 pendentes × ~12 s + 9 pausas de 2 min), a campanha vira `completed` ou `completed_with_errors` automaticamente, sem ninguém precisar manter tela aberta.
+3. Logs do `dispatch-scheduled-campaigns` mostram, a cada minuto: `watchdog re-invoking ... (pending=N)` enquanto há pendentes; depois para de aparecer.
+4. Criar uma campanha-teste com 30 destinatários e fechar a aba imediatamente após disparar → conferir que finaliza sozinha.
 
 ### Fora de escopo
 
-- Mexer nas 2 baixas pendentes de Maria de Fátima / Edivania (admin precisa decidir).
-- Refatorar `manualPaymentService.confirm` para transação atômica (revisão arquitetural separada).
-- Adicionar constraint UNIQUE no banco (`agreement_id, installment_number, installment_key`) — bloquearia inclusive o caso multi-entrada legítimo, precisa modelagem antes.
+- Trocar o motor anti-ban (delays continuam exatos como estão).
+- Refatorar `send-bulk-whatsapp` para multiprocessing por instância (já é round-robin por instância na arquitetura atual).
+- Adicionar UI de "pausar campanha" (existe outra história, fora deste fix).
 
