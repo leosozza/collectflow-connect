@@ -101,23 +101,33 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // Idempotência: já enviado hoje para este (rule, client)?
+            // Idempotência: já enviado hoje para este (rule, alvo)?
+            // Para agreement: chave = agreement_id+installment_key. Para wallet: client_id ou cpf.
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
-            const { data: dupLog } = await supabase
+            let dupQuery = supabase
               .from("message_logs")
               .select("id")
               .eq("tenant_id", tenant.id)
-              .eq("client_id", client.id)
               .eq("rule_id", rule.id)
               .eq("status", "sent")
-              .gte("created_at", todayStart.toISOString())
-              .limit(1)
-              .maybeSingle();
+              .gte("created_at", todayStart.toISOString());
+
+            if (ruleType === "agreement" && client.agreement_id) {
+              dupQuery = dupQuery
+                .eq("metadata->>agreement_id", client.agreement_id)
+                .eq("metadata->>installment_key", client.installment_key || "");
+            } else if (client.client_id) {
+              dupQuery = dupQuery.eq("client_id", client.client_id);
+            } else {
+              dupQuery = dupQuery.eq("client_cpf", client.cpf);
+            }
+
+            const { data: dupLog } = await dupQuery.limit(1).maybeSingle();
 
             if (dupLog) {
               totalSkippedDup++;
-              console.log(`[send-notifications] dup-skip rule=${rule.id} client=${client.id}`);
+              console.log(`[send-notifications] dup-skip rule=${rule.id} target=${client.cpf}`);
               continue;
             }
 
