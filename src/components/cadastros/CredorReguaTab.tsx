@@ -166,6 +166,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
       const payload = {
         name: name.trim(),
         channel,
+        rule_type: ruleType,
         days_offset: parsedDays,
         message_template: template,
         instance_id: instanceId === "none" ? null : instanceId,
@@ -225,10 +226,13 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     return <ArrowDown className="w-3 h-3 text-red-500" />;
   };
 
-  const preview = TEMPLATE_VARS.reduce(
+  const currentVars = ruleType === "agreement" ? AGREEMENT_VARS : WALLET_VARS;
+  const preview = currentVars.reduce(
     (text, v) => text.split(v).join(SAMPLE_DATA[v] || v),
     template
   );
+
+  const filteredRules = filterType === "all" ? rules : rules.filter((r) => (r.rule_type || "wallet") === filterType);
 
   const getInstanceName = (id: string | null) => {
     if (!id) return null;
