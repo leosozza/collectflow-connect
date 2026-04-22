@@ -385,7 +385,7 @@ export default function CampaignManagementTab() {
                     <th className="text-left p-3 font-medium">Criado por</th>
                     <th className="text-left p-3 font-medium">Status</th>
                     <th className="text-right p-3 font-medium">Selecionados</th>
-                    <th className="text-right p-3 font-medium">Únicos</th>
+                    
                     <th className="text-right p-3 font-medium">Enviados</th>
                     <th className="text-right p-3 font-medium">Falhas</th>
                     <th className="text-left p-3 font-medium">Progresso / Agenda</th>
