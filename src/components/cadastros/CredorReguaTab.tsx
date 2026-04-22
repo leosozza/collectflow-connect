@@ -92,13 +92,26 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   };
 
   const handleSave = async () => {
-    if (!tenant || !credorId || !name.trim()) return;
+    if (!tenant || !credorId) return;
+    if (!name.trim()) {
+      toast.error("Informe um nome para a regra");
+      return;
+    }
+    const parsedDays = parseInt(daysOffset);
+    if (Number.isNaN(parsedDays)) {
+      toast.error("Dias precisa ser um número (negativo, zero ou positivo)");
+      return;
+    }
+    if (!template.trim()) {
+      toast.error("Informe o template da mensagem");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
-        name,
+        name: name.trim(),
         channel,
-        days_offset: parseInt(daysOffset),
+        days_offset: parsedDays,
         message_template: template,
         instance_id: instanceId === "none" ? null : instanceId,
       };
@@ -112,7 +125,9 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
       resetForm();
       await loadData();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao salvar regra");
+      console.error("[CredorReguaTab] save error:", err);
+      const msg = err?.message || err?.error_description || err?.hint || "Erro ao salvar regra";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -197,6 +212,9 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
             <Label className="text-xs">Dias em relação ao vencimento</Label>
             <Input type="number" value={daysOffset} onChange={e => setDaysOffset(e.target.value)} min={-30} max={90} className="h-9 w-32" />
             <p className="text-xs text-muted-foreground">{daysLabel(parseInt(daysOffset) || 0)}</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              Negativo = antes do vencimento (prevenção). 0 = no dia. Positivo = após (cobrança).
+            </p>
           </div>
           {showInstanceSelect && (
             <div className="space-y-1.5">
