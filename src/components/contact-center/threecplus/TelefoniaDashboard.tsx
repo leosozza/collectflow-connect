@@ -266,7 +266,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [interval, setRefreshInterval] = useState(isOperatorView ? 3 : 30);
+  const [interval, setRefreshInterval] = useState(isOperatorView ? 3 : 15);
   const [loggingOut, setLoggingOut] = useState<number | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<any>(null);
   const [selectedCampaign, setSelectedCampaign] = useState<string>("");
@@ -454,7 +454,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
                 const { extractObject } = await import("@/lib/threecplusUtils");
                 const stats = await invoke("campaign_statistics", { campaign_id: c.id });
                 return { ...c, statistics: extractObject(stats) };
-              } catch {
+              } catch (err) {
+                console.warn(`[Telefonia] campaign_statistics failed for ${c.id}:`, err);
                 return c;
               }
             })
@@ -1530,6 +1531,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         domain={domain}
         apiToken={apiToken}
         onRefresh={fetchAll}
+        lastUpdate={lastUpdate}
       />
     </div>
   );
