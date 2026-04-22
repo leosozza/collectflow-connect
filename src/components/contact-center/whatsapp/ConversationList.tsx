@@ -433,6 +433,12 @@ const ConversationList = ({
                             {displayName}
                           </span>
                           <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                            {conv.status === "waiting" && (
+                              <span className="inline-flex items-center gap-0.5 h-[18px] px-1.5 rounded-full bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 text-[10px] font-semibold leading-none">
+                                <UserCheck className="w-2.5 h-2.5" />
+                                Aguardando aceite
+                              </span>
+                            )}
                             {conv.unread_count > 0 && (
                               <div className="flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-[#25d366] text-white text-[11px] font-bold leading-none">
                                 {conv.unread_count}
