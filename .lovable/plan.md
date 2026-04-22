@@ -1,67 +1,98 @@
 
 
-## Plano: corrigir baixa manual com valor diferente da parcela (caso Camila/Bárbara)
+## Plano: corrigir duplicatas remanescentes + auditoria do dashboard
 
-### O que aconteceu de fato (investigação no banco)
+### Diagnóstico
 
-1. O acordo onde Bárbara lançou **R$ 251,99** **não é da Camila** — é da cliente **Ezi Mitel de Souza Fleury** (acordo `3fee4f9c`), parcela 1 (valor agendado original: R$ 252,73). Camila tem outro acordo (`d825253a`), entrada R$ 246,48, e esse já está sincronizado.
-2. Bárbara confirmou a baixa de R$ 251,99 da Ezi em **17/04** — antes da correção de sync que entrou hoje. Naquele momento `custom_installment_values["1"]` ficou R$ 252,73 (valor original), e a UI continuou mostrando 252,73.
-3. Como "não atualizou", Bárbara hoje (22/04) **lançou uma segunda baixa** de R$ 251,99 para a mesma parcela 1 → confirmou de novo → agora `custom_installment_values["1"] = 251,99` ✅, mas o acordo tem **duas confirmações** para a mesma parcela (251,99 + 251,99 = R$ 503,98 contabilizados, em vez de R$ 251,99).
-4. Levantamento mostra **20+ acordos com baixas duplicadas** e **9+ acordos com `amount_paid` ainda divergente** que o backfill anterior não pegou.
+Após o cleanup anterior (44 duplicatas → `superseded`), restaram **4 acordos com duplicatas reais** que escaparam porque misturam `installment_key` `NULL` (legado) com a chave canônica (`"entrada"`, `"1"`, `"2"`). O guard de duplicidade atual (`findExistingActivePayment`) trata `NULL` e `"entrada"` como chaves diferentes, então ambas convivem. A migration anterior agrupou por `COALESCE(installment_key, installment_number::text)`, mas isso não unifica `NULL` da entrada com a string `"entrada"`.
 
-### Causa raiz de cada problema
+**Duplicatas reais remanescentes** (R$ 865,42 inflados no total):
 
-| Problema | Causa |
-|---|---|
-| **A. UI mostra valor original mesmo após edição** | Backfill anterior só cobriu casos com `installment_key` preenchido. Casos com `installment_key=NULL` (legado, só `installment_number`), `entrada_2/3` em multi-entrada, ou divergências < 1 centavo — ficaram de fora. |
-| **B. Sistema permite confirmar a mesma parcela 2× ou 3×** | `manualPaymentService.confirm` não verifica se já existe baixa confirmada para o mesmo `agreement_id + installment_key/number`. Resultado: `totalPaid` infla e o acordo pode ser marcado `completed` incorretamente. |
-| **C. Operador não percebe que o valor pode ser editado pelo admin** | Sem feedback visual no diálogo do operador quando o valor digitado difere do agendado (alerta amarelo já foi adicionado na rodada anterior, mas vamos reforçar no fluxo do admin também). |
+| Acordo | Cliente | Parcela | Baixas | Manter | Reverter |
+|---|---|---|---|---|---|
+| `715e16a3` | Natani | entrada | 118,64 (entrada) + 118,64 (NULL) | mais recente | 118,64 |
+| `c888ddf6` | — | 1 | 466,00 (NULL) + 466,00 ("1") | mais recente ("1") | 466,00 |
+| `e66340e7` | — | entrada | 136,36 (entrada) + 144,42 (NULL) | **144,42 (mais recente, valor correto)** | 136,36 |
+| `e66340e7` | — | 2 | 136,36 ("2") + 136,36 (NULL) | mais recente | 136,36 |
 
-### Correção (3 frentes)
+**Falsos positivos** (NÃO mexer): `079bb3e1` (Raiane) e `c7493649` (Samantha) têm `entrada` + `entrada_2` como **duas parcelas legítimas** de multi-entrada — ambas baixas válidas.
 
-#### 1. Bloquear baixa duplicada da mesma parcela
+### Estado do dashboard
 
-Em `manualPaymentService.create` e `manualPaymentService.confirm`:
-- Antes de criar/confirmar, fazer `SELECT` por `agreement_id + installment_key (ou installment_number)` com `status='confirmed'`. Se existir → bloquear com mensagem clara: *"Esta parcela já tem uma baixa confirmada (R$ X,XX em DD/MM). Para alterar o valor, use o botão de editar (lápis) na linha da baixa existente."*
-- Mesmo bloqueio na UI: em `ManualPaymentDialog`, ao abrir, buscar baixas confirmadas para a parcela e mostrar aviso/desabilitar.
+- `manual_payments`: 193 confirmed, 44 superseded, 2 pending, 1 rejected.
+- O dashboard soma `amount_paid` de TODOS confirmed → hoje está **R$ 865,42 inflado** em 4 acordos.
+- 2 baixas pendentes aguardando admin (Maria de Fátima R$ 582,75 / Edivania R$ 153,25) — informativo, não é bug.
+- Sync round 2 anterior pegou todos os divergentes → **0 pagamentos** com `amount_paid` ≠ valor agendado restantes (depois de aplicar o fix abaixo).
 
-Isso resolve o que Bárbara fez (ela criou uma 2ª baixa pra "forçar" o valor a aparecer — esse caminho deixa de existir).
+### Correção em 2 frentes
 
-#### 2. Garantir que **editar o valor** (lápis) realmente sincroniza — tornar `syncInstallmentValueFromPayment` mais robusto
+#### 1. Guard de duplicidade tratar `NULL` ≡ chave canônica derivada do `installment_number`
 
-Em `agreementService.syncInstallmentValueFromPayment`:
-- Quando `installment_key` for NULL, derivar a chave a partir de `installment_number` (`"entrada"` se 0, senão `String(installment_number)`).
-- Tolerância de 1 centavo já existe. Acrescentar log estruturado quando não conseguir resolver a parcela.
-- Quando `entrada_value` for atualizado (entrada única), atualizar **também** `custom_installment_values["entrada"]` (para o `buildInstallmentSchedule` ler de qualquer lugar).
+Em `manualPaymentService.findExistingActivePayment`: ao buscar duplicatas, considerar **ambas as formas** da chave para a mesma parcela:
+- Para `installment_number = 0`: chaves equivalentes = `["entrada", NULL]` (não considera `entrada_2/3` — esses são parcelas distintas legítimas em multi-entrada).
+- Para `installment_number ≥ 1`: chaves equivalentes = `[String(installment_number), NULL]`.
 
-#### 3. Backfill segundo round + limpeza de duplicatas
+Query passa a usar `.or()` cobrindo as duas variantes simultaneamente, antes de validar com `.eq("installment_number", ...)`.
 
-Migration one-shot:
-- **Sync round 2**: para todas as `manual_payments` confirmed onde `amount_paid` ainda diverge da parcela agendada (incluindo `installment_key=NULL` e `entrada_2/3`), gravar em `custom_installment_values[chave_resolvida]`. ~9 registros estimados.
-- **Reverter duplicatas**: para os 20+ acordos com 2-3 baixas confirmadas no mesmo `installment_key`, **manter a mais recente como `confirmed`** e marcar as anteriores como `superseded` (novo status, ou `rejected` com `review_notes='Substituída por baixa posterior — duplicidade'`). Recalcular `clients.valor_pago` (decrementar a diferença) e re-avaliar `agreements.status` (pode voltar de `completed` para `pending` se overpayment for desfeito).
-- Dry-run primeiro: imprimir lista dos 20 acordos + delta de valor antes de executar.
+**Importante**: para `installment_key` começando com `entrada_` (multi-entrada), NÃO aplicar a equivalência com NULL — são parcelas independentes.
+
+#### 2. Migration one-shot — cleanup das 4 duplicatas restantes + revalidação
+
+```sql
+-- Marcar as baixas mais antigas como superseded
+UPDATE manual_payments SET status='superseded',
+  review_notes='Substituída por baixa posterior — duplicidade NULL/key (round 3)'
+WHERE id IN (
+  'dede2e2a-8451-4e79-92df-911003f2cfe0', -- Natani entrada antiga
+  '6328fb9b-ce42-4096-a243-476a7bc531f5', -- c888ddf6 parc 1 NULL antiga
+  'a7afd689-b2ea-4758-8cfb-820c30820ea5', -- e66340e7 entrada 136,36 antiga
+  'f2e424c6-754a-40fa-9fa7-6f37f3f502c3'  -- e66340e7 parc 2 antiga
+);
+
+-- Reverter clients.valor_pago (decrementar 865,42 distribuído por cliente)
+-- + re-avaliar agreements.status (se algum tinha virado completed por overpayment)
+-- + log client_events 'manual_payment_superseded'
+
+-- Sincronizar custom_installment_values com a baixa que ficou (especialmente Ezi: 144,42)
+```
+
+#### Validação dos números do dashboard pós-correção
+
+Após aplicar:
+- Total `manual_payments confirmed`: 189 (era 193 → −4 superseded).
+- Soma `amount_paid` confirmados: −R$ 865,42 vs. estado atual.
+- Acordo da Ezi (`e66340e7`) agora mostra entrada = R$ 144,42 (valor real recebido) e parcela 2 = R$ 136,36, com 1 baixa cada.
+- RPC `get_dashboard_stats` (que lê `manual_payments` confirmed + `negociarie_cobrancas` pago) refletirá o valor correto automaticamente.
+
+### Teste end-to-end (admin altera valor → baixa correta)
+
+Após o deploy, rodar este cenário no preview:
+1. Abrir aba **Confirmação de Pagamento** → criar baixa pendente para uma parcela de teste com valor R$ 200,00 (parcela agendada R$ 195,00).
+2. Confirmar como admin → verificar:
+   - `manual_payments.amount_paid` = 200,00 ✓
+   - `agreements.custom_installment_values[key]` = 200,00 ✓ (sync já implementado)
+   - UI do detalhe do acordo mostra parcela como **R$ 200,00** ✓
+   - `clients.valor_pago` incrementou +200,00 (não +195,00) ✓
+3. Editar via lápis para R$ 198,00 → repetir verificações com novo valor.
+4. Tentar criar 2ª baixa para mesma parcela → diálogo bloqueia ✓ (já implementado).
+5. Tentar criar baixa com `installment_key=NULL` (legado) quando já existe `"1"` → guard novo bloqueia ✓.
 
 ### Arquivos alterados
 
-- `src/services/manualPaymentService.ts` — adicionar guard contra duplicidade em `create` e `confirm`.
-- `src/services/agreementService.ts` — `syncInstallmentValueFromPayment` mais robusto (resolve key por number quando NULL; sincroniza `custom_installment_values["entrada"]` quando atualiza `entrada_value`).
-- `src/components/acordos/ManualPaymentDialog.tsx` — query de baixas existentes da parcela; aviso/bloqueio quando já houver baixa confirmada; botão alternativo "Editar baixa existente" levando ao admin.
-- `src/components/acordos/PaymentConfirmationTab.tsx` — exibir badge "duplicada" caso o backfill tenha marcado, e chamar a versão melhorada do sync.
-- Migration SQL one-shot:
-  - Sync round 2 para amount_paid divergente.
-  - Marcar duplicatas como `superseded` + reverter `valor_pago` e revalidar status do acordo.
+- `src/services/manualPaymentService.ts` — `findExistingActivePayment` cobre equivalência `NULL ↔ chave canônica` para entrada/parcela numerada (excluindo `entrada_2/3`).
+- Migration SQL one-shot — superseded das 4 duplicatas reais + revert valor_pago + revalidate status + sync custom_installment_values do Ezi.
 
-### Validação pós-deploy
+### Validação manual pós-deploy
 
-1. Abrir acordo da Ezi (`3fee4f9c`) → parcela 1 mostra R$ 251,99 (já está correto), e o histórico mostra apenas **uma** baixa confirmada (a outra fica como "Substituída").
-2. Abrir acordo `6905fbe5` (Jaciele) → de 1.400 voltou para 700, parcela 1 = R$ 700,01.
-3. Operador tenta solicitar baixa de uma parcela já paga → diálogo bloqueia com mensagem clara apontando para a baixa existente.
-4. Admin edita valor de baixa via lápis → parcela atualiza imediatamente na tela do detalhe do acordo (mesmo para acordos legados sem `installment_key`).
-5. `client_events` recebe evento `manual_payment_superseded` para cada duplicata revertida (auditoria).
+1. Dashboard: comparar "Total Recebido" antes/depois (deve cair R$ 865,42).
+2. Acordo da Ezi: entrada = **R$ 144,42**, parcela 2 = **R$ 136,36**, sem duplicatas no histórico.
+3. Acordo Natani / `c888ddf6`: 1 baixa cada, valor correto.
+4. Raiane (`079bb3e1`) e Samantha (`c7493649`): **mantêm** ambas as entradas — verificar que NÃO foram marcadas como superseded.
+5. Teste end-to-end (acima) passa sem erro.
 
 ### Fora de escopo
 
-- Refazer histórico de auditoria das baixas duplicadas anteriores ao deploy.
-- Mexer no fluxo de cobranças PIX/boleto da Negociarie (divergência por juros lá segue caminho diferente).
-- Permitir múltiplas baixas parciais na mesma parcela (não é o caso atual — sempre uma baixa = parcela inteira). Se o cliente quiser esse fluxo, pode ser próxima rodada.
+- Mexer nas 2 baixas pendentes de Maria de Fátima / Edivania (admin precisa decidir).
+- Refatorar `manualPaymentService.confirm` para transação atômica (revisão arquitetural separada).
+- Adicionar constraint UNIQUE no banco (`agreement_id, installment_number, installment_key`) — bloquearia inclusive o caso multi-entrada legítimo, precisa modelagem antes.
 
