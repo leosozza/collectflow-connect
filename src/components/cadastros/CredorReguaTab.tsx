@@ -492,6 +492,8 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">Instância que executará o disparo desta regra</p>
+                </div>
+              )}
             </div>
 
             <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
@@ -524,8 +526,6 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
               <p className="text-[11px] text-muted-foreground leading-tight">
                 ℹ O sistema só dispara dentro da janela configurada (horário de Brasília) e aplica delay aleatório entre mensagens para evitar bloqueio do WhatsApp.
               </p>
-            </div>
-              )}
             </div>
 
             <div className="space-y-1.5">
