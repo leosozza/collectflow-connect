@@ -21,7 +21,9 @@ const AI_AGENT_MAX_DELAY_MS = 6000;
 const AI_AGENT_BATCH_THRESHOLD = 25;
 const AI_AGENT_BATCH_REST_MS = 60000;
 
-const MAX_EXECUTION_MS = 380000;
+// Edge runtime hard limit is 150s. Exit at 120s so we have time to
+// mark remaining recipients + self-retrigger before the platform kills us.
+const MAX_EXECUTION_MS = 120000;
 
 interface ThrottleConfig {
   minDelay: number;
