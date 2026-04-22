@@ -337,6 +337,21 @@ const CampaignsPanel = () => {
 
   useEffect(() => { if (hasCredentials) loadCampaigns(); }, [domain, apiToken]);
 
+  // Auto-refresh expanded campaign details every 15s
+  useEffect(() => {
+    if (!expandedCampaign) return;
+    const id = setInterval(() => loadCampaignDetails(expandedCampaign), 15000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedCampaign]);
+
+  // Tick every second to refresh "atualizado há Xs" label
+  useEffect(() => {
+    if (!expandedCampaign) return;
+    const id = setInterval(() => setDetailsTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [expandedCampaign]);
+
   /* ─── Helpers ─── */
 
   const getStatusBadge = (status: string) => {
