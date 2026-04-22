@@ -84,6 +84,12 @@ const ManualPaymentDialog = ({
           <div>
             <Label className="text-xs">Valor Pago *</Label>
             <CurrencyInput value={amountPaid} onValueChange={setAmountPaid} />
+            {Math.abs(amountPaid - installmentValue) > 0.01 && (
+              <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                Valor pago difere do valor da parcela em <strong>R$ {Math.abs(amountPaid - installmentValue).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>.
+                Ao confirmar, o valor da parcela será atualizado para refletir o valor recebido.
+              </p>
+            )}
           </div>
 
           <div>
