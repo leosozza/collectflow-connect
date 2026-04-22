@@ -934,6 +934,30 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           <Button onClick={handleSave} disabled={saveMutation.isPending}>{saveMutation.isPending ? "Salvando..." : "Salvar Credor"}</Button>
         </div>
       </SheetContent>
+
+      <AlertDialog open={!!prazoConfirm} onOpenChange={(o) => { if (!o && !applyingExpire) skipApplyExpireNow(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Aplicar novo prazo aos acordos vencidos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você reduziu o prazo de pagamento de <strong>{prazoConfirm?.oldPrazo}</strong> para{" "}
+              <strong>{prazoConfirm?.newPrazo}</strong> dias. Deseja aplicar essa nova regra agora aos acordos
+              vencidos deste credor? Acordos com mais de {prazoConfirm?.newPrazo} dias de atraso serão marcados
+              como <strong>Quebra de Acordo</strong> imediatamente.
+              <br /><br />
+              Caso contrário, a nova regra entra em vigor automaticamente na próxima rotina diária (03:00 BRT).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={applyingExpire} onClick={skipApplyExpireNow}>
+              Aplicar somente na próxima rotina
+            </AlertDialogCancel>
+            <AlertDialogAction disabled={applyingExpire} onClick={(e) => { e.preventDefault(); runApplyExpireNow(); }}>
+              {applyingExpire ? "Processando..." : "Aplicar agora"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 };
