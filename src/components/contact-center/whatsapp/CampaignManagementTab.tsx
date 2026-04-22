@@ -66,6 +66,8 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   MoreVertical,
   Clock,
   Repeat,
@@ -125,6 +127,7 @@ export default function CampaignManagementTab() {
   const [scheduleTypeFilter, setScheduleTypeFilter] = useState<"all" | "once" | "recurring">("all");
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [expanded, setExpanded] = useState(false);
 
   // Action dialogs state
   const [cancelTarget, setCancelTarget] = useState<CampaignWithStats | null>(null);
@@ -144,6 +147,10 @@ export default function CampaignManagementTab() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, statusFilter, scheduleTypeFilter]);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [debouncedSearch, statusFilter, scheduleTypeFilter, page]);
 
   const { data: campaignsResult, isLoading } = useQuery({
     queryKey: ["managed-campaigns", tenantId, statusFilter, debouncedSearch, onlyOwn, page],
@@ -167,6 +174,8 @@ export default function CampaignManagementTab() {
     : allCampaigns;
   const totalCampaigns = campaignsResult?.total || 0;
   const totalPages = Math.max(1, Math.ceil(totalCampaigns / PAGE_SIZE));
+  const visibleCampaigns = expanded ? campaigns : campaigns.slice(0, 5);
+  const hiddenCount = Math.max(0, campaigns.length - 5);
 
   const { data: stats } = useQuery({
     queryKey: ["campaign-dashboard-stats", tenantId, onlyOwn],
@@ -394,7 +403,7 @@ export default function CampaignManagementTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {campaigns.map((c) => {
+                  {visibleCampaigns.map((c) => {
                     const isScheduled = c.status === "scheduled" || c.status === "paused";
                     const isRecurring = c.schedule_type === "recurring";
                     const progress =
@@ -542,6 +551,28 @@ export default function CampaignManagementTab() {
                   })}
                 </tbody>
               </table>
+              {hiddenCount > 0 && (
+                <div className="flex justify-center py-3 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExpanded((v) => !v)}
+                    className="text-muted-foreground"
+                  >
+                    {expanded ? (
+                      <>
+                        <ChevronUp className="w-4 h-4 mr-1" />
+                        Ocultar
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-4 h-4 mr-1" />
+                        Ver mais {hiddenCount} {hiddenCount === 1 ? "campanha" : "campanhas"}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
