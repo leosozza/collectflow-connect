@@ -1,84 +1,68 @@
 
 
-## Auditoria do filtro "Sem disparo de WhatsApp"
+## Aviso no sininho ao desconectar número de WhatsApp
 
-### Diagnóstico
-
-O filtro **funciona parcialmente, mas está incompleto**. Hoje ele só considera disparos via **Campanhas em Massa**, ignorando todos os outros canais de envio do Rivo.
-
-**Onde o filtro vive:** RPC `get_carteira_grouped` (linhas 102–112) faz `NOT EXISTS` em `whatsapp_campaign_recipients`.
-
-**Problema:** o Rivo envia mensagens por **5 caminhos diferentes**:
-
-| Caminho | Tabela onde grava | Considerado hoje? |
-|---|---|---|
-| Campanhas em massa (`send-bulk-whatsapp`) | `whatsapp_campaign_recipients` | ✅ Sim |
-| Atendimento 1-a-1 (`send-chat-message`) | `chat_messages` (direction=`outbound`) | ❌ Não |
-| Régua de cobrança (`send-notifications`) | `chat_messages` | ❌ Não |
-| Workflows / Automação (`workflow-engine`) | `chat_messages` | ❌ Não |
-| API REST pública (`clients-api/whatsapp/send`) | `chat_messages` | ❌ Não |
-
-Resultado: marcar "Sem disparo de WhatsApp" **mostra clientes que já receberam mensagens via atendimento, régua, workflow ou API**, contradizendo a expectativa do usuário ("nunca tivemos contato via Rivo").
-
-**Bugs adicionais encontrados na sub-CTE atual:**
-
-1. **Ignora `assigned_instance_id`** — Se um destinatário foi enfileirado mas a campanha foi cancelada antes de despachar, ainda assim aparece como "teve disparo". Deveria filtrar por `status IN ('sent','delivered','read')` (ou pelo menos `sent_at IS NOT NULL`) para considerar apenas envios efetivos.
-2. **Não usa `client_profiles`** — A consolidação canônica de CPF está em `client_profiles`. CPFs com pontuação diferente já estão normalizados via `replace`, então OK, mas seria mais limpo via JOIN canônico. (Não-bloqueante.)
+### Onde a desconexão é detectada hoje
+A Edge Function `whatsapp-webhook` recebe o evento `connection.update` da Evolution e atualiza `whatsapp_instances.status = 'disconnected'` (linha 38). Hoje **só atualiza o status**, sem notificar ninguém.
 
 ### Correção proposta
 
-Reescrever apenas o bloco `sem_whatsapp_filter` da RPC `get_carteira_grouped` para considerar **ambas as fontes** com envios **efetivamente realizados**:
+**1. Adicionar bloco de notificação no `whatsapp-webhook/index.ts`**
 
-```sql
-sem_whatsapp_filter AS (
-  SELECT s.* FROM sem_acordo_filter s
-  WHERE NOT _sem_whatsapp OR (
-    -- Sem envio efetivo via campanha
-    NOT EXISTS (
-      SELECT 1 FROM whatsapp_campaign_recipients r
-      JOIN clients cl ON cl.id = r.representative_client_id
-      WHERE cl.tenant_id = _tenant_id
-        AND r.sent_at IS NOT NULL
-        AND r.status IN ('sent','delivered','read')
-        AND regexp_replace(cl.cpf,'\D','','g') = regexp_replace(s.cpf,'\D','','g')
-        AND cl.credor = s.credor
-    )
-    -- E sem mensagem outbound em atendimento/régua/workflow/API
-    AND NOT EXISTS (
-      SELECT 1 FROM chat_messages cm
-      JOIN whatsapp_conversations wc ON wc.id = cm.conversation_id
-      JOIN clients cl ON cl.id = wc.client_id
-      WHERE cm.tenant_id = _tenant_id
-        AND cm.direction = 'outbound'
-        AND regexp_replace(cl.cpf,'\D','','g') = regexp_replace(s.cpf,'\D','','g')
-        AND cl.credor = s.credor
-    )
-  )
-)
+Quando `state === 'close'` (e o status anterior era diferente de `disconnected`, para evitar spam), disparar notificações via RPC `create_notification` para:
+
+- **Operadores vinculados à instância** — buscar em `operator_instances` (JOIN com `profiles` para obter `user_id`) onde `instance_id = inst.id`.
+- **Admins do tenant** — buscar em `profiles` onde `tenant_id = inst.tenant_id AND role = 'admin'`.
+
+Deduplicar por `user_id` (um admin que também é operador da instância recebe só 1 notificação).
+
+Payload da notificação:
+```ts
+{
+  _tenant_id: inst.tenant_id,
+  _user_id: <user_id>,
+  _title: "WhatsApp desconectado",
+  _message: `A instância "${inst.name}" foi desconectada. Reconecte pelo painel para retomar os disparos.`,
+  _type: "warning",
+  _reference_type: "whatsapp_instance",
+  _reference_id: inst.id,
+}
 ```
 
-Critério "teve disparo" = pelo menos uma mensagem **outbound** (em qualquer canal interno) associada ao mesmo CPF + Credor do agrupamento da carteira.
+**2. Anti-spam (lookup do status anterior)**
 
-### Validação
+Antes de inserir, ler `status` atual da instância. Se já estava `disconnected`, pular notificações. Garante que só dispara na **transição** connected → disconnected.
 
-Após aplicar a migration, vou executar as seguintes verificações:
+**3. Cobertura para Gupshup (oficial)**
 
-1. Contar CPFs totais na carteira do tenant ativo.
-2. Contar CPFs com pelo menos 1 disparo (campanha OU chat outbound).
-3. Rodar a RPC com `_sem_whatsapp = true` e confirmar que `total_count = total - com_disparo`.
-4. Pegar 3 CPFs de amostra retornados e confirmar via SQL que **nenhum** deles aparece em `whatsapp_campaign_recipients` (com sent_at) nem em `chat_messages` (outbound).
+Em `gupshup-webhook/index.ts`, quando o evento de status da conta indicar desconexão/expiração de sessão, replicar o mesmo bloco. (Vou inspecionar os tipos de evento que o Gupshup envia e tratar `account-event` / equivalente — se não houver evento explícito, deixo como TODO documentado e foco em Evolution/Wuzapi, que cobrem 100% das instâncias não-oficiais.)
+
+**4. Feedback visual no sininho**
+
+Já existe: `NotificationBell` + `NotificationList` renderizam o badge vermelho automaticamente via realtime na tabela `notifications` (`type='warning'` usa o ícone/cor de alerta). Nenhuma mudança no front.
+
+**5. Realtime já habilitado**
+
+A migration `20260211155027` já fez `ALTER PUBLICATION supabase_realtime ADD TABLE notifications`. O hook `useNotifications` recebe o INSERT na hora.
+
+### Validação pós-deploy
+
+1. Forçar uma desconexão (botão Desconectar em uma instância de teste) → confirmar que o webhook dispara e a notificação aparece para operador vinculado + admin do tenant.
+2. Conferir que disparar novamente não cria duplicata enquanto status já está `disconnected`.
+3. Confirmar via SQL: `SELECT * FROM notifications WHERE reference_type='whatsapp_instance' ORDER BY created_at DESC LIMIT 5`.
 
 ### Arquivos alterados
 
-- **Migration SQL** (via tool de migração): `CREATE OR REPLACE FUNCTION public.get_carteira_grouped(...)` com o bloco `sem_whatsapp_filter` corrigido. Demais parâmetros e lógica permanecem idênticos.
+- **`supabase/functions/whatsapp-webhook/index.ts`** — adicionar bloco de notificação dentro de `if (event === "connection.update")` quando state vira `close`.
+- **`supabase/functions/gupshup-webhook/index.ts`** — replicar para evento equivalente (após inspeção do payload).
 
 ### Fora de escopo
 
-- UI do checkbox (já correto, passa `semWhatsapp: true` corretamente).
-- `clientService.ts` (já mapeia para `_sem_whatsapp`).
-- Adicionar contadores na UI ("X clientes sem disparo") — não foi pedido.
+- UI do sininho (já funcional).
+- E-mail/push externo (apenas in-app por ora).
+- Reconexão automática.
 
 ### Próximo passo
 
-Confirme **"Aplicar correção"** e eu publico a migration + rodo a bateria de validação trazendo o relatório com os números antes/depois.
+Confirme **"Aplicar"** e eu implemento o bloco de notificação + faço o teste de transição real numa instância.
 
