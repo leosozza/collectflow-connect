@@ -1766,6 +1766,7 @@ export type Database = {
           is_active: boolean | null
           message_template: string
           name: string
+          rule_type: string
           tenant_id: string
           updated_at: string | null
         }
@@ -1779,6 +1780,7 @@ export type Database = {
           is_active?: boolean | null
           message_template: string
           name: string
+          rule_type?: string
           tenant_id: string
           updated_at?: string | null
         }
@@ -1792,6 +1794,7 @@ export type Database = {
           is_active?: boolean | null
           message_template?: string
           name?: string
+          rule_type?: string
           tenant_id?: string
           updated_at?: string | null
         }
@@ -6645,6 +6648,26 @@ export type Database = {
           last_interaction_at: string
           remote_phone: string
           status: string
+        }[]
+      }
+      get_rule_eligible_targets: {
+        Args: { p_rule_id: string; p_target_date: string }
+        Returns: {
+          agreement_id: string
+          client_id: string
+          cpf: string
+          credor: string
+          data_vencimento: string
+          email: string
+          installment_due_date: string
+          installment_key: string
+          installment_number: number
+          installment_value: number
+          nome_completo: string
+          phone: string
+          source: string
+          total_installments: number
+          valor: number
         }[]
       }
       get_tenant_token_summary: {
