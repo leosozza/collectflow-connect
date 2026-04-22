@@ -1,59 +1,56 @@
 
 
-## Por que a campanha parou de novo (e o watchdog não destravou)
+## Correções: ficha não abre na ligação + pausa travada
 
-### Causa raiz (confirmada)
+### Causa 1 — Ficha não abre quando entra ligação
 
-**Campanha:** `Disparo carteira 10:32` — agora em **30/199** (subiu de 14, watchdog re-invocou), mas voltou a travar às 15:43. Lock de `worker_b2285a8a` ativo desde 15:40, **1 recipient preso em `status=processing`**, 167 pendentes.
+Olhando o screenshot do Gustavo "Em ligação (00:27)", a barra vermelha aparece mas o que está abaixo são as KPIs/Últimas Ligações da tela de espera, não a ficha. Isso significa que o ramo `if (isOnCall && (activeCallPhone || mailingCpf || mailingClientId))` em `TelefoniaDashboard.tsx:1073` **não foi acionado** — `isOnCall` ficou `true` mas **as 3 fontes de identificação ficaram vazias** ao mesmo tempo.
 
-**Análise dos logs HTTP da edge (`function_edge_logs`)** — todas as últimas ~40 invocações de `send-bulk-whatsapp` retornam **HTTP 401 Unauthorized** em 145–555ms (sem boot do código). O dispatcher loga `[dispatcher] watchdog re-invoking 6c97163b…` corretamente, mas a chamada subsequente é rejeitada na borda da edge antes do código rodar.
+Por quê: o estado `companyCalls` é populado pelo polling de `fetchAll` (a cada 3s no operatorView). Existe uma janela em que `myAgent.status` já virou `2` (on_call), mas `company_calls` ainda não devolveu o registro da chamada nova → `activeCall=null`, `mailingCpf=""`, `mailingClientId=""`, `activeCallPhone=""` (porque também não há `myAgent.phone`/`remote_phone` ainda). Resultado: cai no `else` e renderiza a tela "Logged in, waiting" mesmo com a barra "Em ligação".
 
-**Por quê:** o `send-bulk-whatsapp` não tem bloco `[functions.send-bulk-whatsapp]` em `supabase/config.toml` → roda com `verify_jwt=true` (default). Tanto o `dispatch-scheduled-campaigns` (watchdog/one-shot/recurring) quanto o próprio `send-bulk-whatsapp` (self-retrigger) chamam usando `Authorization: Bearer ${SERVICE_ROLE_KEY}` — mas com a migração da plataforma para **signing keys assimétricas (ES256)**, o service role key estático **não satisfaz mais** o verificador JWT da edge, gerando 401 antes do código.
+Ainda pior: quando finalmente `activeCall` chega, o `TelefoniaAtendimentoWrapper` faz `useClientByPhone` + query CPF; se as duas devolvem `null` (cliente não existe na carteira), mostra o card "Cliente não encontrado". Não há fallback que **abra a ficha de atendimento mesmo sem cliente cadastrado** com base no telefone bruto. Em discadores preditivos sem mailing rico, isso é a regra, não a exceção.
 
-Resultado: cada tick do cron loga "re-invoking" mas **nada executa**. Watchdog vira teatro.
+**Correção:**
+1. Em `isOnCall`, **sempre renderizar `TelefoniaAtendimentoWrapper`**, mesmo sem identificadores ainda — passa `clientPhone=""` e o wrapper mostra um loader "Aguardando dados da chamada..." enquanto polling completa.
+2. No wrapper, quando a busca termina sem cliente E há um `clientPhone` válido, **navegar automaticamente** para `/atendimento?phone=...&agentId=...&callId=...&channel=call` (em vez de exigir clique no botão). A página de atendimento já trata cliente novo via querystring.
+3. Forçar fetch imediato de `company_calls` na transição `prevStatus !== 2 → 2` (não esperar próximo tick de 3s) — adicionar `fetchAll()` no `useEffect` de detecção de transição.
 
-### Consequências em cascata
+### Causa 2 — Pausa travada sem botão "Retomar"
 
-1. Worker que pegou o último ciclo (15:40) processou 16 mensagens (14→30), marcou 1 recipient como `processing`, atingiu timeout/erro, e **nenhuma invocação posterior conseguiu rodar** o cleanup → recipient órfão segura interpretação de "lock vivo" caso o `processing_locked_at` seja atualizado.
-2. Mesma trava afeta **todas** as outras 14 campanhas em `sending` listadas (várias desde 14/04) — todas órfãs pelo mesmo motivo.
+Screenshot "Em pausa (04:04)" mostra só botão "Intervalo" (que abre o popover de motivos), sem o botão "Retomar". Na lógica linha 1214: `isManualPause` precisa de `(status===3 com activePauseName)` **OU** `status===6`. Se o operador foi pausado externamente (admin pausou, ou pausa veio com status 3 sem nome reconhecível) e o `sessionStorage` está vazio (ex: reload da página, outra aba), `activePauseName=""` e `status=3` → `isManualPause=false` → mostra "Intervalo" em vez de "Retomar". Operador clica no Intervalo, não vê opção de sair, fica preso.
 
-### Correções
+**Correção:**
+1. Tratar `status===3` **sempre** como pausa manual (independente de `activePauseName`). Pausa real do servidor é status 3; status 4 (TPA) já tem fluxo próprio. Ajustar `isManualPause` para `status===3 || status===6 || (string equivalents)`, sem exigir `activePauseName`.
+2. No `useEffect` de detecção de pausa externa (linha 812), quando entra em status 3 sem `activePauseName`, definir `setActivePauseName("Pausa")` como label genérico para o header não ficar inconsistente.
+3. Adicionar **botão de emergência "Forçar saída de pausa"** no header sempre que `isPaused===true` por mais de 60s — chama `unpause_agent` direto e, se a 3CPlus responder "não está em pausa", limpa estado local. Já existe esse caminho de erro tratado em `handleUnpause`, só falta expor o botão de forma visível.
 
-**1) Desativar JWT no `send-bulk-whatsapp` via `supabase/config.toml`**
+### Causa 3 — Defesa contra "campanha caída sem áudio"
 
-```toml
-[functions.send-bulk-whatsapp]
-verify_jwt = false
-```
-
-A função já valida o `tenant_id` por payload e usa service role internamente para escrever — não há ganho de segurança em manter `verify_jwt=true` aqui (todo cliente legítimo é o próprio dispatcher e o front via `supabase.functions.invoke`, ambos compatíveis). Após o deploy do config, os 401 viram 200 e watchdog/self-retrigger voltam a funcionar.
-
-**2) Liberar recipient órfão em `processing`**
-
-Migration utilitária: para a campanha `6c97163b…`, fazer `UPDATE whatsapp_campaign_recipients SET status='pending' WHERE campaign_id='6c97163b…' AND status='processing'` e zerar `processing_locked_at` da campanha. Generaliza-se para qualquer campanha `sending` com lock > 5min e recipient em `processing` > 5min — adicionar essa limpeza no início do `dispatch-scheduled-campaigns` (antes do watchdog) para que se auto-cure no futuro.
-
-**3) Defesa extra no worker — converter `processing` órfão em retry**
-
-No início do `processCampaignChunk` (após `try_lock_campaign`), rodar `UPDATE … SET status='pending' WHERE campaign_id=$1 AND status='processing' AND updated_at < now() - interval '5 minutes'`. Garante que recipient marcado como `processing` por worker que morreu volte para a fila no próximo ciclo.
-
-**4) Validação pós-deploy**
-
-1. Aplicar config + migration de cleanup.
-2. Em ≤1min, cron `*/1` re-invoca `6c97163b…` — agora HTTP 200, contagem sai de 30 e progride.
-3. Watchdog também destrava as outras 14 campanhas órfãs (várias completam em 1–2 ciclos pois têm <20 pending cada).
-4. Conferir `function_edge_logs` — `send-bulk-whatsapp` passa a retornar 200, execution_time > 5s (boot + processamento real).
-5. SQL final: `SELECT count(*) FROM whatsapp_campaigns WHERE status='sending' AND processing_locked_at < now() - interval '10 min'` → `0`.
+Independente das duas correções de UI, vamos registrar telemetria mínima da chamada para o próximo diagnóstico do Gustavo: ao entrar em `isOnCall`, fazer um único `INSERT` em `client_events` com `metadata: { agent_id, call_id, phone, status_at_entry, sip_connected, extension_status }`. Isso permite, no futuro, correlacionar "ligação caiu sem áudio" com `sip_connected=false` ou `extension_status≠registered` no momento do ring.
 
 ### Arquivos alterados
 
-- `supabase/config.toml` — adicionar bloco `[functions.send-bulk-whatsapp]` com `verify_jwt = false`.
-- `supabase/migrations/<nova>.sql` — limpar `processing` órfão da campanha travada e zerar locks > 10min de todas em `sending`.
-- `supabase/functions/dispatch-scheduled-campaigns/index.ts` — bloco de auto-cura no início (resetar recipients `processing` > 5min para `pending`).
-- `supabase/functions/send-bulk-whatsapp/index.ts` — mesma defesa após `try_lock_campaign`.
+- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx`
+  - `isManualPause` (linha 829): aceitar status 3 sem `activePauseName`.
+  - `useEffect` pausa externa (linha 812): definir label genérico "Pausa" quando ausente.
+  - Botão "Forçar saída de pausa" no header da pausa (próximo ao timer) quando `isPaused` há > 60s.
+  - Bloco `isOnCall` (linha 1073): renderizar `TelefoniaAtendimentoWrapper` mesmo sem identificadores ainda; disparar `fetchAll()` extra na transição para status 2.
+  - `useEffect` de transição (linha 484): chamar `fetchAll()` quando prevStatus → 2 para acelerar busca de `company_calls`.
+- `src/components/contact-center/threecplus/TelefoniaDashboard.tsx` → `TelefoniaAtendimentoWrapper`:
+  - Auto-navegar para `/atendimento?phone=...` quando lookup terminar sem cliente (sem exigir clique).
+  - Loader explícito "Aguardando dados da chamada..." quando `clientPhone===""`.
+  - `INSERT` opcional em `client_events` ao montar com dados de telemetria SIP.
+
+### Validação pós-deploy
+
+1. Gustavo entra em campanha → ramo verde "Aguardando ligação".
+2. Próxima ligação cai → barra vermelha aparece **e** ficha de atendimento abre em até 3s, mesmo se cliente não estiver na carteira (vai para `/atendimento?phone=...`).
+3. Se admin pausar Gustavo de outra tela → header amarelo mostra **botão "Retomar"** funcional imediatamente.
+4. Se ele ficar preso na pausa por > 60s → aparece "Forçar saída" como escape.
 
 ### Fora de escopo
 
-- Trocar `SERVICE_ROLE_KEY` por chave assinada nova (overkill se `verify_jwt=false` resolve para esta função interna).
-- Refatorar para fila externa.
-- Bug colateral `utf-8-validate` warning no boot (cosmético).
+- Fix de áudio one-way no MicroSIP (problema externo no headset/NAT do PC).
+- Refatorar `TelefoniaAtendimentoWrapper` para ser componente próprio em arquivo separado.
+- Repensar fluxo de TPA (`isACW`) — está funcionando, não mexer.
 
