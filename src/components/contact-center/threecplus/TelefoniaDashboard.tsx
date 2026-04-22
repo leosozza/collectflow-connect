@@ -488,6 +488,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
     if (prevStatus !== null && prevStatus !== currentStatus) {
       console.log("[Telefonia] Status transition:", prevStatus, "→", currentStatus);
+      // Transition INTO on_call (2): force an immediate fetch so company_calls is populated ASAP
+      // — otherwise we have a 3s gap where isOnCall is true but no mailing/phone is known yet.
+      if (currentStatus === 2 && prevStatus !== 2) {
+        console.log("[Telefonia] Entered on_call — forcing immediate fetchAll() to populate company_calls");
+        fetchAll();
+        setTimeout(() => fetchAll(), 800);
+      }
       // Transition from on_call (2) to paused (3) or ACW/TPA (4) = ACW
       if (prevStatus === 2 && (currentStatus === 3 || currentStatus === 4)) {
         console.log("[Telefonia] ACW/TPA detected — showing disposition screen");
