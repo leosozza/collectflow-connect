@@ -763,11 +763,47 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       const isError = result?.status && result.status >= 400;
       if (isError) {
         const msg = (result.detail || result.message || "").toLowerCase();
+        const isNotInInterval =
+          msg.includes("não está em intervalo") ||
+          msg.includes("nao esta em intervalo") ||
+          msg.includes("not in interval") ||
+          msg.includes("cannot be removed") ||
+          msg.includes("não pode ser removido");
         if (msg.includes("não está em pausa") || msg.includes("not paused") || msg.includes("not in pause")) {
           // Agent already left pause on server — clear local state gracefully
           setActivePauseName("");
           sessionStorage.removeItem("3cp_active_pause_name");
           toast.info("Pausa já encerrada no servidor");
+        } else if (isNotInInterval) {
+          // TPA masquerading as pause — fallback to qualify_call with first available qualification
+          console.warn("[Telefonia] unpause rejected (not in interval), falling back to qualify_call");
+          const callIdToQualify = lastCallId || sessionStorage.getItem("3cp_last_call_id");
+          const qualId = campaignQualifications.length > 0 ? campaignQualifications[0].id : null;
+          if (callIdToQualify && qualId) {
+            try {
+              const qResult = await invoke("qualify_call", {
+                call_id: callIdToQualify,
+                qualification_id: Number(qualId),
+              });
+              console.log("[Telefonia] fallback qualify_call result:", JSON.stringify(qResult));
+              const qErr = qResult?.status && qResult.status >= 400;
+              if (qErr) {
+                toast.error(qResult.detail || "Não foi possível tabular a chamada");
+              } else {
+                toast.success("Chamada tabulada (TPA encerrada)");
+                setActivePauseName("");
+                setLastCallId(null);
+                sessionStorage.removeItem("3cp_last_call_id");
+                sessionStorage.removeItem("3cp_active_pause_name");
+              }
+            } catch (e: any) {
+              toast.error(e?.message || "Erro ao tabular chamada");
+            }
+          } else {
+            // No call/qualification available — open ACW panel for manual selection
+            setIsACW(true);
+            toast.info("Selecione um motivo para encerrar o TPA");
+          }
         } else {
           toast.error(result.detail || result.message || "Erro ao retomar");
         }
