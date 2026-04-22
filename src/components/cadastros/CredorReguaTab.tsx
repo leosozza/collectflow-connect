@@ -62,9 +62,11 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   // Form state
   const [name, setName] = useState("");
   const [channel, setChannel] = useState("whatsapp");
+  const [ruleType, setRuleType] = useState<RuleType>("wallet");
   const [daysOffset, setDaysOffset] = useState("0");
   const [instanceId, setInstanceId] = useState<string>("none");
-  const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATES.wallet);
+  const [filterType, setFilterType] = useState<"all" | RuleType>("all");
 
   const loadData = useCallback(async () => {
     if (!tenant || !credorId) return;
@@ -88,20 +90,24 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
   const resetFormFields = () => {
     setName("");
     setDaysOffset("0");
-    setTemplate(DEFAULT_TEMPLATE);
+    setTemplate(DEFAULT_TEMPLATES[ruleType]);
   };
 
   const closeAndReset = () => {
     setName("");
     setChannel("whatsapp");
+    setRuleType("wallet");
     setDaysOffset("0");
     setInstanceId("none");
-    setTemplate(DEFAULT_TEMPLATE);
+    setTemplate(DEFAULT_TEMPLATES.wallet);
     setEditingRule(null);
     setShowForm(false);
   };
 
-  const isDirty = () => name.trim().length > 0 || (template.trim() !== DEFAULT_TEMPLATE.trim() && template.trim().length > 0);
+  const isDirty = () => {
+    const defaults = Object.values(DEFAULT_TEMPLATES).map((t) => t.trim());
+    return name.trim().length > 0 || (template.trim().length > 0 && !defaults.includes(template.trim()));
+  };
 
   const tryClose = () => {
     if (isDirty() && !editingRule) {
@@ -114,15 +120,25 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
     setEditingRule(null);
     setName("");
     setChannel("whatsapp");
+    setRuleType("wallet");
     setDaysOffset("0");
     setInstanceId("none");
-    setTemplate(DEFAULT_TEMPLATE);
+    setTemplate(DEFAULT_TEMPLATES.wallet);
     setShowForm(true);
+  };
+
+  const handleRuleTypeChange = (newType: RuleType) => {
+    const defaults = Object.values(DEFAULT_TEMPLATES).map((t) => t.trim());
+    if (defaults.includes(template.trim()) || template.trim() === "") {
+      setTemplate(DEFAULT_TEMPLATES[newType]);
+    }
+    setRuleType(newType);
   };
 
   const openEdit = (rule: CollectionRule) => {
     setName(rule.name);
     setChannel(rule.channel);
+    setRuleType(rule.rule_type || "wallet");
     setDaysOffset(rule.days_offset.toString());
     setInstanceId(rule.instance_id || "none");
     setTemplate(rule.message_template);
