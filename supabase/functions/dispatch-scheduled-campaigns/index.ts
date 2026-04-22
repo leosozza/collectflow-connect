@@ -434,7 +434,9 @@ Deno.serve(async (req) => {
     // actively processing it (lock null OR stale > 2min) and there are still
     // pending/processing recipients. Hits when a previous worker timed out
     // (380s edge-runtime cap) without self-retriggering.
-    const staleCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    // Reduced from 2min → 45s so watchdog re-invokes orphan campaigns faster.
+    // Combined with worker self-retrigger this keeps the gap between cycles < 1min.
+    const staleCutoff = new Date(Date.now() - 45 * 1000).toISOString();
     const { data: stalled } = await supabase
       .from("whatsapp_campaigns")
       .select("id, processing_locked_at")
