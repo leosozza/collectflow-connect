@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
             } catch (err: any) {
               await logMessage(supabase, {
                 tenant_id: tenant.id,
-                client_id: client.id,
+                client_id: client.client_id,
                 client_cpf: client.cpf,
                 phone: client.phone,
                 channel: "whatsapp",
@@ -260,10 +260,14 @@ Deno.serve(async (req) => {
                 rule_id: rule.id,
                 metadata: {
                   source_type: "trigger",
+                  source: client.source || ruleType,
                   rule_id: rule.id,
                   rule_name: rule.name,
+                  rule_type: ruleType,
                   event_source: eventSource,
                   instance_id: rule.instance_id || null,
+                  agreement_id: client.agreement_id || null,
+                  installment_key: client.installment_key || null,
                 },
               });
               totalFailed++;
@@ -275,7 +279,7 @@ Deno.serve(async (req) => {
             if (client.email) {
               await logMessage(supabase, {
                 tenant_id: tenant.id,
-                client_id: client.id,
+                client_id: client.client_id,
                 client_cpf: client.cpf,
                 channel: "email",
                 status: "pending",
@@ -285,10 +289,14 @@ Deno.serve(async (req) => {
                 email_to: client.email,
                 metadata: {
                   source_type: "trigger",
+                  source: client.source || ruleType,
                   rule_id: rule.id,
                   rule_name: rule.name,
+                  rule_type: ruleType,
                   event_source: eventSource,
                   email_to: client.email,
+                  agreement_id: client.agreement_id || null,
+                  installment_key: client.installment_key || null,
                 },
               });
             }
