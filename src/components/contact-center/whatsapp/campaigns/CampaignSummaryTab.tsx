@@ -542,8 +542,11 @@ export default function CampaignSummaryTab({ campaign }: Props) {
                     dataKey="value"
                     label={({ name, value }) => `${name}: ${value}`}
                   >
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    {pieData.map((entry, i) => (
+                      <Cell
+                        key={i}
+                        fill={STATUS_PIE_COLORS[entry.name] ?? PIE_FALLBACK}
+                      />
                     ))}
                   </Pie>
                   <Tooltip />
