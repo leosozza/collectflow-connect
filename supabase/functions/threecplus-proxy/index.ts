@@ -267,9 +267,10 @@ Deno.serve(async (req) => {
       case 'campaign_statistics': {
         const err = requireField(body, 'campaign_id', corsHeaders);
         if (err) return err;
-        const startDate = formatDateParam(body.startDate, '00:00:00');
-        const endDate = formatDateParam(body.endDate, '23:59:59');
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/statistics`, authParam, { startDate, endDate });
+        const start_date = formatDateParam(body.startDate || body.start_date, '00:00:00');
+        const end_date = formatDateParam(body.endDate || body.end_date, '23:59:59');
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/statistics`, authParam, { start_date, end_date });
+        console.log(`Fetching campaign_statistics for ${body.campaign_id} [${start_date} → ${end_date}]`);
         break;
       }
 
@@ -937,8 +938,10 @@ Deno.serve(async (req) => {
       case 'campaign_lists_metrics': {
         const err = requireField(body, 'campaign_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/metrics`, authParam);
-        console.log(`Fetching lists metrics for campaign ${body.campaign_id}`);
+        const start_date = formatDateParam(body.startDate || body.start_date, '00:00:00');
+        const end_date = formatDateParam(body.endDate || body.end_date, '23:59:59');
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/metrics`, authParam, { start_date, end_date });
+        console.log(`Fetching lists metrics for campaign ${body.campaign_id} [${start_date} → ${end_date}]`);
         break;
       }
 
@@ -946,8 +949,10 @@ Deno.serve(async (req) => {
       case 'campaign_lists_total_metrics': {
         const err = requireField(body, 'campaign_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/total_metrics`, authParam);
-        console.log(`Fetching total metrics for campaign ${body.campaign_id}`);
+        const start_date = formatDateParam(body.startDate || body.start_date, '00:00:00');
+        const end_date = formatDateParam(body.endDate || body.end_date, '23:59:59');
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists/total_metrics`, authParam, { start_date, end_date });
+        console.log(`Fetching total metrics for campaign ${body.campaign_id} [${start_date} → ${end_date}]`);
         break;
       }
 
@@ -955,8 +960,10 @@ Deno.serve(async (req) => {
       case 'campaign_agents_metrics': {
         const err = requireField(body, 'campaign_id', corsHeaders);
         if (err) return err;
-        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents/metrics/total`, authParam);
-        console.log(`Fetching agents metrics for campaign ${body.campaign_id}`);
+        const start_date = formatDateParam(body.startDate || body.start_date, '00:00:00');
+        const end_date = formatDateParam(body.endDate || body.end_date, '23:59:59');
+        url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/agents/metrics/total`, authParam, { start_date, end_date });
+        console.log(`Fetching agents metrics for campaign ${body.campaign_id} [${start_date} → ${end_date}]`);
         break;
       }
 
