@@ -397,8 +397,44 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ---------- Watchdog: re-invoke orphaned `sending` campaigns ----------
+    // A campaign is orphaned when it's still in `sending` but no worker is
+    // actively processing it (lock null OR stale > 2min) and there are still
+    // pending/processing recipients. Hits when a previous worker timed out
+    // (380s edge-runtime cap) without self-retriggering.
+    const staleCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: stalled } = await supabase
+      .from("whatsapp_campaigns")
+      .select("id, processing_locked_at")
+      .eq("status", "sending")
+      .or(`processing_locked_at.is.null,processing_locked_at.lt.${staleCutoff}`)
+      .limit(20);
+
+    let watchdogReinvoked = 0;
+    for (const c of (stalled || []) as any[]) {
+      // Confirm there are pending recipients before invoking
+      const { count } = await supabase
+        .from("whatsapp_campaign_recipients")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", c.id)
+        .in("status", ["pending", "processing"]);
+
+      if ((count || 0) === 0) continue;
+
+      console.log(`[dispatcher] watchdog re-invoking ${c.id} (pending=${count}, lock=${c.processing_locked_at || "null"})`);
+      fetch(`${SUPABASE_URL}/functions/v1/send-bulk-whatsapp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({ campaign_id: c.id }),
+      }).catch((e) => console.log(`[watchdog] invoke failed ${c.id}:`, e?.message));
+      watchdogReinvoked++;
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, processed, scanned: (due || []).length }),
+      JSON.stringify({ ok: true, processed, scanned: (due || []).length, watchdogReinvoked }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e: any) {
