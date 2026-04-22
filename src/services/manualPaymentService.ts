@@ -62,13 +62,21 @@ const findExistingActivePayment = async (
     .from("manual_payments" as any)
     .select("*")
     .eq("agreement_id", agreementId)
-    .in("status", ["confirmed", "pending_confirmation"]);
+    .in("status", ["confirmed", "pending_confirmation"])
+    .eq("installment_number", installmentNumber);
 
-  if (installmentKey) {
+  // Multi-entrada (entrada_2/3/...) — chaves independentes, sem equivalência com NULL
+  const isMultiEntrada = typeof installmentKey === "string" && /^entrada_\d+$/.test(installmentKey);
+
+  if (isMultiEntrada) {
     query = query.eq("installment_key", installmentKey);
   } else {
-    query = query.is("installment_key", null).eq("installment_number", installmentNumber);
+    // Equivalência NULL ↔ chave canônica para mesma parcela (entrada / "1" / "2" / ...)
+    const canonical = installmentNumber === 0 ? "entrada" : String(installmentNumber);
+    const target = installmentKey || canonical;
+    query = query.or(`installment_key.eq.${target},installment_key.is.null`);
   }
+
   if (excludeId) query = query.neq("id", excludeId);
 
   const { data } = await query.order("created_at", { ascending: false });
