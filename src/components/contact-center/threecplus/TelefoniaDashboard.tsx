@@ -111,8 +111,40 @@ const TelefoniaAtendimentoWrapper = ({
     }
   }, [isLoading, resolvedId, clientPhone, cleanCpf, clientDbId, clientByCpf, clientByPhone]);
 
+  // Loader: while we don't have ANY identifier yet (call just started, polling not done)
+  if (!clientPhone && !cleanCpf && !clientDbId) {
+    return (
+      <div className="p-6 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+        <RefreshCw className="w-4 h-4 animate-spin" />
+        Aguardando dados da chamada...
+      </div>
+    );
+  }
+
   if (isLoading) {
     return <div className="p-4 text-center text-muted-foreground text-sm">Buscando cliente...</div>;
+  }
+
+  // No client found in CRM but we DO have a phone — auto-navigate to /atendimento?phone=...
+  // so the operator always lands on a working ficha (page handles unknown clients via querystring).
+  if (!resolvedId && clientPhone) {
+    if (!hasOpened.current) {
+      hasOpened.current = true;
+      const params = new URLSearchParams();
+      params.set("phone", clientPhone);
+      if (cleanCpf) params.set("cpf", cleanCpf);
+      if (agentId) params.set("agentId", String(agentId));
+      if (callId) params.set("callId", String(callId));
+      params.set("channel", "call");
+      console.log("[Telefonia] Cliente não encontrado, abrindo ficha por telefone:", clientPhone);
+      navigate(`/atendimento?${params.toString()}`);
+    }
+    return (
+      <div className="p-6 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+        <RefreshCw className="w-4 h-4 animate-spin" />
+        Abrindo ficha de atendimento...
+      </div>
+    );
   }
 
   if (!resolvedId) {
@@ -488,6 +520,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
     if (prevStatus !== null && prevStatus !== currentStatus) {
       console.log("[Telefonia] Status transition:", prevStatus, "→", currentStatus);
+      // Transition INTO on_call (2): force an immediate fetch so company_calls is populated ASAP
+      // — otherwise we have a 3s gap where isOnCall is true but no mailing/phone is known yet.
+      if (currentStatus === 2 && prevStatus !== 2) {
+        console.log("[Telefonia] Entered on_call — forcing immediate fetchAll() to populate company_calls");
+        fetchAll();
+        setTimeout(() => fetchAll(), 800);
+      }
       // Transition from on_call (2) to paused (3) or ACW/TPA (4) = ACW
       if (prevStatus === 2 && (currentStatus === 3 || currentStatus === 4)) {
         console.log("[Telefonia] ACW/TPA detected — showing disposition screen");
@@ -532,7 +571,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
 
     previousStatusRef.current = currentStatus;
-  }, [isOperatorView, myAgent?.status, lastCallId, isACW]);
+  }, [isOperatorView, myAgent?.status, lastCallId, isACW, fetchAll]);
 
   const handleLogout = async (agentId: number) => {
     setLoggingOut(agentId);
@@ -808,17 +847,17 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   }, [isOperatorView, isAgentOnline, myCampaignId, loadPauseIntervals, loadCampaignQualifications]);
 
-  // Detect external pause (status 6) and resolve pause name from loaded intervals
+  // Detect external pause (status 3 manual or 6 work_break) and resolve a label
   useEffect(() => {
-    if (isOperatorView && myAgent?.status === 6 && !activePauseName) {
-      // Try to find the interval name from the loaded pauseIntervals
-      // The API doesn't return pause_name for status 6, so we use a generic fallback
+    if (!isOperatorView) return;
+    const s = myAgent?.status;
+    if ((s === 3 || s === 6) && !activePauseName) {
       const storedName = sessionStorage.getItem("3cp_active_pause_name");
       if (storedName) {
         setActivePauseName(storedName);
-      } else if (pauseIntervals.length > 0) {
-        // Can't determine exact interval from API, show generic
-        setActivePauseName("Intervalo");
+      } else {
+        // Generic label so the header stays consistent and "Retomar" is reachable
+        setActivePauseName(s === 6 ? "Intervalo" : "Pausa");
       }
     }
   }, [isOperatorView, myAgent?.status, activePauseName, pauseIntervals]);
@@ -826,7 +865,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   // No longer needed — widget was removed
 
   // Derived telephony state: distinguish TPA from manual pause
-  const isManualPause = (myAgent?.status === 3 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break") && (!!activePauseName || myAgent?.status === 6);
+  // Treat status 3 (paused) and 6 (work_break) ALWAYS as manual pause so the "Retomar" button is always available,
+  // even when the operator was paused externally and we don't have a local activePauseName yet.
+  const isManualPause = myAgent?.status === 3 || myAgent?.status === 6 || ["paused", "work_break"].includes(String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_"));
   const isPausedStatus = myAgent?.status === 3 || myAgent?.status === 4 || myAgent?.status === 6 || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "paused" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "acw" || String(myAgent?.status ?? "").toLowerCase().replace(/[\s-]/g, "_") === "work_break";
 
   // No longer needed — pause controls were part of the widget
@@ -1069,8 +1110,9 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       );
     }
 
-    // State: On call → show atendimento (unified)
-    if (isOnCall && (activeCallPhone || mailingCpf || mailingClientId)) {
+    // State: On call → ALWAYS render the atendimento wrapper, even before company_calls
+    // resolves the mailing/phone — the wrapper shows a loader until identifiers arrive.
+    if (isOnCall) {
       return (
         <div className="space-y-0">
           <div className={`flex items-center justify-between px-4 py-2.5 ${statusBgClass(myAgent?.status)} animate-pulse`}>
@@ -1082,7 +1124,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
           <TelefoniaAtendimentoWrapper
             clientPhone={activeCallPhone}
             agentId={operatorAgentId!}
-            callId={activeCall?.call_id || myAgent?.call_id || myAgent?.current_call_id}
+            callId={activeCall?.call_id || activeCall?.telephony_id || myAgent?.call_id || myAgent?.current_call_id}
             clientCpf={mailingCpf}
             clientDbId={mailingClientId}
           />
@@ -1267,8 +1309,22 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </span>
           </div>
 
-          {/* Right spacer */}
-          <div className="w-4" />
+          {/* Right side: Force unpause escape hatch when stuck in pause for >60s */}
+          {isPaused && timerSeconds > 60 ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleUnpause}
+              disabled={unpausing}
+              className="gap-1.5 h-8 text-xs bg-white/20 hover:bg-white/30 border-0"
+              title="Pausa travada? Force a saída"
+            >
+              <Play className={`w-3.5 h-3.5 ${unpausing ? "animate-spin" : ""}`} />
+              Forçar saída
+            </Button>
+          ) : (
+            <div className="w-4" />
+          )}
         </div>
 
         {/* ── 4 KPI Cards ── */}
