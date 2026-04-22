@@ -1,79 +1,59 @@
 
 
-## Horário de disparo na Régua + janela e throttle anti-ban
+## Por que a campanha parou de novo (e o watchdog não destravou)
 
-### Conceito
+### Causa raiz (confirmada)
 
-Cada regra ganha **horário próprio** de disparo. O motor (`send-notifications`) passa a rodar de 15 em 15 minutos e, a cada execução, só dispara regras cuja **janela horária** (timezone America/Sao_Paulo) esteja ativa naquele instante. Entre mensagens, aplica delay aleatório para não rajar.
+**Campanha:** `Disparo carteira 10:32` — agora em **30/199** (subiu de 14, watchdog re-invocou), mas voltou a travar às 15:43. Lock de `worker_b2285a8a` ativo desde 15:40, **1 recipient preso em `status=processing`**, 167 pendentes.
 
-### 1) Schema — novos campos em `collection_rules`
+**Análise dos logs HTTP da edge (`function_edge_logs`)** — todas as últimas ~40 invocações de `send-bulk-whatsapp` retornam **HTTP 401 Unauthorized** em 145–555ms (sem boot do código). O dispatcher loga `[dispatcher] watchdog re-invoking 6c97163b…` corretamente, mas a chamada subsequente é rejeitada na borda da edge antes do código rodar.
 
-| Campo | Tipo | Default | Função |
-|---|---|---|---|
-| `send_time_start` | `time` | `09:00` | Hora local (BRT) para começar a disparar |
-| `send_time_end` | `time` | `18:00` | Hora limite — após isso, regra não dispara mais hoje |
-| `min_delay_seconds` | `int` | `8` | Delay mínimo entre 2 envios da regra |
-| `max_delay_seconds` | `int` | `15` | Delay máximo (random uniforme entre min e max) |
-| `daily_cap` | `int` | `null` | Teto opcional de envios/dia por regra (null = ilimitado) |
+**Por quê:** o `send-bulk-whatsapp` não tem bloco `[functions.send-bulk-whatsapp]` em `supabase/config.toml` → roda com `verify_jwt=true` (default). Tanto o `dispatch-scheduled-campaigns` (watchdog/one-shot/recurring) quanto o próprio `send-bulk-whatsapp` (self-retrigger) chamam usando `Authorization: Bearer ${SERVICE_ROLE_KEY}` — mas com a migração da plataforma para **signing keys assimétricas (ES256)**, o service role key estático **não satisfaz mais** o verificador JWT da edge, gerando 401 antes do código.
 
-Validação por trigger: `send_time_start < send_time_end`, `min_delay_seconds <= max_delay_seconds`, `min_delay_seconds >= 3`.
+Resultado: cada tick do cron loga "re-invoking" mas **nada executa**. Watchdog vira teatro.
 
-Defaults seguros mantêm comportamento atual para regras existentes (todas passam a rodar 09–18h com delay 8–15s).
+### Consequências em cascata
 
-### 2) Motor `send-notifications` — janela + throttle + cap
+1. Worker que pegou o último ciclo (15:40) processou 16 mensagens (14→30), marcou 1 recipient como `processing`, atingiu timeout/erro, e **nenhuma invocação posterior conseguiu rodar** o cleanup → recipient órfão segura interpretação de "lock vivo" caso o `processing_locked_at` seja atualizado.
+2. Mesma trava afeta **todas** as outras 14 campanhas em `sending` listadas (várias desde 14/04) — todas órfãs pelo mesmo motivo.
 
-- Computar `nowBRT` via `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' })`.
-- Para cada regra ativa: pular se `nowBRT.time < send_time_start` ou `>= send_time_end`.
-- Antes do loop de envios, contar `message_logs` `sent` da regra hoje; se já atingiu `daily_cap`, pular.
-- Após cada envio bem-sucedido, `await sleep(random(min,max)*1000)` antes do próximo. Se durante o sleep o relógio ultrapassar `send_time_end`, parar a regra (logar `skipped_after_window`).
-- Como a edge function tem ~400s de teto, o motor processa o que conseguir e o **próximo ciclo do cron (15min depois)** continua de onde parou — idempotência por `message_logs` já garante não duplicar.
+### Correções
 
-### 3) Cron — de 1x/dia para a cada 15min
+**1) Desativar JWT no `send-bulk-whatsapp` via `supabase/config.toml`**
 
-Atualizar job `send-notifications-daily` (atual `0 11 * * *`) para `*/15 * * * *` e renomear para `send-notifications-tick`. Com a janela por regra, disparos ficam concentrados no horário configurado mesmo rodando 96x/dia.
-
-### 4) UI — card "Agendamento e Anti-Ban" no Dialog (`CredorReguaTab.tsx`)
-
-Novo bloco abaixo de "Dias em relação ao vencimento":
-
-```text
-┌─ Agendamento e Boas Práticas ──────────────────────┐
-│ Janela de envio:  [09:00] até [18:00] (horário BRT)│
-│ Delay entre msgs: [ 8 ] a [ 15 ] segundos          │
-│ Limite diário:    [____]  (vazio = sem limite)     │
-│ ℹ Sistema espalha disparos dentro da janela e usa  │
-│   delay aleatório para evitar bloqueio do WhatsApp.│
-└────────────────────────────────────────────────────┘
+```toml
+[functions.send-bulk-whatsapp]
+verify_jwt = false
 ```
 
-- 2 inputs `type="time"` (start/end), 2 numéricos (min/max delay), 1 numérico opcional (cap).
-- Validação client-side espelhando o trigger SQL.
-- Estado e payload incluídos em `handleSave` (criar/editar).
-- Tabela de regras ganha coluna **"Horário"** mostrando `09:00–18:00`.
+A função já valida o `tenant_id` por payload e usa service role internamente para escrever — não há ganho de segurança em manter `verify_jwt=true` aqui (todo cliente legítimo é o próprio dispatcher e o front via `supabase.functions.invoke`, ambos compatíveis). Após o deploy do config, os 401 viram 200 e watchdog/self-retrigger voltam a funcionar.
 
-### 5) Service `automacaoService.ts`
+**2) Liberar recipient órfão em `processing`**
 
-Adicionar 5 campos em `CollectionRule` e propagar em `createCollectionRule` / `updateCollectionRule` (já é `Omit/Partial`, basta o tipo).
+Migration utilitária: para a campanha `6c97163b…`, fazer `UPDATE whatsapp_campaign_recipients SET status='pending' WHERE campaign_id='6c97163b…' AND status='processing'` e zerar `processing_locked_at` da campanha. Generaliza-se para qualquer campanha `sending` com lock > 5min e recipient em `processing` > 5min — adicionar essa limpeza no início do `dispatch-scheduled-campaigns` (antes do watchdog) para que se auto-cure no futuro.
 
-### 6) Validação
+**3) Defesa extra no worker — converter `processing` órfão em retry**
 
-1. Aplicar migration (defaults seguros).
-2. Editar a regra "DIA D" — setar janela 14:00–15:00 e cap 5.
-3. Trocar cron para `*/15`.
-4. Aguardar próximo tick: `message_logs` mostra ≤5 sent dentro da janela; logs do edge mostram delay 8–15s entre `sent_at` consecutivos.
-5. Tick fora da janela (ex: 16h): regra é pulada, log `[send-notifications] rule=X out-of-window`.
-6. Re-tick dentro da janela mesmo dia: cap respeitado, `skipped_cap` logado.
+No início do `processCampaignChunk` (após `try_lock_campaign`), rodar `UPDATE … SET status='pending' WHERE campaign_id=$1 AND status='processing' AND updated_at < now() - interval '5 minutes'`. Garante que recipient marcado como `processing` por worker que morreu volte para a fila no próximo ciclo.
+
+**4) Validação pós-deploy**
+
+1. Aplicar config + migration de cleanup.
+2. Em ≤1min, cron `*/1` re-invoca `6c97163b…` — agora HTTP 200, contagem sai de 30 e progride.
+3. Watchdog também destrava as outras 14 campanhas órfãs (várias completam em 1–2 ciclos pois têm <20 pending cada).
+4. Conferir `function_edge_logs` — `send-bulk-whatsapp` passa a retornar 200, execution_time > 5s (boot + processamento real).
+5. SQL final: `SELECT count(*) FROM whatsapp_campaigns WHERE status='sending' AND processing_locked_at < now() - interval '10 min'` → `0`.
 
 ### Arquivos alterados
 
-- `supabase/migrations/<nova>.sql` — 5 colunas + trigger de validação + atualizar `cron.job` (`*/15 * * * *`).
-- `supabase/functions/send-notifications/index.ts` — janela BRT, sleep entre envios, daily cap.
-- `src/services/automacaoService.ts` — tipo `CollectionRule` com novos campos.
-- `src/components/cadastros/CredorReguaTab.tsx` — card "Agendamento e Boas Práticas", coluna "Horário" na tabela.
+- `supabase/config.toml` — adicionar bloco `[functions.send-bulk-whatsapp]` com `verify_jwt = false`.
+- `supabase/migrations/<nova>.sql` — limpar `processing` órfão da campanha travada e zerar locks > 10min de todas em `sending`.
+- `supabase/functions/dispatch-scheduled-campaigns/index.ts` — bloco de auto-cura no início (resetar recipients `processing` > 5min para `pending`).
+- `supabase/functions/send-bulk-whatsapp/index.ts` — mesma defesa após `try_lock_campaign`.
 
 ### Fora de escopo
 
-- Janela diferente por dia da semana (seg–sex vs sáb).
-- Pausa em feriados.
-- Dashboard de "ritmo de disparo da régua" em tempo real.
+- Trocar `SERVICE_ROLE_KEY` por chave assinada nova (overkill se `verify_jwt=false` resolve para esta função interna).
+- Refatorar para fila externa.
+- Bug colateral `utf-8-validate` warning no boot (cosmético).
 
