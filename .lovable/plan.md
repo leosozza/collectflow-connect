@@ -1,54 +1,94 @@
 
 
-## Auditoria de impacto das alterações da rodada anterior
+## Diagnóstico: por que está demorando e por que “parece pausada”
 
-### O que foi efetivamente aplicado
+### Estado real agora (campanha `Disparo carteira 10:32`)
 
-1. **Backfill `assigned_to` em conversas órfãs** (migration `20260422200918`).
-   - Setou `assigned_to` para o operador único de instâncias com **um único** vínculo em `operator_instances`.
-   - Inclui guarda: só atribui se a conversa tiver `client_id IS NULL` **ou** o cliente não estiver atribuído a outro operador.
+- 84 pendentes, 102 enviados, 13 falhas, 1 entregue.
+- `processing_locked_at = null`, `progress_metadata.timed_out = true`, `last_chunk_at` há ~7 minutos.
+- O watchdog do `dispatch-scheduled-campaigns` está re-invocando a campanha a cada minuto (logs: `watchdog re-invoking 6c97163b… (pending=84, lock=null)`).
+- O `send-bulk-whatsapp` boota e dá shutdown logo em seguida — sem nenhum log `[Anti-Ban] waiting…` nem `Lock not acquired`. Ou seja, **o worker está terminando antes de processar qualquer recipient**.
 
-2. **Auto-atribuição no envio manual** em `send-chat-message/index.ts` (passo 11): se a conversa estiver `assigned_to IS NULL`, grava `assigned_to = profile_id` do operador remetente após o envio.
+### Por que está “travado / lento”
 
-### O que NÃO foi aplicado (e o plano previa)
+1. **Anti-Ban hoje é muito conservador para volume real**: provedores não-oficiais usam **8–15 s entre mensagens** + **descanso de 2 min a cada 15 envios**. Em uma instância só, isso dá **~30–40 mensagens por minuto útil** e cada janela de 2 min de processamento empurra ~30 envios → as 84 pendentes precisam de no mínimo **3 ciclos de worker** (~6 min só de relógio, fora os descansos).
 
-3. **Extensão da RPC `get_visible_conversations` e `get_visible_conversation_counts`**
-   Conferi `pg_get_functiondef` das duas overloads em produção: as cláusulas seguem na versão antiga, exigindo `c.client_id IS NULL` no fallback de instância. Ou seja, a regra para conversas com `client_id` mas cliente sem dono **continua ausente**.
-   - Isso significa: para a maioria das instâncias dedicadas, a Sabrina (e equivalentes) só passa a enxergar as conversas **a partir do momento em que ela mesma envia uma mensagem manual** (passo 2 grava `assigned_to`) ou as que foram corrigidas no backfill (passo 1). Conversas novas vindas de campanha ainda nascem invisíveis até que alguém atue.
+2. **Cada ciclo de worker dura no máximo 120 s** (`MAX_EXECUTION_MS = 120000`), depois o próprio worker se auto-reinvoca; se falhar, o cron watchdog assume em até 1 min. Hoje a campanha gastou os 120 s do ciclo, marcou `timed_out = true` e o auto-reinvoke não pegou (boot/shutdown no log sem trabalho efetivo).
 
-### Riscos da entrega parcial atual
+3. **Na UI parece “pausada”** porque o card mostra a flag `timed_out / batch_resting` enquanto o próximo worker não pega trabalho. Não está pausada de fato — está em **gap entre ciclos**.
 
-- **Risco baixo de regressão geral.** O único ponto de mudança comportamental ativo é o auto-assign no envio manual e o backfill pontual; nada altera RLS, motor de envio, webhooks, mídia, transcrição ou campanhas.
-- **Risco específico: instâncias compartilhadas (>1 operador em `operator_instances`).** O backfill ignorou (HAVING COUNT=1) — comportamento correto, sem risco de “roubar” conversa de operador errado.
-- **Risco específico: clientes em outras carteiras.** O backfill respeita `clients.operator_id` — não atribui se o cliente já tem dono diferente. OK.
-- **Risco operacional remanescente:** novas conversas geradas por campanha em instância dedicada continuarão **fora da inbox da operadora** até que ela envie a primeira mensagem ou um admin intervenha. É exatamente o sintoma original da Sabrina, mas só para conversas **futuras** (as antigas foram corrigidas pelo backfill).
+4. **Watchdog para campanhas com origem em campanha (não em workflow) está OK**, mas a janela `staleCutoff = 2 min` somada ao tempo de boot/heal/lock acaba gerando ~3 min sem progresso aparente.
 
-### O que entregar nesta rodada para fechar o plano original com segurança
+### O sistema parou de pausar sozinho?
 
-1. **Atualizar as duas overloads de `get_visible_conversations`** (e `get_visible_conversation_counts`) substituindo o atual fallback de instância por:
-   - `c.assigned_to IS NULL`
-   - **e** o operador está vinculado em `operator_instances` à instância da conversa (`COALESCE(c.endpoint_id, c.instance_id)`)
-   - **e** (`c.client_id IS NULL` **ou** o `clients.operator_id` é `NULL` ou igual ao `_profile_id`)
+Não há mais o erro 409 em loop (o `try_lock_campaign` agora devolve 200 quando outro worker já tem o lock — não vira “pausa” na UI). O watchdog continua ativo e re-invoca campanhas órfãs. **Não há pausa automática** — o que dá impressão de pausa é o **gap entre ciclos do worker** descrito acima.
 
-   Nada mais é tocado: regras 1–4 (admin, assigned_to, carteira atribuída, transfer ativo, mar aberto) ficam idênticas. A nova cláusula é estritamente uma **expansão** — pode revelar conversas, nunca esconder.
+---
 
-2. **Validações pós-aplicação** (não destrutivas):
-   - Logar como Sabrina → conversas geradas hoje pela campanha aparecem mesmo sem ela ter enviado nada.
-   - Logar como operador de tenant **com** atribuição de carteira ativa para outra pessoa → conversas continuam ocultas (o `cl.operator_id <> _profile_id` continua barrando).
-   - Logar como admin → comportamento idêntico (curto-circuito `_is_admin` no topo).
-   - Conferir que os contadores do topo da inbox batem com a listagem.
+## Plano de correção
 
-### Avaliação geral de impacto no WhatsApp e funções relacionadas
+Foco: reduzir o tempo total de disparo **sem comprometer o anti-ban** e eliminar o gap visual entre ciclos.
 
-- **Envio (send-chat-message, send-bulk-whatsapp, whatsapp-sender):** sem mudança funcional. O auto-assign roda **após** o envio bem-sucedido; em caso de falha, comportamento idêntico ao anterior.
-- **Webhooks (whatsapp-webhook, gupshup-webhook):** intocados nesta rodada.
-- **Mídia, áudio, transcrição, OGG remux, anexos:** intocados.
-- **Campanhas, watchdog, dispatcher, anti-ban:** intocados.
-- **RLS das tabelas (`conversations`, `chat_messages`, `clients`):** intacta. A RPC é `SECURITY DEFINER` e só amplia visibilidade para o próprio operador autenticado dentro do tenant correto (verificação de `tenant_users.role` no início da função).
-- **Carteira / Mar Aberto / Atribuição:** preservados — a nova cláusula só dispara se `clients.operator_id` for `NULL` ou for o próprio operador.
-- **Multi-tenant:** preservado — `WHERE c.tenant_id = _tenant_id` segue como primeiro filtro.
+### 1. Encurtar o gap entre ciclos do worker
 
-### Resumo
+- Subir `MAX_EXECUTION_MS` de **120 s → 220 s** (continua dentro do limite de 380 s do edge runtime, com folga para fechar). Isso quase dobra o trabalho útil por ciclo e reduz pela metade o número de re-invocações.
+- Reduzir `staleCutoff` do watchdog de **2 min → 45 s** quando a campanha está sem lock e tem pendências. Hoje o gap entre ciclos chega a ~3 min porque o cron roda a cada minuto e só decide re-invocar depois de 2 min sem update.
+- Garantir que o **auto-retrigger** dentro do worker (passo após `timed_out`) seja disparado **antes** do release de lock — hoje a sequência libera o lock e só depois faz o `fetch`, dando janela para o próximo cron passar e ainda achar “lock=null + pending” enquanto o retrigger ainda nem chegou. Inverter ordem: `fetch (fire-and-forget)` → `release_campaign_lock`.
 
-A rodada anterior é **segura, mas incompleta**. Nenhuma função do WhatsApp regride. Para fechar o plano e garantir que o sintoma original da Sabrina não volte para conversas novas, falta apenas atualizar as duas RPCs de visibilidade. A mudança proposta é puramente aditiva (amplia o conjunto visível sem mexer em nenhuma regra existente) e mantém intactas todas as garantias de Carteira, Mar Aberto, RLS e isolamento entre operadores.
+### 2. Throttling adaptativo por instância
+
+Hoje o `ThrottleConfig` é fixo por categoria. Proposta:
+
+- Manter as **constantes anti-ban inalteradas** (8–15 s não-oficial, 1–3 s oficial, 3–6 s AI).
+- **Round-robin entre instâncias já existe** (linha 346), então quanto mais instâncias ativas para a campanha, maior a vazão. Adicionar log explícito de quantas instâncias estão sendo usadas para o admin entender a vazão esperada.
+- Adicionar um campo opcional `progress_metadata.eta_seconds` calculado por: `pending × avg_delay_ms / num_instances + restingTime`. Já fica visível no card de resumo da campanha.
+
+### 3. Esclarecer estado “resting” vs “pausada” na UI
+
+O `CampaignSummaryTab` hoje exibe badge único “Em andamento / Pausada / Concluída”. Adicionar microcópia abaixo do badge quando `progress_metadata.batch_resting === true`: **“Aguardando descanso anti-ban (2 min)”** e quando `timed_out === true && remaining > 0`: **“Reiniciando ciclo automaticamente (até 1 min)”**. Sem mexer em lógica, só feedback honesto.
+
+### 4. Painel de diagnóstico mínimo (admin)
+
+No `CampaignDetailView`, adicionar uma linha discreta com:
+
+- Última atividade (`last_chunk_at`).
+- Lock atual (`processing_locked_by` ou “livre”).
+- Próxima ação prevista (resting / aguardando worker / concluída).
+
+Sem novas tabelas — tudo já existe em `whatsapp_campaigns.progress_metadata`.
+
+### 5. (Opcional) Habilitar paralelismo manual por campanha
+
+Hoje a campanha usa as instâncias atribuídas ao destinatário (`assigned_instance_id`). Se a campanha tem só **uma** instância dedicada (caso da Sabrina), a vazão é limitada por anti-ban. Para campanhas grandes, o admin pode habilitar uma flag opcional `allow_multi_instance_fanout` (default: false, sem impacto retroativo) que distribui pendentes entre todas as instâncias `connected` do tenant. Fora do escopo desta rodada se não for solicitado.
+
+---
+
+## O que muda / não muda
+
+- **Anti-ban (8–15 s, 2 min de descanso a cada 15) — INTACTO.**
+- **Webhooks, motor de envio, RLS, visibilidade da Sabrina — INTACTOS.**
+- Worker fica mais produtivo por ciclo (menos boot/teardown).
+- Watchdog fica mais responsivo (45 s em vez de 2 min).
+- UI passa a explicar honestamente o estado (resting / reiniciando) sem dizer “pausada”.
+
+## Arquivos alterados
+
+- `supabase/functions/send-bulk-whatsapp/index.ts` — `MAX_EXECUTION_MS`, ordem do retrigger.
+- `supabase/functions/dispatch-scheduled-campaigns/index.ts` — `staleCutoff` para 45 s.
+- `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` — microcópia de estado real.
+- `src/components/contact-center/whatsapp/campaigns/CampaignDetailView.tsx` — linha de diagnóstico.
+
+## Validação pós-deploy
+
+1. Disparar uma campanha com 100+ destinatários e cronometrar.
+   - Esperado: vazão sustentada de ~30–40 msg/min por instância não-oficial; sem janelas > 60 s sem envio (exceto durante descanso de 2 min, que mostra explicitamente “Aguardando descanso anti-ban”).
+2. Conferir nos logs do `send-bulk-whatsapp` que cada ciclo processa ~25–30 mensagens (em vez dos ~12–15 de hoje).
+3. Conferir que o watchdog re-invoca em <1 min após `timed_out`, sem o gap atual de 3 min.
+4. UI nunca mais mostra “Pausada” durante operação normal — só “Em andamento” + microcópia explicando descanso/reinício.
+
+## Fora de escopo
+
+- Reescrever o motor anti-ban.
+- Multi-instance fan-out automático para campanhas com instância única (item 5, opcional).
+- Mudar UI da Carteira ou regras de visibilidade da Sabrina (já entregues nas rodadas anteriores).
 
