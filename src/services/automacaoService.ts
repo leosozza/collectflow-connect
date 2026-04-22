@@ -13,6 +13,11 @@ export interface CollectionRule {
   message_template: string;
   is_active: boolean;
   instance_id: string | null;
+  send_time_start: string; // 'HH:MM:SS' BRT
+  send_time_end: string;   // 'HH:MM:SS' BRT
+  min_delay_seconds: number;
+  max_delay_seconds: number;
+  daily_cap: number | null;
   created_at: string;
   updated_at: string;
 }

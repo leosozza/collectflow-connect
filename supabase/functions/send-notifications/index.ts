@@ -9,11 +9,45 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const MAX_EXECUTION_MS = 380_000;
+
+function nowBRTParts(): { date: string; time: string; minutes: number } {
+  // en-CA gives YYYY-MM-DD; we manually compose HH:MM:SS in America/Sao_Paulo
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date());
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || "00";
+  const date = `${get("year")}-${get("month")}-${get("day")}`;
+  const hh = get("hour");
+  const mm = get("minute");
+  const ss = get("second");
+  const time = `${hh}:${mm}:${ss}`;
+  const minutes = parseInt(hh) * 60 + parseInt(mm);
+  return { date, time, minutes };
+}
+
+function timeStrToMinutes(t: string): number {
+  // accepts HH:MM or HH:MM:SS
+  const [h, m] = t.split(":");
+  return parseInt(h) * 60 + parseInt(m);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startedAt = Date.now();
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -24,7 +58,9 @@ Deno.serve(async (req) => {
   const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
 
   try {
-    // 1. Tenants ativos
+    const brt = nowBRTParts();
+    console.log(`[send-notifications] tick BRT=${brt.date} ${brt.time}`);
+
     const { data: tenants, error: tErr } = await supabase
       .from("tenants")
       .select("id, settings")
@@ -34,12 +70,13 @@ Deno.serve(async (req) => {
     let totalSent = 0;
     let totalFailed = 0;
     let totalSkippedDup = 0;
+    let totalSkippedWindow = 0;
+    let totalSkippedCap = 0;
 
     for (const tenant of tenants || []) {
-      // 2. Regras ativas
       const { data: rules, error: rErr } = await supabase
         .from("collection_rules")
-        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id, rule_type")
+        .select("id, name, days_offset, message_template, channel, credor_id, instance_id, tenant_id, rule_type, send_time_start, send_time_end, min_delay_seconds, max_delay_seconds, daily_cap")
         .eq("tenant_id", tenant.id)
         .eq("is_active", true);
       if (rErr) {
@@ -50,7 +87,37 @@ Deno.serve(async (req) => {
       const settings = (tenant.settings || {}) as Record<string, any>;
 
       for (const rule of rules || []) {
-        // 3. Data alvo
+        // Janela horária BRT
+        const startMin = timeStrToMinutes(rule.send_time_start || "09:00");
+        const endMin = timeStrToMinutes(rule.send_time_end || "18:00");
+        if (brt.minutes < startMin || brt.minutes >= endMin) {
+          totalSkippedWindow++;
+          console.log(`[send-notifications] rule=${rule.id} out-of-window (${rule.send_time_start}-${rule.send_time_end}, now=${brt.time})`);
+          continue;
+        }
+
+        // Daily cap (BRT today)
+        let remainingCap = Number.POSITIVE_INFINITY;
+        if (rule.daily_cap && rule.daily_cap > 0) {
+          const todayBRTStartUTC = new Date(`${brt.date}T00:00:00-03:00`).toISOString();
+          const { count: sentToday } = await supabase
+            .from("message_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("tenant_id", tenant.id)
+            .eq("rule_id", rule.id)
+            .eq("status", "sent")
+            .gte("created_at", todayBRTStartUTC);
+          remainingCap = Math.max(0, rule.daily_cap - (sentToday || 0));
+          if (remainingCap <= 0) {
+            totalSkippedCap++;
+            console.log(`[send-notifications] rule=${rule.id} skipped_cap (cap=${rule.daily_cap}, sent=${sentToday})`);
+            continue;
+          }
+        }
+
+        const minDelay = Math.max(3, rule.min_delay_seconds || 8);
+        const maxDelay = Math.max(minDelay, rule.max_delay_seconds || 15);
+
         const targetDate = new Date();
         targetDate.setDate(targetDate.getDate() - rule.days_offset);
         const dateStr = targetDate.toISOString().split("T")[0];
@@ -58,7 +125,6 @@ Deno.serve(async (req) => {
         const eventSource = rule.days_offset < 0 ? "prevention" : "collection";
         const ruleType: "wallet" | "agreement" = (rule as any).rule_type || "wallet";
 
-        // 4. Resolver instância (se a regra define uma)
         let inst: any = null;
         if (rule.instance_id) {
           const { data: instRow, error: instErr } = await supabase
@@ -82,7 +148,6 @@ Deno.serve(async (req) => {
           };
         }
 
-        // 5. Buscar elegíveis via RPC unificada (ramifica wallet vs agreement)
         const { data: targets, error: cErr } = await supabase.rpc("get_rule_eligible_targets", {
           p_rule_id: rule.id,
           p_target_date: dateStr,
@@ -92,17 +157,31 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        let sentInThisRule = 0;
+
         for (const client of (targets || []) as any[]) {
+          // Tempo limite global
+          if (Date.now() - startedAt > MAX_EXECUTION_MS) {
+            console.warn(`[send-notifications] near-timeout, stopping. Próximo tick continuará.`);
+            break;
+          }
+          // Janela ainda válida?
+          const nowCheck = nowBRTParts();
+          if (nowCheck.minutes >= endMin) {
+            console.log(`[send-notifications] rule=${rule.id} skipped_after_window mid-loop`);
+            break;
+          }
+          // Cap atingido?
+          if (sentInThisRule >= remainingCap) {
+            console.log(`[send-notifications] rule=${rule.id} cap atingido durante o loop`);
+            break;
+          }
+
           const message = resolveTemplate(rule.message_template, client);
 
-          // 6. WhatsApp
           if (rule.channel === "whatsapp" || rule.channel === "both") {
-            if (!client.phone) {
-              continue;
-            }
+            if (!client.phone) continue;
 
-            // Idempotência: já enviado hoje para este (rule, alvo)?
-            // Para agreement: chave = agreement_id+installment_key. Para wallet: client_id ou cpf.
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
             let dupQuery = supabase
@@ -127,7 +206,6 @@ Deno.serve(async (req) => {
 
             if (dupLog) {
               totalSkippedDup++;
-              console.log(`[send-notifications] dup-skip rule=${rule.id} target=${client.cpf}`);
               continue;
             }
 
@@ -138,7 +216,6 @@ Deno.serve(async (req) => {
               let rawResult: any = null;
 
               if (inst) {
-                // Envio via instância configurada (Evolution/Baylers/Wuzapi/Gupshup mapeado)
                 const r = await sendByProvider(
                   inst,
                   client.phone,
@@ -155,7 +232,6 @@ Deno.serve(async (req) => {
                 providerMessageId = r.providerMessageId;
                 rawResult = r.result;
               } else if (settings.gupshup_api_key && settings.gupshup_source_number) {
-                // Fallback: Gupshup global do tenant
                 const phone = client.phone.replace(/\D/g, "");
                 const body = new URLSearchParams({
                   channel: "whatsapp",
@@ -214,9 +290,8 @@ Deno.serve(async (req) => {
 
               if (sendOk) {
                 totalSent++;
+                sentInThisRule++;
 
-                // Timeline: client_events
-                // Timeline: client_events (apenas se temos client_id)
                 if (client.client_id) {
                   try {
                     await supabase.from("client_events").insert({
@@ -244,6 +319,10 @@ Deno.serve(async (req) => {
                     console.error(`[send-notifications] client_events insert failed:`, evtErr?.message || evtErr);
                   }
                 }
+
+                // Throttle anti-ban entre envios da mesma regra
+                const delayMs = (Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay) * 1000;
+                await sleep(delayMs);
               } else {
                 totalFailed++;
               }
@@ -274,7 +353,6 @@ Deno.serve(async (req) => {
             }
           }
 
-          // 7. Email (placeholder — sem provider real)
           if (rule.channel === "email" || rule.channel === "both") {
             if (client.email) {
               await logMessage(supabase, {
@@ -306,7 +384,15 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, sent: totalSent, failed: totalFailed, skipped_duplicates: totalSkippedDup }),
+      JSON.stringify({
+        success: true,
+        sent: totalSent,
+        failed: totalFailed,
+        skipped_duplicates: totalSkippedDup,
+        skipped_out_of_window: totalSkippedWindow,
+        skipped_daily_cap: totalSkippedCap,
+        elapsed_ms: Date.now() - startedAt,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {

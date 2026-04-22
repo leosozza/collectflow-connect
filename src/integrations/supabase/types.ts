@@ -1760,13 +1760,18 @@ export type Database = {
           channel: string
           created_at: string | null
           credor_id: string | null
+          daily_cap: number | null
           days_offset: number
           id: string
           instance_id: string | null
           is_active: boolean | null
+          max_delay_seconds: number
           message_template: string
+          min_delay_seconds: number
           name: string
           rule_type: string
+          send_time_end: string
+          send_time_start: string
           tenant_id: string
           updated_at: string | null
         }
@@ -1774,13 +1779,18 @@ export type Database = {
           channel?: string
           created_at?: string | null
           credor_id?: string | null
+          daily_cap?: number | null
           days_offset?: number
           id?: string
           instance_id?: string | null
           is_active?: boolean | null
+          max_delay_seconds?: number
           message_template: string
+          min_delay_seconds?: number
           name: string
           rule_type?: string
+          send_time_end?: string
+          send_time_start?: string
           tenant_id: string
           updated_at?: string | null
         }
@@ -1788,13 +1798,18 @@ export type Database = {
           channel?: string
           created_at?: string | null
           credor_id?: string | null
+          daily_cap?: number | null
           days_offset?: number
           id?: string
           instance_id?: string | null
           is_active?: boolean | null
+          max_delay_seconds?: number
           message_template?: string
+          min_delay_seconds?: number
           name?: string
           rule_type?: string
+          send_time_end?: string
+          send_time_start?: string
           tenant_id?: string
           updated_at?: string | null
         }
