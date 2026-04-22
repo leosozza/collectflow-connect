@@ -37,6 +37,12 @@ export default function CampaignDetailView({ campaignId, onBack, onlyOwn, userId
     queryKey: ["campaign-detail", campaignId, tenantId],
     queryFn: () => fetchCampaignDetail(campaignId, tenantId!, { onlyOwn, userId }),
     enabled: !!campaignId && !!tenantId,
+    // Poll while the campaign is actively sending so the UI reflects live counters
+    refetchInterval: (query) => {
+      const c: any = query.state.data;
+      return c?.status === "sending" ? 5000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
 
   const visibleTabs = tabs.filter((t) => {
