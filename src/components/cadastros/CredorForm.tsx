@@ -98,6 +98,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         setForm(editData);
         setHonorarios(editing.honorarios_grade || []);
         setEnderecoOpen(!!(editing.cep || editing.endereco || editing.numero || editing.bairro || editing.cidade || editing.uf));
+        setPrazoOriginal(typeof editing.prazo_dias_acordo === "number" ? editing.prazo_dias_acordo : null);
       } else {
         setForm({
           status: "ativo", tipo_conta: "corrente", gateway_ambiente: "producao", gateway_status: "ativo",
@@ -106,6 +107,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           ...Object.fromEntries(Object.entries(TEMPLATE_DEFAULTS).map(([k, v]) => [k, v])),
         });
         setHonorarios([]);
+        setPrazoOriginal(null);
       }
     }
   }, [open, editing]);
@@ -122,7 +124,21 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => upsertCredor(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["credores"] }); toast.success("Credor salvo!"); onOpenChange(false); },
+    onSuccess: (_data, variables: any) => {
+      queryClient.invalidateQueries({ queryKey: ["credores"] });
+      toast.success("Credor salvo!");
+      const newPrazo = parseInt(variables?.prazo_dias_acordo) || 30;
+      if (
+        canApplyExpireNow &&
+        editing?.id &&
+        prazoOriginal != null &&
+        newPrazo < prazoOriginal
+      ) {
+        setPrazoConfirm({ oldPrazo: prazoOriginal, newPrazo, closeAfter: true });
+      } else {
+        onOpenChange(false);
+      }
+    },
     onError: () => toast.error("Erro ao salvar credor"),
   });
 
@@ -134,6 +150,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     if (!editing?.id) return;
     setSavingNegociacao(true);
     try {
+      const newPrazo = parseInt(form.prazo_dias_acordo) || 30;
       const { error } = await supabase
         .from("credores" as any)
         .update({
@@ -144,18 +161,52 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           desconto_maximo: parseFloat(form.desconto_maximo) || 0,
           juros_mes: parseFloat(form.juros_mes) || 0,
           multa: parseFloat(form.multa) || 0,
-          prazo_dias_acordo: parseInt(form.prazo_dias_acordo) || 30,
+          prazo_dias_acordo: newPrazo,
           indice_correcao_monetaria: form.indice_correcao_monetaria || null,
         } as any)
         .eq("id", editing.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Regras de negociação salvas!");
+      if (canApplyExpireNow && prazoOriginal != null && newPrazo < prazoOriginal) {
+        setPrazoConfirm({ oldPrazo: prazoOriginal, newPrazo, closeAfter: false });
+      }
+      setPrazoOriginal(newPrazo);
     } catch {
       toast.error("Erro ao salvar regras");
     } finally {
       setSavingNegociacao(false);
     }
+  };
+
+  const runApplyExpireNow = async () => {
+    if (!editing?.id || !tenant?.id) return;
+    setApplyingExpire(true);
+    try {
+      const result = await triggerExpireAgreementsForCredor(editing.id, tenant.id);
+      toast.success(
+        `${result.expired_count} acordo(s) expirado(s), ${result.clients_updated} cliente(s) movidos para Quebra de Acordo.`
+      );
+      queryClient.invalidateQueries({ queryKey: ["credores"] });
+      queryClient.invalidateQueries({ queryKey: ["agreements"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      const closeAfter = prazoConfirm?.closeAfter;
+      setPrazoConfirm(null);
+      if (closeAfter) onOpenChange(false);
+    } catch (e: any) {
+      toast.error("Erro ao reprocessar acordos", {
+        description: e?.message || "Tente novamente.",
+        action: { label: "Tentar novamente", onClick: () => runApplyExpireNow() },
+      });
+    } finally {
+      setApplyingExpire(false);
+    }
+  };
+
+  const skipApplyExpireNow = () => {
+    const closeAfter = prazoConfirm?.closeAfter;
+    setPrazoConfirm(null);
+    if (closeAfter) onOpenChange(false);
   };
 
   const handleSaveGrade = async () => {
