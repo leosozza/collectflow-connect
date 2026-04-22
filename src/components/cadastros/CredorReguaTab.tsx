@@ -294,6 +294,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Tipo</TableHead>
               <TableHead>Disparo</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Canal</TableHead>
@@ -303,8 +304,18 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rules.sort((a, b) => a.days_offset - b.days_offset).map(rule => (
+            {filteredRules.sort((a, b) => a.days_offset - b.days_offset).map(rule => {
+              const rt = (rule.rule_type || "wallet") as RuleType;
+              return (
               <TableRow key={rule.id}>
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${rt === "agreement" ? "border-primary text-primary" : "border-accent-foreground/40"}`}
+                  >
+                    {ruleTypeLabel[rt]}
+                  </Badge>
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
                     {daysIcon(rule.days_offset)}
@@ -331,7 +342,8 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       )}
@@ -346,6 +358,25 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Tipo de régua</Label>
+              <RadioGroup value={ruleType} onValueChange={(v) => handleRuleTypeChange(v as RuleType)} className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <RadioGroupItem value="wallet" id="rt-wallet" />
+                  <span>Título da Carteira</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <RadioGroupItem value="agreement" id="rt-agreement" />
+                  <span>Parcela de Acordo</span>
+                </label>
+              </RadioGroup>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                {ruleType === "wallet"
+                  ? "Dispara para clientes com título original em aberto (sem acordo ativo)."
+                  : "Dispara para parcelas de acordos vigentes que ainda não foram pagas."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Nome da regra</Label>
@@ -397,7 +428,7 @@ const CredorReguaTab = ({ credorId }: CredorReguaTabProps) => {
             <div className="space-y-1.5">
               <Label className="text-xs">Template da mensagem</Label>
               <div className="flex flex-wrap gap-1 mb-1">
-                {TEMPLATE_VARS.map(v => (
+                {currentVars.map(v => (
                   <button key={v} type="button" onClick={() => setTemplate(t => t + " " + v)}
                     className="text-xs px-1.5 py-0.5 rounded bg-muted hover:bg-accent transition-colors font-mono"
                   >{v}</button>
