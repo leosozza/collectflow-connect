@@ -527,14 +527,64 @@ export default function CampaignSummaryTab({ campaign }: Props) {
               <CardTitle className="text-sm">Distribuição por Instância</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={barData}>
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--background))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  />
+                  <Bar dataKey="recipients" name="Destinatários" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="sent" name="Enviados" fill="hsl(217 91% 60%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="delivered" name="Entregues" fill="hsl(142 71% 45%)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              {/* Legenda + tabela compacta */}
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs mt-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "hsl(var(--muted-foreground))" }} />
+                  <span className="text-muted-foreground">Destinatários</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "hsl(217 91% 60%)" }} />
+                  <span className="text-muted-foreground">Enviados</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "hsl(142 71% 45%)" }} />
+                  <span className="text-muted-foreground">Entregues</span>
+                </div>
+              </div>
+              <div className="overflow-auto mt-3">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left p-1.5 font-medium">Instância</th>
+                      <th className="text-right p-1.5 font-medium">Dest.</th>
+                      <th className="text-right p-1.5 font-medium">Env.</th>
+                      <th className="text-right p-1.5 font-medium">Entr.</th>
+                      <th className="text-right p-1.5 font-medium">Taxa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {barData.map((m) => (
+                      <tr key={m.name} className="border-b border-border/50">
+                        <td className="p-1.5 font-medium truncate max-w-[120px]">{m.name}</td>
+                        <td className="p-1.5 text-right">{m.recipients}</td>
+                        <td className="p-1.5 text-right text-blue-600">{m.sent}</td>
+                        <td className="p-1.5 text-right text-green-600">{m.delivered}</td>
+                        <td className="p-1.5 text-right">
+                          {m.sent > 0 ? ((m.delivered / m.sent) * 100).toFixed(0) : 0}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         )}
