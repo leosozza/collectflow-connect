@@ -1,100 +1,81 @@
 
-## Plano: corrigir a falsa “pausa” da campanha e parar o watchdog de ficar ressuscitando campanhas antigas
 
-### O que está acontecendo agora
+## Plano: Taxa de Entrega sempre 0% — propagar `delivered`/`read` dos webhooks até a campanha
 
-A campanha `Disparo carteira 10:32` **não está parada de verdade neste momento**. No banco ela continua em `sending`, com `last_chunk_at` recente e os contadores subindo (já passou de 71/6 para 80/7 depois do print). O problema é duplo:
+### Diagnóstico
 
-1. **A UI fica presa no estado “pausado pelo limite de execução”**
-   - `send-bulk-whatsapp` grava `progress_metadata.timed_out = true` quando um ciclo bate no limite.
-   - Quando o próximo worker retoma, `updateCheckpoint()` **não limpa esse flag**.
-   - Resultado: o banner continua dizendo “pausado”, mesmo com envio retomado.
+A `Taxa de Entrega` é calculada como `delivered_count / sent_count`. Em **todas** as campanhas do banco (histórico inteiro), `delivered_count = 0`. Conferi:
 
-2. **Os cards do resumo ficam com números antigos**
-   - `CampaignSummaryTab` só atualiza ao vivo `status` + `progress_metadata`.
-   - Os KPIs (`sent_count`, `failed_count`) continuam vindo do objeto `campaign` carregado uma vez em `CampaignDetailView`.
-   - Resultado: a tela mostra 71/6 enquanto o banco já está em 80/7.
+- Nenhuma Edge Function escreve `whatsapp_campaigns.delivered_count` (busca por `delivered_count` em `supabase/functions/**`: 0 ocorrências).
+- Os webhooks (`gupshup-webhook` e `whatsapp-webhook`/Evolution) recebem corretamente eventos `delivered`/`read` (status 3/4/5 da Evolution, `message-event` da Gupshup) e atualizam `chat_messages.status`.
+- Mas **não** atualizam `whatsapp_campaign_recipients.status` nem `delivered_at`/`read_at`, mesmo já existindo o casamento natural via `provider_message_id` (a coluna existe em ambas as tabelas e é gravada no envio em `send-bulk-whatsapp/index.ts` linha 453).
+- Resultado: o recipient da campanha permanece em `sent`, e o agregado nunca é atualizado.
 
-3. **O watchdog está gastando energia com campanhas antigas que nunca foram encerradas**
-   - Hoje há várias campanhas antigas ainda marcadas como `sending`, com `last_chunk_at` de dias atrás e pendências residuais.
-   - O `dispatch-scheduled-campaigns` tenta reativá-las a cada minuto, poluindo o watchdog e confundindo o diagnóstico operacional.
+A campanha `Disparo carteira 10:32` está com 88 `sent`, 10 `failed`, 101 `pending` no nível de recipient, e 0 entregues — coerente com a falha sistêmica, não com o provedor.
 
-### Correção proposta
+### Correção (3 frentes)
 
-#### 1. Fazer a UI refletir o estado real da campanha em tempo quase real
+#### 1. Webhook Evolution (`whatsapp-webhook/index.ts`) — propagar status para a campanha
 
-Em `CampaignDetailView.tsx`:
-- adicionar polling do detalhe completo da campanha enquanto `status === "sending"` (ex.: a cada 5s);
-- passar a versão atualizada do objeto `campaign` para `CampaignSummaryTab`.
+No bloco `messages.update` (linhas 334–356), além de atualizar `chat_messages.status`:
 
-Em `CampaignSummaryTab.tsx`:
-- usar os contadores live (`sent_count`, `failed_count`, `delivered_count`, `updated_at`, `progress_metadata`) da consulta mais recente;
-- recalcular cards, badge de status e métricas a partir da campanha live, não do snapshot inicial;
-- exibir banner de timeout **só se realmente estiver sem progresso recente**.
+- Atualizar `whatsapp_campaign_recipients` casando por `provider_message_id = externalId`:
+  - Se status = `delivered`: setar `status='delivered'`, `delivered_at=now()` (somente se ainda não estiver `read`).
+  - Se status = `read`: setar `status='read'`, `read_at=now()`, e `delivered_at=COALESCE(delivered_at, now())`.
+- Para cada linha efetivamente atualizada, recomputar e gravar os contadores no `whatsapp_campaigns` correspondente (ver item 3).
 
-#### 2. Limpar o estado de “timeout” assim que um novo worker reassume
+#### 2. Webhook Gupshup (`gupshup-webhook/index.ts`) — mesmo tratamento
 
-Em `supabase/functions/send-bulk-whatsapp/index.ts`:
-- ao adquirir lock com sucesso, limpar flags transitórias do `progress_metadata`, como:
-  - `timed_out`
-  - `batch_resting`
-  - `resting_instance`
-- no `updateCheckpoint()`, gravar explicitamente que a campanha voltou a processar, por exemplo:
-  - `timed_out: false`
-  - `batch_resting: false`
-  - `resumed_at`
-  - `worker_id`
-- no final da campanha, garantir que o `progress_metadata` final não carregue restos de ciclo anterior.
+No bloco `message-event` / `status` (linhas 269–318), após atualizar `chat_messages`:
 
-Isso faz o banner sair automaticamente quando a campanha já retomou.
+- Atualizar `whatsapp_campaign_recipients` por `provider_message_id = gsMessageId` com a mesma lógica de transição (`delivered` → `read` é progressão; nunca regredir).
+- Para `failed` recebido após `sent` (raro, mas possível na Gupshup): atualizar recipient para `failed` e gravar `error_message` com o `providerError` já calculado.
+- Disparar a recomputação de contadores (item 3).
 
-#### 3. Melhorar a lógica visual do banner “Disparo pausado”
+#### 3. Recomputação atômica de contadores — RPC `recompute_campaign_counters(_campaign_id uuid)`
 
-Hoje o banner depende muito de `timed_out`. Vou ajustar para priorizar o comportamento real:
-- se `status === sending` e `last_chunk_at` é recente: mostrar “Em envio / retomado automaticamente”, não “pausado”;
-- se está em pausa anti-ban: mostrar o painel de pausa anti-ban;
-- se `timed_out === true` **e** o tempo sem progresso passou do limiar: mostrar banner de retomada manual;
-- se o watchdog já retomou e o progresso voltou a andar: esconder o banner de pausa.
+Criar uma função SQL `SECURITY DEFINER` curta que:
 
-#### 4. Encerrar campanhas antigas órfãs para limpar o watchdog
+```sql
+UPDATE whatsapp_campaigns c SET
+  sent_count      = (SELECT COUNT(*) FROM whatsapp_campaign_recipients WHERE campaign_id=c.id AND status IN ('sent','delivered','read')),
+  delivered_count = (SELECT COUNT(*) FROM whatsapp_campaign_recipients WHERE campaign_id=c.id AND status IN ('delivered','read')),
+  read_count      = (SELECT COUNT(*) FROM whatsapp_campaign_recipients WHERE campaign_id=c.id AND status='read'),
+  failed_count    = (SELECT COUNT(*) FROM whatsapp_campaign_recipients WHERE campaign_id=c.id AND status='failed'),
+  updated_at      = now()
+WHERE c.id = _campaign_id;
+```
 
-Há 13 campanhas antigas em `sending` com `last_chunk_at` de dias atrás. Vou fazer um cleanup controlado:
-- identificar campanhas `sending` com:
-  - `pending = 0` e `processing = 0` → marcar como `completed` / `completed_with_errors`;
-  - `pending > 0` mas claramente órfãs/antigas → avaliar caso a caso e retomar ou encerrar corretamente;
-- evitar que o `dispatch-scheduled-campaigns` fique reinvocando lixo histórico todo minuto.
+Vantagens: idempotente, livre de race condition, fonte única de verdade derivada do recipient. Os webhooks chamam essa RPC após cada update de recipient que envolva campanha. O worker `send-bulk-whatsapp` continua incrementando direto (rápido), mas o snapshot final fica sempre coerente.
 
-Isso melhora a confiabilidade do watchdog para as campanhas realmente ativas.
+#### 4. Backfill histórico (one-shot)
 
-#### 5. Validação específica da campanha da Bárbara
+Migration que executa `recompute_campaign_counters` em todas as campanhas existentes para preencher `delivered_count`/`read_count` retroativamente onde os webhooks já chegaram (vai ficar 0 para campanhas onde recipients estão só em `sent`, mas corrige automaticamente as que tiverem callbacks futuros).
 
-Após aplicar:
-1. Abrir `Disparo carteira 10:32`.
-2. Confirmar que:
-   - banner de “pausado” some quando houver novo progresso;
-   - cards passam a refletir o número real enviado/falhado sem precisar recarregar a página;
-   - ao bater novo ciclo de execução, a campanha entra em retomada automática sem ficar “travada visualmente”.
-3. Acompanhar logs do dispatcher e da função de envio para garantir que:
-   - há novo worker assumindo;
-   - o `last_chunk_at` avança;
-   - o watchdog não fica preso reprocessando campanhas históricas inúteis.
+Para a campanha `Disparo carteira 10:32` em andamento: rodar uma vez para sincronizar `sent_count` com a contagem real de recipients (88 vs 86 mostrado na UI).
 
-### Arquivos a alterar
+### O que não muda
 
-- `src/components/contact-center/whatsapp/campaigns/CampaignDetailView.tsx`
-- `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx`
-- `supabase/functions/send-bulk-whatsapp/index.ts`
-- migration SQL para cleanup/normalização das campanhas antigas em `sending`
+- Lógica de envio anti-ban (delays, lotes, watchdog) — intacta.
+- UI de `CampaignSummaryTab` — já consome `delivered_count` ao vivo via polling (corrigido na rodada anterior). Assim que o backend popular o campo, o card "Taxa de Entrega" passa a refletir em tempo real.
+- Schema das tabelas — sem novas colunas.
 
-### Resultado esperado
+### Arquivos alterados
 
-- A campanha pode continuar trabalhando em ciclos, respeitando os delays anti-ban, **sem parecer pausada quando já retomou**.
-- O admin vê os números reais subindo na tela.
-- O botão “Retomar agora” só aparece quando houver travamento de verdade.
-- O watchdog deixa de desperdiçar tentativas com campanhas velhas penduradas.
+- `supabase/functions/whatsapp-webhook/index.ts` — bloco `messages.update`.
+- `supabase/functions/gupshup-webhook/index.ts` — bloco `message-event/status`.
+- Migration SQL — RPC `recompute_campaign_counters` + backfill.
+
+### Validação pós-deploy
+
+1. Esperar ~1–2 min após o próximo lote da campanha em curso.
+2. Conferir no banco: `SELECT sent_count, delivered_count, failed_count FROM whatsapp_campaigns WHERE id='6c97163b…'`. `delivered_count` deve subir conforme webhooks chegam.
+3. Na UI (Resumo da campanha), o card "Taxa de Entrega" deixa de mostrar `0.0%` e passa a refletir a relação real entregues/enviados.
+4. Em campanhas via Gupshup oficial, idem com `read_count` subindo quando o destinatário abrir.
 
 ### Fora de escopo
 
-- Alterar o ritmo anti-ban (8–15s e pausas por lote continuam iguais).
-- Reescrever o motor de envio em outro modelo.
-- Mudar regras de distribuição por instância.
+- Reescrever o motor anti-ban.
+- Painel de tracking individual por recipient (já existe na aba Destinatários e passará a refletir `delivered_at`/`read_at` automaticamente).
+- Criar evento de "lido" na timeline do cliente — pode entrar em rodada separada se houver demanda.
+
