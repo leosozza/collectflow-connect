@@ -18,6 +18,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
 import ScheduledCallbacksDialog from "@/components/dashboard/ScheduledCallbacksDialog";
+import DashboardMetaCard from "@/components/dashboard/DashboardMetaCard";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -239,6 +240,15 @@ const DashboardPage = () => {
       </div>
 
 
+
+      {/* Metas + Parcelas Programadas lado a lado */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <DashboardMetaCard
+          year={filterYear ?? now.getFullYear()}
+          month={filterMonth ?? (now.getMonth() + 1)}
+          monthLabel={new Date(filterYear ?? now.getFullYear(), (filterMonth ?? (now.getMonth() + 1)) - 1, 1)
+            .toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+        />
 
       {/* Parcelas do Dia (com navegador de data integrado) */}
       <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full md:w-1/2">
