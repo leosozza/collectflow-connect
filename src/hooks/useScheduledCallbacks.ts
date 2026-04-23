@@ -16,6 +16,7 @@ export interface ScheduledCallback {
   notes: string | null;
   client_name?: string;
   client_cpf?: string;
+  client_credor?: string;
   operator_name?: string;
 }
 
