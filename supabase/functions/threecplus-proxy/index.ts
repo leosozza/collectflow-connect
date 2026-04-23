@@ -1177,20 +1177,57 @@ Deno.serve(async (req) => {
       fetchOptions.body = reqBody;
     }
 
-    let response: Response;
-    try {
-      response = await fetch(url, fetchOptions);
-    } catch (err: any) {
-      clearTimeout(timeoutId);
-      if (err?.name === "AbortError") {
+    // Retry transient upstream errors (HTTP/2 connection resets, 502/503/504).
+    // The 3CPlus edge frequently returns "http2 error: connection error received"
+    // mid-request; a quick retry almost always succeeds.
+    let response!: Response;
+    let lastErr: any = null;
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        response = await fetch(url, fetchOptions);
+        // Retry on transient upstream gateway errors
+        if ([502, 503, 504].includes(response.status) && attempt < maxAttempts) {
+          console.warn(`3CPlus transient ${response.status} on ${action}, retry ${attempt}/${maxAttempts - 1}`);
+          await new Promise((r) => setTimeout(r, 200 * attempt));
+          continue;
+        }
+        lastErr = null;
+        break;
+      } catch (err: any) {
+        lastErr = err;
+        if (err?.name === "AbortError") break;
+        const msg = String(err?.message || err);
+        const transient =
+          msg.includes("http2") ||
+          msg.includes("connection error") ||
+          msg.includes("connection closed") ||
+          msg.includes("connection reset") ||
+          msg.includes("SendRequest") ||
+          msg.includes("os error");
+        if (!transient || attempt === maxAttempts) break;
+        console.warn(`3CPlus transient network err on ${action} (attempt ${attempt}/${maxAttempts}): ${msg.slice(0, 120)}`);
+        await new Promise((r) => setTimeout(r, 200 * attempt));
+      }
+    }
+    clearTimeout(timeoutId);
+
+    if (lastErr) {
+      if (lastErr?.name === "AbortError") {
         return new Response(
           JSON.stringify({ status: 504, detail: "3CPlus API timeout (15s)" }),
           { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
+      // Surface as 502 Bad Gateway (transient) so the frontend can treat it as recoverable
+      return new Response(
+        JSON.stringify({
+          status: 502,
+          detail: "3CPlus upstream temporariamente indisponível, tente novamente em instantes",
+          upstream_error: String(lastErr?.message || lastErr).slice(0, 200),
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Handle recording endpoints that return audio
