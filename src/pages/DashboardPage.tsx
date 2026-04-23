@@ -245,7 +245,7 @@ const DashboardPage = () => {
         <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-card-foreground">Parcelas do Dia</h2>
+            <h2 className="text-sm font-semibold text-card-foreground">Parcelas Programadas</h2>
           </div>
 
           <div className="flex items-center gap-1">
