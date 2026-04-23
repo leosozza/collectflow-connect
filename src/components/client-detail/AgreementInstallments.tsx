@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
@@ -79,6 +79,25 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     },
     enabled: !!agreementId,
   });
+
+  // Realtime: refetch quando boletos forem inseridos/atualizados em background
+  useEffect(() => {
+    if (!agreementId) return;
+    const channel = supabase
+      .channel(`negociarie_cobrancas_${agreementId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "negociarie_cobrancas", filter: `agreement_id=eq.${agreementId}` },
+        () => {
+          refetchCobrancas();
+          queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [agreementId, refetchCobrancas, queryClient]);
 
   const { data: manualPayments = [] } = useQuery({
     queryKey: ["manual-payments", agreementId],
