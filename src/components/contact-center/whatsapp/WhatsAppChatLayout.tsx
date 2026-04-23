@@ -487,7 +487,7 @@ const WhatsAppChatLayout = () => {
     if (!tenantId) return;
 
     const convChannel = supabase
-      .channel("conversations-realtime")
+      .channel(`conversations-realtime-${tenantId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
