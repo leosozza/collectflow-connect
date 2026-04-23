@@ -55,6 +55,7 @@ interface ConversationListProps {
   onSelect: (conv: Conversation) => void;
   onStatusChange?: (convId: string, status: string) => void;
   onDelete?: (convId: string) => void;
+  onMarkUnread?: (convId: string) => void;
   instances: { id: string; name: string; provider_category?: string }[];
   tags?: ConversationTag[];
   tagAssignments?: TagAssignment[];
