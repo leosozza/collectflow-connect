@@ -6596,6 +6596,10 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      get_acionados_hoje: {
+        Args: { _tenant_id?: string; _user_id?: string }
+        Returns: number
+      }
       get_agreement_financials: {
         Args: { _tenant_id: string }
         Returns: {
