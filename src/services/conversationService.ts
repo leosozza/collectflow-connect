@@ -379,6 +379,14 @@ export async function markConversationRead(id: string) {
   if (error) throw error;
 }
 
+export async function markConversationUnread(id: string) {
+  const { error } = await supabase
+    .from("conversations" as any)
+    .update({ unread_count: 1 } as any)
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteConversation(id: string) {
   const { error: msgError } = await supabase
     .from("chat_messages" as any)

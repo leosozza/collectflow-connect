@@ -21,6 +21,7 @@ import {
   sendInternalNote,
   updateConversationStatus,
   markConversationRead,
+  markConversationUnread,
   deleteConversation,
 } from "@/services/conversationService";
 import { fetchWhatsAppInstances, WhatsAppInstance } from "@/services/whatsappInstanceService";
@@ -716,6 +717,31 @@ const WhatsAppChatLayout = () => {
     }
   };
 
+  const handleMarkUnread = async (convId: string) => {
+    try {
+      await markConversationUnread(convId);
+      // Optimistic update for the list cache
+      queryClient.setQueriesData({ queryKey: ["conversations", tenantId] }, (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            data: (page.data || []).map((c: Conversation) =>
+              c.id === convId ? { ...c, unread_count: Math.max(1, c.unread_count || 0) } : c
+            ),
+          })),
+        };
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversation-counts", tenantId] });
+      // If the conversation is currently open, deselect so reopening will trigger read again
+      if (selectedConv?.id === convId) setSelectedConv(null);
+      toast.success("Conversa marcada como não lida");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao marcar como não lida");
+    }
+  };
+
   const selectedInstance = instances.find((i) => i.id === selectedConv?.instance_id);
   const selectedInstanceName = selectedInstance?.name;
   const isOfficialApi = selectedInstance?.provider_category === "official_meta" || selectedInstance?.provider_category === "official";
@@ -730,6 +756,7 @@ const WhatsAppChatLayout = () => {
             onSelect={handleSelectConv}
             onStatusChange={handleStatusChangeFromList}
             onDelete={handleDeleteConversation}
+            onMarkUnread={handleMarkUnread}
             instances={instances.map((i) => ({ id: i.id, name: i.name, provider_category: i.provider_category }))}
             operators={operators}
             isAdmin={canManageContactCenterAdmin}

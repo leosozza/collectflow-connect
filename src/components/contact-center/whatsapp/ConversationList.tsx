@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, EyeOff, Link2Off, Loader2, ShieldCheck, QrCode, UserCheck } from "lucide-react";
+import { Search, User, AlertTriangle, Clock, Tag, Users, Trash2, EyeOff, Link2Off, Loader2, ShieldCheck, QrCode, UserCheck, MailPlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -55,6 +55,7 @@ interface ConversationListProps {
   onSelect: (conv: Conversation) => void;
   onStatusChange?: (convId: string, status: string) => void;
   onDelete?: (convId: string) => void;
+  onMarkUnread?: (convId: string) => void;
   instances: { id: string; name: string; provider_category?: string }[];
   tags?: ConversationTag[];
   tagAssignments?: TagAssignment[];
@@ -180,6 +181,7 @@ const ConversationList = ({
   onSelect,
   onStatusChange,
   onDelete,
+  onMarkUnread,
   instances,
   tags = [],
   tagAssignments = [],
@@ -554,6 +556,15 @@ const ConversationList = ({
                     <EyeOff className="w-4 h-4" />
                     Ignorar conversa
                   </ContextMenuItem>
+                  {onMarkUnread && (
+                    <ContextMenuItem
+                      onClick={() => onMarkUnread(conv.id)}
+                      className="gap-2"
+                    >
+                      <MailPlus className="w-4 h-4" />
+                      Marcar como não lida
+                    </ContextMenuItem>
+                  )}
                   {isAdmin && onDelete && (
                     <>
                       <ContextMenuItem
