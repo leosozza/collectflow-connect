@@ -317,6 +317,156 @@ async function sendEvolutionMedia(
   }
 }
 
+// ========== DELETE / EDIT (manage messages) ==========
+
+export interface ManageResult {
+  ok: boolean;
+  result: any;
+  provider: string;
+  error?: string;
+}
+
+/**
+ * Delete a previously-sent message FOR THE RECIPIENT (delete-for-everyone).
+ * Provider-specific endpoints. Returns { ok, result, provider, error? }.
+ */
+export async function deleteByProvider(
+  inst: { provider?: string; instance_url?: string; api_key?: string; instance_name?: string },
+  providerMessageId: string,
+  remotePhone: string,
+  tenantSettings: Record<string, any>,
+  fallbackEvolutionUrl: string,
+  fallbackEvolutionKey: string,
+  wuzapiUrl: string,
+  wuzapiAdminToken: string,
+): Promise<ManageResult> {
+  const provider = (inst.provider || "evolution").toLowerCase();
+  const phone = normalizePhoneBR(remotePhone);
+
+  if (provider === "wuzapi") {
+    const baseUrl = inst.instance_url || wuzapiUrl;
+    const token = inst.api_key || wuzapiAdminToken;
+    if (!baseUrl || !token) {
+      return { ok: false, result: null, provider, error: "WuzAPI não configurado" };
+    }
+    try {
+      const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/delete`, {
+        method: "POST",
+        headers: { "Token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, messageId: providerMessageId, fromMe: true }),
+      });
+      const result = await resp.json().catch(() => ({}));
+      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.error || `HTTP ${resp.status}`) };
+    } catch (err) {
+      return { ok: false, result: null, provider, error: `Falha de rede WuzAPI: ${(err as Error).message}` };
+    }
+  }
+
+  if (provider === "gupshup") {
+    const apiKey = tenantSettings.gupshup_api_key;
+    if (!apiKey) {
+      return { ok: false, result: null, provider, error: "Credenciais Gupshup não configuradas" };
+    }
+    try {
+      const resp = await fetch(`https://api.gupshup.io/wa/api/v1/msg/${encodeURIComponent(providerMessageId)}`, {
+        method: "DELETE",
+        headers: { "apikey": apiKey },
+      });
+      const text = await resp.text();
+      let result: any;
+      try { result = JSON.parse(text); } catch { result = { raw: text }; }
+      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.message || `HTTP ${resp.status}`) };
+    } catch (err) {
+      return { ok: false, result: null, provider, error: `Falha de rede Gupshup: ${(err as Error).message}` };
+    }
+  }
+
+  // Default: Evolution / Baylers
+  const instanceUrl = (inst.instance_url || fallbackEvolutionUrl).replace(/\/+$/, "");
+  const instanceKey = inst.api_key || fallbackEvolutionKey;
+  if (!instanceUrl || !inst.instance_name) {
+    return { ok: false, result: null, provider, error: "Instância Evolution não configurada" };
+  }
+  try {
+    const resp = await fetch(`${instanceUrl}/chat/deleteMessageForEveryone/${inst.instance_name}`, {
+      method: "DELETE",
+      headers: { apikey: instanceKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: providerMessageId,
+        remoteJid: `${phone}@s.whatsapp.net`,
+        fromMe: true,
+      }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.message || result?.error || `HTTP ${resp.status}`) };
+  } catch (err) {
+    return { ok: false, result: null, provider, error: `Falha de rede Evolution: ${(err as Error).message}` };
+  }
+}
+
+/**
+ * Edit a previously-sent text message. Only Evolution and WuzAPI support this.
+ * Gupshup official API does NOT support editing — returns ok:false with explicit error.
+ */
+export async function editByProvider(
+  inst: { provider?: string; instance_url?: string; api_key?: string; instance_name?: string },
+  providerMessageId: string,
+  remotePhone: string,
+  newText: string,
+  fallbackEvolutionUrl: string,
+  fallbackEvolutionKey: string,
+  wuzapiUrl: string,
+  wuzapiAdminToken: string,
+): Promise<ManageResult> {
+  const provider = (inst.provider || "evolution").toLowerCase();
+  const phone = normalizePhoneBR(remotePhone);
+
+  if (provider === "gupshup") {
+    return { ok: false, result: null, provider, error: "Edição de mensagem não é suportada pela API oficial (Gupshup/Meta)." };
+  }
+
+  if (provider === "wuzapi") {
+    const baseUrl = inst.instance_url || wuzapiUrl;
+    const token = inst.api_key || wuzapiAdminToken;
+    if (!baseUrl || !token) {
+      return { ok: false, result: null, provider, error: "WuzAPI não configurado" };
+    }
+    try {
+      const resp = await fetch(`${baseUrl.replace(/\/+$/, "")}/chat/edit`, {
+        method: "POST",
+        headers: { "Token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, id: providerMessageId, body: newText }),
+      });
+      const result = await resp.json().catch(() => ({}));
+      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.error || `HTTP ${resp.status}`) };
+    } catch (err) {
+      return { ok: false, result: null, provider, error: `Falha de rede WuzAPI: ${(err as Error).message}` };
+    }
+  }
+
+  // Default: Evolution
+  const instanceUrl = (inst.instance_url || fallbackEvolutionUrl).replace(/\/+$/, "");
+  const instanceKey = inst.api_key || fallbackEvolutionKey;
+  if (!instanceUrl || !inst.instance_name) {
+    return { ok: false, result: null, provider, error: "Instância Evolution não configurada" };
+  }
+  try {
+    const resp = await fetch(`${instanceUrl}/chat/updateMessage/${inst.instance_name}`, {
+      method: "POST",
+      headers: { apikey: instanceKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        number: phone,
+        key: { id: providerMessageId, remoteJid: `${phone}@s.whatsapp.net`, fromMe: true },
+        text: newText,
+      }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.message || result?.error || `HTTP ${resp.status}`) };
+  } catch (err) {
+    return { ok: false, result: null, provider, error: `Falha de rede Evolution: ${(err as Error).message}` };
+  }
+}
+
 // ========== GUPSHUP HELPER ==========
 
 async function sendGupshupMsg(
