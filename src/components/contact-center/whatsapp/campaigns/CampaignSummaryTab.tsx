@@ -347,6 +347,61 @@ export default function CampaignSummaryTab({ campaign }: Props) {
     }
   }
 
+  // ----------------- Failure breakdown -----------------
+  type FailureCategory = "invalid_phone" | "no_whatsapp" | "instance_error" | "other";
+  interface FailedRecipient {
+    id: string;
+    recipient_name: string;
+    phone: string;
+    error_message: string | null;
+  }
+
+  function classifyFailure(err: string | null | undefined): FailureCategory {
+    if (!err) return "other";
+    const s = err.toLowerCase();
+    if (/"exists"\s*:\s*false/.test(err) || /n[ãa]o\s*existe/.test(s) || /does\s*not\s*exist/.test(s)) {
+      return "no_whatsapp";
+    }
+    if (/inv[áa]lid|invalid number|telefone|placeholder|formato/.test(s)) return "invalid_phone";
+    if (/timeout|econn|inst[âa]ncia|instance|connection|fetch failed|network/.test(s)) return "instance_error";
+    return "other";
+  }
+
+  const { data: failedRecipients = [] } = useQuery({
+    queryKey: ["campaign-failed-recipients", campaign.id, liveFailed],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("whatsapp_campaign_recipients" as any)
+        .select("id, recipient_name, phone, error_message")
+        .eq("campaign_id", campaign.id)
+        .eq("status", "failed")
+        .limit(500);
+      return (data || []) as unknown as FailedRecipient[];
+    },
+    enabled: liveFailed > 0,
+  });
+
+  const failureGroups = useMemo(() => {
+    const groups: Record<FailureCategory, FailedRecipient[]> = {
+      invalid_phone: [],
+      no_whatsapp: [],
+      instance_error: [],
+      other: [],
+    };
+    for (const r of failedRecipients) {
+      groups[classifyFailure(r.error_message)].push(r);
+    }
+    return groups;
+  }, [failedRecipients]);
+
+  const failureMeta: Record<FailureCategory, { label: string; icon: typeof PhoneOff; color: string }> = {
+    invalid_phone: { label: "Telefone inválido", icon: PhoneOff, color: "text-amber-600" },
+    no_whatsapp: { label: "Sem WhatsApp ativo", icon: PhoneMissed, color: "text-orange-600" },
+    instance_error: { label: "Erro de instância", icon: ServerCrash, color: "text-destructive" },
+    other: { label: "Outros erros", icon: HelpCircle, color: "text-muted-foreground" },
+  };
+
+  const [openFailureGroup, setOpenFailureGroup] = useState<FailureCategory | null>(null);
   return (
     <div className="p-4 space-y-4">
       {/* Banner de campanha travada com retomada manual */}
