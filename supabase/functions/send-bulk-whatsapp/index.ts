@@ -551,6 +551,10 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         } else {
           chunkFailed++; totalFailed++;
           errors.push(`${recipient.recipient_name}: envio falhou`);
+          // Persist "no WhatsApp" flag so future campaigns auto-skip this CPF
+          if (isNoWhatsAppError(sendResult.result)) {
+            await markCpfWithoutWhatsApp(supabase, tenantId, client?.cpf || null);
+          }
         }
       } catch (err: any) {
         await supabase.from("whatsapp_campaign_recipients").update({
