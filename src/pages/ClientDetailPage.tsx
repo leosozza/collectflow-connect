@@ -294,8 +294,31 @@ const ClientDetailPage = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
+
+      // Detect past-due installments to warn operator
+      let pastDueCount = 0;
+      try {
+        const { data: ag } = await supabase
+          .from("agreements")
+          .select("*")
+          .eq("id", id)
+          .single();
+        if (ag) {
+          const { buildInstallmentSchedule } = await import("@/lib/agreementInstallmentClassifier");
+          const schedule = buildInstallmentSchedule(ag as any);
+          const today = new Date().toISOString().split("T")[0];
+          pastDueCount = schedule.filter((s: any) => s.dueDate < today).length;
+        }
+      } catch { /* best-effort */ }
+
       await reopenAgreement(id, user.id);
-      toast.success("Acordo reaberto com sucesso.");
+      toast.success("Acordo reaberto. Regerando boletos das parcelas futuras…");
+      if (pastDueCount > 0) {
+        toast.warning(
+          `Atenção: ${pastDueCount} ${pastDueCount === 1 ? "parcela está" : "parcelas estão"} com data vencida e NÃO ${pastDueCount === 1 ? "terá" : "terão"} boleto gerado. Corrija as datas em "Acordos do cliente" e clique em "Reemitir" para essas parcelas.`,
+          { duration: 10000 }
+        );
+      }
       refetch();
       refetchAgreements();
     } catch (err: any) {
