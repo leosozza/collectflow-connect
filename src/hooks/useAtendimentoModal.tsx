@@ -76,6 +76,34 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
     }
   }, [liveAgentState.status, liveAgentState.isOnline, liveAgentState.lastPoll, agentStatusState]);
 
+  // Dispatcher: quando o agente fica idle (status 1) e há um pendingCall recente, disca automaticamente.
+  useEffect(() => {
+    const status = liveAgentState.status;
+    const isIdle = status === 1 || status === "idle" || status === "available";
+    if (!isIdle || !liveAgentState.isOnline) return;
+    const tenantId = tenant?.id;
+    const agentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
+    if (!tenantId || !agentId) return;
+
+    const pending = getPendingCall();
+    if (!pending) return;
+    if (pending.tenantId !== tenantId) return;
+    // Idempotência: evita disparar 2x para a mesma intenção
+    const key = `${pending.phone}-${pending.createdAt}`;
+    if (lastDispatchedRef.current === key) return;
+    lastDispatchedRef.current = key;
+    clearPendingCall();
+
+    void dialClientPhone({
+      tenantId,
+      agentId,
+      phone: pending.phone,
+      clientId: pending.clientId,
+      agentStatus: status,
+      assumeConnected: true,
+    });
+  }, [liveAgentState.status, liveAgentState.isOnline, tenant?.id, profile]);
+
   return (
     <AtendimentoModalContext.Provider
       value={{
