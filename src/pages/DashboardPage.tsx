@@ -108,6 +108,20 @@ const DashboardPage = () => {
     },
   });
 
+  // Acionados Hoje (CPFs únicos acessados hoje, excluindo os que já viraram acordo)
+  const { data: acionadosHoje = 0 } = useQuery({
+    queryKey: ["acionados-hoje", rpcUserId, profile?.tenant_id],
+    queryFn: async () => {
+      const params: Record<string, unknown> = {};
+      if (rpcUserId) params._user_id = rpcUserId;
+      const { data, error } = await supabase.rpc("get_acionados_hoje", params as any);
+      if (error) throw error;
+      return Number(data) || 0;
+    },
+    enabled: !!profile?.tenant_id,
+    refetchInterval: 60_000,
+  });
+
   // Vencimentos from RPC
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
