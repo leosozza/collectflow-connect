@@ -1,65 +1,60 @@
 
 
-## Análise das falhas — Disparo carteira 09:33
+## Análise: as falhas são realmente sem WhatsApp?
 
-### Status atual da campanha
-- **ID**: `9c838ab5-ecfc-4fbd-bc5c-3a9e5b5d4672`
-- **Status**: `sending` (em andamento, ~10% processado)
-- **Total**: 199 destinatários únicos
-- **Processados até agora**: 18 (3 sent + 10 delivered + 1 read + 4 failed)
-- **Pendentes**: 181
-- **Watchdog do dispatcher está re-invocando** o worker normalmente (visto nos logs).
+### Resumo da campanha "Disparo carteira 09:33"
+- Status: **Concluída** (200 selecionados, 199 únicos, 145 sent, 137 delivered, 5 read, **54 falhas**)
+- Provider: Evolution (não-oficial)
 
-A campanha está rodando saudável. As 4 falhas são pontuais e não-bloqueantes — o motor continua processando os 181 pendentes.
+### Categorização real das 54 falhas
 
-### Diagnóstico das 4 falhas
+Analisando os `error_message` retornados:
 
-Todas as 4 falhas vieram do mesmo erro do provider Evolution: **HTTP 400 — `exists: false`** (número não existe no WhatsApp). Detalhes:
+| Categoria | Qtd aprox. | Causa real | Tem WhatsApp? |
+|---|---|---|---|
+| **HTTP 500 — `Connection Closed`** | ~20 | **Instância caiu durante envio** (problema do nosso lado) | **Provavelmente SIM** — não foi sequer testado |
+| **HTTP 400 — `exists:false` com JID sem "9"** (ex: enviado `5544991119945` → checado `554491119945`) | ~25 | Evolution removeu o nono dígito para checar formato antigo de 8 dígitos. Não confirma o número de 9 dígitos. | **Possivelmente SIM** — checagem é heurística e falha em muitos números reais |
+| **HTTP 400 — `exists:false` com JID idêntico ao enviado** | ~9 | Evolution checou o número exato e não achou conta | **Provavelmente NÃO** |
 
-| Cliente | Telefone armazenado | Enviado (E.164) | JID verificado pelo Evolution | Causa |
-|---|---|---|---|---|
-| Luana Monteiro Pires | `00000000000` | `5500000000000` | `5500000000000` | **Telefone placeholder** — cadastro inválido na carteira |
-| Kelly Caroline Ruy Matos | `44984539181` | `5544984539181` | `554484539181` | Evolution removeu o **9** para checar formato antigo; o número antigo de 8 dígitos (DDD 44) **não tem WhatsApp** |
-| Ionise Alves Moreira | `38988071653` | `5538988071653` | `553888071653` | Mesma situação — Evolution removeu o 9, número antigo não existe |
-| Angelina dos Santos Delmondes | `11978369935` | `5511978369935` | `5511978369935` | Número simplesmente **não tem WhatsApp ativo** |
+**Conclusão importante**: das 54 falhas, **só ~9 são realmente "sem WhatsApp" com alta confiança**. As outras ~45 merecem retentativa.
 
-### Causas-raiz e soluções propostas
+### Problemas que isso revela
 
-**Problema 1 — Telefones placeholder (00000000000) na carteira**
+1. **Marcamos `phone_has_whatsapp=false` cedo demais** — a migração que acabamos de aplicar está classificando como "sem WhatsApp" todos os `exists:false`, inclusive os falsos negativos do Evolution e os erros 500. Isso vai fazer com que números válidos sejam **excluídos permanentemente** das próximas campanhas.
 
-Estão sendo selecionados destinatários com telefones obviamente inválidos. Solução:
+2. **Não há retry automático** para falhas transitórias (`Connection Closed`).
 
-- Adicionar **validação no momento do cálculo da audiência da campanha** em `src/services/whatsappCampaignService.ts` (função `isValidPhone`): rejeitar números com todos os dígitos iguais (`/^(\d)\1+$/`), começando com 0, ou compostos só por 0s/1s repetidos.
-- Esses contatos seriam contados como "excluídos por telefone inválido" no resumo da campanha (já existe `excludedCount`).
+3. **Forçar envio "mesmo assim" é viável no Evolution** — basta usar a opção `options.checkExists: false` (ou enviar direto sem pré-check). Hoje o Evolution faz pre-check obrigatório que rejeita esses casos.
 
-**Problema 2 — Números sem WhatsApp ativo (Kelly, Ionise, Angelina)**
+### Plano (3 ajustes)
 
-Não tem como saber antes de enviar — o Evolution só responde isso ao tentar. Mitigações:
+**1. Reverter a marcação agressiva de `phone_has_whatsapp=false`**
 
-- **Opção A (recomendada)**: marcar destinatários que falharem com `exists:false` em uma lista de "telefones sem WhatsApp" por tenant (nova tabela `tenant_invalid_whatsapp_phones` com `phone`, `last_checked_at`, `verified_invalid_count`). Próximas campanhas pulam telefones já verificados como inválidos nos últimos 30 dias.
-- **Opção B (mais simples)**: marcar a coluna `phone_has_whatsapp = false` no `client_profiles` quando recebermos `exists:false`, e excluir esses na seleção da audiência.
+No worker `supabase/functions/send-bulk-whatsapp/index.ts`, mudar a regra: só marcar `phone_has_whatsapp=false` quando o JID retornado for **idêntico** ao enviado E for HTTP 400 com `exists:false`. Não marcar quando:
+- HTTP 500 / Connection Closed (erro de instância)
+- JID retornado difere do enviado (Evolution mudou o número para checar formato legado — falso negativo)
 
-**Problema 3 — Sem visibilidade da causa do erro na UI**
+Adicionalmente: zerar o flag para todos os CPFs que foram marcados nesta primeira campanha (rodar UPDATE one-shot via migration revertendo `phone_has_whatsapp` para `true` nos profiles afetados).
 
-Hoje o `error_message` é JSON cru. Adicionar na aba "Resumo" da campanha (`CampaignSummaryTab.tsx`) uma **seção de falhas agrupadas por causa**:
-- "Telefone inválido" (placeholders)
-- "Sem WhatsApp" (`exists:false`)
-- "Erro de instância" (timeout, conexão)
-- "Outros"
+**2. Forçar envio sem pré-checagem no Evolution**
 
-Cada grupo mostra contagem e botão "Ver lista" para auditoria.
+No `supabase/functions/_shared/whatsapp-sender.ts`, função `sendEvolutionText`, adicionar no payload:
+```ts
+options: { checkExists: false }
+```
+Assim o Evolution **tenta entregar mesmo se não confirmar a existência prévia**. O WhatsApp vai aceitar ou recusar de fato, e teremos uma resposta mais confiável.
 
-### Plano de implementação (3 mudanças)
+**3. Botão "Reenviar falhas" na aba Resumo da campanha**
 
-1. **Filtro de placeholders** em `src/services/whatsappCampaignService.ts` — função `isValidPhone` rejeita repetições e padrões inválidos. (~10 linhas)
-
-2. **Persistir telefones sem WhatsApp** — opção B: migration adicionando coluna `phone_has_whatsapp boolean` em `client_profiles`; ajustar `supabase/functions/send-bulk-whatsapp/index.ts` (worker) para, ao receber `exists:false`, fazer `update client_profiles set phone_has_whatsapp=false` pelo telefone normalizado; ajustar a query de seleção de audiência para excluir.
-
-3. **Painel de falhas agrupadas** em `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx` — parser de `error_message` que classifica em 4 grupos com contagem e drill-down.
+Em `src/components/contact-center/whatsapp/campaigns/CampaignSummaryTab.tsx`, adicionar botão **"Tentar reenviar falhas (X)"** que:
+- Filtra recipients com status=`failed` da campanha
+- Reseta status para `queued`
+- Reinvoca o worker `send-bulk-whatsapp` para reprocessar apenas esses
+- Mostra toast com resultado
 
 ### Validação
 
-1. Acompanhar o término da campanha 09:33 → comparar `failed_count` final com a categorização nova.
-2. Próximo disparo: confirmar que telefones `00000000000` saem pré-excluídos do total e aparecem como "excluídos" no resumo.
-3. Disparo seguinte: confirmar que números marcados como `phone_has_whatsapp=false` na rodada anterior são automaticamente pulados.
+1. Após (1) e (2): rodar nova campanha pequena (10-20 destinatários conhecidos) e confirmar que o pre-check não bloqueia mais.
+2. Usar o botão "Reenviar falhas" na campanha 09:33 e medir quantos dos 54 falhos efetivamente entregam — expectativa: 30-45 entregas reais.
+3. Verificar que `phone_has_whatsapp=false` permanece **apenas** para os ~9 casos com JID idêntico confirmado.
 
