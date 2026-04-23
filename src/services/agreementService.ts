@@ -424,13 +424,37 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     if (error) throw error;
 
-    // Cancelar boletos pendentes na negociarie_cobrancas
+    // Cancelar boletos pendentes na negociarie_cobrancas + invalidar no provider
     try {
+      const { data: pendingCobrancas } = await supabase
+        .from("negociarie_cobrancas")
+        .select("id, id_parcela")
+        .eq("agreement_id", id)
+        .in("status", ["pendente", "em_aberto"]);
+
+      // Update local status first (UI consistency)
       await supabase
         .from("negociarie_cobrancas")
         .update({ status: "cancelado" } as any)
         .eq("agreement_id", id)
         .in("status", ["pendente", "em_aberto"]);
+
+      // Fire cancellation calls to Negociarie in parallel (best-effort)
+      const toCancel = (pendingCobrancas || []).filter((c: any) => c.id_parcela);
+      if (toCancel.length > 0) {
+        Promise.allSettled(
+          toCancel.map((c: any) =>
+            supabase.functions.invoke("negociarie-proxy", {
+              body: { action: "cancelar-cobranca", id_parcela: String(c.id_parcela) },
+            })
+          )
+        ).then((results) => {
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (failed > 0) {
+            logger.warn(MODULE, "cancel_negociarie_partial", { failed, total: toCancel.length });
+          }
+        });
+      }
     } catch (e) {
       logger.error(MODULE, "cancel_boletos", e);
     }
