@@ -248,10 +248,8 @@ const DashboardPage = () => {
             <h2 className="text-base font-bold text-card-foreground">Parcelas Programadas</h2>
           </div>
 
-          <div className="grid grid-cols-3 items-center gap-3">
-            <div />
-
-            <div className="flex items-center gap-1 justify-self-center">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1 justify-self-start">
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
@@ -273,7 +271,7 @@ const DashboardPage = () => {
               </Button>
             </div>
 
-            <div className="flex items-center gap-3 justify-self-end">
+            <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-success">
                 {vencimentos.length} registros • {formatCurrency(totalVencimentos)}
               </span>
