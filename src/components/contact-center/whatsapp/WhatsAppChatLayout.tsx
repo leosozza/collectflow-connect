@@ -389,14 +389,29 @@ const WhatsAppChatLayout = () => {
         setHasMoreOlder(result.hasMore);
       })
       .catch(console.error);
-    // Spectator mode: only the responsible operator clears unread_count.
-    const currentUserId = profile?.user_id || profile?.id;
-    const isResponsibleOperator =
-      !!selectedConv.assigned_to && !!currentUserId && selectedConv.assigned_to === currentUserId;
-    if (isResponsibleOperator) {
-      markConversationRead(selectedConv.id).catch(console.error);
+    // Always clear unread_count when any authorized operator opens the conversation.
+    // Optimistically reset locally so the green badge disappears immediately.
+    if ((selectedConv.unread_count ?? 0) > 0) {
+      setSelectedConv((prev) => (prev && prev.id === selectedConv.id ? { ...prev, unread_count: 0 } : prev));
+      queryClient.setQueriesData({ queryKey: ["conversations", tenantId] }, (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            data: (page.data || []).map((c: Conversation) =>
+              c.id === selectedConv.id ? { ...c, unread_count: 0 } : c
+            ),
+          })),
+        };
+      });
     }
-  }, [selectedConv?.id, selectedConv?.assigned_to, profile?.user_id, profile?.id]);
+    markConversationRead(selectedConv.id)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["conversation-counts", tenantId] });
+      })
+      .catch(console.error);
+  }, [selectedConv?.id, tenantId, queryClient]);
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!selectedConv || loadingOlder || !hasMoreOlder) return;
@@ -472,7 +487,7 @@ const WhatsAppChatLayout = () => {
     if (!tenantId) return;
 
     const convChannel = supabase
-      .channel("conversations-realtime")
+      .channel(`conversations-realtime-${tenantId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "conversations", filter: `tenant_id=eq.${tenantId}` },
@@ -516,23 +531,35 @@ const WhatsAppChatLayout = () => {
     if (!selectedConv) return;
 
     const msgChannel = supabase
-      .channel("messages-realtime")
+      .channel(`messages-realtime-${selectedConv.id}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_messages", filter: `conversation_id=eq.${selectedConv.id}` },
         (payload) => {
           const newMsg = payload.new as unknown as ChatMessage;
           setMessages((prev) => {
+            // Already present (real id) — skip
             if (prev.some((m) => m.id === newMsg.id)) return prev;
+            // Try to replace a matching optimistic message (same direction/content within recent window)
+            const idx = prev.findIndex(
+              (m) =>
+                (m as any).__optimistic &&
+                m.direction === newMsg.direction &&
+                (m.content || "") === (newMsg.content || "") &&
+                m.message_type === newMsg.message_type
+            );
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = newMsg;
+              return next;
+            }
             return [...prev, newMsg];
           });
           if (newMsg.direction === "inbound") {
-            const currentUserId = profile?.user_id || profile?.id;
-            const isResponsibleOperator =
-              !!selectedConv.assigned_to && !!currentUserId && selectedConv.assigned_to === currentUserId;
-            if (isResponsibleOperator) {
-              markConversationRead(selectedConv.id).catch(console.error);
-            }
+            // Always mark as read when the conversation is open in the UI.
+            markConversationRead(selectedConv.id)
+              .then(() => queryClient.invalidateQueries({ queryKey: ["conversation-counts", tenantId] }))
+              .catch(console.error);
           }
         }
       )
@@ -549,7 +576,7 @@ const WhatsAppChatLayout = () => {
     return () => {
       supabase.removeChannel(msgChannel);
     };
-  }, [selectedConv?.id]);
+  }, [selectedConv?.id, tenantId, queryClient]);
 
   const handleSelectConv = (conv: Conversation) => {
     setSelectedConv(conv);
@@ -567,10 +594,32 @@ const WhatsAppChatLayout = () => {
       toast.error("Instância não encontrada");
       return;
     }
+    // Optimistic UI: show message immediately while the edge function works.
+    const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      conversation_id: selectedConv.id,
+      tenant_id: tenantId,
+      direction: "outbound",
+      message_type: "text",
+      content: text,
+      status: "sending",
+      created_at: new Date().toISOString(),
+      actor_type: "human",
+      is_internal: false,
+      reply_to_message_id: replyToMessageId || null,
+      __optimistic: true,
+    } as any;
+    setMessages((prev) => [...prev, optimisticMsg]);
     setSending(true);
     try {
       await sendTextMessage(selectedConv.id, tenantId, text, instance.instance_name, replyToMessageId);
+      // Real message will arrive via Realtime and replace the optimistic one.
     } catch (err: any) {
+      // Mark optimistic message as failed
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? ({ ...m, status: "failed" } as ChatMessage) : m))
+      );
       toast.error(err.message || "Erro ao enviar mensagem");
     } finally {
       setSending(false);

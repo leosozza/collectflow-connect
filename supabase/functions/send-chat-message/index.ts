@@ -63,28 +63,29 @@ Deno.serve(async (req) => {
       return jsonResp({ error: "content ou mediaUrl é obrigatório" }, 400);
     }
 
-    // 2. Resolve tenant
-    const { data: tenantRow } = await supabase
-      .from("tenant_users")
-      .select("tenant_id")
-      .eq("user_id", userId)
-      .limit(1)
-      .single();
+    // 2. Resolve tenant + conversation in parallel
+    const [tenantUserRes, convRes] = await Promise.all([
+      supabase
+        .from("tenant_users")
+        .select("tenant_id")
+        .eq("user_id", userId)
+        .limit(1)
+        .single(),
+      supabase
+        .from("conversations")
+        .select("id, remote_phone, status, instance_id, endpoint_id, provider, channel_type, assigned_to, tenant_id")
+        .eq("id", conversationId)
+        .single(),
+    ]);
 
+    const tenantRow = tenantUserRes.data;
     if (!tenantRow) {
       return jsonResp({ error: "Tenant não encontrado" }, 403);
     }
     const tenantId = tenantRow.tenant_id;
 
-    // 3. Fetch conversation + instance
-    const { data: conv, error: convErr } = await supabase
-      .from("conversations")
-      .select("id, remote_phone, status, instance_id, endpoint_id, provider, channel_type")
-      .eq("id", conversationId)
-      .eq("tenant_id", tenantId)
-      .single();
-
-    if (convErr || !conv) {
+    const conv = convRes.data;
+    if (convRes.error || !conv || conv.tenant_id !== tenantId) {
       return jsonResp({ error: "Conversa não encontrada" }, 404);
     }
 
@@ -98,33 +99,32 @@ Deno.serve(async (req) => {
     }
 
     const instanceId = conv.endpoint_id || conv.instance_id;
+    if (!instanceId) {
+      return jsonResp({ error: "Instância WhatsApp não encontrada para esta conversa" }, 404);
+    }
 
-    // 4. Fetch WhatsApp instance
-    let instance: any = null;
-    if (instanceId) {
-      const { data: inst } = await supabase
+    // 3. Fetch instance + tenant settings in parallel
+    const [instRes, tenantRes] = await Promise.all([
+      supabase
         .from("whatsapp_instances")
         .select("id, instance_name, instance_url, api_key, provider, tenant_id")
         .eq("id", instanceId)
         .eq("tenant_id", tenantId)
-        .single();
-      instance = inst;
-    }
+        .single(),
+      supabase
+        .from("tenants")
+        .select("settings")
+        .eq("id", tenantId)
+        .single(),
+    ]);
 
+    const instance = instRes.data;
     if (!instance) {
       return jsonResp({ error: "Instância WhatsApp não encontrada para esta conversa" }, 404);
     }
 
     const providerName = (instance?.provider || conv.provider || "").toLowerCase();
-
-    // 5. Tenant settings
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .select("settings")
-      .eq("id", tenantId)
-      .single();
-
-    const tenantSettings = (tenant?.settings as Record<string, any>) || {};
+    const tenantSettings = (tenantRes.data?.settings as Record<string, any>) || {};
 
     // 6. Build media payload if applicable
     let media: MediaPayload | null = null;
@@ -310,29 +310,29 @@ Deno.serve(async (req) => {
     }
 
     // 11. Waiting → open for outbound + auto-assign to operator if unassigned
+    // Single UPDATE: uses conv.assigned_to from initial SELECT and resolves sender's profile inline.
     {
-      const updates: Record<string, unknown> = {};
-      if (conv.status === "waiting") updates.status = "open";
+      const needsStatusUpdate = conv.status === "waiting";
+      const needsAssign = !conv.assigned_to;
 
-      // Auto-assign to the sending operator when conversation has no owner
-      const { data: senderProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
+      if (needsStatusUpdate || needsAssign) {
+        let assignedToId: string | null = null;
+        if (needsAssign) {
+          const { data: senderProfile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("user_id", userId)
+            .maybeSingle();
+          assignedToId = senderProfile?.id || null;
+        }
 
-      const { data: convOwner } = await supabase
-        .from("conversations")
-        .select("assigned_to")
-        .eq("id", conversationId)
-        .maybeSingle();
+        const updates: Record<string, unknown> = {};
+        if (needsStatusUpdate) updates.status = "open";
+        if (assignedToId) updates.assigned_to = assignedToId;
 
-      if (senderProfile?.id && !convOwner?.assigned_to) {
-        updates.assigned_to = senderProfile.id;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await supabase.from("conversations").update(updates).eq("id", conversationId);
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("conversations").update(updates).eq("id", conversationId);
+        }
       }
     }
 
