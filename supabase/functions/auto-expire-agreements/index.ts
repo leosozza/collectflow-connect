@@ -159,6 +159,36 @@ Deno.serve(async (req) => {
           if (updErr) errors.push(updErr.message);
           expiredCount = toCancel.length;
 
+          // Cancel pending boletos in negociarie_cobrancas (parity with manual cancel)
+          const { data: pendingCobrancas } = await supabase
+            .from("negociarie_cobrancas")
+            .select("id, id_parcela, agreement_id")
+            .in("agreement_id", ids)
+            .in("status", ["pendente", "em_aberto"]);
+
+          await supabase
+            .from("negociarie_cobrancas")
+            .update({ status: "cancelado" } as any)
+            .in("agreement_id", ids)
+            .in("status", ["pendente", "em_aberto"]);
+
+          // Best-effort cancel at provider
+          const cancelables = (pendingCobrancas || []).filter((c: any) => c.id_parcela);
+          if (cancelables.length > 0) {
+            await Promise.allSettled(
+              cancelables.map((c: any) =>
+                fetch(`${supabaseUrl}/functions/v1/negociarie-proxy`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${serviceKey}`,
+                  },
+                  body: JSON.stringify({ action: "cancelar-cobranca", id_parcela: String(c.id_parcela) }),
+                })
+              )
+            );
+          }
+
           const { data: quebraStatus } = await supabase
             .from("tipos_status")
             .select("id")
