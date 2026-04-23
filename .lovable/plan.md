@@ -1,26 +1,43 @@
 
 
-## Ajustar cores do gráfico Meta por faixa de performance
+## Adicionar seletor de data em "Agendados" e "Parcelas Programadas"
 
-Atualizar a paleta de cores do `MetaGaugeCard` no Dashboard para refletir a nova escala de performance.
+Padronizar os dois cards do Dashboard com um seletor de data idêntico (◀ data ▶), exibindo "HOJE" quando for o dia atual e `dd/MM/yyyy` nos demais dias. Renomear "Agendamentos para Hoje" para "Agendados".
 
-### Nova escala de cores
+### Mudanças por arquivo
 
-| Faixa | Cor | Token |
-|---|---|---|
-| 0% – 40% | Vermelho | `hsl(var(--destructive))` |
-| 41% – 80% | Laranja | `#f97316` |
-| 81% – 90% | Azul | `#3b82f6` |
-| 91% – 100% | Verde | `hsl(var(--success))` |
+**1. `src/hooks/useScheduledCallbacks.ts`**
+- Aceitar parâmetro opcional `date: Date` (default = hoje).
+- Substituir o filtro fixo `today/tomorrow` pelo intervalo `startOfDay(date)` → `endOfDay(date)`.
+- Re-fetch automático quando a data muda.
 
-A cor é aplicada tanto no arco de progresso quanto no número percentual central.
+**2. `src/components/dashboard/ScheduledCallbacksCard.tsx`**
+- Receber props `selectedDate: Date` e `onDateChange: (d: Date) => void`.
+- Trocar título para **"Agendados"**.
+- Adicionar header com seletor: `[◀] [HOJE | dd/MM/yyyy] [▶]` no mesmo padrão visual do `ScheduledInstallmentsCard` (botão central abre Popover com `<Calendar>` para escolher data arbitrária).
+- Manter badge com a contagem de agendamentos da data selecionada.
+- Lógica `isPast`/`isNear` (vermelho/pulse) só se aplica quando `selectedDate` é hoje.
 
-### Arquivo alterado
+**3. `src/pages/DashboardPage.tsx`**
+- Criar estado local `scheduledDate` (default `new Date()`).
+- Passar `scheduledDate` para `useScheduledCallbacks(scheduledDate)` e para o card.
 
-- `src/components/dashboard/MetaGaugeCard.tsx` — substituir a função `progressColorVar` (linhas 56-57) pela nova lógica de 4 faixas.
+**4. `src/components/dashboard/ScheduledInstallmentsCard.tsx`** (corrigir exibição)
+- Quando a data selecionada for hoje, exibir **"HOJE"** no botão central em vez de `23/04/2026`.
+- Demais dias permanecem em `dd/MM/yyyy`.
+
+### Padrão visual do seletor (compartilhado)
+
+```
+[◀]  [ HOJE ]  [▶]      ← quando data == hoje
+[◀]  [24/04/2026]  [▶]  ← demais dias
+```
+
+Botão central clicável abre `<Popover>` com `<Calendar>` para pular para qualquer data.
 
 ### Não incluído
 
-- Sem alterações em outros componentes ou tokens globais de tema.
-- O texto "🏆 META ATINGIDA!" continua aparecendo em 100%.
+- Sem alteração no schema do banco nem nas RPCs.
+- Sem persistência da data selecionada (reseta ao recarregar — comportamento idêntico ao card de parcelas).
+- Sem sincronização entre os dois seletores (cada card mantém sua própria data).
 
