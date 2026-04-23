@@ -271,7 +271,7 @@ const DashboardPage = () => {
               </Button>
             </div>
 
-            <div className="flex items-center gap-3 justify-self-end">
+            <div className="flex items-center gap-3">
               <span className="text-sm font-semibold text-success">
                 {vencimentos.length} registros • {formatCurrency(totalVencimentos)}
               </span>
