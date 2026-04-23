@@ -556,6 +556,15 @@ const ConversationList = ({
                     <EyeOff className="w-4 h-4" />
                     Ignorar conversa
                   </ContextMenuItem>
+                  {onMarkUnread && (
+                    <ContextMenuItem
+                      onClick={() => onMarkUnread(conv.id)}
+                      className="gap-2"
+                    >
+                      <MailPlus className="w-4 h-4" />
+                      Marcar como não lida
+                    </ContextMenuItem>
+                  )}
                   {isAdmin && onDelete && (
                     <>
                       <ContextMenuItem
