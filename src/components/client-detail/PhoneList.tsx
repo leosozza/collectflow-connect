@@ -17,6 +17,7 @@ import {
   updatePhoneObservation,
   type PhoneSlot,
 } from "@/services/clientPhoneService";
+import CallButton from "@/components/shared/CallButton";
 
 interface PhoneListProps {
   tenantId: string;
@@ -265,8 +266,10 @@ export const PhoneList = ({ tenantId, cpf, credor, phone, phone2, phone3 }: Phon
                     )}
                   </div>
 
-                  {/* Actions: Hot + Editar + Inativar */}
+                  {/* Actions: Call + Hot + Editar + Inativar */}
                   <div className="flex items-center shrink-0 ml-1 gap-0.5">
+                    {/* 0. Ligar via 3CPlus */}
+                    {value && !inactive && <CallButton phone={value} />}
                     {/* 1. Hot */}
                     <Button
                       size="icon"
