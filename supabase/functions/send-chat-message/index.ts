@@ -310,29 +310,29 @@ Deno.serve(async (req) => {
     }
 
     // 11. Waiting → open for outbound + auto-assign to operator if unassigned
+    // Single UPDATE: uses conv.assigned_to from initial SELECT and resolves sender's profile inline.
     {
-      const updates: Record<string, unknown> = {};
-      if (conv.status === "waiting") updates.status = "open";
+      const needsStatusUpdate = conv.status === "waiting";
+      const needsAssign = !conv.assigned_to;
 
-      // Auto-assign to the sending operator when conversation has no owner
-      const { data: senderProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
+      if (needsStatusUpdate || needsAssign) {
+        let assignedToId: string | null = null;
+        if (needsAssign) {
+          const { data: senderProfile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("user_id", userId)
+            .maybeSingle();
+          assignedToId = senderProfile?.id || null;
+        }
 
-      const { data: convOwner } = await supabase
-        .from("conversations")
-        .select("assigned_to")
-        .eq("id", conversationId)
-        .maybeSingle();
+        const updates: Record<string, unknown> = {};
+        if (needsStatusUpdate) updates.status = "open";
+        if (assignedToId) updates.assigned_to = assignedToId;
 
-      if (senderProfile?.id && !convOwner?.assigned_to) {
-        updates.assigned_to = senderProfile.id;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await supabase.from("conversations").update(updates).eq("id", conversationId);
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("conversations").update(updates).eq("id", conversationId);
+        }
       }
     }
 
