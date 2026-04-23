@@ -770,6 +770,33 @@ export const reopenAgreement = async (
     logger.info(MODULE, "reopen", { id });
     logAction({ action: "reopen", entity_type: "agreement", entity_id: id, details: { cpf: agreement.client_cpf } });
 
+    // Audit event in client_events timeline
+    try {
+      await supabase.from("client_events").insert({
+        tenant_id: agreement.tenant_id,
+        client_cpf: agreement.client_cpf,
+        event_source: "operator",
+        event_type: "agreement_reopened",
+        metadata: { agreement_id: id, credor: agreement.credor, reopened_by: userId },
+      } as any);
+    } catch (e) {
+      logger.error(MODULE, "reopen_event_log", e);
+    }
+
+    // Fire-and-forget: regenerate boletos for future installments
+    supabase.functions
+      .invoke("generate-agreement-boletos", { body: { agreement_id: id } })
+      .then(({ data, error }) => {
+        if (error) {
+          logger.error(MODULE, "reopen_regenerate_boletos", error);
+        } else {
+          logger.info(MODULE, "reopen_regenerate_boletos", {
+            id, success: data?.success, failed: data?.failed, skipped: data?.skipped,
+          });
+        }
+      })
+      .catch((e) => logger.error(MODULE, "reopen_regenerate_boletos", e));
+
     recalcScoreForCpf(agreement.client_cpf).catch(() => {});
   } catch (error) {
     handleServiceError(error, MODULE);
