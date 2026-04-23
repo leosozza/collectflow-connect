@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { useThreeCPlusStatus, type ThreeCPlusAgentState } from "./useThreeCPlusStatus";
+import { useTenant } from "./useTenant";
+import { useAuth } from "./useAuth";
+import { dialClientPhone, getPendingCall, clearPendingCall } from "@/services/callService";
 
 interface AtendimentoModalContextType {
   setAgentStatus: (status: number | string | undefined) => void;
