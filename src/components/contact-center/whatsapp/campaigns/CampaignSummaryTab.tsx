@@ -29,6 +29,10 @@ import {
   Pause,
   Play,
   AlertTriangle,
+  PhoneOff,
+  PhoneMissed,
+  ServerCrash,
+  HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
