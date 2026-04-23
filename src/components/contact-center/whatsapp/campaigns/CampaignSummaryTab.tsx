@@ -781,6 +781,87 @@ export default function CampaignSummaryTab({ campaign }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Painel de Falhas Agrupadas */}
+      {liveFailed > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-destructive" />
+              Falhas agrupadas por causa ({liveFailed})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {(Object.keys(failureMeta) as FailureCategory[]).map((cat) => {
+                const meta = failureMeta[cat];
+                const list = failureGroups[cat];
+                const Icon = meta.icon;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    disabled={list.length === 0}
+                    onClick={() => setOpenFailureGroup(cat)}
+                    className="text-left p-3 rounded-lg border border-border bg-card hover:bg-muted/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Icon className={`w-4 h-4 mb-1 ${meta.color}`} />
+                    <p className="text-xl font-bold">{list.length}</p>
+                    <p className="text-xs text-muted-foreground">{meta.label}</p>
+                  </button>
+                );
+              })}
+            </div>
+            {failedRecipients.length === 0 && liveFailed > 0 && (
+              <p className="text-xs text-muted-foreground mt-3">Carregando detalhes…</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={openFailureGroup !== null} onOpenChange={(o) => !o && setOpenFailureGroup(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {openFailureGroup && (() => {
+                const Icon = failureMeta[openFailureGroup].icon;
+                return <Icon className={`w-4 h-4 ${failureMeta[openFailureGroup].color}`} />;
+              })()}
+              {openFailureGroup ? failureMeta[openFailureGroup].label : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {openFailureGroup
+                ? `${failureGroups[openFailureGroup].length} destinatário(s) nesta categoria`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[400px] overflow-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-background border-b border-border">
+                <tr>
+                  <th className="text-left p-2 font-medium">Nome</th>
+                  <th className="text-left p-2 font-medium">Telefone</th>
+                  <th className="text-left p-2 font-medium">Erro</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openFailureGroup && failureGroups[openFailureGroup].map((r) => (
+                  <tr key={r.id} className="border-b border-border/50">
+                    <td className="p-2 font-medium truncate max-w-[160px]">{r.recipient_name}</td>
+                    <td className="p-2 font-mono">{r.phone}</td>
+                    <td className="p-2 text-muted-foreground truncate max-w-[280px]" title={r.error_message || ""}>
+                      {r.error_message || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <DialogFooter>
+            <Button size="sm" onClick={() => setOpenFailureGroup(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
