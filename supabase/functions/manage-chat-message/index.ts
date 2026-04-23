@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     // Fetch message + conversation + instance + tenant settings (one round trip)
     const { data: msg, error: msgErr } = await admin
       .from("chat_messages")
-      .select("id, tenant_id, conversation_id, direction, message_type, content, status, provider_message_id, external_id, created_at, metadata, deleted_for_recipient_at")
+      .select("id, tenant_id, conversation_id, direction, message_type, content, status, provider_message_id, external_id, created_at, metadata, deleted_for_recipient_at, original_content, edited_at")
       .eq("id", messageId)
       .maybeSingle();
     if (msgErr || !msg) return json({ error: "Mensagem não encontrada" }, 404);

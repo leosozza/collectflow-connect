@@ -93,7 +93,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     !isDeleted &&
     !isOptimistic &&
     message.status !== "failed" &&
-    !!(message as any).provider_message_id || !!message.external_id;
+    (!!(message as any).provider_message_id || !!message.external_id);
   const showActionsMenu = isOutbound && !isInternal && !isOptimistic;
 
   const handleDocumentDownload = async (url: string, filename: string) => {
