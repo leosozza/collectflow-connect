@@ -1,94 +1,95 @@
 
 
-## Análise: o que acontece com os boletos hoje quando o acordo é quebrado
+## Plano: ícone de telefone ao lado do número do cliente para discagem direta via 3CPlus
 
-### Estado atual (já implementado)
+### Comportamento desejado
 
-**Quebra manual** (`agreementService.cancelAgreement`, linhas 412-436):
-- Atualiza `agreements.status = 'cancelled'`
-- **Marca os registros em `negociarie_cobrancas` como `status = 'cancelado'`** (apenas os que estavam `pendente` ou `em_aberto`). Boletos já pagos são preservados.
-- Mas **não chama o Negociarie** para invalidar o boleto no provider — o link continua tecnicamente acessível se o devedor já tinha em mãos.
+- Ao lado de **cada número de telefone** exibido na ficha do cliente (Hot/phone, phone2, phone3), aparece um **ícone verde de telefone** (`Phone` do lucide-react).
+- Clique no ícone:
+  1. **Se operador está conectado na 3CPlus** (status `idle`/`available`/`paused`): dispara `click2call` direto para aquele número específico via `threecplus-proxy`. Toast: *"Discando para (XX) XXXXX-XXXX…"*. A 3CPlus toca no ramal SIP do operador, ele atende, sistema conecta com o cliente.
+  2. **Se operador NÃO está conectado** (sem `agent_id`, ou status `offline`/`logged_out`): abre **modal de conexão da 3CPlus** (mesmo modal que já existe em `TelefoniaDashboard`/`ThreeCPlusPanel` com seleção de campanha + ramal SIP). Após o operador conectar, o sistema **automaticamente disca o número pendente** que originou a ação.
+  3. **Se operador está em `on_call` ou `acw`**: ícone fica desabilitado com tooltip *"Finalize a chamada atual antes de discar"*.
 
-**Quebra automática** (`auto-expire-agreements`, linhas 153-200):
-- Cancela o acordo e atualiza clientes para "Quebra de Acordo".
-- **NÃO atualiza `negociarie_cobrancas`** — registros ficam como `pendente` no banco interno (bug de inconsistência vs. quebra manual).
+### Onde adicionar o ícone
 
-**Reabertura** (`agreementService.reopenAgreement`, linhas 680-753):
-- Volta `agreements.status = 'pending'` e re-marca títulos como `em_acordo`.
-- **Não toca em `negociarie_cobrancas`**: os boletos antigos continuam com status `cancelado` (se quebra manual) ou `pendente` (se auto-expirado).
-- **Não regera boletos automaticamente.** O operador precisa ir na aba "Acordos" e clicar manualmente em **"Reemitir boletos"** parcela por parcela (botão FileBarChart já existente em `AgreementInstallments`).
+O número de telefone do cliente aparece em vários lugares — vamos cobrir os 2 mais críticos no escopo desta entrega:
 
-### Resumo direto para sua pergunta
+1. **`ClientHeader.tsx`** (header da ficha em `/atendimento/:clientId` e `/carteira/:id`): hoje exibe `phone` formatado. Adicionar `<button>` com ícone Phone à direita do número.
+2. **`ClientPhonesPanel.tsx`** (painel lateral de telefones com Hot/Phone2/Phone3, observações e ações): adicionar ícone Phone ao lado de cada slot que tenha número e não esteja inativo.
 
-| Cenário | Boletos no Rivo | Boletos no Negociarie/cliente |
-|---|---|---|
-| Quebra manual | Marcados `cancelado` | **Continuam acessíveis** pelo link antigo (não cancela no provider) |
-| Quebra automática (vencimento + prazo) | **Permanecem `pendente`** (bug) | Continuam acessíveis |
-| Reabertura | Permanecem como estavam | Não regenera; operador precisa reemitir manualmente |
+### Lógica central (novo serviço)
 
-### Problemas identificados
+Criar **`src/services/callService.ts`** com:
 
-1. **Inconsistência entre quebra manual e automática**: a auto-expiração não cancela os boletos no banco interno.
-2. **Boleto antigo continua válido no Negociarie** após quebra: se o cliente já recebeu o link antes, ele consegue pagar mesmo com o acordo cancelado. Isso pode gerar conciliação confusa (pagamento entra mas acordo está cancelado).
-3. **Reabertura não dispara regeneração automática**: o operador precisa lembrar de corrigir datas e reemitir cada parcela manualmente. Friction operacional + risco de esquecer parcelas.
+```ts
+dialClientPhone({ tenantId, phone, clientId? }): Promise<void>
+```
 
----
+Fluxo interno:
 
-## Plano: padronizar quebra + automatizar reemissão na reabertura
+1. Lê `profile.threecplus_agent_id` do operador atual.
+2. Lê status atual via hook compartilhado `useThreeCPlusStatus` (já existe).
+3. **Se conectado** (`idle`/`available`/`paused`): invoca `threecplus-proxy` com action `click2call`, payload `{ agent_id, phone, client_id }`. Mesmo payload que `AtendimentoPage.handleCall` já usa hoje (linha 457), apenas extraído para função reutilizável.
+4. **Se desconectado**: salva intenção em estado global (Zustand store novo `pendingCallStore` com `{ phone, clientId, tenantId, createdAt }`) e abre o modal de conexão chamando `openThreeCPlusConnectionModal()` (action do `AtendimentoModalProvider` que já existe).
+5. **Listener no `AtendimentoModalProvider`**: quando o status do agente muda de `offline` → `idle`, verifica se há `pendingCall` no store; se sim e tiver <2 minutos de idade, dispara `click2call` automaticamente e limpa o pending. Toast: *"Conectado! Discando para o número pendente…"*.
 
-### 1) Quebra automática passa a cancelar boletos (paridade com quebra manual)
+### Componente reutilizável
 
-Em `supabase/functions/auto-expire-agreements/index.ts` (após linha 159, dentro do bloco on-demand, e também no bloco do cron por volta da linha 412):
-- Adicionar `UPDATE negociarie_cobrancas SET status = 'cancelado' WHERE agreement_id IN (...) AND status IN ('pendente','em_aberto')`.
+Criar **`src/components/shared/CallButton.tsx`**:
 
-### 2) Cancelar boleto no Negociarie (não só no Rivo)
+```tsx
+<CallButton phone={phone} clientId={clientId} size="sm" variant="ghost" />
+```
 
-A API Negociarie tem `DELETE /cobranca/{id_parcela}` (cancelamento). Hoje **não está exposta** no `negociarie-proxy`.
+- Renderiza `<Button>` com `<Phone className="h-4 w-4 text-green-600" />`.
+- Tooltip dinâmico: *"Ligar para (XX) XXXXX-XXXX"* (com número formatado) ou estado de erro.
+- Estado disabled quando `!phone` ou `agentBusy` (`on_call`/`acw`).
+- onClick → chama `callService.dialClientPhone(...)`.
 
-- Adicionar case `"cancelar-cobranca"` em `negociarie-proxy/index.ts` que chama `DELETE /cobranca/{id_parcela}`.
-- Em `cancelAgreement` e na auto-expiração: para cada `negociarie_cobrancas` com `id_parcela` e status pendente, disparar a chamada de cancelamento (em `Promise.allSettled` para não bloquear se o provider falhar).
-- Marcar localmente como `cancelado` independente do resultado da chamada externa (consistência de UI prevalece; falha só vai para log).
+Esse componente fica reutilizável para qualquer lugar futuro (lista da Carteira, popovers, etc.).
 
-### 3) Reabertura regenera boletos automaticamente em background
+### Modal de conexão automático
 
-Em `agreementService.reopenAgreement` (linha 717, logo após o UPDATE do status):
-- Após o UPDATE de `status = 'pending'`, disparar `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id: id } })` em **fire-and-forget** (mesma UX otimista que já adotamos no fechamento de acordo).
-- A função `generate-agreement-boletos` já tem a lógica de **substituir** boletos antigos: faz `UPDATE ... SET status = 'substituido'` antes de inserir o novo (linhas 400-406). E ela já **pula parcelas com `dueDate < today`** (linha 324), exatamente o comportamento desejado: o operador precisa primeiro corrigir as datas vencidas, senão essas parcelas ficam sem boleto.
-- Adicionar toast: "Acordo reaberto. Regerando boletos das parcelas futuras…" + segundo toast quando concluir.
+Já existe em `AtendimentoModalProvider`:
+- `openThreeCPlusConnectionModal()` → abre seleção de campanha + ramal SIP (mesma UI usada hoje em `/contact-center/telefonia` quando operador clica "Conectar").
+- Após conexão bem-sucedida, o `useThreeCPlusStatus` realtime atualiza o status para `idle`.
 
-### 4) UI: avisar operador na reabertura sobre datas vencidas
+Vamos apenas:
+- Garantir que essa action do provider esteja exposta globalmente (criar se não existir como API pública do contexto).
+- Adicionar listener `useEffect` no provider que observa `status === 'idle'` E `pendingCall` no store → dispara discagem.
 
-No `ClientDetailPage` `handleReopenAgreement` (linha 293): após reabrir, se houver parcelas com `dueDate < today`, exibir toast warning destacado: *"Atenção: X parcelas estão com data vencida e NÃO terão boleto gerado. Corrija as datas em 'Acordos do cliente' e clique em 'Reemitir' para essas parcelas."*
+### Pré-condições e tratamento de erros
 
-### 5) Evento de auditoria
+- **Operador sem `threecplus_agent_id`**: toast claro *"Seu usuário não está vinculado a um ramal 3CPlus. Solicite ao administrador em Cadastros → Usuários."*.
+- **Tenant sem credenciais 3CPlus** (`threecplus_domain`/`threecplus_api_token` ausentes): toast *"3CPlus não configurada para este tenant."*.
+- **Erro do `threecplus-proxy`** (ex.: ramal SIP não registrado): toast com mensagem específica retornada pelo proxy (já normalizada hoje).
+- **Pending call expira em 2 min**: se operador demorar muito para conectar, descarta o pending silenciosamente para não discar inesperadamente depois.
 
-Adicionar entrada em `client_events` com tipo `agreement_broken` (já existe no enum) e `agreement_reopened` para timeline do cliente — capturar quem fez, quando e quantos boletos foram cancelados/regerados.
+### O que NÃO muda
 
----
+- Fluxo receptivo (cliente cai pro operador via fila) permanece 100% inalterado.
+- Modo manual no `DialPad` continua funcionando.
+- `AtendimentoPage.handleCall` passa a usar `callService.dialClientPhone()` internamente (refactor sem mudança de comportamento).
+- Lógica de telefones (`clientPhoneService`, slots Hot/2/3, promoção) intacta.
 
-### Resultado esperado
+### Arquivos a alterar / criar
 
-| Ação | Boletos no Rivo | Boletos no Negociarie | UX |
-|---|---|---|---|
-| Quebra manual | `cancelado` | **Cancelado no provider** | igual hoje |
-| Quebra automática | `cancelado` (corrigido) | **Cancelado no provider** | igual hoje |
-| Reabertura | Antigos viram `substituido`; novos `pendente` para parcelas futuras | Boletos novos gerados; antigos cancelados | Modal fecha imediato + toast de progresso; warning para parcelas vencidas |
-
-### Arquivos a alterar
-
-1. `supabase/functions/auto-expire-agreements/index.ts` — cancelar `negociarie_cobrancas` no bloco on-demand (≈linha 160) e no bloco do cron (≈linha 412).
-2. `supabase/functions/negociarie-proxy/index.ts` — adicionar case `"cancelar-cobranca"` chamando `DELETE /cobranca/{id_parcela}`.
-3. `src/services/agreementService.ts`:
-   - `cancelAgreement`: após marcar `cancelado` localmente, chamar Negociarie (Promise.allSettled).
-   - `reopenAgreement`: disparar `generate-agreement-boletos` fire-and-forget; logar evento `agreement_reopened`.
-4. `src/pages/ClientDetailPage.tsx` `handleReopenAgreement`: detectar parcelas com data vencida e exibir toast warning.
+1. **`src/services/callService.ts`** *(novo)* — função `dialClientPhone` + leitura de `agent_id`/status + roteamento conectado/desconectado.
+2. **`src/stores/pendingCallStore.ts`** *(novo)* — Zustand store simples `{ pendingCall, setPendingCall, clearPendingCall }`.
+3. **`src/components/shared/CallButton.tsx`** *(novo)* — botão com ícone Phone reutilizável.
+4. **`src/components/atendimento/ClientHeader.tsx`** — adicionar `<CallButton>` ao lado do telefone exibido.
+5. **`src/components/client-detail/ClientPhonesPanel.tsx`** — adicionar `<CallButton>` em cada slot ativo (Hot/Phone2/Phone3).
+6. **`src/components/contact-center/AtendimentoModalProvider.tsx`** (ou hook equivalente) — expor `openThreeCPlusConnectionModal()` globalmente; adicionar `useEffect` que observa status idle + pendingCall → dispara discagem auto.
+7. **`src/pages/AtendimentoPage.tsx`** — refatorar `handleCall` (linha 457) para usar `callService.dialClientPhone()` (sem mudança funcional).
 
 ### Validação
 
-1. **Quebra manual** de acordo com 5 boletos pendentes → no Rivo ficam `cancelado`; no link antigo do Negociarie retorna "cancelado/expirado".
-2. **Quebra automática** via `auto-expire-agreements` → mesma consistência (corrige bug atual onde ficavam `pendente`).
-3. **Boleto já pago** antes da quebra → preservado, não é cancelado.
-4. **Reabertura** com todas as parcelas com data futura → modal fecha; toast "Regerando boletos…"; em ~3s aba Acordos exibe os novos links via Realtime; antigos ficam `substituido`.
-5. **Reabertura** com 2 parcelas vencidas → toast warning destacado; aba Acordos mostra novos boletos só para as futuras; após corrigir datas e clicar "Reemitir", as 2 últimas geram normalmente.
-6. **Falha do Negociarie** ao cancelar → log de erro, mas estado local fica consistente como `cancelado` (não bloqueia operador).
+1. **Operador conectado, idle, ficha do cliente** → clica ícone ao lado do Hot phone → toast "Discando…"; ramal SIP toca em ~2s; ao atender, conecta com cliente.
+2. **Operador desconectado da 3CPlus, ficha do cliente** → clica ícone → modal de conexão abre; operador escolhe campanha + ramal e conecta; em ~3s sistema disca automático para o número que originou; toast "Conectado! Discando…".
+3. **Operador em chamada ativa** (`on_call`) → ícone aparece desabilitado com tooltip explicativo.
+4. **Cliente com 3 telefones** → cada um tem seu próprio ícone Phone; clicar no Phone2 disca especificamente o Phone2.
+5. **Operador sem `agent_id`** → toast claro pedindo configuração; modal não abre.
+6. **Operador conecta mas demora >2min** → pending expira; nenhuma discagem inesperada acontece.
+7. **Erro de proxy** (ramal não registrado) → toast com erro específico da 3CPlus.
+8. **Refactor de `AtendimentoPage.handleCall`** → comportamento atual de "Ligar" no `ClientHeader` dentro de `/atendimento` segue idêntico.
 
