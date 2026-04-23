@@ -85,7 +85,43 @@ function normalizePhone(phone: string | null | undefined): string {
 }
 
 function isValidPhone(normalized: string): boolean {
-  return normalized.length >= 10 && normalized.length <= 15;
+  if (normalized.length < 10 || normalized.length > 15) return false;
+  // Reject all-same-digit (e.g., 00000000000, 11111111111)
+  if (/^(\d)\1+$/.test(normalized)) return false;
+  // Reject numbers starting with 0 (invalid Brazilian/E.164)
+  if (normalized.startsWith("0")) return false;
+  // Reject numbers composed only of 0s and 1s (placeholders like 01010101010)
+  if (/^[01]+$/.test(normalized)) return false;
+  return true;
+}
+
+/**
+ * Filter out CPFs whose phones were previously confirmed as not having WhatsApp.
+ * Reads `client_profiles.phone_has_whatsapp` for the tenant and excludes matches.
+ * Returns the filtered client list and how many were excluded.
+ */
+export async function filterClientsWithoutWhatsApp<T extends { cpf: string }>(
+  supabaseClient: any,
+  tenantId: string,
+  clients: T[],
+): Promise<{ clients: T[]; excludedNoWhatsApp: number }> {
+  if (!clients || clients.length === 0) return { clients: [], excludedNoWhatsApp: 0 };
+  try {
+    const cpfs = Array.from(new Set(clients.map((c) => c.cpf).filter(Boolean)));
+    if (cpfs.length === 0) return { clients, excludedNoWhatsApp: 0 };
+    const { data } = await supabaseClient
+      .from("client_profiles")
+      .select("cpf, phone_has_whatsapp")
+      .eq("tenant_id", tenantId)
+      .eq("phone_has_whatsapp", false)
+      .in("cpf", cpfs);
+    const invalidCpfs = new Set<string>(((data || []) as any[]).map((r) => r.cpf));
+    if (invalidCpfs.size === 0) return { clients, excludedNoWhatsApp: 0 };
+    const filtered = clients.filter((c) => !invalidCpfs.has(c.cpf));
+    return { clients: filtered, excludedNoWhatsApp: clients.length - filtered.length };
+  } catch {
+    return { clients, excludedNoWhatsApp: 0 };
+  }
 }
 
 // ---- Deduplication ----
