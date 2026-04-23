@@ -740,6 +740,7 @@ const UsersPage = () => {
                     commission_grade_id: editGradeId === "none" ? null : editGradeId,
                     full_name: editName,
                     threecplus_agent_id: editAgentId,
+                    threecplus_extension: editExtension.trim() ? editExtension.trim() : null,
                     instanceIds: editInstanceIds,
                     permission_profile_id: editProfileId === "none" ? null : editProfileId,
                   });
