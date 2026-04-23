@@ -242,13 +242,13 @@ const DashboardPage = () => {
 
       {/* Parcelas do Dia (com navegador de data integrado) */}
       <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full md:w-1/2">
-        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="px-4 py-3 border-b border-border grid grid-cols-3 items-center gap-3">
+          <div className="flex items-center gap-2 justify-self-start">
             <CalendarClock className="w-4 h-4 text-primary" />
             <h2 className="text-sm font-semibold text-card-foreground">Parcelas Programadas</h2>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 justify-self-center">
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
@@ -270,7 +270,7 @@ const DashboardPage = () => {
             </Button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 justify-self-end">
             <span className="text-sm font-semibold text-success">
               {vencimentos.length} registros • {formatCurrency(totalVencimentos)}
             </span>
