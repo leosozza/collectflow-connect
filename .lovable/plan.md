@@ -1,53 +1,43 @@
+# Dashboard sem rolagem lateral — listas internas scrolláveis
+
 ## Objetivo
-
-Padronizar visualmente o Dashboard no estilo RIVO (clean, elegante, neutro com acento laranja), corrigindo:
-
-1. **Quebra de padrão dos KPIs**: a coluna do meio usa `variant="gradient"` (cards laranja sólido), enquanto as colunas 1 e 3 são neutros — vira um "bloco laranja" no meio.
-2. **Desalinho vertical**: card "Agendados" vazio fica com ~150 px enquanto Meta e Parcelas Programadas têm ~600 px.
-3. **Tipografia / iconografia mista** entre KPIs e cards funcionais.
-4. **Headers e bordas** levemente diferentes entre os 3 cards funcionais.
+Eliminar a barra de rolagem da página `/dashboard`. Tudo deve caber em uma única tela. Apenas os blocos **Agendados** e **Parcelas Programadas** terão rolagem interna quando houver muitos itens.
 
 ## Mudanças
 
-### 1. `src/pages/DashboardPage.tsx`
+### 1. `src/pages/DashboardPage.tsx` — container fit-to-viewport
+- Substituir `space-y-6 animate-fade-in` do wrapper raiz por `h-full flex flex-col gap-4 animate-fade-in min-h-0`, para o dashboard ocupar exatamente a altura do `<main>` do `AppLayout` (que já é `flex-1 overflow-auto`).
+- Reduzir o cabeçalho para ficar mais condensado (sem alterar conteúdo): `gap-3` no header, `text-xl` no título.
+- Trocar o grid principal:
+  - De: `grid grid-cols-1 lg:grid-cols-3 gap-5` + colunas com `min-h-[520px]`.
+  - Para: `flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4`, e cada coluna `flex flex-col gap-3 min-h-0` (sem `min-h-[520px]`).
+- Stat cards do topo de cada coluna: manter o grid de 3 cards mas reduzindo a altura (ver item 3) para liberar espaço aos blocos inferiores.
+- Bloco inferior de cada coluna (`Agendados`, `Meta`, `Parcelas Programadas`) recebe `flex-1 min-h-0 flex flex-col` para preencher o restante da altura disponível e permitir rolagem interna.
 
-- Remover `variant="gradient"` dos 3 KPIs da coluna 2 (Colchão, Total 1ª Parcela, Total Negociado). Os 9 KPIs do topo passam a usar o mesmo estilo neutro com ícone laranja em fundo `bg-primary/10`.
-- Padronizar gaps: grid principal `gap-5`, KPIs internos `gap-3`.
-- Adicionar `min-h-[520px]` na coluna que contém Agendados/Meta/Parcelas, garantindo altura igual entre os 3 cards funcionais.
-- Botões "Relatórios" e "Analytics" do header com `text-xs` para casar com filtros.
+### 2. `src/components/dashboard/ScheduledCallbacksCard.tsx`
+- Wrapper raiz: trocar `h-full flex flex-col` para `h-full min-h-0 flex flex-col` (já está h-full, falta `min-h-0`).
+- A `div` da lista de callbacks já tem `overflow-auto flex-1` — manter.
+- O empty state hoje é `flex-1 flex flex-col items-center justify-center` — manter (preserva o tamanho mesmo sem agendamentos).
 
-### 2. `src/components/StatCard.tsx`
+### 3. `src/components/StatCard.tsx` — versão condensada
+- Reduzir padding interno (`p-3` em vez de `p-4`), altura de ícone (`w-7 h-7` em vez de `w-8 h-8`), valor (`text-lg` em vez de `text-xl`) e título (`text-[10px]`).
+- Objetivo: cada stat card ocupar ~64–72px de altura, somando ~210px para os 3 cards de cada coluna e deixando o bloco inferior com altura suficiente para listar 4–6 linhas sem rolar.
 
-- Padronizar todos os KPIs com:
-  - Título: `text-[11px] font-medium text-muted-foreground uppercase tracking-wide`
-  - Valor: `text-xl font-bold text-foreground tracking-tight`
-  - Ícone: caixa `w-8 h-8 rounded-lg`, ícone `w-4 h-4` — sempre laranja (`text-primary` em `bg-primary/10`), exceto `received` (verde) e `broken` (vermelho), que mantêm cor semântica para sinalização rápida.
-  - Borda `border-border/60`, hover `hover:border-primary/30 hover:shadow-md transition-all`.
+### 4. Bloco "Parcelas Programadas" (dentro de `DashboardPage.tsx`)
+- Wrapper já é `flex-1 flex flex-col`. Adicionar `min-h-0` para que o `overflow-auto flex-1` da tabela funcione corretamente.
+- Header já tem `flex-shrink-0` implícito; nenhuma mudança no conteúdo.
 
-### 3. `src/components/dashboard/ScheduledCallbacksCard.tsx`
-
-- Adicionar `h-full flex flex-col` no card raiz.
-- Empty state ocupa `flex-1` com ícone `Clock` discreto e mensagem centralizada vertical+horizontal.
-- Header: ícone `w-4 h-4 text-primary`, título `text-sm font-semibold text-foreground`, padding `px-4 py-3`, border-bottom `border-border/60`.
-
-### 4. `src/components/dashboard/DashboardMetaCard.tsx` e bloco "Parcelas Programadas" inline em `DashboardPage.tsx`
-
-- Mesmo padrão de header dos cards funcionais (ícone + título + padding + border).
-- `h-full flex flex-col` para esticar até a altura da coluna.
-- Footer com cores e padding alinhados.
+### 5. `DashboardMetaCard.tsx`
+- Wrapper já é `h-full flex flex-col`. Adicionar `min-h-0` no wrapper e trocar o conteúdo central de `py-12` para `py-6` para reduzir altura mínima quando não há meta.
 
 ## Resultado esperado
+- Página `/dashboard` cabe em 1432×948 sem barra lateral.
+- "Agendados" e "Parcelas Programadas" mostram scrollbar **interna** somente quando a lista excede a altura do bloco.
+- Stat cards do topo ficam visualmente condensados, alinhados nas três colunas.
+- Layout permanece responsivo: em telas menores que `lg`, as colunas empilham e o `<main>` do AppLayout volta a rolar normalmente (comportamento mobile esperado).
 
-- 9 KPIs do topo idênticos (neutros com acento laranja), formando uma faixa horizontal limpa.
-- 3 cards funcionais (Agendados, Meta, Parcelas Programadas) com altura mínima igual e rodapés alinhados.
-- Tipografia, ícones, padding e bordas consistentes em todo o Dashboard.
-- Identidade RIVO: laranja como acento sutil, fundo claro, contraste alto, estética clean.
-
-## Arquivos afetados
-
+## Arquivos editados
 - `src/pages/DashboardPage.tsx`
 - `src/components/StatCard.tsx`
 - `src/components/dashboard/ScheduledCallbacksCard.tsx`
 - `src/components/dashboard/DashboardMetaCard.tsx`
-
-Aprove para eu aplicar as alterações.
