@@ -1,95 +1,58 @@
 
 
-## Plano: ícone de telefone ao lado do número do cliente para discagem direta via 3CPlus
+## Plano de teste: validar ícone de telefone (CallButton) antes de produção
 
-### Comportamento desejado
+Vou validar a feature em 3 frentes — código (revisão estática), edge function (sanidade do `threecplus-proxy`) e fluxo no preview (browser automation com seu login atual).
 
-- Ao lado de **cada número de telefone** exibido na ficha do cliente (Hot/phone, phone2, phone3), aparece um **ícone verde de telefone** (`Phone` do lucide-react).
-- Clique no ícone:
-  1. **Se operador está conectado na 3CPlus** (status `idle`/`available`/`paused`): dispara `click2call` direto para aquele número específico via `threecplus-proxy`. Toast: *"Discando para (XX) XXXXX-XXXX…"*. A 3CPlus toca no ramal SIP do operador, ele atende, sistema conecta com o cliente.
-  2. **Se operador NÃO está conectado** (sem `agent_id`, ou status `offline`/`logged_out`): abre **modal de conexão da 3CPlus** (mesmo modal que já existe em `TelefoniaDashboard`/`ThreeCPlusPanel` com seleção de campanha + ramal SIP). Após o operador conectar, o sistema **automaticamente disca o número pendente** que originou a ação.
-  3. **Se operador está em `on_call` ou `acw`**: ícone fica desabilitado com tooltip *"Finalize a chamada atual antes de discar"*.
+### 1) Revisão de código (read-only)
 
-### Onde adicionar o ícone
+Reler os 5 arquivos da entrega procurando regressões:
+- `src/services/callService.ts` — validar tratamento de `agentStatus` (idle/paused vs on_call/acw), persistência de `pendingCall` em sessionStorage, expiração 2min, normalização do telefone (E.164 13 dígitos).
+- `src/components/shared/CallButton.tsx` — confirmar `e.stopPropagation()` (não dispara navegação ao clicar dentro de linha clicável da Carteira), tooltip dinâmico, estado disabled quando `inCall`.
+- `src/hooks/useAtendimentoModal.tsx` — verificar dispatcher do `pendingCall`: idempotência (`lastDispatchedRef`), match de `tenantId`, condição de idle correta.
+- `src/components/atendimento/ClientHeader.tsx` e `src/components/client-detail/PhoneList.tsx` — confirmar que ícone aparece para todos os slots e respeita ausência de número.
 
-O número de telefone do cliente aparece em vários lugares — vamos cobrir os 2 mais críticos no escopo desta entrega:
+### 2) Sanidade da edge function
 
-1. **`ClientHeader.tsx`** (header da ficha em `/atendimento/:clientId` e `/carteira/:id`): hoje exibe `phone` formatado. Adicionar `<button>` com ícone Phone à direita do número.
-2. **`ClientPhonesPanel.tsx`** (painel lateral de telefones com Hot/Phone2/Phone3, observações e ações): adicionar ícone Phone ao lado de cada slot que tenha número e não esteja inativo.
+`supabase--curl_edge_functions` em `threecplus-proxy` com action `click2call` usando um `agent_id` de teste e telefone fictício, só para confirmar que o endpoint responde com erro tratado (não 500 cru) — valida a malha de erro que o `CallButton` consome.
 
-### Lógica central (novo serviço)
+### 3) Validação funcional no preview (browser)
 
-Criar **`src/services/callService.ts`** com:
+Você está em `/auth`. Após login, vou rodar **apenas leitura/observação** (sem disparar chamadas reais para não alarmar o cliente):
 
-```ts
-dialClientPhone({ tenantId, phone, clientId? }): Promise<void>
-```
+| Cenário | Como valido | Resultado esperado |
+|---|---|---|
+| Ícone aparece em ClientHeader | `navigate` em `/atendimento/:id` ou `/carteira/:id` de um cliente com telefone; `observe` botão verde ao lado do número | Botão `Phone` visível, verde, com tooltip "Ligar para (XX) XXXXX-XXXX" |
+| Ícone aparece em PhoneList | `observe` painel lateral de telefones | Um botão por slot (Hot/2/3) preenchido |
+| Cliente sem telefone | `navigate` para um cliente sem `phone` | Botão ausente OU disabled com tooltip "Sem telefone cadastrado" |
+| Estado disabled quando ocupado | inspeção visual: se houver agente em `on_call`, ícone fica acinzentado com tooltip "Finalize a chamada atual…" | Confirmado por classe `opacity-40` + atributo `disabled` |
+| Operador sem agent_id | leitura de `profile.threecplus_agent_id`; clique → toast de erro claro | Toast pedindo vínculo SIP, sem 500 |
+| Sem credenciais 3CPlus no tenant | revisar lógica em `callService` | Toast claro, não dispara fetch ao proxy |
+| Click2call real (opcional, só com sua autorização) | clicar 1 vez em telefone seu próprio para confirmar disparo end-to-end | Toast "Discando…", ramal SIP toca, `threecplus-proxy` retorna 200 |
+| Fluxo desconectado → modal → auto-dial | desconectar 3CPlus, clicar ícone → redirect `/contact-center/telefonia`; após reconectar, dispatcher dispara automático em <2min | `pendingCall` no sessionStorage, dispatcher consome 1x (idempotente), toast "Conectado! Discando…" |
 
-Fluxo interno:
+### Critérios de aprovação para produção
 
-1. Lê `profile.threecplus_agent_id` do operador atual.
-2. Lê status atual via hook compartilhado `useThreeCPlusStatus` (já existe).
-3. **Se conectado** (`idle`/`available`/`paused`): invoca `threecplus-proxy` com action `click2call`, payload `{ agent_id, phone, client_id }`. Mesmo payload que `AtendimentoPage.handleCall` já usa hoje (linha 457), apenas extraído para função reutilizável.
-4. **Se desconectado**: salva intenção em estado global (Zustand store novo `pendingCallStore` com `{ phone, clientId, tenantId, createdAt }`) e abre o modal de conexão chamando `openThreeCPlusConnectionModal()` (action do `AtendimentoModalProvider` que já existe).
-5. **Listener no `AtendimentoModalProvider`**: quando o status do agente muda de `offline` → `idle`, verifica se há `pendingCall` no store; se sim e tiver <2 minutos de idade, dispara `click2call` automaticamente e limpa o pending. Toast: *"Conectado! Discando para o número pendente…"*.
+- [ ] Todos os botões renderizam corretamente nos 2 componentes integrados.
+- [ ] Edge function responde com erro tratado (não 500 cru) para input inválido.
+- [ ] Estados disabled (sem telefone, em chamada) funcionam.
+- [ ] Toasts de erro são claros e acionáveis (sem agent_id, sem credenciais 3CPlus).
+- [ ] Fluxo desconectado → conexão → auto-dial funciona com idempotência (não disca 2x).
+- [ ] Pending call respeita expiração de 2min.
+- [ ] Refactor do `AtendimentoPage.handleCall` mantém comportamento original (clicar "Ligar" no ClientHeader dentro de `/atendimento` segue idêntico).
 
-### Componente reutilizável
+### Itens que vou destacar como bloqueadores (se encontrados)
 
-Criar **`src/components/shared/CallButton.tsx`**:
+- Disparo duplicado do dispatcher (perde idempotência).
+- Falha ao normalizar telefone (envio de número com máscara para o proxy).
+- Toast genérico em vez do erro específico do proxy (ex.: "ramal SIP não registrado").
+- Botão acionável durante `on_call` (risco de derrubar chamada).
+- `pendingCall` não expira (risco de discagem inesperada minutos depois).
 
-```tsx
-<CallButton phone={phone} clientId={clientId} size="sm" variant="ghost" />
-```
+### Pré-requisitos para eu iniciar
 
-- Renderiza `<Button>` com `<Phone className="h-4 w-4 text-green-600" />`.
-- Tooltip dinâmico: *"Ligar para (XX) XXXXX-XXXX"* (com número formatado) ou estado de erro.
-- Estado disabled quando `!phone` ou `agentBusy` (`on_call`/`acw`).
-- onClick → chama `callService.dialClientPhone(...)`.
+1. **Faça login no preview** (você está em `/auth`). Sem login não consigo navegar para `/atendimento` nem `/carteira`.
+2. **Confirme se posso disparar 1 chamada real** para um número seu, ou se prefere apenas validação visual + sanidade do endpoint.
 
-Esse componente fica reutilizável para qualquer lugar futuro (lista da Carteira, popovers, etc.).
-
-### Modal de conexão automático
-
-Já existe em `AtendimentoModalProvider`:
-- `openThreeCPlusConnectionModal()` → abre seleção de campanha + ramal SIP (mesma UI usada hoje em `/contact-center/telefonia` quando operador clica "Conectar").
-- Após conexão bem-sucedida, o `useThreeCPlusStatus` realtime atualiza o status para `idle`.
-
-Vamos apenas:
-- Garantir que essa action do provider esteja exposta globalmente (criar se não existir como API pública do contexto).
-- Adicionar listener `useEffect` no provider que observa `status === 'idle'` E `pendingCall` no store → dispara discagem.
-
-### Pré-condições e tratamento de erros
-
-- **Operador sem `threecplus_agent_id`**: toast claro *"Seu usuário não está vinculado a um ramal 3CPlus. Solicite ao administrador em Cadastros → Usuários."*.
-- **Tenant sem credenciais 3CPlus** (`threecplus_domain`/`threecplus_api_token` ausentes): toast *"3CPlus não configurada para este tenant."*.
-- **Erro do `threecplus-proxy`** (ex.: ramal SIP não registrado): toast com mensagem específica retornada pelo proxy (já normalizada hoje).
-- **Pending call expira em 2 min**: se operador demorar muito para conectar, descarta o pending silenciosamente para não discar inesperadamente depois.
-
-### O que NÃO muda
-
-- Fluxo receptivo (cliente cai pro operador via fila) permanece 100% inalterado.
-- Modo manual no `DialPad` continua funcionando.
-- `AtendimentoPage.handleCall` passa a usar `callService.dialClientPhone()` internamente (refactor sem mudança de comportamento).
-- Lógica de telefones (`clientPhoneService`, slots Hot/2/3, promoção) intacta.
-
-### Arquivos a alterar / criar
-
-1. **`src/services/callService.ts`** *(novo)* — função `dialClientPhone` + leitura de `agent_id`/status + roteamento conectado/desconectado.
-2. **`src/stores/pendingCallStore.ts`** *(novo)* — Zustand store simples `{ pendingCall, setPendingCall, clearPendingCall }`.
-3. **`src/components/shared/CallButton.tsx`** *(novo)* — botão com ícone Phone reutilizável.
-4. **`src/components/atendimento/ClientHeader.tsx`** — adicionar `<CallButton>` ao lado do telefone exibido.
-5. **`src/components/client-detail/ClientPhonesPanel.tsx`** — adicionar `<CallButton>` em cada slot ativo (Hot/Phone2/Phone3).
-6. **`src/components/contact-center/AtendimentoModalProvider.tsx`** (ou hook equivalente) — expor `openThreeCPlusConnectionModal()` globalmente; adicionar `useEffect` que observa status idle + pendingCall → dispara discagem auto.
-7. **`src/pages/AtendimentoPage.tsx`** — refatorar `handleCall` (linha 457) para usar `callService.dialClientPhone()` (sem mudança funcional).
-
-### Validação
-
-1. **Operador conectado, idle, ficha do cliente** → clica ícone ao lado do Hot phone → toast "Discando…"; ramal SIP toca em ~2s; ao atender, conecta com cliente.
-2. **Operador desconectado da 3CPlus, ficha do cliente** → clica ícone → modal de conexão abre; operador escolhe campanha + ramal e conecta; em ~3s sistema disca automático para o número que originou; toast "Conectado! Discando…".
-3. **Operador em chamada ativa** (`on_call`) → ícone aparece desabilitado com tooltip explicativo.
-4. **Cliente com 3 telefones** → cada um tem seu próprio ícone Phone; clicar no Phone2 disca especificamente o Phone2.
-5. **Operador sem `agent_id`** → toast claro pedindo configuração; modal não abre.
-6. **Operador conecta mas demora >2min** → pending expira; nenhuma discagem inesperada acontece.
-7. **Erro de proxy** (ramal não registrado) → toast com erro específico da 3CPlus.
-8. **Refactor de `AtendimentoPage.handleCall`** → comportamento atual de "Ligar" no `ClientHeader` dentro de `/atendimento` segue idêntico.
+Após sua confirmação, executo as 3 frentes e devolvo um relatório com **GO / NO-GO para produção** + lista de bugs (se houver).
 
