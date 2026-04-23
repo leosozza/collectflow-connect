@@ -45,9 +45,15 @@ const MetaGaugeCard = ({
     return controls.stop;
   }, [clampedPct, animatedValue, duration]);
 
-  // Progress color by performance (semantic tokens)
+  // Progress color by performance band
   const progressColorVar =
-    clampedPct >= 70 ? "hsl(var(--success))" : clampedPct >= 40 ? "#eab308" : "hsl(var(--destructive))";
+    clampedPct >= 91
+      ? "hsl(var(--success))"
+      : clampedPct >= 81
+      ? "#3b82f6"
+      : clampedPct >= 41
+      ? "#f97316"
+      : "hsl(var(--destructive))";
 
   // Period label
   const ref = year && month ? new Date(year, month - 1, 1) : new Date();
