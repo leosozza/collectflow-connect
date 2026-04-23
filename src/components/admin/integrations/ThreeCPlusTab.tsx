@@ -1,11 +1,27 @@
-import { Phone, ArrowLeftRight, ArrowRight } from "lucide-react";
+import { Phone, ArrowLeftRight, ArrowRight, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Info } from "lucide-react";
 import IntegrationTestCard from "./IntegrationTestCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { extractList } from "@/lib/threecplusUtils";
+import { toast } from "sonner";
+
+type SyncMatched = { name: string; email: string; extension: string; previous: string | null };
+type SyncResult = {
+  matched: SyncMatched[];
+  unmatched: { name: string; email: string }[];
+  alreadyCorrect: number;
+  failed: { email: string; error: string }[];
+};
 
 const ThreeCPlusTab = () => {
   const [webhookActive, setWebhookActive] = useState<boolean | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [resultOpen, setResultOpen] = useState(false);
 
   useEffect(() => {
     checkBidirectionalStatus();
