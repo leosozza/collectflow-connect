@@ -492,9 +492,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     return { consolidated, missing, labels };
   }, [clients, cpf, profile?.tenant_id]);
 
-  /** Save missing fields to all client records of same CPF + canonical profile, then proceed with boletos */
+  /** Save missing fields to clients + canonical profile, then re-run the official agreement flow */
   const handleSaveMissingFields = async () => {
-    if (!profile?.tenant_id || !pendingAgreement) return;
+    if (!profile?.tenant_id) return;
     setSavingMissingFields(true);
     try {
       const rawCpf = cpf.replace(/\D/g, "");
@@ -502,60 +502,36 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       for (const [key, val] of Object.entries(missingFields)) {
         if (val.trim()) updatePayload[key] = val.trim();
       }
-      if (Object.keys(updatePayload).length > 0) {
-        // Update clients table for retrocompatibility
-        await supabase
-          .from("clients")
-          .update(updatePayload)
-          .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
-          .eq("tenant_id", profile.tenant_id);
-
-        // Upsert canonical profile
-        await upsertClientProfile(profile.tenant_id, rawCpf, updatePayload, "manual");
+      const stillMissing = Object.keys(missingFields).filter((k) => !updatePayload[k]);
+      if (stillMissing.length > 0) {
+        const labels: Record<string, string> = {
+          email: "E-mail", phone: "Telefone", cep: "CEP",
+          endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+        };
+        toast.error(`Preencha: ${stillMissing.map((k) => labels[k] || k).join(", ")}`);
+        setSavingMissingFields(false);
+        return;
       }
+
+      // Persist in clients (retrocompat) + client_profiles (canonical)
+      await supabase
+        .from("clients")
+        .update(updatePayload)
+        .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
+        .eq("tenant_id", profile.tenant_id);
+      await upsertClientProfile(profile.tenant_id, rawCpf, updatePayload, "manual");
+
       setMissingFieldsOpen(false);
-      await generateBoletosForAgreement(pendingAgreement);
-      setPendingAgreement(null);
-      onAgreementCreated();
+      setMissingFields({});
+      setFoundFields({});
+      toast.success("Dados salvos. Gerando acordo...");
+
+      // Re-run the canonical agreement flow — pre-flight will now pass.
+      await handleConfirmedSubmit({ skipMissingCheck: true });
     } catch (err: any) {
       toast.error("Erro ao salvar dados: " + (err.message || "Erro desconhecido"));
     } finally {
       setSavingMissingFields(false);
-    }
-  };
-
-  /** Generate boletos for a given agreement */
-  const generateBoletosForAgreement = async (agreement: any) => {
-    setGeneratingBoletos(true);
-    try {
-      const boletoInstallments: BoletoInstallment[] = simulatedInstallments.map((inst) => ({
-        number: inst.number,
-        value: inst.value,
-        dueDate: inst.dueDate,
-      }));
-
-      const boletoResult = await negociarieService.generateAgreementBoletos(
-        {
-          id: agreement.id,
-          client_cpf: cpf,
-          credor,
-          tenant_id: profile!.tenant_id,
-          client_name: clientName,
-        },
-        boletoInstallments
-      );
-
-      if (boletoResult.success > 0 && boletoResult.failed === 0) {
-        toast.success(`${boletoResult.success} boleto(s) gerado(s) com sucesso!`);
-      } else if (boletoResult.success > 0 && boletoResult.failed > 0) {
-        toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s): ${boletoResult.errors[0]}`);
-      } else if (boletoResult.failed > 0) {
-        toast.error(`Falha ao gerar boletos: ${boletoResult.errors[0]}`);
-      }
-    } catch (boletoErr: any) {
-      toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
-    } finally {
-      setGeneratingBoletos(false);
     }
   };
 
