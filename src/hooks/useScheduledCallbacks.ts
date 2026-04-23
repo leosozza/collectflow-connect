@@ -53,14 +53,14 @@ export function useScheduledCallbacks() {
       const clientIds = [...new Set((data || []).map((d: any) => d.client_id))];
       const operatorIds = [...new Set((data || []).map((d: any) => d.operator_id))];
 
-      let clientMap: Record<string, { nome_completo: string; cpf: string }> = {};
+      let clientMap: Record<string, { nome_completo: string; cpf: string; credor: string | null }> = {};
       if (clientIds.length > 0) {
         const { data: clients } = await supabase
           .from("clients")
-          .select("id, nome_completo, cpf")
+          .select("id, nome_completo, cpf, credor")
           .in("id", clientIds);
         for (const c of clients || []) {
-          clientMap[c.id] = { nome_completo: c.nome_completo, cpf: c.cpf };
+          clientMap[c.id] = { nome_completo: c.nome_completo, cpf: c.cpf, credor: (c as any).credor ?? null };
         }
       }
 
@@ -79,6 +79,7 @@ export function useScheduledCallbacks() {
         ...d,
         client_name: clientMap[d.client_id]?.nome_completo || "Cliente",
         client_cpf: clientMap[d.client_id]?.cpf || "",
+        client_credor: clientMap[d.client_id]?.credor || "",
         operator_name: operatorMap[d.operator_id] || undefined,
       })) as ScheduledCallback[];
     },
