@@ -1,62 +1,59 @@
 
 
-## Plano: corrigir "Extension SIP não encontrada" no click2call (operador Gustavo, agent 100706)
+## Adicionar card de Metas no Dashboard
 
-### Diagnóstico
+Reutilizar o gauge visual já existente em `GoalsTab` e exibi-lo no `DashboardPage` com comportamento adaptado por papel.
 
-Quando o operador clica para ligar:
+### Comportamento
 
-1. Edge function `threecplus-proxy` (action `click2call`) faz `GET /users?per_page=500`.
-2. Procura, no objeto do agente, um destes campos: `extension`, `extensions[0].extension`, ou `username`.
-3. Para o **Gustavo (agent_id 100706)**, o endpoint `/users` da 3CPlus **não retornou** nenhum desses campos — então a função aborta com 422 e mostra o toast exato:
-   > "Extension SIP não encontrada para o agente 100706. Configure a extension no 3CPlus."
+**Operador (não-admin):**
+- Mostra o gauge da própria meta do mês (igual hoje em Gamificação → Metas).
+- Usa `fetchMyGoal()` + `operator_points.total_received` do mês corrente.
 
-Isso acontece porque na 3CPlus o vínculo "usuário ↔ extension SIP" mora em um recurso separado (`/extensions`), e nem sempre vem agregado dentro do objeto de `/users`. O Gustavo provavelmente **tem uma extension** atribuída na 3CPlus, mas o `/users` não a está expondo.
+**Admin:**
+- Card com seletor (dropdown) no topo do gauge:
+  - **Total da Empresa** (default) → soma de `target_amount` de todas as metas do mês + soma de `total_received` de `operator_points` do mês.
+  - **Por operador** → lista cada operador que tem meta definida; ao escolher, mostra o gauge daquele operador (meta vs recebido).
+- O seletor respeita o filtro de Mês/Ano já presente no header do dashboard (se um único mês/ano estiver selecionado, usa esse; senão usa mês corrente).
 
-### Causa raiz
-- **Fonte única de verdade incompleta**: dependemos só de `/users` para descobrir a extension. Se a 3CPlus não embutir a extension nesse payload (o que varia por tenant/configuração), a discagem trava — mesmo com o agente perfeitamente configurado lá.
-- **Sem override**: não temos um lugar no nosso lado para o admin "dizer" qual é a extension do operador caso a API da 3CPlus não devolva.
+### Arquivos
 
-### Correção (2 frentes)
+**1. Novo componente: `src/components/dashboard/MetaGaugeCard.tsx`**
+- Extrai o `GaugeChart` SVG de `GoalsTab.tsx` para um componente reutilizável (mesmo visual: vermelho/amarelo/verde, ponteiro animado, dois cards "Meta Recebimento" / "Realizado" abaixo, período).
+- Props: `percent`, `received`, `goal`, `monthLabel`, `title` opcional.
+- (Refatorar `GoalsTab.tsx` para importar deste novo arquivo, evitando duplicação.)
 
-#### Frente 1 — Fallback robusto na Edge Function `threecplus-proxy` (case `click2call`)
+**2. Novo componente: `src/components/dashboard/DashboardMetaCard.tsx`**
+- Encapsula a lógica de busca:
+  - Se operador: `fetchMyGoal(year, month)` + `operator_points` do próprio profile.
+  - Se admin: `fetchGoals(year, month, null)` + `operator_points` agregado; estado local `selectedOperatorId | "total"`.
+- Renderiza `<Select>` (shadcn) acima do `<MetaGaugeCard>` quando admin.
+- Props: `year`, `month`, `monthLabel`.
 
-Cadeia de resolução da extension, na ordem (para no primeiro hit):
+**3. Editar: `src/pages/DashboardPage.tsx`**
+- Importar e renderizar `<DashboardMetaCard>` logo abaixo da grade de StatCards (linha ~239), em uma coluna `md:w-1/2` ao lado (ou acima) do card "Parcelas Programadas".
+- Layout proposto:
 
-1. **Override manual no nosso DB** (ver Frente 2): se `profiles.threecplus_extension` existir para o operador, usa direto.
-2. **`/users`** (já existe hoje): `agent.extension` → `agent.extensions[0].extension` → `agent.username`.
-3. **NOVO Fallback `/extensions`**: `GET /extensions?per_page=500`, procurar item onde `user_id == agent_id` (ou `agent_id == agent_id`), pegar campo `extension_number` / `number` / `extension`. Cachear por invocação como já é feito em `agentTokenCache`.
-4. **NOVO Fallback `/agents/:id`** (recurso individual, geralmente mais detalhado que a listagem): pegar o mesmo conjunto de campos.
+```text
+┌─ StatCards (5 cards) ───────────────────────────┐
+├─ Metas (gauge) ─────┬─ Parcelas Programadas ───┤
+│ [admin: seletor]    │ (card existente)         │
+│  gauge SVG          │                          │
+└─────────────────────┴──────────────────────────┘
+```
+Ambos `md:w-1/2` lado a lado em `flex gap-4`.
 
-Só se TODOS falharem é que a função retorna 422 com a mensagem atual — agora indicando, no log, qual rota foi tentada.
+- Passa `year`/`month` derivados de `filterYear`/`filterMonth` (ou mês corrente como fallback).
 
-Bonus: aceitar `body.extension` vindo do frontend como override de runtime (caso o admin queira testar). Se vier preenchido, pula toda a cadeia de resolução.
+### Detalhes técnicos
 
-#### Frente 2 — Override manual por operador (admin UI)
+- "Total da Empresa" (admin):
+  - `goal = sum(target_amount)` de `operator_goals` do mês.
+  - `received = sum(total_received)` de `operator_points` do mês.
+- Reutiliza `formatCurrency` e tokens (`primary`, `success`, `muted`) já existentes — sem cores hardcoded fora do gauge (que mantém vermelho/amarelo/verde semânticos).
+- Sem mudanças no schema/RLS — todas as queries já existem (`operator_goals`, `operator_points`).
+- Sem migrações de banco.
 
-**Migração SQL**: adicionar coluna opcional `threecplus_extension TEXT` em `profiles`.
-
-**UI Admin → Usuários → editar operador**: campo opcional **"Extension SIP 3CPlus"** com helper text:
-> "Preencha apenas se o sistema não conseguir descobrir automaticamente a extension do operador (ex.: erro 'Extension SIP não encontrada')."
-
-**Frontend `callService.ts`**: ao chamar `click2call`, se o profile do operador logado tiver `threecplus_extension`, enviar no body como `extension: "xxx"`.
-
-### Arquivos afetados
-
-1. `supabase/functions/threecplus-proxy/index.ts` — adicionar fallbacks `/extensions` e `/agents/:id` no case `click2call`; aceitar `body.extension` como override.
-2. **Migração SQL** — `ALTER TABLE profiles ADD COLUMN threecplus_extension TEXT NULL;`
-3. `src/services/callService.ts` — incluir `extension` do profile no payload se presente.
-4. `src/components/admin/users/...` (form de edição de operador) — campo input opcional para extension.
-
-### Validação esperada
-
-1. **Operador Gustavo (cenário atual)**: clicar no ícone verde → fallback `/extensions` encontra a SIP do 100706 → discagem completa sem erro.
-2. **Operador sem extension em lugar nenhum**: mesmo erro 422 atual, mas log da edge mostra "tentado /users + /extensions + /agents/100706 — nenhum trouxe extension".
-3. **Admin preenche manualmente "Extension SIP" = 1234**: discagem usa "1234" direto, sem nem chamar `/users`.
-4. **Operador antigo que já funciona** (extension veio em `/users`): nenhuma regressão, primeira camada da cadeia resolve igual hoje.
-
-### Esforço
-- 1 edge function (~40 linhas), 1 migração trivial, 1 ajuste no `callService`, 1 campo no form admin.
-- Sem mudança em `AgreementCalculator`, `ClientHeader`, ou outras telas.
-- Risco baixo, valor alto: destrava operação de telefonia de operadores cuja extension não vem no `/users`.
+### Não incluído
+- Edição/criação de metas continua exclusivamente no módulo Gamificação (admin já tem ferramenta lá).
 
