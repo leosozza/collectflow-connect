@@ -74,7 +74,7 @@ const DashboardMetaCard = ({
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full md:w-1/2">
+    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full">
       <div className="px-4 pt-3 pb-2 border-b border-border">
         <div className="flex items-center gap-2">
           <Trophy className="w-5 h-5 text-primary" />
