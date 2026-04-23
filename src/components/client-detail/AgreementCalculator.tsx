@@ -544,38 +544,43 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setConfirmOpen(true);
   };
 
-  const handleConfirmedSubmit = async () => {
+  const handleConfirmedSubmit = async (options?: { skipMissingCheck?: boolean; markBoletoPendente?: boolean }) => {
     if (!user || !profile?.tenant_id) { toast.error("Usuário não autenticado"); return; }
     if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
 
+    const skipMissingCheck = options?.skipMissingCheck === true;
+    const markBoletoPendente = options?.markBoletoPendente === true;
+
     setSubmitting(true);
     try {
-      // Pre-flight: ensure address fields exist BEFORE creating the agreement,
-      // so that the automatic boleto generation downstream has what it needs.
-      // If anything is missing (CEP/endereço/bairro/cidade/UF/email/phone),
-      // try MaxSystem enrichment first and wait for the result.
-      try {
-        const pre = await checkRequiredFields();
-        if (Object.keys(pre.missing).length > 0) {
-          setEnrichingAddress(true);
-          setAddressStatus("Buscando endereço no MaxSystem...");
-          await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
-          setAddressStatus("");
-          setEnrichingAddress(false);
-          // Re-check: if still missing, open the dialog instead of falling into boleto_pendente
-          const post = await checkRequiredFields();
-          if (Object.keys(post.missing).length > 0) {
-            setMissingFields(post.missing);
-            setMissingFieldsOpen(true);
-            setSubmitting(false);
-            return;
+      // Pre-flight: ensure address fields exist BEFORE creating the agreement.
+      // Skipped when re-entering after the operator filled missing fields manually,
+      // or when explicitly marking the agreement as boleto_pendente.
+      if (!skipMissingCheck) {
+        try {
+          const pre = await checkRequiredFields();
+          if (Object.keys(pre.missing).length > 0) {
+            setEnrichingAddress(true);
+            setAddressStatus("Buscando endereço no MaxSystem...");
+            await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
+            setAddressStatus("");
+            setEnrichingAddress(false);
+            // Re-check: if still missing, open the dialog instead of falling into boleto_pendente
+            const post = await checkRequiredFields();
+            if (Object.keys(post.missing).length > 0) {
+              setFoundFields(post.consolidated);
+              setMissingFields(post.missing);
+              setMissingFieldsOpen(true);
+              setSubmitting(false);
+              return;
+            }
           }
+        } catch (enrichErr) {
+          console.warn("[address-enrichment] pre-flight failed (non-blocking):", enrichErr);
+        } finally {
+          setEnrichingAddress(false);
+          setAddressStatus("");
         }
-      } catch (enrichErr) {
-        console.warn("[address-enrichment] pre-flight failed (non-blocking):", enrichErr);
-      } finally {
-        setEnrichingAddress(false);
-        setAddressStatus("");
       }
 
       // Build custom installment maps for multiple entradas
