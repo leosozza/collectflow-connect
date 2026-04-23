@@ -241,7 +241,7 @@ const DashboardPage = () => {
 
 
       {/* Parcelas do Dia (com navegador de data integrado) */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full md:w-1/2">
         <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-primary" />
