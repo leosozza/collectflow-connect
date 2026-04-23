@@ -594,10 +594,32 @@ const WhatsAppChatLayout = () => {
       toast.error("Instância não encontrada");
       return;
     }
+    // Optimistic UI: show message immediately while the edge function works.
+    const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      conversation_id: selectedConv.id,
+      tenant_id: tenantId,
+      direction: "outbound",
+      message_type: "text",
+      content: text,
+      status: "sending",
+      created_at: new Date().toISOString(),
+      actor_type: "human",
+      is_internal: false,
+      reply_to_message_id: replyToMessageId || null,
+      __optimistic: true,
+    } as any;
+    setMessages((prev) => [...prev, optimisticMsg]);
     setSending(true);
     try {
       await sendTextMessage(selectedConv.id, tenantId, text, instance.instance_name, replyToMessageId);
+      // Real message will arrive via Realtime and replace the optimistic one.
     } catch (err: any) {
+      // Mark optimistic message as failed
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? ({ ...m, status: "failed" } as ChatMessage) : m))
+      );
       toast.error(err.message || "Erro ao enviar mensagem");
     } finally {
       setSending(false);
