@@ -174,7 +174,6 @@ const ScoringRulesTab = () => {
                         onChange={e => setField(r.id, "label", e.target.value)}
                         placeholder={def?.label}
                       />
-                      <p className="text-[10px] text-muted-foreground mt-1 font-mono">{r.metric}</p>
                     </div>
 
                     <div className="md:col-span-2">
