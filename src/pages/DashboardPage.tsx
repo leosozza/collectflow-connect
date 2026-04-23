@@ -226,8 +226,9 @@ const DashboardPage = () => {
 
 
 
-      {/* Metas + Parcelas Programadas lado a lado */}
-      <div className="flex flex-col md:flex-row gap-4">
+      {/* Agendamentos + Parcelas Programadas + Metas lado a lado */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <ScheduledCallbacksCard callbacks={callbacks} showOperator={canViewAllAgendados} />
         <DashboardMetaCard
           year={filterYear ?? now.getFullYear()}
           month={filterMonth ?? (now.getMonth() + 1)}
@@ -238,7 +239,7 @@ const DashboardPage = () => {
         />
 
       {/* Parcelas do Dia (com navegador de data integrado) */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full md:w-1/2">
+      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full">
         <div className="px-4 pt-3 pb-2 border-b border-border">
           <div className="flex items-center gap-2 mb-3">
             <CalendarClock className="w-5 h-5 text-primary" />
@@ -328,13 +329,6 @@ const DashboardPage = () => {
         )}
       </div>
       </div>
-
-      <ScheduledCallbacksDialog
-        open={agendadosOpen}
-        onOpenChange={setAgendadosOpen}
-        callbacks={callbacks}
-        showOperator={canViewAllAgendados}
-      />
     </div>
   );
 };
