@@ -1,99 +1,94 @@
 
 
-## Análise: lentidão na geração de boletos no fechamento de acordo
+## Análise: o que acontece com os boletos hoje quando o acordo é quebrado
 
-### Onde está o gargalo
+### Estado atual (já implementado)
 
-A edge function `generate-agreement-boletos` é chamada **uma vez por acordo**, mas internamente faz tudo em série. Para um acordo típico com **entrada + 6 a 12 parcelas**, cada parcela dispara:
+**Quebra manual** (`agreementService.cancelAgreement`, linhas 412-436):
+- Atualiza `agreements.status = 'cancelled'`
+- **Marca os registros em `negociarie_cobrancas` como `status = 'cancelado'`** (apenas os que estavam `pendente` ou `em_aberto`). Boletos já pagos são preservados.
+- Mas **não chama o Negociarie** para invalidar o boleto no provider — o link continua tecnicamente acessível se o devedor já tinha em mãos.
 
-1. `POST https://sistema.negociarie.com.br/api/v2/cobranca/nova` (rede externa, ~800-1500ms cada)
-2. `UPDATE negociarie_cobrancas` (substituir antigos)
-3. `INSERT negociarie_cobrancas` (novo registro)
+**Quebra automática** (`auto-expire-agreements`, linhas 153-200):
+- Cancela o acordo e atualiza clientes para "Quebra de Acordo".
+- **NÃO atualiza `negociarie_cobrancas`** — registros ficam como `pendente` no banco interno (bug de inconsistência vs. quebra manual).
 
-Como o loop em `index.ts` linha 257 é `for...of` com `await` dentro, **nada acontece em paralelo**. Tempo medido:
-- 1 entrada + 6 parcelas → **~7-12s**
-- 1 entrada + 12 parcelas → **~14-22s**
-- + autenticação inicial Negociarie quando `cachedToken` expira (+1-2s)
-- + queries Supabase iniciais sequenciais (agreement → client_profile → clients fallback) (+300-600ms)
+**Reabertura** (`agreementService.reopenAgreement`, linhas 680-753):
+- Volta `agreements.status = 'pending'` e re-marca títulos como `em_acordo`.
+- **Não toca em `negociarie_cobrancas`**: os boletos antigos continuam com status `cancelado` (se quebra manual) ou `pendente` (se auto-expirado).
+- **Não regera boletos automaticamente.** O operador precisa ir na aba "Acordos" e clicar manualmente em **"Reemitir boletos"** parcela por parcela (botão FileBarChart já existente em `AgreementInstallments`).
 
-O frontend (`AgreementCalculator.tsx` linha 651) bloqueia o operador com spinner "Gerando boletos…" até a edge function inteira terminar. **Esse é o tempo que o operador percebe como "demorado"**.
+### Resumo direto para sua pergunta
 
-### Plano de otimização
+| Cenário | Boletos no Rivo | Boletos no Negociarie/cliente |
+|---|---|---|
+| Quebra manual | Marcados `cancelado` | **Continuam acessíveis** pelo link antigo (não cancela no provider) |
+| Quebra automática (vencimento + prazo) | **Permanecem `pendente`** (bug) | Continuam acessíveis |
+| Reabertura | Permanecem como estavam | Não regenera; operador precisa reemitir manualmente |
 
-#### 1) Paralelizar as chamadas Negociarie (ganho principal)
+### Problemas identificados
 
-Substituir o `for...of await` por `Promise.allSettled` com **concorrência limitada** (lote de 4-5 chamadas simultâneas para não estourar o rate-limit do Negociarie). Implementação com helper `pLimit(5)` simples inline.
+1. **Inconsistência entre quebra manual e automática**: a auto-expiração não cancela os boletos no banco interno.
+2. **Boleto antigo continua válido no Negociarie** após quebra: se o cliente já recebeu o link antes, ele consegue pagar mesmo com o acordo cancelado. Isso pode gerar conciliação confusa (pagamento entra mas acordo está cancelado).
+3. **Reabertura não dispara regeneração automática**: o operador precisa lembrar de corrigir datas e reemitir cada parcela manualmente. Friction operacional + risco de esquecer parcelas.
 
-- **Antes**: 7 parcelas × 1.2s = ~8.4s
-- **Depois**: ceil(7/5) × 1.2s = ~2.4s
-- **Ganho**: ~70% menos tempo
+---
 
-Também paralelizar os `INSERT/UPDATE` em `negociarie_cobrancas` por parcela junto com a resposta (não esperar um boleto para começar o próximo).
+## Plano: padronizar quebra + automatizar reemissão na reabertura
 
-#### 2) Paralelizar as queries iniciais
+### 1) Quebra automática passa a cancelar boletos (paridade com quebra manual)
 
-Hoje (linhas 175-227): SELECT agreement → SELECT client_profiles → SELECT clients (condicional).
+Em `supabase/functions/auto-expire-agreements/index.ts` (após linha 159, dentro do bloco on-demand, e também no bloco do cron por volta da linha 412):
+- Adicionar `UPDATE negociarie_cobrancas SET status = 'cancelado' WHERE agreement_id IN (...) AND status IN ('pendente','em_aberto')`.
 
-Trocar por:
-```ts
-const [{ data: agreement }, { data: clientProfile }, { data: clientRows }] = 
-  await Promise.all([selectAgreement, selectProfile, selectClientsFallback]);
-```
+### 2) Cancelar boleto no Negociarie (não só no Rivo)
 
-Sempre buscar `clients` em paralelo (custo ~80ms) em vez de aguardar para decidir condicional. Ganho: ~300-500ms.
+A API Negociarie tem `DELETE /cobranca/{id_parcela}` (cancelamento). Hoje **não está exposta** no `negociarie-proxy`.
 
-#### 3) Resposta em background (UX otimista) — ganho percebido máximo
+- Adicionar case `"cancelar-cobranca"` em `negociarie-proxy/index.ts` que chama `DELETE /cobranca/{id_parcela}`.
+- Em `cancelAgreement` e na auto-expiração: para cada `negociarie_cobrancas` com `id_parcela` e status pendente, disparar a chamada de cancelamento (em `Promise.allSettled` para não bloquear se o provider falhar).
+- Marcar localmente como `cancelado` independente do resultado da chamada externa (consistência de UI prevalece; falha só vai para log).
 
-Mudar a UX no `AgreementCalculator.tsx` (linhas 648-681) para:
+### 3) Reabertura regenera boletos automaticamente em background
 
-- **Não bloquear o operador**: assim que o `createAgreement` retorna, exibe `toast.success("Acordo criado! Gerando boletos em segundo plano…")` e **fecha o modal imediatamente**.
-- A chamada `supabase.functions.invoke("generate-agreement-boletos", ...)` continua em **fire-and-forget** (sem `await` no fluxo principal).
-- Quando termina, dispara um segundo toast: `"7 boletos gerados"` ou `"5 ok, 2 falharam"`.
-- Adicionar listener Realtime na tabela `negociarie_cobrancas` filtrando `agreement_id` para a UI atualizar a aba "Acordos do cliente" sozinha.
+Em `agreementService.reopenAgreement` (linha 717, logo após o UPDATE do status):
+- Após o UPDATE de `status = 'pending'`, disparar `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id: id } })` em **fire-and-forget** (mesma UX otimista que já adotamos no fechamento de acordo).
+- A função `generate-agreement-boletos` já tem a lógica de **substituir** boletos antigos: faz `UPDATE ... SET status = 'substituido'` antes de inserir o novo (linhas 400-406). E ela já **pula parcelas com `dueDate < today`** (linha 324), exatamente o comportamento desejado: o operador precisa primeiro corrigir as datas vencidas, senão essas parcelas ficam sem boleto.
+- Adicionar toast: "Acordo reaberto. Regerando boletos das parcelas futuras…" + segundo toast quando concluir.
 
-Resultado: operador vê o modal fechar em **<500ms** independente do tempo real de geração.
+### 4) UI: avisar operador na reabertura sobre datas vencidas
 
-#### 4) Token Negociarie persistido em cache de DB
+No `ClientDetailPage` `handleReopenAgreement` (linha 293): após reabrir, se houver parcelas com `dueDate < today`, exibir toast warning destacado: *"Atenção: X parcelas estão com data vencida e NÃO terão boleto gerado. Corrija as datas em 'Acordos do cliente' e clique em 'Reemitir' para essas parcelas."*
 
-Hoje `cachedToken` é variável de módulo — perde ao cold-start da edge function (a cada poucos minutos). Persistir em uma tabela `integration_tokens` (provider='negociarie', tenant_id, token, expires_at) e ler antes de chamar `/login`. Evita 1-2s de auth a cada execução cold.
+### 5) Evento de auditoria
 
-#### 5) Métricas + observabilidade
+Adicionar entrada em `client_events` com tipo `agreement_broken` (já existe no enum) e `agreement_reopened` para timeline do cliente — capturar quem fez, quando e quantos boletos foram cancelados/regerados.
 
-Adicionar logs estruturados de tempo por etapa (`auth_ms`, `queries_ms`, `negociarie_total_ms`, `per_installment_ms[]`) para confirmar o ganho em produção e identificar regressões.
-
-### Arquivos a alterar
-
-1. **`supabase/functions/generate-agreement-boletos/index.ts`**
-   - Paralelizar queries iniciais com `Promise.all` (linhas 175-227).
-   - Substituir loop sequencial (linha 257) por `Promise.allSettled` com pLimit(5).
-   - Logs de performance por etapa.
-
-2. **`src/components/client-detail/AgreementCalculator.tsx`**
-   - Linhas 648-681: remover `await` da chamada da edge function; disparar fire-and-forget; mostrar toast inicial + segundo toast assíncrono no `.then()`.
-   - Remover `setGeneratingBoletos(true)` bloqueante; manter como indicador de "fundo" não-modal opcional.
-   - Chamar `onAgreementCreated()` e `clearDraft()` imediatamente.
-
-3. **Nova tabela `integration_tokens`** (migration):
-   - Colunas: `provider text`, `tenant_id uuid nullable`, `access_token text`, `expires_at timestamptz`.
-   - RLS: somente service_role lê/escreve.
-   - Atualizar `getToken()` na edge function para usar o cache persistido.
-
-4. **Realtime publication**: adicionar `negociarie_cobrancas` ao `supabase_realtime` para a UI da aba Acordos atualizar automaticamente quando os boletos forem inseridos em background.
+---
 
 ### Resultado esperado
 
-| Métrica | Hoje | Depois |
-|---|---|---|
-| Tempo percebido pelo operador | 7-22s | **<500ms** (modal fecha) |
-| Tempo real de geração (7 parcelas) | ~8.4s | **~2.5s** |
-| Tempo real de geração (13 parcelas) | ~16s | **~4s** |
-| Auth Negociarie (cold start) | +1-2s | **0** (cache em DB) |
+| Ação | Boletos no Rivo | Boletos no Negociarie | UX |
+|---|---|---|---|
+| Quebra manual | `cancelado` | **Cancelado no provider** | igual hoje |
+| Quebra automática | `cancelado` (corrigido) | **Cancelado no provider** | igual hoje |
+| Reabertura | Antigos viram `substituido`; novos `pendente` para parcelas futuras | Boletos novos gerados; antigos cancelados | Modal fecha imediato + toast de progresso; warning para parcelas vencidas |
+
+### Arquivos a alterar
+
+1. `supabase/functions/auto-expire-agreements/index.ts` — cancelar `negociarie_cobrancas` no bloco on-demand (≈linha 160) e no bloco do cron (≈linha 412).
+2. `supabase/functions/negociarie-proxy/index.ts` — adicionar case `"cancelar-cobranca"` chamando `DELETE /cobranca/{id_parcela}`.
+3. `src/services/agreementService.ts`:
+   - `cancelAgreement`: após marcar `cancelado` localmente, chamar Negociarie (Promise.allSettled).
+   - `reopenAgreement`: disparar `generate-agreement-boletos` fire-and-forget; logar evento `agreement_reopened`.
+4. `src/pages/ClientDetailPage.tsx` `handleReopenAgreement`: detectar parcelas com data vencida e exibir toast warning.
 
 ### Validação
 
-1. Fechar acordo com 1 entrada + 6 parcelas (todas BOLETO) → modal fecha imediatamente; toast "Gerando boletos…"; em ~3s segundo toast "7 boletos gerados"; aba Acordos exibe os 7 links automaticamente via Realtime.
-2. Fechar acordo com 1 entrada + 12 parcelas mistas (Cartão/PIX/Boleto) → mesma UX rápida; resumo final indica `ok` + `skipped`.
-3. Fechar 2 acordos seguidos em <30s → segundo acordo usa token Negociarie em cache (sem `/login`).
-4. Simular 1 falha de Negociarie em 1 parcela → toast warning com contagem; demais boletos persistidos normalmente.
-5. Falha total na edge function → toast error claro; usuário pode reabrir acordo e clicar "Reemitir boletos" manualmente (fluxo já existente).
+1. **Quebra manual** de acordo com 5 boletos pendentes → no Rivo ficam `cancelado`; no link antigo do Negociarie retorna "cancelado/expirado".
+2. **Quebra automática** via `auto-expire-agreements` → mesma consistência (corrige bug atual onde ficavam `pendente`).
+3. **Boleto já pago** antes da quebra → preservado, não é cancelado.
+4. **Reabertura** com todas as parcelas com data futura → modal fecha; toast "Regerando boletos…"; em ~3s aba Acordos exibe os novos links via Realtime; antigos ficam `substituido`.
+5. **Reabertura** com 2 parcelas vencidas → toast warning destacado; aba Acordos mostra novos boletos só para as futuras; após corrigir datas e clicar "Reemitir", as 2 últimas geram normalmente.
+6. **Falha do Negociarie** ao cancelar → log de erro, mas estado local fica consistente como `cancelado` (não bloqueia operador).
 
