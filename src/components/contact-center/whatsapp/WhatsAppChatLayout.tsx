@@ -21,6 +21,7 @@ import {
   sendInternalNote,
   updateConversationStatus,
   markConversationRead,
+  markConversationUnread,
   deleteConversation,
 } from "@/services/conversationService";
 import { fetchWhatsAppInstances, WhatsAppInstance } from "@/services/whatsappInstanceService";
