@@ -340,6 +340,7 @@ const DashboardPage = () => {
           </div>
         )}
       </div>
+      </div>
 
       <ScheduledCallbacksDialog
         open={agendadosOpen}
