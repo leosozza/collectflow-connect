@@ -625,10 +625,33 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
       toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gravado com sucesso!");
 
+      // If user explicitly chose "Pular (sem boleto)": mark as boleto_pendente and skip generation
+      if (agreement && !outOfStandard.isOut && markBoletoPendente) {
+        try {
+          await supabase
+            .from("agreements")
+            .update({ boleto_pendente: true } as any)
+            .eq("id", agreement.id);
+          const { logAction } = await import("@/services/auditService");
+          logAction({
+            action: "acordo_criado_sem_boleto",
+            entity_type: "agreement",
+            entity_id: agreement.id,
+            details: {
+              cpf,
+              credor,
+              campos_faltantes: Object.keys(missingFields),
+            },
+          });
+        } catch (e) {
+          console.warn("Erro ao marcar boleto_pendente:", e);
+        }
+      }
+
       // Generate boletos in BACKGROUND (fire-and-forget) — modal closes immediately,
       // user is notified via toast when generation completes. UI atualiza via Realtime
       // na tabela negociarie_cobrancas (aba Acordos).
-      if (agreement && !outOfStandard.isOut) {
+      if (agreement && !outOfStandard.isOut && !markBoletoPendente) {
         toast.info("Gerando boletos em segundo plano…");
         supabase.functions
           .invoke("generate-agreement-boletos", { body: { agreement_id: agreement.id } })
@@ -661,6 +684,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             toast.error("Falha ao gerar boletos: " + (boletoErr?.message || "Erro desconhecido"));
           });
       }
+
 
       // Limpa rascunho e fecha o fluxo IMEDIATAMENTE — geração roda em background
       clearDraft();
