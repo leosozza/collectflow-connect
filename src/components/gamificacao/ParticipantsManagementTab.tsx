@@ -19,7 +19,7 @@ const ParticipantsManagementTab = () => {
         .from("profiles")
         .select("id, full_name, role, avatar_url")
         .eq("tenant_id", tenant!.id)
-        .in("role", ["operador", "supervisor", "gerente"])
+        .in("role", ["operador", "supervisor", "gerente"] as any)
         .order("full_name");
       return data || [];
     },

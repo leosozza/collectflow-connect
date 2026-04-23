@@ -59,14 +59,18 @@ const ShopTab = () => {
           const message = `${operatorName} comprou "${product.name}" por ${product.price_rivocoins.toLocaleString("pt-BR")} RivoCoins`;
           for (const r of responsaveis) {
             if (r.user_id === profile.user_id) continue;
-            await supabase.rpc("create_notification" as any, {
-              _tenant_id: tenantUser.tenant_id,
-              _user_id: r.user_id,
-              _title: "Nova compra na Loja",
-              _message: message,
-              _type: "info",
-              _reference_type: "shop_order",
-            }).catch(() => null);
+            try {
+              await supabase.rpc("create_notification" as any, {
+                _tenant_id: tenantUser.tenant_id,
+                _user_id: r.user_id,
+                _title: "Nova compra na Loja",
+                _message: message,
+                _type: "info",
+                _reference_type: "shop_order",
+              });
+            } catch {
+              /* ignore individual notification errors */
+            }
           }
         }
       } catch (e) {
