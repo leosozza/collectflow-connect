@@ -645,42 +645,44 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
       toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gravado com sucesso!");
 
-      // Generate boletos automatically via Edge Function (for non-approval agreements)
+      // Generate boletos in BACKGROUND (fire-and-forget) — modal closes immediately,
+      // user is notified via toast when generation completes. UI atualiza via Realtime
+      // na tabela negociarie_cobrancas (aba Acordos).
       if (agreement && !outOfStandard.isOut) {
-        try {
-          setGeneratingBoletos(true);
-          const { data: boletoResult, error: boletoError } = await supabase.functions.invoke("generate-agreement-boletos", {
-            body: { agreement_id: agreement.id },
-          });
-          if (boletoError) {
-            console.error("Boleto generation error:", boletoError);
-            toast.error("Acordo criado, mas falha ao gerar boletos automaticamente.");
-          } else if (boletoResult?.boleto_pendente) {
-            toast.info("Acordo criado! Boletos pendentes — preencha os dados cadastrais do cliente.");
-          } else {
+        toast.info("Gerando boletos em segundo plano…");
+        supabase.functions
+          .invoke("generate-agreement-boletos", { body: { agreement_id: agreement.id } })
+          .then(({ data: boletoResult, error: boletoError }) => {
+            if (boletoError) {
+              console.error("Boleto generation error:", boletoError);
+              toast.error("Falha ao gerar boletos automaticamente. Use 'Reemitir boletos' na aba Acordos.");
+              return;
+            }
+            if (boletoResult?.boleto_pendente) {
+              toast.info("Boletos pendentes — preencha os dados cadastrais do cliente.");
+              return;
+            }
             const skipped = Number(boletoResult?.skipped_non_boleto || 0);
             const ok = Number(boletoResult?.success || 0);
             const fail = Number(boletoResult?.failed || 0);
             const skippedMsg = skipped > 0 ? ` ${skipped} parcela(s) Cartão/PIX serão cobradas via link de pagamento.` : "";
             if (ok > 0 && fail === 0) {
-              toast.success(`${ok} boleto(s) gerado(s) automaticamente.${skippedMsg}`);
+              toast.success(`${ok} boleto(s) gerado(s).${skippedMsg}`);
             } else if (ok > 0 && fail > 0) {
               toast.warning(`${ok} boleto(s) gerado(s), ${fail} falha(s).${skippedMsg}`);
             } else if (fail > 0) {
-              toast.error(`Falha ao gerar boletos: ${boletoResult.errors?.[0] || "Erro desconhecido"}`);
+              toast.error(`Falha ao gerar boletos: ${boletoResult?.errors?.[0] || "Erro desconhecido"}`);
             } else if (skipped > 0) {
               toast.success(`Acordo criado. ${skipped} parcela(s) Cartão/PIX serão cobradas via link de pagamento.`);
             }
-          }
-        } catch (boletoErr: any) {
-          console.error("Boleto edge function error:", boletoErr);
-          toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
-        } finally {
-          setGeneratingBoletos(false);
-        }
+          })
+          .catch((boletoErr: any) => {
+            console.error("Boleto edge function error:", boletoErr);
+            toast.error("Falha ao gerar boletos: " + (boletoErr?.message || "Erro desconhecido"));
+          });
       }
 
-      // Limpa rascunho — acordo formalizado com sucesso
+      // Limpa rascunho e fecha o fluxo IMEDIATAMENTE — geração roda em background
       clearDraft();
       onAgreementCreated();
     } catch (err: any) {
