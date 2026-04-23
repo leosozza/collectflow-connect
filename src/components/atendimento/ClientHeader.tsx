@@ -357,6 +357,12 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
                 DESLIGAR
               </Button>
             )}
+            <CallButton
+              phone={client.phone}
+              clientId={client?.id}
+              size="icon"
+              className="bg-green-500/10 hover:bg-green-500/20 rounded-full h-9 w-9 text-green-600 hover:text-green-700"
+            />
             <Button
               variant="ghost"
               size="icon"
