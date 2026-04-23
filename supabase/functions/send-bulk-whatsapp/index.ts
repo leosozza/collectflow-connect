@@ -48,17 +48,63 @@ function randomDelay(cfg: ThrottleConfig): number {
 }
 
 /**
- * Detects "number does not exist on WhatsApp" responses from providers
- * (Evolution returns HTTP 400 with `exists: false`).
+ * Detects "number does not exist on WhatsApp" responses with HIGH CONFIDENCE.
+ *
+ * Only returns true when:
+ *  - Evolution returned `exists: false` AND
+ *  - the JID returned by Evolution matches EXACTLY the number we sent.
+ *
+ * This avoids false negatives when Evolution strips the 9th digit to check
+ * the legacy 8-digit format (e.g. sent 5544991119945 but Evolution checked
+ * 554491119945) — in those cases the number is likely valid and should be
+ * retried, not permanently flagged.
  */
-function isNoWhatsAppError(result: any): boolean {
+function isNoWhatsAppError(result: any, sentPhone?: string | null): boolean {
   if (!result) return false;
   try {
     const str = typeof result === "string" ? result : JSON.stringify(result);
-    return /"exists"\s*:\s*false/i.test(str) || /number.*(does\s*not\s*exist|n[ãa]o\s*existe)/i.test(str);
+    const hasExistsFalse = /"exists"\s*:\s*false/i.test(str);
+    if (!hasExistsFalse) return false;
+
+    // Try to extract the JID/number Evolution actually verified
+    const obj = typeof result === "string" ? safeJsonParse(result) : result;
+    const checkedNumber = extractCheckedNumber(obj);
+    if (!checkedNumber || !sentPhone) {
+      // Cannot confirm match — be conservative and DO NOT mark as invalid
+      return false;
+    }
+
+    const sentDigits = sentPhone.replace(/\D/g, "");
+    const checkedDigits = checkedNumber.replace(/\D/g, "");
+    return sentDigits === checkedDigits;
   } catch {
     return false;
   }
+}
+
+function safeJsonParse(s: string): any {
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+function extractCheckedNumber(obj: any): string | null {
+  if (!obj || typeof obj !== "object") return null;
+  // Evolution shapes seen in the wild:
+  //   { response: { message: [{ exists: false, jid: "554491119945@s.whatsapp.net", number: "554491119945" }] } }
+  //   { exists: false, jid: "...", number: "..." }
+  const candidates: any[] = [];
+  candidates.push(obj);
+  if (obj.response?.message && Array.isArray(obj.response.message)) {
+    candidates.push(...obj.response.message);
+  }
+  if (Array.isArray(obj.message)) candidates.push(...obj.message);
+  for (const c of candidates) {
+    if (!c || typeof c !== "object") continue;
+    if (c.exists === false) {
+      const num = c.number || c.jid || c.remoteJid || null;
+      if (typeof num === "string") return num.split("@")[0];
+    }
+  }
+  return null;
 }
 
 /**
@@ -551,8 +597,9 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         } else {
           chunkFailed++; totalFailed++;
           errors.push(`${recipient.recipient_name}: envio falhou`);
-          // Persist "no WhatsApp" flag so future campaigns auto-skip this CPF
-          if (isNoWhatsAppError(sendResult.result)) {
+          // Persist "no WhatsApp" flag ONLY when Evolution checked the EXACT
+          // number we sent (avoids false negatives from 9th-digit stripping).
+          if (isNoWhatsAppError(sendResult.result, recipient.phone)) {
             await markCpfWithoutWhatsApp(supabase, tenantId, client?.cpf || null);
           }
         }

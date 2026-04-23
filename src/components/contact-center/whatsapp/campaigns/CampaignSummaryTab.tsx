@@ -33,6 +33,7 @@ import {
   PhoneMissed,
   ServerCrash,
   HelpCircle,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -402,6 +403,52 @@ export default function CampaignSummaryTab({ campaign }: Props) {
   };
 
   const [openFailureGroup, setOpenFailureGroup] = useState<FailureCategory | null>(null);
+
+  // ----------------- Reenviar falhas -----------------
+  const [retryingFailed, setRetryingFailed] = useState(false);
+  async function handleRetryFailed() {
+    if (retryingFailed || liveFailed === 0) return;
+    setRetryingFailed(true);
+    try {
+      // Reseta todos os recipients com status=failed para pending (e limpa erro/claim)
+      const { error: resetErr, count } = await supabase
+        .from("whatsapp_campaign_recipients" as any)
+        .update({
+          status: "pending",
+          error_message: null,
+          claimed_at: null,
+          claimed_by: null,
+          updated_at: new Date().toISOString(),
+        }, { count: "exact" })
+        .eq("campaign_id", campaign.id)
+        .eq("status", "failed");
+      if (resetErr) throw resetErr;
+
+      // Atualiza contadores da campanha (failed_count zerado, status volta para sending)
+      const { error: campErr } = await supabase
+        .from("whatsapp_campaigns" as any)
+        .update({
+          status: "sending",
+          failed_count: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaign.id);
+      if (campErr) throw campErr;
+
+      // Reinvoca o worker para processar
+      const { error: invErr } = await supabase.functions.invoke("send-bulk-whatsapp", {
+        body: { campaign_id: campaign.id },
+      });
+      if (invErr) throw invErr;
+
+      toast.success(`${count ?? liveFailed} destinatário(s) recolocado(s) na fila para nova tentativa.`);
+    } catch (e: any) {
+      toast.error(`Falha ao reenviar: ${e?.message || "erro desconhecido"}`);
+    } finally {
+      setTimeout(() => setRetryingFailed(false), 4000);
+    }
+  }
+
   return (
     <div className="p-4 space-y-4">
       {/* Banner de campanha travada com retomada manual */}
@@ -785,11 +832,22 @@ export default function CampaignSummaryTab({ campaign }: Props) {
       {/* Painel de Falhas Agrupadas */}
       {liveFailed > 0 && (
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm flex items-center gap-2">
               <XCircle className="w-4 h-4 text-destructive" />
               Falhas agrupadas por causa ({liveFailed})
             </CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5"
+              onClick={handleRetryFailed}
+              disabled={retryingFailed || liveStatus === "sending"}
+              title={liveStatus === "sending" ? "Aguarde a campanha terminar para reenviar" : ""}
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${retryingFailed ? "animate-spin" : ""}`} />
+              {retryingFailed ? "Reenfileirando..." : `Tentar reenviar falhas (${liveFailed})`}
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
