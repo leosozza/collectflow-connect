@@ -3340,6 +3340,50 @@ export type Database = {
           },
         ]
       }
+      gamification_scoring_rules: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          label: string
+          metric: string
+          points: number
+          tenant_id: string
+          unit_size: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label: string
+          metric: string
+          points?: number
+          tenant_id: string
+          unit_size?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          label?: string
+          metric?: string
+          points?: number
+          tenant_id?: string
+          unit_size?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gamification_scoring_rules_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_logs: {
         Row: {
           api_key_id: string | null

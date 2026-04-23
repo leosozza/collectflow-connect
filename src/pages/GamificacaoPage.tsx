@@ -11,7 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/formatters";
-import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3, History } from "lucide-react";
+import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3, History, Calculator } from "lucide-react";
+import ScoringRulesTab from "@/components/gamificacao/ScoringRulesTab";
 import RankingTab from "@/components/gamificacao/RankingTab";
 import AchievementsTab from "@/components/gamificacao/AchievementsTab";
 import CampaignsTab from "@/components/gamificacao/CampaignsTab";
@@ -204,6 +205,9 @@ const GamificacaoPage = () => {
                 <TabsTrigger value="manage-participants" className="gap-1.5">
                   <Target className="w-3.5 h-3.5" /> Participantes
                 </TabsTrigger>
+                <TabsTrigger value="manage-scoring" className="gap-1.5">
+                  <Calculator className="w-3.5 h-3.5" /> Pontuação
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="manage-campaigns" className="mt-4">
@@ -228,6 +232,10 @@ const GamificacaoPage = () => {
 
               <TabsContent value="manage-participants" className="mt-4">
                 <ParticipantsManagementTab />
+              </TabsContent>
+
+              <TabsContent value="manage-scoring" className="mt-4">
+                <ScoringRulesTab />
               </TabsContent>
             </Tabs>
           </TabsContent>
