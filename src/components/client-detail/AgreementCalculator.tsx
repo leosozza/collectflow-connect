@@ -108,7 +108,6 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [missingFields, setMissingFields] = useState<Record<string, string>>({});
   const [foundFields, setFoundFields] = useState<Record<string, string>>({});
   const [savingMissingFields, setSavingMissingFields] = useState(false);
-  const [pendingAgreement, setPendingAgreement] = useState<any>(null);
   const [cepLookupLoading, setCepLookupLoading] = useState(false);
   const [copiedTitles, setCopiedTitles] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(true);
