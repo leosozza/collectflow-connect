@@ -271,16 +271,17 @@ const DashboardPage = () => {
               </Button>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-success">
-                {vencimentos.length} registros • {formatCurrency(totalVencimentos)}
-              </span>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-success/15 text-success border border-success/30 text-xs font-semibold">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20">
+                <span className="text-xs font-medium text-muted-foreground">Total</span>
+                <span className="text-sm font-bold text-primary">{formatCurrency(totalVencimentos)}</span>
+              </div>
+              <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-card border border-border">
+                <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-success/15 text-success text-[11px] font-bold">
                   {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
                 </span>
-                <span className="text-muted-foreground text-xs">/</span>
-                <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-muted text-foreground border border-border text-xs font-semibold">
+                <span className="text-muted-foreground text-[11px] font-medium">de</span>
+                <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-secondary/10 text-secondary text-[11px] font-bold">
                   {vencimentos.length}
                 </span>
               </div>
