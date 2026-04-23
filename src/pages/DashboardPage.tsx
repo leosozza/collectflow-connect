@@ -238,7 +238,6 @@ const DashboardPage = () => {
         <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
         <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
       </div>
-      </div>
 
 
 
