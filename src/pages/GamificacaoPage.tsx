@@ -7,11 +7,14 @@ import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
 import { fetchMyGoal } from "@/services/goalService";
 import { fetchMyWallet } from "@/services/rivocoinService";
+import { fetchScoringRules } from "@/services/scoringRulesService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/formatters";
-import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3, History, Calculator } from "lucide-react";
+import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3, History, Calculator, HelpCircle } from "lucide-react";
 import ScoringRulesTab from "@/components/gamificacao/ScoringRulesTab";
 import RankingTab from "@/components/gamificacao/RankingTab";
 import AchievementsTab from "@/components/gamificacao/AchievementsTab";
@@ -65,6 +68,11 @@ const GamificacaoPage = () => {
     enabled: !!profile?.id,
   });
 
+  const { data: scoringRules = [] } = useQuery({
+    queryKey: ["scoring-rules"],
+    queryFn: fetchScoringRules,
+  });
+
   const myRankEntry = ranking.find(r => r.operator_id === profile?.id);
   const myPosition = myRankEntry?.position;
   const myMedal = myPosition && myPosition <= 3 ? medals[myPosition - 1] : myPosition ? `#${myPosition}` : "—";
@@ -92,7 +100,41 @@ const GamificacaoPage = () => {
         </Card>
 
         <Card className="border-border">
-          <CardContent className="p-4 text-center">
+          <CardContent className="p-4 text-center relative">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-1 right-1 h-6 w-6 text-muted-foreground hover:text-foreground"
+                  aria-label="Como os pontos são calculados"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80">
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-foreground">Como você ganha pontos</p>
+                  <p className="text-xs text-muted-foreground">
+                    Regras configuradas pelo administrador para o mês atual:
+                  </p>
+                  <ul className="space-y-1.5 mt-2">
+                    {scoringRules.filter(r => r.enabled).length === 0 && (
+                      <li className="text-xs text-muted-foreground">Nenhuma regra ativa.</li>
+                    )}
+                    {scoringRules.filter(r => r.enabled).map(r => (
+                      <li key={r.id} className="flex items-start justify-between gap-3 text-xs">
+                        <span className="text-foreground flex-1">{r.label}</span>
+                        <span className={`font-mono font-semibold whitespace-nowrap ${r.points < 0 ? "text-destructive" : "text-primary"}`}>
+                          {r.points > 0 ? "+" : ""}{r.points} pts
+                          {r.unit_size > 1 && <span className="text-muted-foreground"> /{r.unit_size}</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Trophy className="w-6 h-6 text-primary mx-auto mb-1" />
             <p className="text-2xl font-bold text-foreground">{points.toLocaleString("pt-BR")}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Pontos totais</p>
