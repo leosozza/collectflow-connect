@@ -413,7 +413,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
   try {
     const { data: agreement } = await supabase
       .from("agreements")
-      .select("client_cpf, credor")
+      .select("client_cpf, credor, tenant_id")
       .eq("id", id)
       .single();
 
@@ -523,6 +523,21 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     logger.info(MODULE, "cancel", { id });
     logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+
+    // Audit event in client_events timeline
+    if (agreement?.tenant_id && agreement?.client_cpf) {
+      try {
+        await supabase.from("client_events").insert({
+          tenant_id: agreement.tenant_id,
+          client_cpf: agreement.client_cpf,
+          event_source: "operator",
+          event_type: "agreement_broken",
+          metadata: { agreement_id: id, credor: agreement.credor },
+        } as any);
+      } catch (e) {
+        logger.error(MODULE, "cancel_event_log", e);
+      }
+    }
 
     // Recalc score after cancellation
     if (agreement?.client_cpf) {
