@@ -108,7 +108,6 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const [missingFields, setMissingFields] = useState<Record<string, string>>({});
   const [foundFields, setFoundFields] = useState<Record<string, string>>({});
   const [savingMissingFields, setSavingMissingFields] = useState(false);
-  const [pendingAgreement, setPendingAgreement] = useState<any>(null);
   const [cepLookupLoading, setCepLookupLoading] = useState(false);
   const [copiedTitles, setCopiedTitles] = useState(false);
   const [titlesOpen, setTitlesOpen] = useState(true);
@@ -493,9 +492,9 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     return { consolidated, missing, labels };
   }, [clients, cpf, profile?.tenant_id]);
 
-  /** Save missing fields to all client records of same CPF + canonical profile, then proceed with boletos */
+  /** Save missing fields to clients + canonical profile, then re-run the official agreement flow */
   const handleSaveMissingFields = async () => {
-    if (!profile?.tenant_id || !pendingAgreement) return;
+    if (!profile?.tenant_id) return;
     setSavingMissingFields(true);
     try {
       const rawCpf = cpf.replace(/\D/g, "");
@@ -503,60 +502,36 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
       for (const [key, val] of Object.entries(missingFields)) {
         if (val.trim()) updatePayload[key] = val.trim();
       }
-      if (Object.keys(updatePayload).length > 0) {
-        // Update clients table for retrocompatibility
-        await supabase
-          .from("clients")
-          .update(updatePayload)
-          .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
-          .eq("tenant_id", profile.tenant_id);
-
-        // Upsert canonical profile
-        await upsertClientProfile(profile.tenant_id, rawCpf, updatePayload, "manual");
+      const stillMissing = Object.keys(missingFields).filter((k) => !updatePayload[k]);
+      if (stillMissing.length > 0) {
+        const labels: Record<string, string> = {
+          email: "E-mail", phone: "Telefone", cep: "CEP",
+          endereco: "Endereço", bairro: "Bairro", cidade: "Cidade", uf: "UF",
+        };
+        toast.error(`Preencha: ${stillMissing.map((k) => labels[k] || k).join(", ")}`);
+        setSavingMissingFields(false);
+        return;
       }
+
+      // Persist in clients (retrocompat) + client_profiles (canonical)
+      await supabase
+        .from("clients")
+        .update(updatePayload)
+        .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`)
+        .eq("tenant_id", profile.tenant_id);
+      await upsertClientProfile(profile.tenant_id, rawCpf, updatePayload, "manual");
+
       setMissingFieldsOpen(false);
-      await generateBoletosForAgreement(pendingAgreement);
-      setPendingAgreement(null);
-      onAgreementCreated();
+      setMissingFields({});
+      setFoundFields({});
+      toast.success("Dados salvos. Gerando acordo...");
+
+      // Re-run the canonical agreement flow — pre-flight will now pass.
+      await handleConfirmedSubmit({ skipMissingCheck: true });
     } catch (err: any) {
       toast.error("Erro ao salvar dados: " + (err.message || "Erro desconhecido"));
     } finally {
       setSavingMissingFields(false);
-    }
-  };
-
-  /** Generate boletos for a given agreement */
-  const generateBoletosForAgreement = async (agreement: any) => {
-    setGeneratingBoletos(true);
-    try {
-      const boletoInstallments: BoletoInstallment[] = simulatedInstallments.map((inst) => ({
-        number: inst.number,
-        value: inst.value,
-        dueDate: inst.dueDate,
-      }));
-
-      const boletoResult = await negociarieService.generateAgreementBoletos(
-        {
-          id: agreement.id,
-          client_cpf: cpf,
-          credor,
-          tenant_id: profile!.tenant_id,
-          client_name: clientName,
-        },
-        boletoInstallments
-      );
-
-      if (boletoResult.success > 0 && boletoResult.failed === 0) {
-        toast.success(`${boletoResult.success} boleto(s) gerado(s) com sucesso!`);
-      } else if (boletoResult.success > 0 && boletoResult.failed > 0) {
-        toast.warning(`${boletoResult.success} boleto(s) gerado(s), ${boletoResult.failed} falha(s): ${boletoResult.errors[0]}`);
-      } else if (boletoResult.failed > 0) {
-        toast.error(`Falha ao gerar boletos: ${boletoResult.errors[0]}`);
-      }
-    } catch (boletoErr: any) {
-      toast.error("Acordo criado, mas falha ao gerar boletos: " + (boletoErr.message || "Erro desconhecido"));
-    } finally {
-      setGeneratingBoletos(false);
     }
   };
 
@@ -569,38 +544,43 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
     setConfirmOpen(true);
   };
 
-  const handleConfirmedSubmit = async () => {
+  const handleConfirmedSubmit = async (options?: { skipMissingCheck?: boolean; markBoletoPendente?: boolean }) => {
     if (!user || !profile?.tenant_id) { toast.error("Usuário não autenticado"); return; }
     if (!simulated) { toast.error("Simule o acordo antes de gravar"); return; }
 
+    const skipMissingCheck = options?.skipMissingCheck === true;
+    const markBoletoPendente = options?.markBoletoPendente === true;
+
     setSubmitting(true);
     try {
-      // Pre-flight: ensure address fields exist BEFORE creating the agreement,
-      // so that the automatic boleto generation downstream has what it needs.
-      // If anything is missing (CEP/endereço/bairro/cidade/UF/email/phone),
-      // try MaxSystem enrichment first and wait for the result.
-      try {
-        const pre = await checkRequiredFields();
-        if (Object.keys(pre.missing).length > 0) {
-          setEnrichingAddress(true);
-          setAddressStatus("Buscando endereço no MaxSystem...");
-          await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
-          setAddressStatus("");
-          setEnrichingAddress(false);
-          // Re-check: if still missing, open the dialog instead of falling into boleto_pendente
-          const post = await checkRequiredFields();
-          if (Object.keys(post.missing).length > 0) {
-            setMissingFields(post.missing);
-            setMissingFieldsOpen(true);
-            setSubmitting(false);
-            return;
+      // Pre-flight: ensure address fields exist BEFORE creating the agreement.
+      // Skipped when re-entering after the operator filled missing fields manually,
+      // or when explicitly marking the agreement as boleto_pendente.
+      if (!skipMissingCheck) {
+        try {
+          const pre = await checkRequiredFields();
+          if (Object.keys(pre.missing).length > 0) {
+            setEnrichingAddress(true);
+            setAddressStatus("Buscando endereço no MaxSystem...");
+            await enrichClientAddress(cpf, profile.tenant_id, (msg) => setAddressStatus(msg));
+            setAddressStatus("");
+            setEnrichingAddress(false);
+            // Re-check: if still missing, open the dialog instead of falling into boleto_pendente
+            const post = await checkRequiredFields();
+            if (Object.keys(post.missing).length > 0) {
+              setFoundFields(post.consolidated);
+              setMissingFields(post.missing);
+              setMissingFieldsOpen(true);
+              setSubmitting(false);
+              return;
+            }
           }
+        } catch (enrichErr) {
+          console.warn("[address-enrichment] pre-flight failed (non-blocking):", enrichErr);
+        } finally {
+          setEnrichingAddress(false);
+          setAddressStatus("");
         }
-      } catch (enrichErr) {
-        console.warn("[address-enrichment] pre-flight failed (non-blocking):", enrichErr);
-      } finally {
-        setEnrichingAddress(false);
-        setAddressStatus("");
       }
 
       // Build custom installment maps for multiple entradas
@@ -645,10 +625,33 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
       toast.success(outOfStandard.isOut ? "Solicitação de liberação enviada!" : "Acordo gravado com sucesso!");
 
+      // If user explicitly chose "Pular (sem boleto)": mark as boleto_pendente and skip generation
+      if (agreement && !outOfStandard.isOut && markBoletoPendente) {
+        try {
+          await supabase
+            .from("agreements")
+            .update({ boleto_pendente: true } as any)
+            .eq("id", agreement.id);
+          const { logAction } = await import("@/services/auditService");
+          logAction({
+            action: "acordo_criado_sem_boleto",
+            entity_type: "agreement",
+            entity_id: agreement.id,
+            details: {
+              cpf,
+              credor,
+              campos_faltantes: Object.keys(missingFields),
+            },
+          });
+        } catch (e) {
+          console.warn("Erro ao marcar boleto_pendente:", e);
+        }
+      }
+
       // Generate boletos in BACKGROUND (fire-and-forget) — modal closes immediately,
       // user is notified via toast when generation completes. UI atualiza via Realtime
       // na tabela negociarie_cobrancas (aba Acordos).
-      if (agreement && !outOfStandard.isOut) {
+      if (agreement && !outOfStandard.isOut && !markBoletoPendente) {
         toast.info("Gerando boletos em segundo plano…");
         supabase.functions
           .invoke("generate-agreement-boletos", { body: { agreement_id: agreement.id } })
@@ -681,6 +684,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             toast.error("Falha ao gerar boletos: " + (boletoErr?.message || "Erro desconhecido"));
           });
       }
+
 
       // Limpa rascunho e fecha o fluxo IMEDIATAMENTE — geração roda em background
       clearDraft();
@@ -1166,10 +1170,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
 
       <Dialog open={missingFieldsOpen} onOpenChange={(open) => {
-        if (!open) {
+        if (!open && !savingMissingFields && !submitting) {
           setMissingFieldsOpen(false);
-          setPendingAgreement(null);
-          onAgreementCreated();
+          setMissingFields({});
+          setFoundFields({});
         }
       }}>
         <DialogContent className="sm:max-w-md">
@@ -1180,9 +1184,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            O acordo foi criado com sucesso. {Object.keys(missingFields).length === 1
-              ? "Apenas o campo abaixo precisa ser preenchido para gerar o boleto:"
-              : "Preencha os campos faltantes abaixo para gerar os boletos:"}
+            Para formalizar o acordo e gerar {Object.keys(missingFields).length === 1 ? "o boleto" : "os boletos"}, preencha {Object.keys(missingFields).length === 1 ? "o campo abaixo" : "os campos abaixo"}:
           </p>
 
           {/* Show found fields */}
@@ -1253,36 +1255,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             })}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={async () => {
-              // Mark agreement as boleto_pendente
-              if (pendingAgreement?.id) {
-                try {
-                  await supabase
-                    .from("agreements")
-                    .update({ boleto_pendente: true } as any)
-                    .eq("id", pendingAgreement.id);
-                  const { logAction } = await import("@/services/auditService");
-                  logAction({
-                    action: "acordo_criado_sem_boleto",
-                    entity_type: "agreement",
-                    entity_id: pendingAgreement.id,
-                    details: {
-                      cpf,
-                      credor,
-                      campos_faltantes: Object.keys(missingFields),
-                    },
-                  });
-                } catch (e) {
-                  console.warn("Erro ao marcar boleto_pendente:", e);
-                }
-              }
+            <Button variant="outline" disabled={savingMissingFields || submitting} onClick={async () => {
+              // "Pular (sem boleto)": close modal and create the agreement marked as boleto_pendente.
               setMissingFieldsOpen(false);
-              setPendingAgreement(null);
-              onAgreementCreated();
+              setMissingFields({});
+              setFoundFields({});
+              await handleConfirmedSubmit({ skipMissingCheck: true, markBoletoPendente: true });
             }}>
               Pular (sem boleto)
             </Button>
-            <Button onClick={handleSaveMissingFields} disabled={savingMissingFields}>
+            <Button onClick={handleSaveMissingFields} disabled={savingMissingFields || submitting}>
               {savingMissingFields ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Salvar e Gerar Boletos
             </Button>
