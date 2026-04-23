@@ -21,7 +21,7 @@ const MetaGaugeCard = ({
   monthLabel,
   year,
   month,
-  size = 320,
+  size = 420,
   duration = 1.6,
 }: MetaGaugeCardProps) => {
   const clampedPct = Math.min(100, Math.max(0, percent));
