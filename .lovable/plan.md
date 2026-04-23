@@ -1,59 +1,49 @@
 
 
-## Adicionar card de Metas no Dashboard
+## Corrigir Card de Metas no Dashboard
 
-Reutilizar o gauge visual já existente em `GoalsTab` e exibi-lo no `DashboardPage` com comportamento adaptado por papel.
+### Problemas
+1. O card de Metas tem um seletor de operador redundante — o dashboard já filtra por operador no header global.
+2. O "Realizado" usa `operator_points.total_received`, que só é atualizado quando o operador dispara o fluxo de gamificação — fica defasado.
 
-### Comportamento
+### Solução
 
-**Operador (não-admin):**
-- Mostra o gauge da própria meta do mês (igual hoje em Gamificação → Metas).
-- Usa `fetchMyGoal()` + `operator_points.total_received` do mês corrente.
+**Fonte única de verdade:** usar o mesmo `total_recebido` que já alimenta o StatCard "Total Recebido" do dashboard (vem do RPC `get_dashboard_stats`, filtrado por operador + ano + mês em tempo real). Assim o número do gauge sempre bate com o card "Total Recebido" exibido logo acima.
 
-**Admin:**
-- Card com seletor (dropdown) no topo do gauge:
-  - **Total da Empresa** (default) → soma de `target_amount` de todas as metas do mês + soma de `total_received` de `operator_points` do mês.
-  - **Por operador** → lista cada operador que tem meta definida; ao escolher, mostra o gauge daquele operador (meta vs recebido).
-- O seletor respeita o filtro de Mês/Ano já presente no header do dashboard (se um único mês/ano estiver selecionado, usa esse; senão usa mês corrente).
+### Mudanças
 
-### Arquivos
+**1. `src/components/dashboard/DashboardMetaCard.tsx` — refatorar:**
+- Remover por completo o `<Select>` interno e o estado `selectedOperatorId`.
+- Remover queries de `operator_points` e da lista de operadores.
+- Novas props:
+  - `year: number`
+  - `month: number`
+  - `monthLabel: string`
+  - `selectedOperatorUserId: string | null` — o `user_id` selecionado no filtro global (ou `null` para "todos").
+  - `received: number` — valor já calculado pelo dashboard (`stats.total_recebido`).
+- Lógica de meta:
+  - **Operador (não-admin)**: `fetchMyGoal(year, month)` → `goal = target_amount`.
+  - **Admin com 1 operador selecionado**: traduzir `user_id → profile.id` (consultar `profiles` pelo `user_id`) e buscar a meta daquele operador via `fetchGoals(year, month, null)` filtrando por `operator_id`.
+  - **Admin sem operador (Total da Empresa)**: `fetchGoals(year, month, null)` → `goal = soma de target_amount`.
+- Título dinâmico: "Minha Meta do Mês" (operador) / "Meta — Total da Empresa" (admin sem filtro) / "Meta — {nome do operador}" (admin com 1 selecionado).
+- O gauge continua usando `<MetaGaugeCard>` sem mudanças visuais.
 
-**1. Novo componente: `src/components/dashboard/MetaGaugeCard.tsx`**
-- Extrai o `GaugeChart` SVG de `GoalsTab.tsx` para um componente reutilizável (mesmo visual: vermelho/amarelo/verde, ponteiro animado, dois cards "Meta Recebimento" / "Realizado" abaixo, período).
-- Props: `percent`, `received`, `goal`, `monthLabel`, `title` opcional.
-- (Refatorar `GoalsTab.tsx` para importar deste novo arquivo, evitando duplicação.)
+**2. `src/pages/DashboardPage.tsx`:**
+- Passar para o `<DashboardMetaCard>`:
+  - `selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}`
+  - `received={stats?.total_recebido ?? 0}`
+- Como `stats` já é filtrado por `rpcUserId` + `filterYear` + `filterMonth`, o "Realizado" do gauge passa a refletir o mesmo número (e mesmo período) do StatCard "Total Recebido", em tempo real, sem depender da tabela `operator_points`.
 
-**2. Novo componente: `src/components/dashboard/DashboardMetaCard.tsx`**
-- Encapsula a lógica de busca:
-  - Se operador: `fetchMyGoal(year, month)` + `operator_points` do próprio profile.
-  - Se admin: `fetchGoals(year, month, null)` + `operator_points` agregado; estado local `selectedOperatorId | "total"`.
-- Renderiza `<Select>` (shadcn) acima do `<MetaGaugeCard>` quando admin.
-- Props: `year`, `month`, `monthLabel`.
+### Comportamento resultante
 
-**3. Editar: `src/pages/DashboardPage.tsx`**
-- Importar e renderizar `<DashboardMetaCard>` logo abaixo da grade de StatCards (linha ~239), em uma coluna `md:w-1/2` ao lado (ou acima) do card "Parcelas Programadas".
-- Layout proposto:
-
-```text
-┌─ StatCards (5 cards) ───────────────────────────┐
-├─ Metas (gauge) ─────┬─ Parcelas Programadas ───┤
-│ [admin: seletor]    │ (card existente)         │
-│  gauge SVG          │                          │
-└─────────────────────┴──────────────────────────┘
-```
-Ambos `md:w-1/2` lado a lado em `flex gap-4`.
-
-- Passa `year`/`month` derivados de `filterYear`/`filterMonth` (ou mês corrente como fallback).
-
-### Detalhes técnicos
-
-- "Total da Empresa" (admin):
-  - `goal = sum(target_amount)` de `operator_goals` do mês.
-  - `received = sum(total_received)` de `operator_points` do mês.
-- Reutiliza `formatCurrency` e tokens (`primary`, `success`, `muted`) já existentes — sem cores hardcoded fora do gauge (que mantém vermelho/amarelo/verde semânticos).
-- Sem mudanças no schema/RLS — todas as queries já existem (`operator_goals`, `operator_points`).
-- Sem migrações de banco.
+| Filtro global | Meta exibida | Realizado |
+|---|---|---|
+| Operador logado (sem filtro) | Sua meta do mês | `total_recebido` próprio (RPC) |
+| Admin, sem operador | Soma das metas do mês | `total_recebido` da empresa (RPC) |
+| Admin, 1 operador | Meta daquele operador | `total_recebido` daquele operador (RPC) |
+| Admin, vários operadores | Soma das metas (todos do mês) | `total_recebido` agregado (RPC) — *limitação atual do RPC, que não filtra por múltiplos*; nesse caso mostraremos a soma global como aproximação e exibiremos um aviso "Selecione um único operador para ver a meta individual" |
 
 ### Não incluído
-- Edição/criação de metas continua exclusivamente no módulo Gamificação (admin já tem ferramenta lá).
+- Nenhuma mudança de schema, RPC ou RLS.
+- Sem alterações em `GoalsTab` (Gamificação) — continua usando `operator_points` lá, pois é o contexto de gamificação propriamente dito.
 
