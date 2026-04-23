@@ -441,6 +441,35 @@ Deno.serve(async (req) => {
         const ids = toCancel.map((a: any) => a.id);
         await supabase.from("agreements").update({ status: "cancelled", cancellation_type: "auto_expired" }).in("id", ids);
 
+        // Cancel pending boletos in negociarie_cobrancas (parity with manual cancel)
+        const { data: pendingCobrancas } = await supabase
+          .from("negociarie_cobrancas")
+          .select("id, id_parcela, agreement_id")
+          .in("agreement_id", ids)
+          .in("status", ["pendente", "em_aberto"]);
+
+        await supabase
+          .from("negociarie_cobrancas")
+          .update({ status: "cancelado" } as any)
+          .in("agreement_id", ids)
+          .in("status", ["pendente", "em_aberto"]);
+
+        const cancelables = (pendingCobrancas || []).filter((c: any) => c.id_parcela);
+        if (cancelables.length > 0) {
+          await Promise.allSettled(
+            cancelables.map((c: any) =>
+              fetch(`${supabaseUrl}/functions/v1/negociarie-proxy`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${serviceKey}`,
+                },
+                body: JSON.stringify({ action: "cancelar-cobranca", id_parcela: String(c.id_parcela) }),
+              })
+            )
+          );
+        }
+
         const tenantIdsForCancel = [...new Set(toCancel.map((a: any) => a.tenant_id))];
         const { data: quebraStatusList } = await supabase
           .from("tipos_status")
