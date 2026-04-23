@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText, Clock } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { GlassCalendar } from "@/components/ui/glass-calendar";
@@ -17,7 +17,7 @@ import { useNavigate, Link } from "react-router-dom";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
-import ScheduledCallbacksDialog from "@/components/dashboard/ScheduledCallbacksDialog";
+import ScheduledCallbacksCard from "@/components/dashboard/ScheduledCallbacksCard";
 import DashboardMetaCard from "@/components/dashboard/DashboardMetaCard";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -67,8 +67,7 @@ const DashboardPage = () => {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
   const [browseDate, setBrowseDate] = useState(new Date());
-  const [agendadosOpen, setAgendadosOpen] = useState(false);
-  const { callbacks, count: agendadosCount, canViewAll: canViewAllAgendados } = useScheduledCallbacks();
+  const { callbacks, canViewAll: canViewAllAgendados } = useScheduledCallbacks();
 
   const canViewAll = permissions.canViewAllDashboard;
 
@@ -160,20 +159,6 @@ const DashboardPage = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 border-primary text-primary hover:bg-primary/10 relative"
-            onClick={() => setAgendadosOpen(true)}
-          >
-            <Clock className="w-4 h-4" />
-            <span className="hidden sm:inline">Agendados</span>
-            {agendadosCount > 0 && (
-              <Badge className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1 text-[10px] bg-destructive text-destructive-foreground">
-                {agendadosCount}
-              </Badge>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
             className="gap-1.5 border-primary text-primary hover:bg-primary/10"
             onClick={() => navigate("/analytics")}
           >
@@ -241,8 +226,9 @@ const DashboardPage = () => {
 
 
 
-      {/* Metas + Parcelas Programadas lado a lado */}
-      <div className="flex flex-col md:flex-row gap-4">
+      {/* Agendamentos + Parcelas Programadas + Metas lado a lado */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <ScheduledCallbacksCard callbacks={callbacks} showOperator={canViewAllAgendados} />
         <DashboardMetaCard
           year={filterYear ?? now.getFullYear()}
           month={filterMonth ?? (now.getMonth() + 1)}
@@ -253,7 +239,7 @@ const DashboardPage = () => {
         />
 
       {/* Parcelas do Dia (com navegador de data integrado) */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full md:w-1/2">
+      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full">
         <div className="px-4 pt-3 pb-2 border-b border-border">
           <div className="flex items-center gap-2 mb-3">
             <CalendarClock className="w-5 h-5 text-primary" />
@@ -343,13 +329,6 @@ const DashboardPage = () => {
         )}
       </div>
       </div>
-
-      <ScheduledCallbacksDialog
-        open={agendadosOpen}
-        onOpenChange={setAgendadosOpen}
-        callbacks={callbacks}
-        showOperator={canViewAllAgendados}
-      />
     </div>
   );
 };
