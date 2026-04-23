@@ -28,11 +28,25 @@ export const calculatePoints = (paymentsCount: number, totalReceived: number, br
   return Math.max(0, points);
 };
 
+const getMyTenantId = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return (data?.tenant_id as string) || null;
+};
+
 export const fetchRanking = async (year: number, month: number): Promise<RankingEntry[]> => {
-  // Get enabled participants to filter ranking
+  const tenantId = await getMyTenantId();
+  if (!tenantId) return [];
+
   const { data: participants } = await supabase
     .from("gamification_participants")
     .select("profile_id")
+    .eq("tenant_id", tenantId)
     .eq("enabled", true);
 
   const enabledIds = new Set((participants || []).map((p: any) => p.profile_id));
@@ -40,6 +54,7 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
   const { data: points, error } = await supabase
     .from("operator_points")
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("year", year)
     .eq("month", month)
     .order("points", { ascending: false });
@@ -47,7 +62,6 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
   if (error) throw error;
   if (!points || points.length === 0) return [];
 
-  // Filter only enabled participants (if any participants exist)
   const filteredPoints = enabledIds.size > 0
     ? (points as OperatorPoints[]).filter(p => enabledIds.has(p.operator_id))
     : (points as OperatorPoints[]);
@@ -58,6 +72,7 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
   const { data: profiles } = await supabase
     .from("profiles")
     .select("id, full_name, avatar_url")
+    .eq("tenant_id", tenantId)
     .in("id", operatorIds);
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
@@ -70,9 +85,13 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
 };
 
 export const fetchMyPoints = async (operatorId: string, year: number, month: number): Promise<OperatorPoints | null> => {
+  const tenantId = await getMyTenantId();
+  if (!tenantId) return null;
+
   const { data, error } = await supabase
     .from("operator_points")
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("operator_id", operatorId)
     .eq("year", year)
     .eq("month", month)
@@ -83,9 +102,13 @@ export const fetchMyPoints = async (operatorId: string, year: number, month: num
 };
 
 export const fetchMyPointsHistory = async (operatorId: string): Promise<OperatorPoints[]> => {
+  const tenantId = await getMyTenantId();
+  if (!tenantId) return [];
+
   const { data, error } = await supabase
     .from("operator_points")
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("operator_id", operatorId)
     .order("year", { ascending: false })
     .order("month", { ascending: false })
@@ -95,29 +118,32 @@ export const fetchMyPointsHistory = async (operatorId: string): Promise<Operator
   return (data as OperatorPoints[]) || [];
 };
 
-export const upsertOperatorPoints = async (params: {
-  tenant_id: string;
-  operator_id: string;
-  year: number;
-  month: number;
-  points: number;
-  payments_count: number;
-  breaks_count: number;
-  total_received: number;
-}): Promise<void> => {
-  const { error } = await supabase
-    .from("operator_points")
-    .upsert(
-      { ...params, updated_at: new Date().toISOString() },
-      { onConflict: "tenant_id,operator_id,year,month" }
-    );
+/** Recalculates the snapshot for the current authenticated user via SECURITY DEFINER RPC. */
+export const recalculateMySnapshot = async (year: number, month: number): Promise<void> => {
+  const { error } = await supabase.rpc("recalculate_my_gamification_snapshot", {
+    _year: year,
+    _month: month,
+  });
+  if (error) throw error;
+};
+
+/** Recalculates the snapshot for the entire tenant (admin only). */
+export const recalculateTenantSnapshot = async (year: number, month: number): Promise<void> => {
+  const { error } = await supabase.rpc("recalculate_tenant_gamification_snapshot", {
+    _year: year,
+    _month: month,
+  });
   if (error) throw error;
 };
 
 export const fetchMyAchievements = async (profileId: string): Promise<string[]> => {
+  const tenantId = await getMyTenantId();
+  if (!tenantId) return [];
+
   const { data, error } = await supabase
     .from("achievements")
     .select("title")
+    .eq("tenant_id", tenantId)
     .eq("profile_id", profileId);
 
   if (error) throw error;
@@ -134,6 +160,7 @@ export const grantAchievement = async (params: {
   const { data: existing } = await supabase
     .from("achievements")
     .select("id")
+    .eq("tenant_id", params.tenant_id)
     .eq("profile_id", params.profile_id)
     .eq("title", params.title)
     .maybeSingle();
@@ -153,9 +180,13 @@ export const grantAchievement = async (params: {
 };
 
 export const fetchAllAchievements = async (profileId: string) => {
+  const tenantId = await getMyTenantId();
+  if (!tenantId) return [];
+
   const { data, error } = await supabase
     .from("achievements")
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("profile_id", profileId)
     .order("earned_at", { ascending: false });
 

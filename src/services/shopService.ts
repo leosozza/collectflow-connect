@@ -27,11 +27,25 @@ export interface ShopOrder {
   profile?: { full_name: string };
 }
 
+const getMyTenantId = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return (data?.tenant_id as string) || null;
+};
+
 export const fetchProducts = async (tenantId?: string): Promise<ShopProduct[]> => {
-  const { data, error } = await supabase
+  const tid = tenantId || (await getMyTenantId());
+  let query = supabase
     .from("shop_products")
     .select("*")
     .order("created_at", { ascending: false });
+  if (tid) query = query.eq("tenant_id", tid);
+  const { data, error } = await query;
   if (error) throw error;
   return (data as ShopProduct[]) || [];
 };
@@ -52,7 +66,9 @@ export const deleteProduct = async (id: string): Promise<void> => {
 };
 
 export const fetchOrders = async (profileId?: string): Promise<ShopOrder[]> => {
+  const tid = await getMyTenantId();
   let query = supabase.from("shop_orders").select("*").order("created_at", { ascending: false });
+  if (tid) query = query.eq("tenant_id", tid);
   if (profileId) query = query.eq("profile_id", profileId);
   const { data, error } = await query;
   if (error) throw error;

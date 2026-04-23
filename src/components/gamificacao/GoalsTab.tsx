@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchMyGoal, fetchGoals } from "@/services/goalService";
+import { recalculateMySnapshot, recalculateTenantSnapshot } from "@/services/gamificationService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,10 +16,35 @@ import MetaGaugeCard from "@/components/dashboard/MetaGaugeCard";
 const GoalsTab = () => {
   const { profile } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
+  const qc = useQueryClient();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const monthLabel = now.toLocaleString("pt-BR", { month: "long", year: "numeric" });
+
+  // Recalculate snapshots when entering this tab so values are fresh
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        if (isTenantAdmin) {
+          await recalculateTenantSnapshot(year, month);
+        } else {
+          await recalculateMySnapshot(year, month);
+        }
+        if (!cancelled) {
+          qc.invalidateQueries({ queryKey: ["my-points-goal"] });
+          qc.invalidateQueries({ queryKey: ["operator-points-all"] });
+          qc.invalidateQueries({ queryKey: ["my-points"] });
+          qc.invalidateQueries({ queryKey: ["ranking"] });
+        }
+      } catch (e) {
+        console.error("recalculate snapshot error:", e);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [isTenantAdmin, year, month, qc]);
 
   const { data: myGoal } = useQuery({
     queryKey: ["my-goal", year, month],
@@ -50,6 +77,7 @@ const GoalsTab = () => {
       const { data } = await supabase
         .from("operator_points")
         .select("operator_id, total_received")
+        .eq("tenant_id", tenant!.id)
         .eq("year", year)
         .eq("month", month);
       return data || [];
@@ -58,18 +86,19 @@ const GoalsTab = () => {
   });
 
   const { data: myPoints } = useQuery({
-    queryKey: ["my-points-goal", profile?.id, year, month],
+    queryKey: ["my-points-goal", profile?.id, year, month, tenant?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("operator_points")
         .select("total_received")
+        .eq("tenant_id", tenant!.id)
         .eq("operator_id", profile!.id)
         .eq("year", year)
         .eq("month", month)
         .maybeSingle();
       return data;
     },
-    enabled: !isTenantAdmin && !!profile?.id,
+    enabled: !isTenantAdmin && !!profile?.id && !!tenant?.id,
   });
 
   if (!isTenantAdmin) {

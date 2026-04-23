@@ -4,7 +4,6 @@ import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { useGamification } from "@/hooks/useGamification";
 import { fetchMyGoal } from "@/services/goalService";
-import { calculatePoints, upsertOperatorPoints } from "@/services/gamificationService";
 
 export const useGamificationTrigger = () => {
   const { user, profile } = useAuth();
@@ -25,7 +24,7 @@ export const useGamificationTrigger = () => {
     const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
     try {
-      // Payments this month (clients.operator_id = profile.id)
+      // Read source-of-truth metrics for achievements logic
       const { count: paymentsCount } = await supabase
         .from("clients")
         .select("id", { count: "exact", head: true })
@@ -34,7 +33,6 @@ export const useGamificationTrigger = () => {
         .gte("data_quitacao", monthStart)
         .lt("data_quitacao", nextMonth);
 
-      // Total received this month
       const { data: receivedData } = await supabase
         .from("clients")
         .select("valor_pago")
@@ -45,7 +43,6 @@ export const useGamificationTrigger = () => {
 
       const totalReceived = (receivedData || []).reduce((sum, c) => sum + (c.valor_pago || 0), 0);
 
-      // Agreements count this month (agreements.created_by = auth.uid())
       const { count: agreementsCount } = await supabase
         .from("agreements")
         .select("id", { count: "exact", head: true })
@@ -56,7 +53,6 @@ export const useGamificationTrigger = () => {
         .gte("created_at", monthStart)
         .lt("created_at", nextMonth);
 
-      // Breaks this month (agreements.created_by = auth.uid())
       const { count: breaksCount } = await supabase
         .from("agreements")
         .select("id", { count: "exact", head: true })
@@ -66,42 +62,22 @@ export const useGamificationTrigger = () => {
         .gte("updated_at", monthStart)
         .lt("updated_at", nextMonth);
 
-      // Check if goal reached
       const goal = await fetchMyGoal(year, month);
       const isGoalReached = goal ? totalReceived >= goal.target_amount : false;
 
-      // Achievements
-      const { data: achievementsData } = await supabase
-        .from("achievements")
-        .select("id", { count: "exact", head: true })
-        .eq("profile_id", profileId);
-      const achievementsCount = achievementsData?.length || 0;
-
+      // Grant achievements (achievements logic only — does NOT write to operator_points)
       await checkAndGrantAchievements({
         paymentsThisMonth: paymentsCount || 0,
+        agreementsThisMonth: agreementsCount || 0,
         totalReceived,
         breaksThisMonth: breaksCount || 0,
         isGoalReached,
       });
 
-      // Calculate and persist operator points
-      const points = calculatePoints(
-        paymentsCount || 0,
-        totalReceived,
-        breaksCount || 0,
-        achievementsCount,
-        isGoalReached
-      );
-
-      await upsertOperatorPoints({
-        tenant_id: tenantId,
-        operator_id: profileId,
-        year,
-        month,
-        points,
-        payments_count: paymentsCount || 0,
-        breaks_count: breaksCount || 0,
-        total_received: totalReceived,
+      // Persist snapshot via SECURITY DEFINER RPC (works for operators too)
+      await supabase.rpc("recalculate_my_gamification_snapshot", {
+        _year: year,
+        _month: month,
       });
 
       // Update campaign scores for active campaigns
@@ -152,7 +128,6 @@ async function updateCampaignScores(params: {
 }) {
   const { tenantId, profileId, authUid, monthStart, nextMonth } = params;
 
-  // Find active campaigns where this operator participates
   const { data: participations } = await supabase
     .from("campaign_participants")
     .select("id, campaign_id, operator_id")
@@ -166,7 +141,8 @@ async function updateCampaignScores(params: {
     .from("gamification_campaigns")
     .select("id, metric, status")
     .in("id", campaignIds)
-    .eq("status", "active");
+    .eq("tenant_id", tenantId)
+    .eq("status", "ativa");
 
   if (!campaigns || campaigns.length === 0) return;
 
@@ -231,7 +207,6 @@ async function calculateCampaignScore(params: {
     }
 
     case "menor_taxa_quebra": {
-      // Total agreements
       let totalQuery = supabase
         .from("agreements")
         .select("id", { count: "exact", head: true })
@@ -242,9 +217,8 @@ async function calculateCampaignScore(params: {
       if (credorNames) totalQuery = totalQuery.in("credor", credorNames);
       const { count: totalCount } = await totalQuery;
 
-      if (!totalCount || totalCount === 0) return 100; // No agreements = perfect performance
+      if (!totalCount || totalCount === 0) return 100;
 
-      // Cancelled agreements
       let breakQuery = supabase
         .from("agreements")
         .select("id", { count: "exact", head: true })
@@ -260,7 +234,6 @@ async function calculateCampaignScore(params: {
     }
 
     case "menor_valor_quebra": {
-      // Sum of proposed_total from cancelled agreements
       let query = supabase
         .from("agreements")
         .select("proposed_total")
@@ -272,13 +245,10 @@ async function calculateCampaignScore(params: {
       if (credorNames) query = query.in("credor", credorNames);
       const { data } = await query;
       const breakValue = (data || []).reduce((sum, a) => sum + (a.proposed_total || 0), 0);
-      // Lower break value = better, so invert for ranking (higher score = better)
-      // Use a large base minus the break value
       return Math.max(0, 1000000 - breakValue);
     }
 
     case "maior_valor_promessas": {
-      // Sum of proposed_total from pending/approved agreements
       let query = supabase
         .from("agreements")
         .select("proposed_total")
@@ -293,7 +263,6 @@ async function calculateCampaignScore(params: {
     }
 
     default: {
-      // Fallback: total received
       let query = supabase
         .from("clients")
         .select("valor_pago")

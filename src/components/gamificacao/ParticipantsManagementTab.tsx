@@ -13,12 +13,13 @@ const ParticipantsManagementTab = () => {
   const qc = useQueryClient();
 
   const { data: profiles = [] } = useQuery({
-    queryKey: ["tenant-profiles-all", tenant?.id],
+    queryKey: ["tenant-profiles-eligible", tenant?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
         .select("id, full_name, role, avatar_url")
         .eq("tenant_id", tenant!.id)
+        .in("role", ["operador", "supervisor", "gerente"])
         .order("full_name");
       return data || [];
     },
@@ -57,7 +58,7 @@ const ParticipantsManagementTab = () => {
 
   const enableAllOperators = useMutation({
     mutationFn: async () => {
-      const operatorProfiles = profiles.filter((p: any) => p.role === "operador" || p.role === "supervisor");
+      const operatorProfiles = profiles.filter((p: any) => ["operador", "supervisor", "gerente"].includes(p.role));
       for (const op of operatorProfiles) {
         await supabase
           .from("gamification_participants")

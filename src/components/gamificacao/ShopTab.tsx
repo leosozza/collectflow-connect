@@ -46,7 +46,7 @@ const ShopTab = () => {
         price_paid: product.price_rivocoins,
       });
 
-      // Notify admins, gerentes, supervisors
+      // Notify admins, gerentes, supervisors via secure RPC (best-effort)
       try {
         const { data: responsaveis } = await supabase
           .from("tenant_users")
@@ -56,19 +56,17 @@ const ShopTab = () => {
 
         if (responsaveis && responsaveis.length > 0) {
           const operatorName = profile.full_name || "Operador";
-          const notifications = responsaveis
-            .filter((r) => r.user_id !== profile.user_id)
-            .map((r) => ({
-              tenant_id: tenantUser.tenant_id,
-              user_id: r.user_id,
-              title: "Nova compra na Loja",
-              message: `${operatorName} comprou "${product.name}" por ${product.price_rivocoins.toLocaleString("pt-BR")} RivoCoins`,
-              type: "info",
-              reference_type: "shop_order",
-            }));
-
-          if (notifications.length > 0) {
-            await supabase.from("notifications").insert(notifications as any);
+          const message = `${operatorName} comprou "${product.name}" por ${product.price_rivocoins.toLocaleString("pt-BR")} RivoCoins`;
+          for (const r of responsaveis) {
+            if (r.user_id === profile.user_id) continue;
+            await supabase.rpc("create_notification" as any, {
+              _tenant_id: tenantUser.tenant_id,
+              _user_id: r.user_id,
+              _title: "Nova compra na Loja",
+              _message: message,
+              _type: "info",
+              _reference_type: "shop_order",
+            }).catch(() => null);
           }
         }
       } catch (e) {
