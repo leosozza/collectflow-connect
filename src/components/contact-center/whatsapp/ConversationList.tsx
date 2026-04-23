@@ -181,6 +181,7 @@ const ConversationList = ({
   onSelect,
   onStatusChange,
   onDelete,
+  onMarkUnread,
   instances,
   tags = [],
   tagAssignments = [],
