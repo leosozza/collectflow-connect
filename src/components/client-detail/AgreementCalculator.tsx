@@ -1255,36 +1255,16 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             })}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={async () => {
-              // Mark agreement as boleto_pendente
-              if (pendingAgreement?.id) {
-                try {
-                  await supabase
-                    .from("agreements")
-                    .update({ boleto_pendente: true } as any)
-                    .eq("id", pendingAgreement.id);
-                  const { logAction } = await import("@/services/auditService");
-                  logAction({
-                    action: "acordo_criado_sem_boleto",
-                    entity_type: "agreement",
-                    entity_id: pendingAgreement.id,
-                    details: {
-                      cpf,
-                      credor,
-                      campos_faltantes: Object.keys(missingFields),
-                    },
-                  });
-                } catch (e) {
-                  console.warn("Erro ao marcar boleto_pendente:", e);
-                }
-              }
+            <Button variant="outline" disabled={savingMissingFields || submitting} onClick={async () => {
+              // "Pular (sem boleto)": close modal and create the agreement marked as boleto_pendente.
               setMissingFieldsOpen(false);
-              setPendingAgreement(null);
-              onAgreementCreated();
+              setMissingFields({});
+              setFoundFields({});
+              await handleConfirmedSubmit({ skipMissingCheck: true, markBoletoPendente: true });
             }}>
               Pular (sem boleto)
             </Button>
-            <Button onClick={handleSaveMissingFields} disabled={savingMissingFields}>
+            <Button onClick={handleSaveMissingFields} disabled={savingMissingFields || submitting}>
               {savingMissingFields ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Salvar e Gerar Boletos
             </Button>
