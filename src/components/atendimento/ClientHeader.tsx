@@ -19,6 +19,7 @@ import { atendimentoFieldsService } from "@/services/atendimentoFieldsService";
 import { fetchCustomFields } from "@/services/customFieldsService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import CallButton from "@/components/shared/CallButton";
 
 interface ClientHeaderProps {
   client: any;
@@ -284,7 +285,15 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
     const { label, value, icon } = renderer();
     if (!value && !forceRender) return null;
     const phoneSlot = PHONE_SLOT_BY_KEY[f.field_key];
-    const action = phoneSlot ? <HotBadge slot={phoneSlot} /> : undefined;
+    const rawPhone = phoneSlot
+      ? (phoneSlot === "phone" ? client.phone : phoneSlot === "phone2" ? client.phone2 : client.phone3)
+      : null;
+    const action = phoneSlot ? (
+      <span className="inline-flex items-center gap-0.5">
+        <HotBadge slot={phoneSlot} />
+        {rawPhone && <CallButton phone={rawPhone} clientId={client?.id} />}
+      </span>
+    ) : undefined;
     return <InfoItem key={f.field_key} label={label} value={value} icon={icon} forceRender={forceRender} action={action} />;
   };
 

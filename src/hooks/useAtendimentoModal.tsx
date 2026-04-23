@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { useThreeCPlusStatus, type ThreeCPlusAgentState } from "./useThreeCPlusStatus";
+import { useTenant } from "./useTenant";
+import { useAuth } from "./useAuth";
+import { dialClientPhone, getPendingCall, clearPendingCall } from "@/services/callService";
 
 interface AtendimentoModalContextType {
   setAgentStatus: (status: number | string | undefined) => void;
@@ -41,6 +44,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const [agentStatusState, setAgentStatusState] = useState<number | string | undefined>(undefined);
   const onFinishDispositionRef = useRef<(() => Promise<void>) | null>(null);
   const [, forceUpdate] = useState(0);
+  const { tenant } = useTenant();
+  const { profile } = useAuth();
+  const lastDispatchedRef = useRef<string | null>(null);
 
   // Shared live polling — runs independently of TelefoniaDashboard
   const liveAgentState = useThreeCPlusStatus();
@@ -69,6 +75,34 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
       // We can't perfectly distinguish, so we let TelefoniaDashboard's setAgentStatus win
     }
   }, [liveAgentState.status, liveAgentState.isOnline, liveAgentState.lastPoll, agentStatusState]);
+
+  // Dispatcher: quando o agente fica idle (status 1) e há um pendingCall recente, disca automaticamente.
+  useEffect(() => {
+    const status = liveAgentState.status;
+    const isIdle = status === 1 || (status as any) === "idle" || (status as any) === "available";
+    if (!isIdle || !liveAgentState.isOnline) return;
+    const tenantId = tenant?.id;
+    const agentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
+    if (!tenantId || !agentId) return;
+
+    const pending = getPendingCall();
+    if (!pending) return;
+    if (pending.tenantId !== tenantId) return;
+    // Idempotência: evita disparar 2x para a mesma intenção
+    const key = `${pending.phone}-${pending.createdAt}`;
+    if (lastDispatchedRef.current === key) return;
+    lastDispatchedRef.current = key;
+    clearPendingCall();
+
+    void dialClientPhone({
+      tenantId,
+      agentId,
+      phone: pending.phone,
+      clientId: pending.clientId,
+      agentStatus: status,
+      assumeConnected: true,
+    });
+  }, [liveAgentState.status, liveAgentState.isOnline, tenant?.id, profile]);
 
   return (
     <AtendimentoModalContext.Provider
