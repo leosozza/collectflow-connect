@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useTransform, animate } from "framer-motion";
+import { useEffect } from "react";
 import { Target, TrendingUp } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 
@@ -9,31 +10,46 @@ interface MetaGaugeCardProps {
   monthLabel: string;
   year?: number;
   month?: number; // 1-12
+  size?: number;
+  duration?: number;
 }
 
-const MetaGaugeCard = ({ percent, received, goal, monthLabel, year, month }: MetaGaugeCardProps) => {
+const MetaGaugeCard = ({
+  percent,
+  received,
+  goal,
+  monthLabel,
+  year,
+  month,
+  size = 320,
+  duration = 1.6,
+}: MetaGaugeCardProps) => {
   const clampedPct = Math.min(100, Math.max(0, percent));
-  const cx = 130, cy = 130, r = 100;
-  const startAngle = 135;
-  const endAngle = 405;
-  const totalArc = 270;
 
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  // Geometry
+  const strokeWidth = Math.max(12, size * 0.06);
+  const radius = size * 0.35;
+  const center = size / 2;
+  const circumference = Math.PI * radius;
+  const innerLineRadius = radius - strokeWidth - 4;
+  const innerRadius = radius - strokeWidth / 2;
 
-  const arcPath = (from: number, to: number) => {
-    const a1 = toRad(from), a2 = toRad(to);
-    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
-    const largeArc = to - from > 180 ? 1 : 0;
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
-  };
+  // Animation
+  const animatedValue = useMotionValue(0);
+  const offset = useTransform(animatedValue, [0, 100], [circumference, 0]);
+  const progressAngle = useTransform(animatedValue, [0, 100], [-Math.PI, 0]);
+  const displayPct = useTransform(animatedValue, (latest) => Math.round(latest));
 
-  const needleAngle = startAngle + (clampedPct / 100) * totalArc;
-  const needleLen = r - 30;
+  useEffect(() => {
+    const controls = animate(animatedValue, clampedPct, { duration, ease: "easeOut" });
+    return controls.stop;
+  }, [clampedPct, animatedValue, duration]);
 
-  const seg1End = startAngle + totalArc * 0.4;
-  const seg2End = startAngle + totalArc * 0.7;
+  // Progress color by performance (semantic tokens)
+  const progressColorVar =
+    clampedPct >= 70 ? "hsl(var(--success))" : clampedPct >= 40 ? "#eab308" : "hsl(var(--destructive))";
 
+  // Period label
   const ref = year && month ? new Date(year, month - 1, 1) : new Date();
   const m = ref.getMonth();
   const y = ref.getFullYear();
@@ -41,78 +57,133 @@ const MetaGaugeCard = ({ percent, received, goal, monthLabel, year, month }: Met
   const lastDay = new Date(y, m + 1, 0).getDate();
   const lastDayStr = `${lastDay}/${String(m + 1).padStart(2, "0")}/${String(y).slice(-2)}`;
 
-  const getProgressColor = () => {
-    if (clampedPct >= 70) return "#22c55e";
-    if (clampedPct >= 40) return "#eab308";
-    return "#ef4444";
-  };
-  const progressColor = getProgressColor();
+  const fontSize = Math.max(28, size * 0.13);
+  const labelFontSize = Math.max(11, size * 0.038);
+  const uniqueId = `meta-${size}`;
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="relative w-full max-w-sm mx-auto">
-        <svg viewBox="0 -15 260 210" className="w-full">
+      <div className="relative mx-auto" style={{ width: size, height: size * 0.7 }}>
+        <svg
+          width={size}
+          height={size * 0.7}
+          viewBox={`0 0 ${size} ${size * 0.7}`}
+          className="overflow-visible"
+        >
           <defs>
-            <filter id="meta-needle-shadow">
-              <feDropShadow dx="0" dy="1" stdDeviation="1" floodOpacity="0.25" />
+            {/* Base track gradient */}
+            <linearGradient id={`baseGradient-${uniqueId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.25" />
+              <stop offset="50%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.12" />
+            </linearGradient>
+
+            {/* Progress gradient — performance-based */}
+            <linearGradient id={`progressGradient-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={progressColorVar} stopOpacity="0.85" />
+              <stop offset="50%" stopColor={progressColorVar} />
+              <stop offset="100%" stopColor={progressColorVar} stopOpacity="0.95" />
+            </linearGradient>
+
+            {/* Subtle inner-line gradient */}
+            <linearGradient id={`textGradient-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.2" />
+            </linearGradient>
+
+            {/* Drop shadow */}
+            <filter id={`dropshadow-${uniqueId}`} x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="hsl(var(--foreground))" floodOpacity="0.18" />
             </filter>
           </defs>
 
-          <path d={arcPath(startAngle, endAngle)} fill="none" stroke="hsl(var(--muted))" strokeWidth="20" strokeLinecap="round" opacity="0.3" />
-          <path d={arcPath(startAngle, seg1End)} fill="none" stroke="#ef4444" strokeWidth="20" strokeLinecap="round" opacity="0.8" />
-          <path d={arcPath(seg1End, seg2End)} fill="none" stroke="#eab308" strokeWidth="20" strokeLinecap="round" opacity="0.8" />
-          <path d={arcPath(seg2End, endAngle)} fill="none" stroke="#22c55e" strokeWidth="20" strokeLinecap="round" opacity="0.8" />
+          {/* Inner thin line */}
+          <path
+            d={`M ${center - innerLineRadius} ${center} A ${innerLineRadius} ${innerLineRadius} 0 0 1 ${center + innerLineRadius} ${center}`}
+            fill="none"
+            stroke="hsl(var(--muted-foreground))"
+            strokeWidth="1"
+            strokeLinecap="butt"
+            opacity="0.4"
+          />
 
-          {[0, 25, 50, 75, 100].map((tick) => {
-            const angle = startAngle + (tick / 100) * totalArc;
-            const innerR = r + 14;
-            const outerR = r + 20;
-            const ix = cx + innerR * Math.cos(toRad(angle));
-            const iy = cy + innerR * Math.sin(toRad(angle));
-            const ox = cx + outerR * Math.cos(toRad(angle));
-            const oy = cy + outerR * Math.sin(toRad(angle));
-            const tx = cx + (outerR + 10) * Math.cos(toRad(angle));
-            const ty = cy + (outerR + 10) * Math.sin(toRad(angle));
-            return (
-              <g key={tick}>
-                <line x1={ix} y1={iy} x2={ox} y2={oy} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
-                <text x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fontSize="8" className="fill-muted-foreground" fontWeight="500">
-                  {tick}%
-                </text>
-              </g>
-            );
-          })}
+          {/* Base track */}
+          <path
+            d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
+            fill="none"
+            stroke={`url(#baseGradient-${uniqueId})`}
+            strokeWidth={strokeWidth}
+            strokeLinecap="butt"
+            filter={`url(#dropshadow-${uniqueId})`}
+          />
 
-          <motion.g
-            initial={{ rotate: startAngle, originX: cx, originY: cy }}
-            animate={{ rotate: needleAngle }}
-            transition={{ type: "spring", stiffness: 40, damping: 12, delay: 0.3 }}
-            style={{ transformOrigin: `${cx}px ${cy}px` }}
-          >
-            <line x1={cx} y1={cy} x2={cx + needleLen} y2={cy} stroke="hsl(var(--foreground))" strokeWidth="2.5" strokeLinecap="round" filter="url(#meta-needle-shadow)" />
-          </motion.g>
+          {/* Animated progress arc */}
+          <motion.path
+            d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
+            fill="none"
+            stroke={`url(#progressGradient-${uniqueId})`}
+            strokeWidth={strokeWidth}
+            strokeLinecap="butt"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            filter={`url(#dropshadow-${uniqueId})`}
+          />
 
-          <circle cx={cx} cy={cy} r="8" fill="hsl(var(--foreground))" />
-          <circle cx={cx} cy={cy} r="5" fill="hsl(var(--background))" />
-          <circle cx={cx} cy={cy} r="2.5" fill={progressColor} />
+          {/* Animated extending tick line at progress end */}
+          <motion.line
+            x1={useTransform(progressAngle, (a) => center + Math.cos(a) * innerRadius)}
+            y1={useTransform(progressAngle, (a) => center + Math.sin(a) * innerRadius)}
+            x2={useTransform(progressAngle, (a) => center + Math.cos(a) * innerRadius - Math.cos(a) * 30)}
+            y2={useTransform(progressAngle, (a) => center + Math.sin(a) * innerRadius - Math.sin(a) * 30)}
+            stroke={`url(#textGradient-${uniqueId})`}
+            strokeWidth="1"
+            strokeLinecap="butt"
+          />
+        </svg>
 
-          <motion.text
-            x={cx} y={cy - 32}
-            textAnchor="middle"
-            fontSize="32"
-            fontWeight="800"
-            fill={progressColor}
+        {/* Animated percentage display */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ paddingTop: size * 0.12 }}>
+          <motion.div
+            className="font-bold tracking-tight leading-none"
+            style={{ fontSize: `${fontSize}px`, color: progressColorVar }}
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.5, duration: 0.4 }}
+            transition={{ duration: 0.5, delay: duration * 0.6 }}
           >
-            {clampedPct}%
-          </motion.text>
-
-          <text x={cx} y={cy - 14} textAnchor="middle" className="fill-muted-foreground" fontSize="9" fontWeight="500">
+            <motion.span>{displayPct}</motion.span>%
+          </motion.div>
+          <p className="text-[10px] text-muted-foreground font-medium mt-1">
             {clampedPct >= 100 ? "🏆 META ATINGIDA!" : "do objetivo mensal"}
-          </text>
-        </svg>
+          </p>
+        </div>
+
+        {/* 0% / 100% labels */}
+        <motion.div
+          className="absolute text-muted-foreground font-medium"
+          style={{
+            fontSize: `${labelFontSize}px`,
+            left: center - radius - 5,
+            top: center + strokeWidth / 2,
+          }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: duration * 0.25 }}
+        >
+          0%
+        </motion.div>
+        <motion.div
+          className="absolute text-muted-foreground font-medium"
+          style={{
+            fontSize: `${labelFontSize}px`,
+            left: center + radius - 20,
+            top: center + strokeWidth / 2,
+          }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: duration * 0.25 }}
+        >
+          100%
+        </motion.div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 w-full max-w-sm mx-auto">
