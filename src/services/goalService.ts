@@ -13,12 +13,26 @@ export interface OperatorGoal {
   updated_at: string;
 }
 
+const getMyTenantId = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return (data?.tenant_id as string) || null;
+};
+
 export const fetchGoals = async (year: number, month: number, credorId?: string | null): Promise<OperatorGoal[]> => {
+  const tid = await getMyTenantId();
   let query = supabase
     .from("operator_goals")
     .select("*")
     .eq("year", year)
     .eq("month", month);
+
+  if (tid) query = query.eq("tenant_id", tid);
 
   if (credorId) {
     query = query.eq("credor_id", credorId);

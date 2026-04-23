@@ -11,13 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/formatters";
-import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3 } from "lucide-react";
+import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3, History } from "lucide-react";
 import RankingTab from "@/components/gamificacao/RankingTab";
 import AchievementsTab from "@/components/gamificacao/AchievementsTab";
 import CampaignsTab from "@/components/gamificacao/CampaignsTab";
 import GoalsTab from "@/components/gamificacao/GoalsTab";
 import ShopTab from "@/components/gamificacao/ShopTab";
 import WalletTab from "@/components/gamificacao/WalletTab";
+import PointsHistoryTab from "@/components/gamificacao/PointsHistoryTab";
 import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
 import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
 import CampaignsManagementTab from "@/components/gamificacao/CampaignsManagementTab";
@@ -143,6 +144,9 @@ const GamificacaoPage = () => {
           <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
             <Coins className="w-3.5 h-3.5" /> Carteira
           </TabsTrigger>
+          <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
+            <History className="w-3.5 h-3.5" /> Histórico
+          </TabsTrigger>
           {isTenantAdmin && (
             <TabsTrigger value="manage" className="flex-1 sm:flex-none gap-1.5">
               <Settings className="w-3.5 h-3.5" /> Gerenciar
@@ -172,6 +176,10 @@ const GamificacaoPage = () => {
 
         <TabsContent value="wallet" className="mt-4">
           <WalletTab />
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4">
+          <PointsHistoryTab />
         </TabsContent>
 
         {isTenantAdmin && (

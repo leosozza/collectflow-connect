@@ -4,15 +4,14 @@ import { useTenant } from "@/hooks/useTenant";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  calculatePoints,
   grantAchievement,
   fetchMyAchievements,
-  upsertOperatorPoints,
 } from "@/services/gamificationService";
 import { creditRivoCoins } from "@/services/rivocoinService";
 
 interface AchievementContext {
   paymentsThisMonth: number;
+  agreementsThisMonth: number;
   totalReceived: number;
   breaksThisMonth: number;
   isGoalReached: boolean;
@@ -27,9 +26,6 @@ export const useGamification = () => {
 
     const profileId = profile.id;
     const tenantId = tenantUser.tenant_id;
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
 
     try {
       // Fetch achievement templates from DB
@@ -39,28 +35,7 @@ export const useGamification = () => {
         .eq("tenant_id", tenantId)
         .eq("is_active", true);
 
-      if (!templates || templates.length === 0) {
-        // No templates configured, just update points
-        const earnedTitles = await fetchMyAchievements(profileId);
-        const points = calculatePoints(
-          context.paymentsThisMonth,
-          context.totalReceived,
-          context.breaksThisMonth,
-          earnedTitles.length,
-          context.isGoalReached
-        );
-        await upsertOperatorPoints({
-          tenant_id: tenantId,
-          operator_id: profileId,
-          year,
-          month,
-          points,
-          payments_count: context.paymentsThisMonth,
-          breaks_count: context.breaksThisMonth,
-          total_received: context.totalReceived,
-        });
-        return;
-      }
+      if (!templates || templates.length === 0) return;
 
       const earnedTitles = await fetchMyAchievements(profileId);
       const newlyUnlocked: Array<{ title: string; description: string; icon: string; points_reward: number }> = [];
@@ -78,6 +53,7 @@ export const useGamification = () => {
           case "total_received":
             condition = context.totalReceived >= value;
             break;
+          case "no_breaks":
           case "zero_breaks":
             condition = context.breaksThisMonth === 0 && context.paymentsThisMonth > 0;
             break;
@@ -85,7 +61,7 @@ export const useGamification = () => {
             condition = context.isGoalReached;
             break;
           case "agreements_count":
-            condition = context.paymentsThisMonth >= value;
+            condition = context.agreementsThisMonth >= value;
             break;
           default:
             break;
@@ -110,7 +86,7 @@ export const useGamification = () => {
         }
       }
 
-      // Credit RivoCoins for new achievements
+      // Notify user + credit RivoCoins
       for (const achievement of newlyUnlocked) {
         toast.success(`${achievement.icon} Conquista desbloqueada!`, {
           description: achievement.title,
@@ -127,29 +103,8 @@ export const useGamification = () => {
           });
         }
       }
-
-      // Upsert points
-      const achievementsCount = earnedTitles.length + newlyUnlocked.length;
-      const points = calculatePoints(
-        context.paymentsThisMonth,
-        context.totalReceived,
-        context.breaksThisMonth,
-        achievementsCount,
-        context.isGoalReached
-      );
-
-      await upsertOperatorPoints({
-        tenant_id: tenantId,
-        operator_id: profileId,
-        year,
-        month,
-        points,
-        payments_count: context.paymentsThisMonth,
-        breaks_count: context.breaksThisMonth,
-        total_received: context.totalReceived,
-      });
     } catch (err) {
-      console.error("Gamification error:", err);
+      console.error("Gamification achievements error:", err);
     }
   }, [profile?.id, tenantUser?.tenant_id]);
 

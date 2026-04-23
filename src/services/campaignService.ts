@@ -47,13 +47,25 @@ export const PERIOD_OPTIONS = [
   { value: "anual", label: "Anual" },
 ];
 
+const getMyTenantId = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return (data?.tenant_id as string) || null;
+};
+
 export const fetchCampaigns = async (tenantId?: string): Promise<Campaign[]> => {
+  const tid = tenantId || (await getMyTenantId());
   let query = supabase
     .from("gamification_campaigns")
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (tenantId) query = query.eq("tenant_id", tenantId);
+  if (tid) query = query.eq("tenant_id", tid);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -64,10 +76,12 @@ export const fetchCampaigns = async (tenantId?: string): Promise<Campaign[]> => 
 
   // Fetch linked credores
   const campaignIds = campaigns.map((c) => c.id);
-  const { data: links } = await supabase
+  let linksQuery = supabase
     .from("campaign_credores")
     .select("campaign_id, credor_id, credores!campaign_credores_credor_id_fkey(razao_social)")
     .in("campaign_id", campaignIds);
+  if (tid) linksQuery = linksQuery.eq("tenant_id", tid);
+  const { data: links } = await linksQuery;
 
   const credorMap = new Map<string, { credor_id: string; razao_social?: string }[]>();
   for (const link of (links || []) as any[]) {

@@ -6968,6 +6968,18 @@ export type Database = {
           read_ct: number
         }[]
       }
+      recalculate_my_gamification_snapshot: {
+        Args: { _month: number; _year: number }
+        Returns: Json
+      }
+      recalculate_operator_gamification_snapshot: {
+        Args: { _month: number; _operator_profile_id: string; _year: number }
+        Returns: Json
+      }
+      recalculate_tenant_gamification_snapshot: {
+        Args: { _month: number; _year: number }
+        Returns: Json
+      }
       recompute_campaign_counters: {
         Args: { _campaign_id: string }
         Returns: undefined

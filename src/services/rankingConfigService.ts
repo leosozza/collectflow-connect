@@ -11,11 +11,25 @@ export interface RankingConfig {
   updated_at: string;
 }
 
+const getMyTenantId = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  return (data?.tenant_id as string) || null;
+};
+
 export const fetchRankingConfigs = async (): Promise<RankingConfig[]> => {
-  const { data, error } = await supabase
+  const tid = await getMyTenantId();
+  let query = supabase
     .from("ranking_configs")
     .select("*")
     .order("created_at", { ascending: false });
+  if (tid) query = query.eq("tenant_id", tid);
+  const { data, error } = await query;
   if (error) throw error;
   return (data as RankingConfig[]) || [];
 };
