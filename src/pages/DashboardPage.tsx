@@ -152,10 +152,10 @@ const DashboardPage = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header with filters */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
             Bem-vindo, {profile?.full_name || "Operador"}
           </p>
         </div>
@@ -164,20 +164,20 @@ const DashboardPage = () => {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 border-primary text-primary hover:bg-primary/10"
+              className="gap-1.5 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10"
               onClick={() => navigate("/relatorios")}
             >
-              <FileText className="w-4 h-4" />
+              <FileText className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Relatórios</span>
             </Button>
           )}
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 border-primary text-primary hover:bg-primary/10"
+            className="gap-1.5 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10"
             onClick={() => navigate("/analytics")}
           >
-            <BarChart3 className="w-4 h-4" />
+            <BarChart3 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Analytics</span>
           </Button>
           <MultiSelect
@@ -209,77 +209,74 @@ const DashboardPage = () => {
       </div>
 
       {/* Layout em 3 colunas: cada coluna tem 3 stats compactos no topo + card funcional embaixo */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Coluna 1: Acionados / Acordos Dia / Acordos Mês  +  Agendados */}
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-1 gap-2">
+        <div className="flex flex-col gap-3 min-h-[520px]">
+          <div className="grid grid-cols-1 gap-3">
             <StatCard
               title="Acionados Hoje"
               value={String(acionadosHoje)}
               icon="phone"
-              compact
               tooltip="Clientes únicos acessados hoje (perfil ou atendimento), excluindo os que já viraram acordo seu."
             />
-            <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" compact />
-            <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" compact />
+            <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
+            <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
           </div>
-          <ScheduledCallbacksCard
-            callbacks={callbacks}
-            showOperator={canViewAllAgendados}
-            selectedDate={scheduledDate}
-            onDateChange={setScheduledDate}
-          />
+          <div className="flex-1 flex flex-col">
+            <ScheduledCallbacksCard
+              callbacks={callbacks}
+              showOperator={canViewAllAgendados}
+              selectedDate={scheduledDate}
+              onDateChange={setScheduledDate}
+            />
+          </div>
         </div>
 
         {/* Coluna 2: Colchão / 1ª Parcela Mês / Total Negociado Mês  +  Meta */}
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-1 gap-2">
+        <div className="flex flex-col gap-3 min-h-[520px]">
+          <div className="grid grid-cols-1 gap-3">
             <StatCard
               title="Colchão de Acordos"
               value={formatCurrency(stats?.total_projetado ?? 0)}
               icon="projected"
-              variant="gradient"
-              compact
             />
             <StatCard
               title="Total 1ª Parcela do Mês"
               value={formatCurrency(stats?.total_negociado ?? 0)}
               icon="received"
-              variant="gradient"
-              compact
             />
             <StatCard
               title="Total Negociado no Mês"
               value={formatCurrency(stats?.total_negociado_mes ?? 0)}
               icon="agreement"
-              variant="gradient"
-              compact
             />
           </div>
-          <DashboardMetaCard
-            year={filterYear ?? now.getFullYear()}
-            month={filterMonth ?? (now.getMonth() + 1)}
-            monthLabel={new Date(filterYear ?? now.getFullYear(), (filterMonth ?? (now.getMonth() + 1)) - 1, 1)
-              .toLocaleString("pt-BR", { month: "long", year: "numeric" })}
-            selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}
-            received={stats?.total_recebido ?? 0}
-          />
+          <div className="flex-1 flex flex-col">
+            <DashboardMetaCard
+              year={filterYear ?? now.getFullYear()}
+              month={filterMonth ?? (now.getMonth() + 1)}
+              monthLabel={new Date(filterYear ?? now.getFullYear(), (filterMonth ?? (now.getMonth() + 1)) - 1, 1)
+                .toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+              selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}
+              received={stats?.total_recebido ?? 0}
+            />
+          </div>
         </div>
 
         {/* Coluna 3: Recebido / Quebra / Pendentes  +  Parcelas Programadas */}
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-1 gap-2">
-            <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" compact />
-            <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" compact />
-            <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" compact />
+        <div className="flex flex-col gap-3 min-h-[520px]">
+          <div className="grid grid-cols-1 gap-3">
+            <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" />
+            <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" />
+            <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" />
           </div>
 
           {/* Parcelas Programadas */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full">
-            <div className="px-4 pt-3 pb-2 border-b border-border">
+          <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full flex-1 flex flex-col">
+            <div className="px-4 py-3 border-b border-border/60">
               <div className="flex items-center gap-2 mb-3">
-                <CalendarClock className="w-5 h-5 text-primary" />
-                <h2 className="text-base font-bold text-card-foreground">Parcelas Programadas</h2>
+                <CalendarClock className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Parcelas Programadas</h2>
               </div>
 
               <div className="flex items-center justify-between gap-3">
@@ -328,7 +325,7 @@ const DashboardPage = () => {
                 Nenhum vencimento para esta data
               </div>
             ) : (
-              <div className="overflow-auto max-h-[420px]">
+              <div className="overflow-auto flex-1">
                 <Table>
                   <TableBody>
                     {vencimentos.map((v, idx) => {
