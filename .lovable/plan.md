@@ -1,43 +1,50 @@
 
 
-## Diagnóstico: "tela não está abrindo"
+## Plano: ícone verde de telefone ao lado do WhatsApp no header do cliente
 
-Verifiquei e **não há erros de runtime nem de console** registrados. O servidor Vite está rodando normal. O usuário está em `/auth` (tela de login).
+### Contexto
 
-Como o sintoma "tela não abre" é vago, pode ser:
+Na screenshot, no canto superior direito da ficha do devedor (`ClientHeader.tsx`), aparece hoje:
 
-1. **Tela de login não renderiza** (branco/loading infinito) — improvável, pois console está limpo.
-2. **Após login, alguma tela específica não abre** (ex.: ficha do cliente onde adicionei o `CallButton`).
-3. **Modal de conexão da 3CPlus não abre** ao clicar no novo ícone.
-4. **Página de telefonia trava** após o redirect do `pendingCall`.
-5. **Cache do browser** com versão antiga + erro de import quebrando algum componente.
+`[WhatsApp verde]` `[ícone azul de fone — DESLIGAR, só quando em chamada]` `[Formalizar Acordo]`
 
-### Possíveis causas técnicas (do código novo)
+O usuário pediu para adicionar o **ícone verde de telefone** (mesmo `CallButton` que já está ao lado dos números na grid de campos) **ao lado do botão WhatsApp**, dando acesso 1-clique para discar para o **telefone principal (Hot)** do cliente direto do header — sem precisar expandir "Mais informações do devedor".
 
-- O `CallButton` usa `useAtendimentoModalSafe` — o hook está implementado e tem fallback seguro fora do Provider, então não deve quebrar.
-- O `PhoneList.tsx` importa `CallButton` — se o componente jogar exception no render, derruba a ficha do cliente inteira.
-- O dispatcher em `useAtendimentoModal.tsx` (linhas 80-105) roda em todo mount do app autenticado — se `getPendingCall()` retornar lixo no sessionStorage, pode disparar discagem inesperada (mas não derrubaria tela).
+### Mudança
 
-### Plano de ação (após você responder)
+**Arquivo único: `src/components/atendimento/ClientHeader.tsx`**
 
-**Passo 1**: você me diz **qual tela exatamente não abre** (a de login? alguma ficha de cliente? Telefonia?) e o que aparece (branco? loading infinito? erro? trava ao clicar no ícone?).
+Na seção de Action buttons (linha 346), adicionar o `<CallButton>` **imediatamente antes** do `<Button>` do WhatsApp (linha 360):
 
-**Passo 2**: com essa info, executo:
-- Browser automation para reproduzir (após você fazer login no preview).
-- Inspeção dos componentes específicos da tela travada.
-- Verificação de `sessionStorage` em busca de `pendingCall` órfão que possa estar disparando algo.
+```tsx
+<CallButton 
+  phone={client.phone} 
+  clientId={client?.id} 
+  size="icon" 
+  className="bg-green-500/10 hover:bg-green-500/20 rounded-full h-9 w-9"
+/>
+```
 
-**Passo 3**: se for o `CallButton`/`PhoneList` quebrando, faço **rollback cirúrgico** dos imports nos arquivos integrados (`ClientHeader.tsx`, `PhoneList.tsx`) — mantenho `callService.ts`, `CallButton.tsx` e o dispatcher do `useAtendimentoModal.tsx` no codebase, mas removo os usos para destravar a tela. Depois investigamos a causa raiz com calma.
+- Usa `client.phone` (o telefone Hot/principal — mesmo número exibido em "TELEFONE: (18) 98183-2902" da screenshot).
+- Mantém o mesmo visual do WhatsApp (círculo verde h-9/w-9, fundo `green-500/10`) para coerência.
+- Reutiliza 100% da lógica do `CallButton` já existente: status do agente, pendingCall, redirect para `/contact-center/telefonia`, toast de erro, disabled em `on_call`/`acw`.
 
-**Passo 4**: se for outra coisa (cache, sessão Supabase, etc.), oriento limpeza específica.
+### O que NÃO muda
 
-### Pergunta direta
+- `CallButton` continua aparecendo também ao lado de cada número na grid (Telefone 1/2/3) — comportamento atual preservado.
+- Botão WhatsApp, DESLIGAR e Formalizar Acordo permanecem inalterados.
+- Nenhuma mudança no `callService.ts`, `useAtendimentoModal.tsx` ou em outros componentes.
+- Cliente sem `phone` cadastrado: o próprio `CallButton` já trata (fica disabled com tooltip "Sem telefone cadastrado").
 
-Para eu agir certeiro, me responda:
+### Validação
 
-1. **Qual tela** não abre? (`/auth`, `/carteira/:id`, `/atendimento/:id`, `/contact-center/telefonia`, ou outra?)
-2. **O que aparece** quando tenta abrir? (tela branca / loading infinito / erro visível / trava ao clicar em algo específico?)
-3. **Quando começou**? (logo após o último deploy do `CallButton`, ou já estava acontecendo antes?)
+1. Abrir `/atendimento/:clientId` → ver o ícone verde de telefone à esquerda do WhatsApp, mesmo tamanho/estilo.
+2. Hover → tooltip "Ligar para (XX) XXXXX-XXXX" com o telefone principal formatado.
+3. Cliente sem telefone → ícone aparece mas disabled com tooltip apropriado.
+4. Operador em chamada (`on_call`) → ícone disabled com tooltip "Finalize a chamada atual antes de discar".
+5. Clique → mesmo fluxo do `CallButton` da grid (disca direto se conectado, ou redireciona para conexão se offline).
 
-Com essa resposta, em 1 turno eu identifico e proponho o fix exato (ou o rollback cirúrgico se for regressão da feature nova).
+### Esforço
+
+1 arquivo, ~6 linhas adicionadas. Sem regressão prevista — feature aditiva.
 
