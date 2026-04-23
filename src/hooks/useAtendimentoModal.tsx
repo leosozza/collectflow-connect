@@ -79,7 +79,7 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   // Dispatcher: quando o agente fica idle (status 1) e há um pendingCall recente, disca automaticamente.
   useEffect(() => {
     const status = liveAgentState.status;
-    const isIdle = status === 1 || status === "idle" || status === "available";
+    const isIdle = status === 1 || (status as any) === "idle" || (status as any) === "available";
     if (!isIdle || !liveAgentState.isOnline) return;
     const tenantId = tenant?.id;
     const agentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
