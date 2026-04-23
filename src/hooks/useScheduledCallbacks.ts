@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTenant } from "@/hooks/useTenant";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, startOfDay, endOfDay, isSameDay } from "date-fns";
 
 export interface ScheduledCallback {
   id: string;
@@ -20,7 +20,7 @@ export interface ScheduledCallback {
   operator_name?: string;
 }
 
-export function useScheduledCallbacks() {
+export function useScheduledCallbacks(date?: Date) {
   const { user, profile } = useAuth();
   const { tenant } = useTenant();
   const permissions = usePermissions();
@@ -28,18 +28,21 @@ export function useScheduledCallbacks() {
   const notifiedIds = useRef<Set<string>>(new Set());
 
   const canViewAll = permissions.canViewAllAgendados;
+  const targetDate = date ?? new Date();
+  const dateKey = format(targetDate, "yyyy-MM-dd");
+  const isToday = isSameDay(targetDate, new Date());
 
   const { data: callbacks = [], isLoading } = useQuery({
-    queryKey: ["scheduled-callbacks", tenant?.id, canViewAll, profile?.id],
+    queryKey: ["scheduled-callbacks", tenant?.id, canViewAll, profile?.id, dateKey],
     queryFn: async () => {
-      const today = format(new Date(), "yyyy-MM-dd");
-      const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
+      const start = startOfDay(targetDate).toISOString();
+      const end = endOfDay(targetDate).toISOString();
 
       let query = supabase
         .from("call_dispositions")
         .select("id, client_id, operator_id, scheduled_callback, disposition_type, notes")
-        .gte("scheduled_callback", today)
-        .lt("scheduled_callback", tomorrow)
+        .gte("scheduled_callback", start)
+        .lte("scheduled_callback", end)
         .order("scheduled_callback", { ascending: true });
 
       if (!canViewAll && profile?.id) {
@@ -49,7 +52,6 @@ export function useScheduledCallbacks() {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Enrich with client names
       const clientIds = [...new Set((data || []).map((d: any) => d.client_id))];
       const operatorIds = [...new Set((data || []).map((d: any) => d.operator_id))];
 
@@ -87,9 +89,9 @@ export function useScheduledCallbacks() {
     refetchInterval: 60000,
   });
 
-  // Check for upcoming callbacks and show toast notifications
+  // Notifications only for today's callbacks
   useEffect(() => {
-    if (!callbacks.length) return;
+    if (!callbacks.length || !isToday) return;
 
     const now = Date.now();
     const fiveMinutes = 5 * 60 * 1000;
@@ -114,7 +116,6 @@ export function useScheduledCallbacks() {
           },
         });
 
-        // Create notification in the bell
         if (user && tenant) {
           supabase.rpc("create_notification", {
             _tenant_id: tenant.id,
@@ -130,7 +131,7 @@ export function useScheduledCallbacks() {
         }
       }
     }
-  }, [callbacks, user, tenant, queryClient]);
+  }, [callbacks, user, tenant, queryClient, isToday]);
 
   return {
     callbacks,
