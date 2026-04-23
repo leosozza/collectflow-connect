@@ -248,6 +248,8 @@ const DashboardPage = () => {
           month={filterMonth ?? (now.getMonth() + 1)}
           monthLabel={new Date(filterYear ?? now.getFullYear(), (filterMonth ?? (now.getMonth() + 1)) - 1, 1)
             .toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+          selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}
+          received={stats?.total_recebido ?? 0}
         />
 
       {/* Parcelas do Dia (com navegador de data integrado) */}
