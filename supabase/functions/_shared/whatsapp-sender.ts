@@ -119,7 +119,9 @@ async function sendEvolutionText(
     const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
       method: "POST",
       headers: { apikey: instanceKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ number: phone, text: message }),
+      // options.checkExists: false → força envio mesmo se a verificação heurística
+      // do Evolution (que remove o 9º dígito) não confirmar a conta.
+      body: JSON.stringify({ number: phone, text: message, options: { checkExists: false } }),
     });
     const result = await resp.json();
     return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
