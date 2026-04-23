@@ -44,6 +44,9 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
   const [agentStatusState, setAgentStatusState] = useState<number | string | undefined>(undefined);
   const onFinishDispositionRef = useRef<(() => Promise<void>) | null>(null);
   const [, forceUpdate] = useState(0);
+  const { tenant } = useTenant();
+  const { profile } = useAuth();
+  const lastDispatchedRef = useRef<string | null>(null);
 
   // Shared live polling — runs independently of TelefoniaDashboard
   const liveAgentState = useThreeCPlusStatus();
