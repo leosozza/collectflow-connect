@@ -343,6 +343,25 @@ const DashboardPage = () => {
             )}
           </div>
         </div>
+
+        {/* Coluna 3: Recebido / Quebra / Pendentes  +  Meta */}
+        <div className="flex flex-col gap-3 min-h-0">
+          <div className="grid grid-cols-1 gap-2.5 shrink-0">
+            <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" />
+            <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" />
+            <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" />
+          </div>
+          <div className="flex-1 min-h-0 flex flex-col">
+            <DashboardMetaCard
+              year={filterYear ?? now.getFullYear()}
+              month={filterMonth ?? (now.getMonth() + 1)}
+              monthLabel={new Date(filterYear ?? now.getFullYear(), (filterMonth ?? (now.getMonth() + 1)) - 1, 1)
+                .toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+              selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}
+              received={stats?.total_recebido ?? 0}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
