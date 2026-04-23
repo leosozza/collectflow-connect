@@ -47,6 +47,37 @@ function randomDelay(cfg: ThrottleConfig): number {
   return cfg.minDelay + Math.random() * (cfg.maxDelay - cfg.minDelay);
 }
 
+/**
+ * Detects "number does not exist on WhatsApp" responses from providers
+ * (Evolution returns HTTP 400 with `exists: false`).
+ */
+function isNoWhatsAppError(result: any): boolean {
+  if (!result) return false;
+  try {
+    const str = typeof result === "string" ? result : JSON.stringify(result);
+    return /"exists"\s*:\s*false/i.test(str) || /number.*(does\s*not\s*exist|n[ãa]o\s*existe)/i.test(str);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mark client_profiles.phone_has_whatsapp = false for the given CPF in this tenant,
+ * so future campaigns auto-skip this contact.
+ */
+async function markCpfWithoutWhatsApp(supabase: any, tenantId: string, cpf: string | null) {
+  if (!cpf) return;
+  try {
+    await supabase
+      .from("client_profiles")
+      .update({ phone_has_whatsapp: false, updated_at: new Date().toISOString() })
+      .eq("tenant_id", tenantId)
+      .eq("cpf", cpf);
+  } catch (e: any) {
+    console.log(`[Campaign] markCpfWithoutWhatsApp soft-fail for cpf=${cpf}: ${e?.message}`);
+  }
+}
+
 // ===== Helper: persist conversation + outbound message via canonical RPC =====
 async function ensureConversationAndMessage(
   supabase: any,
