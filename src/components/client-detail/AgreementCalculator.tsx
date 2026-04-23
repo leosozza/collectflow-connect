@@ -1170,10 +1170,10 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
 
       <Dialog open={missingFieldsOpen} onOpenChange={(open) => {
-        if (!open) {
+        if (!open && !savingMissingFields && !submitting) {
           setMissingFieldsOpen(false);
-          setPendingAgreement(null);
-          onAgreementCreated();
+          setMissingFields({});
+          setFoundFields({});
         }
       }}>
         <DialogContent className="sm:max-w-md">
@@ -1184,9 +1184,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            O acordo foi criado com sucesso. {Object.keys(missingFields).length === 1
-              ? "Apenas o campo abaixo precisa ser preenchido para gerar o boleto:"
-              : "Preencha os campos faltantes abaixo para gerar os boletos:"}
+            Para formalizar o acordo e gerar {Object.keys(missingFields).length === 1 ? "o boleto" : "os boletos"}, preencha {Object.keys(missingFields).length === 1 ? "o campo abaixo" : "os campos abaixo"}:
           </p>
 
           {/* Show found fields */}
