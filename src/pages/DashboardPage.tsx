@@ -108,6 +108,20 @@ const DashboardPage = () => {
     },
   });
 
+  // Acionados Hoje (CPFs únicos acessados hoje, excluindo os que já viraram acordo)
+  const { data: acionadosHoje = 0 } = useQuery({
+    queryKey: ["acionados-hoje", rpcUserId, profile?.tenant_id],
+    queryFn: async () => {
+      const params: Record<string, unknown> = {};
+      if (rpcUserId) params._user_id = rpcUserId;
+      const { data, error } = await supabase.rpc("get_acionados_hoje", params as any);
+      if (error) throw error;
+      return Number(data) || 0;
+    },
+    enabled: !!profile?.tenant_id,
+    refetchInterval: 60_000,
+  });
+
   // Vencimentos from RPC
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
@@ -194,146 +208,163 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Main stats: 3 cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
-          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Colchão de Acordos</p>
-          <p className="text-3xl font-bold text-primary-foreground tracking-tight">
-            {formatCurrency(stats?.total_projetado ?? 0)}
-          </p>
-        </div>
-        <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
-          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Total de Primeira Parcela no Mês</p>
-          <p className="text-3xl font-bold text-primary-foreground tracking-tight">
-            {formatCurrency(stats?.total_negociado ?? 0)}
-          </p>
-        </div>
-        <div className="rounded-2xl gradient-orange p-5 text-center shadow-lg">
-          <p className="text-xs text-primary-foreground/80 font-medium mb-1">Total Negociado no Mês</p>
-          <p className="text-3xl font-bold text-primary-foreground tracking-tight">
-            {formatCurrency(stats?.total_negociado_mes ?? 0)}
-          </p>
-        </div>
-      </div>
-
-      {/* Stat cards row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" />
-        <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" />
-        <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" />
-        <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
-        <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
-      </div>
-
-
-
-      {/* Agendamentos + Parcelas Programadas + Metas lado a lado */}
+      {/* Layout em 3 colunas: cada coluna tem 3 stats compactos no topo + card funcional embaixo */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ScheduledCallbacksCard
-          callbacks={callbacks}
-          showOperator={canViewAllAgendados}
-          selectedDate={scheduledDate}
-          onDateChange={setScheduledDate}
-        />
-        <DashboardMetaCard
-          year={filterYear ?? now.getFullYear()}
-          month={filterMonth ?? (now.getMonth() + 1)}
-          monthLabel={new Date(filterYear ?? now.getFullYear(), (filterMonth ?? (now.getMonth() + 1)) - 1, 1)
-            .toLocaleString("pt-BR", { month: "long", year: "numeric" })}
-          selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}
-          received={stats?.total_recebido ?? 0}
-        />
-
-      {/* Parcelas do Dia (com navegador de data integrado) */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full">
-        <div className="px-4 pt-3 pb-2 border-b border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <CalendarClock className="w-5 h-5 text-primary" />
-            <h2 className="text-base font-bold text-card-foreground">Parcelas Programadas</h2>
+        {/* Coluna 1: Acionados / Acordos Dia / Acordos Mês  +  Agendados */}
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-2">
+            <StatCard
+              title="Acionados Hoje"
+              value={String(acionadosHoje)}
+              icon="phone"
+              compact
+              tooltip="Clientes únicos acessados hoje (perfil ou atendimento), excluindo os que já viraram acordo seu."
+            />
+            <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" compact />
+            <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" compact />
           </div>
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-1 justify-self-start">
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="text-sm font-semibold text-primary min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-                    {format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd") ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none z-50" align="center" side="bottom" sideOffset={8}>
-                  <GlassCalendar
-                    selectedDate={browseDate}
-                    onDateSelect={(date) => setBrowseDate(date)}
-                  />
-                </PopoverContent>
-              </Popover>
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20">
-                <span className="text-xs font-medium text-muted-foreground">Total</span>
-                <span className="text-sm font-bold text-primary">{formatCurrency(totalVencimentos)}</span>
-              </div>
-              <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-card border border-border">
-                <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-success/15 text-success text-[11px] font-bold">
-                  {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
-                </span>
-                <span className="text-muted-foreground text-[11px] font-medium">de</span>
-                <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-secondary/10 text-secondary text-[11px] font-bold">
-                  {vencimentos.length}
-                </span>
-              </div>
-            </div>
-          </div>
+          <ScheduledCallbacksCard
+            callbacks={callbacks}
+            showOperator={canViewAllAgendados}
+            selectedDate={scheduledDate}
+            onDateChange={setScheduledDate}
+          />
         </div>
 
-        {vencimentos.length === 0 ? (
-          <div className="p-5 text-center text-muted-foreground text-xs">
-            Nenhum vencimento para esta data
+        {/* Coluna 2: Colchão / 1ª Parcela Mês / Total Negociado Mês  +  Meta */}
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-2">
+            <StatCard
+              title="Colchão de Acordos"
+              value={formatCurrency(stats?.total_projetado ?? 0)}
+              icon="projected"
+              variant="gradient"
+              compact
+            />
+            <StatCard
+              title="Total 1ª Parcela do Mês"
+              value={formatCurrency(stats?.total_negociado ?? 0)}
+              icon="received"
+              variant="gradient"
+              compact
+            />
+            <StatCard
+              title="Total Negociado no Mês"
+              value={formatCurrency(stats?.total_negociado_mes ?? 0)}
+              icon="agreement"
+              variant="gradient"
+              compact
+            />
           </div>
-        ) : (
-          <div className="overflow-auto max-h-[420px]">
-            <Table>
-              <TableBody>
-                {vencimentos.map((v, idx) => {
-                  const credorShort = (v.credor || "").trim().split(/\s+/).slice(0, 2).join(" ");
-                  return (
-                    <TableRow key={`${v.agreement_id}-${v.numero_parcela}-${idx}`} className="hover:bg-muted/30 transition-colors">
-                      <TableCell className="text-xs font-medium">
-                        <Link
-                          to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
-                          className="text-primary hover:underline"
-                        >
-                          {v.client_name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{credorShort}</TableCell>
-                      <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
-                      <TableCell className="text-xs text-center">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                          (v as any).effective_status === "paid"
-                            ? "bg-success/10 text-success border-success/30"
-                            : (v as any).effective_status === "overdue"
-                              ? "bg-destructive/10 text-destructive border-destructive/30"
-                              : "bg-warning/10 text-warning border-warning/30"
-                        }`}>
-                          {(v as any).effective_status === "paid" ? "Pago" : (v as any).effective_status === "overdue" ? "Acordo Atrasado" : "Pendente"}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+          <DashboardMetaCard
+            year={filterYear ?? now.getFullYear()}
+            month={filterMonth ?? (now.getMonth() + 1)}
+            monthLabel={new Date(filterYear ?? now.getFullYear(), (filterMonth ?? (now.getMonth() + 1)) - 1, 1)
+              .toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+            selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}
+            received={stats?.total_recebido ?? 0}
+          />
+        </div>
+
+        {/* Coluna 3: Recebido / Quebra / Pendentes  +  Parcelas Programadas */}
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-2">
+            <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" compact />
+            <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" compact />
+            <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" compact />
           </div>
-        )}
-      </div>
+
+          {/* Parcelas Programadas */}
+          <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full">
+            <div className="px-4 pt-3 pb-2 border-b border-border">
+              <div className="flex items-center gap-2 mb-3">
+                <CalendarClock className="w-5 h-5 text-primary" />
+                <h2 className="text-base font-bold text-card-foreground">Parcelas Programadas</h2>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1 justify-self-start">
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="text-sm font-semibold text-primary min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
+                        {format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd") ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none z-50" align="center" side="bottom" sideOffset={8}>
+                      <GlassCalendar
+                        selectedDate={browseDate}
+                        onDateSelect={(date) => setBrowseDate(date)}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20">
+                    <span className="text-xs font-medium text-muted-foreground">Total</span>
+                    <span className="text-sm font-bold text-primary">{formatCurrency(totalVencimentos)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-card border border-border">
+                    <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-success/15 text-success text-[11px] font-bold">
+                      {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
+                    </span>
+                    <span className="text-muted-foreground text-[11px] font-medium">de</span>
+                    <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-secondary/10 text-secondary text-[11px] font-bold">
+                      {vencimentos.length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {vencimentos.length === 0 ? (
+              <div className="p-5 text-center text-muted-foreground text-xs">
+                Nenhum vencimento para esta data
+              </div>
+            ) : (
+              <div className="overflow-auto max-h-[420px]">
+                <Table>
+                  <TableBody>
+                    {vencimentos.map((v, idx) => {
+                      const credorShort = (v.credor || "").trim().split(/\s+/).slice(0, 2).join(" ");
+                      return (
+                        <TableRow key={`${v.agreement_id}-${v.numero_parcela}-${idx}`} className="hover:bg-muted/30 transition-colors">
+                          <TableCell className="text-xs font-medium">
+                            <Link
+                              to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
+                              className="text-primary hover:underline"
+                            >
+                              {v.client_name}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{credorShort}</TableCell>
+                          <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
+                          <TableCell className="text-xs text-center">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                              (v as any).effective_status === "paid"
+                                ? "bg-success/10 text-success border-success/30"
+                                : (v as any).effective_status === "overdue"
+                                  ? "bg-destructive/10 text-destructive border-destructive/30"
+                                  : "bg-warning/10 text-warning border-warning/30"
+                            }`}>
+                              {(v as any).effective_status === "paid" ? "Pago" : (v as any).effective_status === "overdue" ? "Acordo Atrasado" : "Pendente"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
