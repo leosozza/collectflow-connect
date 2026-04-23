@@ -325,7 +325,7 @@ const DashboardPage = () => {
                 Nenhum vencimento para esta data
               </div>
             ) : (
-              <div className="overflow-auto max-h-[420px]">
+              <div className="overflow-auto flex-1">
                 <Table>
                   <TableBody>
                     {vencimentos.map((v, idx) => {
