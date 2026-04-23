@@ -7,6 +7,7 @@ import {
   deduplicateClients,
   distributeRoundRobin,
   distributeWeighted,
+  filterClientsWithoutWhatsApp,
   fetchEligibleInstances,
   createCampaign,
   createRecipients,
@@ -223,7 +224,25 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       .replace(/\{\{credor\}\}/g, c.credor);
   };
 
-  const dedup = useMemo(() => deduplicateClients(selectedClients), [selectedClients]);
+  // Filter out CPFs known to NOT have WhatsApp (persisted from prior campaigns)
+  const [filteredClients, setFilteredClients] = useState<Client[]>(selectedClients);
+  const [excludedNoWhatsApp, setExcludedNoWhatsApp] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenant?.id || selectedClients.length === 0) {
+      setFilteredClients(selectedClients);
+      setExcludedNoWhatsApp(0);
+      return;
+    }
+    filterClientsWithoutWhatsApp(supabase, tenant.id, selectedClients).then((res) => {
+      if (cancelled) return;
+      setFilteredClients(res.clients);
+      setExcludedNoWhatsApp(res.excludedNoWhatsApp);
+    });
+    return () => { cancelled = true; };
+  }, [selectedClients, tenant?.id]);
+
+  const dedup = useMemo(() => deduplicateClients(filteredClients), [filteredClients]);
 
   // Equalize weights whenever the selected set changes (sum to 100, last absorbs remainder)
   useEffect(() => {
