@@ -59,18 +59,17 @@ const StatCard = ({ title, value, icon, trend, tooltip, variant = "default", com
   return (
     <div
       className={cn(
-        "rounded-xl border shadow-sm animate-fade-in transition-all",
-        "p-4",
+        "rounded-xl border shadow-sm animate-fade-in transition-all p-3",
         isGradient
           ? "gradient-orange border-transparent text-primary-foreground"
           : "bg-card border-border/60 hover:border-primary/30 hover:shadow-md"
       )}
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1 min-w-0">
           <span
             className={cn(
-              "font-medium truncate uppercase tracking-wide text-[11px]",
+              "font-medium truncate uppercase tracking-wide text-[10px]",
               isGradient ? "text-primary-foreground/85" : "text-muted-foreground"
             )}
           >
@@ -96,16 +95,16 @@ const StatCard = ({ title, value, icon, trend, tooltip, variant = "default", com
         </div>
         <div
           className={cn(
-            "rounded-lg flex items-center justify-center shrink-0 w-8 h-8",
+            "rounded-lg flex items-center justify-center shrink-0 w-7 h-7",
             isGradient ? "bg-white/20" : bg
           )}
         >
-          <Icon className={cn("w-4 h-4", isGradient ? "text-primary-foreground" : color)} />
+          <Icon className={cn("w-3.5 h-3.5", isGradient ? "text-primary-foreground" : color)} />
         </div>
       </div>
       <p
         className={cn(
-          "font-bold tracking-tight text-xl",
+          "font-bold tracking-tight text-lg leading-tight",
           isGradient ? "text-primary-foreground" : "text-foreground"
         )}
       >

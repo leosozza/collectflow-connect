@@ -150,7 +150,7 @@ const DashboardPage = () => {
   const totalVencimentos = vencimentos.reduce((s, v) => s + Number(v.valor_parcela), 0);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="h-full flex flex-col gap-4 animate-fade-in min-h-0">
       {/* Header with filters */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
@@ -209,10 +209,10 @@ const DashboardPage = () => {
       </div>
 
       {/* Layout em 3 colunas: cada coluna tem 3 stats compactos no topo + card funcional embaixo */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Coluna 1: Acionados / Acordos Dia / Acordos Mês  +  Agendados */}
-        <div className="flex flex-col gap-3 min-h-[520px]">
-          <div className="grid grid-cols-1 gap-3">
+        <div className="flex flex-col gap-3 min-h-0">
+          <div className="grid grid-cols-1 gap-2.5 shrink-0">
             <StatCard
               title="Acionados Hoje"
               value={String(acionadosHoje)}
@@ -222,7 +222,7 @@ const DashboardPage = () => {
             <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
             <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
           </div>
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 min-h-0 flex flex-col">
             <ScheduledCallbacksCard
               callbacks={callbacks}
               showOperator={canViewAllAgendados}
@@ -233,8 +233,8 @@ const DashboardPage = () => {
         </div>
 
         {/* Coluna 2: Colchão / 1ª Parcela Mês / Total Negociado Mês  +  Meta */}
-        <div className="flex flex-col gap-3 min-h-[520px]">
-          <div className="grid grid-cols-1 gap-3">
+        <div className="flex flex-col gap-3 min-h-0">
+          <div className="grid grid-cols-1 gap-2.5 shrink-0">
             <StatCard
               title="Colchão de Acordos"
               value={formatCurrency(stats?.total_projetado ?? 0)}
@@ -251,7 +251,7 @@ const DashboardPage = () => {
               icon="agreement"
             />
           </div>
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 min-h-0 flex flex-col">
             <DashboardMetaCard
               year={filterYear ?? now.getFullYear()}
               month={filterMonth ?? (now.getMonth() + 1)}
@@ -264,16 +264,16 @@ const DashboardPage = () => {
         </div>
 
         {/* Coluna 3: Recebido / Quebra / Pendentes  +  Parcelas Programadas */}
-        <div className="flex flex-col gap-3 min-h-[520px]">
-          <div className="grid grid-cols-1 gap-3">
+        <div className="flex flex-col gap-3 min-h-0">
+          <div className="grid grid-cols-1 gap-2.5 shrink-0">
             <StatCard title="Total Recebido" value={formatCurrency(stats?.total_recebido ?? 0)} icon="received" />
             <StatCard title="Total de Quebra" value={formatCurrency(stats?.total_quebra ?? 0)} icon="broken" />
             <StatCard title="Pendentes" value={formatCurrency(stats?.total_pendente ?? 0)} icon="receivable" />
           </div>
 
           {/* Parcelas Programadas */}
-          <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full flex-1 flex flex-col">
-            <div className="px-4 py-3 border-b border-border/60">
+          <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full flex-1 min-h-0 flex flex-col">
+            <div className="px-4 py-3 border-b border-border/60 shrink-0">
               <div className="flex items-center gap-2 mb-3">
                 <CalendarClock className="w-4 h-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground">Parcelas Programadas</h2>

@@ -30,7 +30,7 @@ export default function ScheduledCallbacksCard({ callbacks, showOperator, select
   const dateLabel = isToday ? "HOJE" : format(selectedDate, "dd/MM/yyyy");
 
   return (
-    <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full h-full flex flex-col">
+    <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full h-full min-h-0 flex flex-col">
       <div className="px-4 py-3 border-b border-border/60">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
