@@ -846,26 +846,87 @@ Deno.serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
         // 3CPlus click2call requires 'extension' (SIP extension) and 'phone' (destination number)
-        // First, fetch the agent user to get their SIP extension number
         const agentIdNum = Number(body.agent_id);
-        const usersUrl = buildUrl(baseUrl, `users`, authParam, { per_page: '500' });
-        const usersResp = await fetch(usersUrl, { headers: { 'Content-Type': 'application/json' } });
-        const usersData = await usersResp.json();
-        
-        // Find the agent by id to get their extension
         let extension: string | number | undefined;
-        if (usersData?.data?.data && Array.isArray(usersData.data.data)) {
-          const agent = usersData.data.data.find((u: any) => Number(u.id) === agentIdNum);
-          if (agent) {
-            extension = agent.extension || agent.extensions?.[0]?.extension || agent.username;
-            console.log(`Found agent: id=${agent.id}, extension=${extension}, username=${agent.username}`);
+        const triedRoutes: string[] = [];
+
+        // 0) Runtime override (vindo do frontend / DB profile.threecplus_extension)
+        const overrideExt = body.extension != null ? String(body.extension).trim() : '';
+        if (overrideExt) {
+          extension = overrideExt;
+          console.log(`click2call: using override extension=${extension} (agent ${agentIdNum})`);
+        }
+
+        // 1) Fallback /users (comportamento legado)
+        if (!extension) {
+          triedRoutes.push('/users');
+          try {
+            const usersUrl = buildUrl(baseUrl, `users`, authParam, { per_page: '500' });
+            const usersResp = await fetch(usersUrl, { headers: { 'Content-Type': 'application/json' } });
+            const usersData = await usersResp.json();
+            const list = usersData?.data?.data || usersData?.data || [];
+            if (Array.isArray(list)) {
+              const agent = list.find((u: any) => Number(u.id) === agentIdNum);
+              if (agent) {
+                extension = agent.extension || agent.extensions?.[0]?.extension || agent.username;
+                if (extension) console.log(`click2call: extension via /users = ${extension}`);
+              }
+            }
+          } catch (e) {
+            console.error(`click2call: /users lookup failed: ${(e as Error).message}`);
           }
         }
-        
+
+        // 2) Fallback /extensions (recurso separado: user_id ↔ extension SIP)
         if (!extension) {
-          console.error(`Agent ${agentIdNum} extension not found — cannot proceed with click2call`);
+          triedRoutes.push('/extensions');
+          try {
+            const extUrl = buildUrl(baseUrl, `extensions`, authParam, { per_page: '500' });
+            const extResp = await fetch(extUrl, { headers: { 'Content-Type': 'application/json' } });
+            const extData = await extResp.json();
+            const list = extData?.data?.data || extData?.data || [];
+            if (Array.isArray(list)) {
+              const match = list.find((x: any) =>
+                Number(x.user_id) === agentIdNum ||
+                Number(x.agent_id) === agentIdNum ||
+                Number(x.user?.id) === agentIdNum
+              );
+              if (match) {
+                extension = match.extension_number || match.number || match.extension || match.name;
+                if (extension) console.log(`click2call: extension via /extensions = ${extension}`);
+              }
+            }
+          } catch (e) {
+            console.error(`click2call: /extensions lookup failed: ${(e as Error).message}`);
+          }
+        }
+
+        // 3) Fallback /agents/:id (recurso individual, geralmente mais detalhado)
+        if (!extension) {
+          triedRoutes.push(`/agents/${agentIdNum}`);
+          try {
+            const agUrl = `${baseUrl}/agents/${agentIdNum}?api_token=${authParam.split('=')[1] || ''}`;
+            const agResp = await fetch(agUrl, { headers: { 'Content-Type': 'application/json' } });
+            const agData = await agResp.json();
+            const agent = agData?.data || agData;
+            if (agent && typeof agent === 'object') {
+              extension = agent.extension || agent.extensions?.[0]?.extension ||
+                          agent.extension_number || agent.username;
+              if (extension) console.log(`click2call: extension via /agents/${agentIdNum} = ${extension}`);
+            }
+          } catch (e) {
+            console.error(`click2call: /agents/:id lookup failed: ${(e as Error).message}`);
+          }
+        }
+
+        if (!extension) {
+          console.error(`click2call: extension não encontrada para agent ${agentIdNum}. Rotas tentadas: ${triedRoutes.join(', ')}`);
           return new Response(
-            JSON.stringify({ status: 422, success: false, detail: `Extension SIP não encontrada para o agente ${agentIdNum}. Configure a extension no 3CPlus.` }),
+            JSON.stringify({
+              status: 422,
+              success: false,
+              detail: `Extension SIP não encontrada para o agente ${agentIdNum}. Tentamos: ${triedRoutes.join(', ')}. Configure a extension no 3CPlus ou preencha "Extension SIP 3CPlus" no cadastro do operador.`,
+            }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }

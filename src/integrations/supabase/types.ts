@@ -4261,6 +4261,7 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
           tenant_id: string | null
           threecplus_agent_id: number | null
+          threecplus_extension: string | null
           updated_at: string
           user_id: string
         }
@@ -4279,6 +4280,7 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
           threecplus_agent_id?: number | null
+          threecplus_extension?: string | null
           updated_at?: string
           user_id: string
         }
@@ -4297,6 +4299,7 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string | null
           threecplus_agent_id?: number | null
+          threecplus_extension?: string | null
           updated_at?: string
           user_id?: string
         }

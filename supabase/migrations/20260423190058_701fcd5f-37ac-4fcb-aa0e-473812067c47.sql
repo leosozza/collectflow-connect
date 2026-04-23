@@ -1,0 +1,2 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS threecplus_extension TEXT NULL;
+COMMENT ON COLUMN public.profiles.threecplus_extension IS 'Override manual da Extension SIP do operador no 3CPlus, usada quando a API /users não devolve a extension automaticamente.';

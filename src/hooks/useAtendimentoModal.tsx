@@ -101,6 +101,7 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
       clientId: pending.clientId,
       agentStatus: status,
       assumeConnected: true,
+      extension: (profile as any)?.threecplus_extension ?? undefined,
     });
   }, [liveAgentState.status, liveAgentState.isOnline, tenant?.id, profile]);
 

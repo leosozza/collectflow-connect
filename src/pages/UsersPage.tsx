@@ -122,6 +122,7 @@ const UsersPage = () => {
   const [editGradeId, setEditGradeId] = useState<string>("none");
   const [editName, setEditName] = useState<string>("");
   const [editAgentId, setEditAgentId] = useState<number | null>(null);
+  const [editExtension, setEditExtension] = useState<string>("");
   const [agentPopoverOpen, setAgentPopoverOpen] = useState(false);
   const [editInstanceIds, setEditInstanceIds] = useState<string[]>([]);
   const [editProfileId, setEditProfileId] = useState<string>("none");
@@ -274,6 +275,7 @@ const UsersPage = () => {
       commission_grade_id,
       full_name,
       threecplus_agent_id,
+      threecplus_extension,
       instanceIds,
       permission_profile_id,
     }: {
@@ -282,13 +284,14 @@ const UsersPage = () => {
       commission_grade_id: string | null;
       full_name: string;
       threecplus_agent_id: number | null;
+      threecplus_extension: string | null;
       instanceIds: string[];
       permission_profile_id: string | null;
     }) => {
       // Update profile (including role sync)
       const { error } = await supabase
         .from("profiles")
-        .update({ commission_grade_id, full_name, threecplus_agent_id, permission_profile_id, role } as any)
+        .update({ commission_grade_id, full_name, threecplus_agent_id, threecplus_extension, permission_profile_id, role } as any)
         .eq("id", id);
       if (error) throw error;
 
@@ -349,6 +352,7 @@ const UsersPage = () => {
     setEditGradeId(user.commission_grade_id || "none");
     setEditName(user.full_name);
     setEditAgentId(user.threecplus_agent_id);
+    setEditExtension(((user as any).threecplus_extension as string | null) ?? "");
     setEditInstanceIds([]);
     setEditProfileId((user as any).permission_profile_id || "none");
   };
@@ -690,6 +694,18 @@ const UsersPage = () => {
                 />
               </div>
             )}
+            <div className="space-y-2">
+              <Label>Extension SIP 3CPlus (opcional)</Label>
+              <Input
+                value={editExtension}
+                onChange={(e) => setEditExtension(e.target.value)}
+                placeholder="Ex.: 1234"
+              />
+              <p className="text-xs text-muted-foreground">
+                Preencha apenas se o sistema não conseguir descobrir automaticamente a extension do operador
+                (ex.: erro "Extension SIP não encontrada para o agente").
+              </p>
+            </div>
             {whatsappInstances.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
@@ -724,6 +740,7 @@ const UsersPage = () => {
                     commission_grade_id: editGradeId === "none" ? null : editGradeId,
                     full_name: editName,
                     threecplus_agent_id: editAgentId,
+                    threecplus_extension: editExtension.trim() ? editExtension.trim() : null,
                     instanceIds: editInstanceIds,
                     permission_profile_id: editProfileId === "none" ? null : editProfileId,
                   });
