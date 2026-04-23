@@ -254,66 +254,106 @@ const DashboardPage = () => {
 
           {/* Parcelas Programadas */}
           <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full flex-1 min-h-0 flex flex-col">
-            <div className="px-4 py-3 border-b border-border/60 shrink-0">
-              <div className="flex items-center gap-2 mb-3">
+            {/* Banner de data destacado */}
+            <div className="px-3 pt-3 shrink-0">
+              <div className="flex items-center justify-between bg-primary/10 rounded-xl px-2 py-2">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 text-primary hover:bg-primary/20"
+                  onClick={() => navigateDate(-1)}
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="flex-1 text-base font-bold text-primary tracking-wide text-center hover:bg-primary/10 rounded-md py-1 transition-colors cursor-pointer">
+                      {format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
+                        ? "HOJE"
+                        : format(browseDate, "dd/MM/yyyy")}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-auto p-0 border-0 bg-transparent shadow-none z-50"
+                    align="center"
+                    side="bottom"
+                    sideOffset={8}
+                  >
+                    <GlassCalendar selectedDate={browseDate} onDateSelect={(date) => setBrowseDate(date)} />
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 text-primary hover:bg-primary/20"
+                  onClick={() => navigateDate(1)}
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Cabeçalho com título e badges */}
+            <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
+              <div className="flex items-center gap-2">
                 <CalendarClock className="w-4 h-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground">Parcelas Programadas</h2>
               </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1 justify-self-start">
-                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button className="text-sm font-semibold text-primary min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-                        {format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd") ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none z-50" align="center" side="bottom" sideOffset={8}>
-                      <GlassCalendar
-                        selectedDate={browseDate}
-                        onDateSelect={(date) => setBrowseDate(date)}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20">
-                    <span className="text-xs font-medium text-muted-foreground">Total</span>
-                    <span className="text-sm font-bold text-primary">{formatCurrency(totalVencimentos)}</span>
-                  </div>
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-card border border-border">
-                    <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-success/15 text-success text-[11px] font-bold">
-                      {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
-                    </span>
-                    <span className="text-muted-foreground text-[11px] font-medium">de</span>
-                    <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded bg-secondary/10 text-secondary text-[11px] font-bold">
-                      {vencimentos.length}
-                    </span>
-                  </div>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-md bg-muted text-foreground text-xs font-bold">
+                  {vencimentos.length}
+                </span>
+                <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-md bg-success text-success-foreground text-xs font-bold">
+                  {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
+                </span>
               </div>
             </div>
 
             {vencimentos.length === 0 ? (
-              <div className="p-5 text-center text-muted-foreground text-xs">
-                Nenhum vencimento para esta data
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-5 py-10 text-muted-foreground">
+                <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mb-3">
+                  <CalendarClock className="w-5 h-5 text-muted-foreground/70" />
+                </div>
+                <p className="text-xs font-medium">Nenhum vencimento</p>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">para esta data</p>
               </div>
             ) : (
               <div className="overflow-auto flex-1">
                 <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-border/60 hover:bg-transparent">
+                      <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Nome
+                      </TableHead>
+                      <TableHead className="h-9 px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Credor
+                      </TableHead>
+                      <TableHead className="h-9 px-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Valor
+                      </TableHead>
+                      <TableHead className="h-9 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Status
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {vencimentos.map((v, idx) => {
                       const credorShort = (v.credor || "").trim().split(/\s+/).slice(0, 2).join(" ");
+                      const status = (v as any).effective_status;
+                      const statusLabel =
+                        status === "paid" ? "QUITADO" : status === "overdue" ? "ATRASADO" : "ANDAMENTO";
+                      const statusClass =
+                        status === "paid"
+                          ? "bg-success text-success-foreground"
+                          : status === "overdue"
+                            ? "bg-destructive text-destructive-foreground"
+                            : "bg-muted text-muted-foreground";
                       return (
-                        <TableRow key={`${v.agreement_id}-${v.numero_parcela}-${idx}`} className="hover:bg-muted/30 transition-colors">
-                          <TableCell className="text-xs font-medium">
+                        <TableRow
+                          key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
+                          className="border-b border-border/40 hover:bg-muted/30 transition-colors"
+                        >
+                          <TableCell className="py-2.5 px-4 text-sm font-medium">
                             <Link
                               to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
                               className="text-primary hover:underline"
@@ -321,17 +361,17 @@ const DashboardPage = () => {
                               {v.client_name}
                             </Link>
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{credorShort}</TableCell>
-                          <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
-                          <TableCell className="text-xs text-center">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                              (v as any).effective_status === "paid"
-                                ? "bg-success/10 text-success border-success/30"
-                                : (v as any).effective_status === "overdue"
-                                  ? "bg-destructive/10 text-destructive border-destructive/30"
-                                  : "bg-warning/10 text-warning border-warning/30"
-                            }`}>
-                              {(v as any).effective_status === "paid" ? "Pago" : (v as any).effective_status === "overdue" ? "Acordo Atrasado" : "Pendente"}
+                          <TableCell className="py-2.5 px-2 text-sm text-muted-foreground">
+                            {credorShort}
+                          </TableCell>
+                          <TableCell className="py-2.5 px-2 text-sm text-right text-foreground tabular-nums">
+                            {formatCurrency(Number(v.valor_parcela))}
+                          </TableCell>
+                          <TableCell className="py-2.5 px-4 text-center">
+                            <span
+                              className={`inline-flex items-center justify-center min-w-[96px] rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusClass}`}
+                            >
+                              {statusLabel}
                             </span>
                           </TableCell>
                         </TableRow>
