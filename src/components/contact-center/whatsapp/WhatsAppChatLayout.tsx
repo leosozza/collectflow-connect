@@ -389,14 +389,29 @@ const WhatsAppChatLayout = () => {
         setHasMoreOlder(result.hasMore);
       })
       .catch(console.error);
-    // Spectator mode: only the responsible operator clears unread_count.
-    const currentUserId = profile?.user_id || profile?.id;
-    const isResponsibleOperator =
-      !!selectedConv.assigned_to && !!currentUserId && selectedConv.assigned_to === currentUserId;
-    if (isResponsibleOperator) {
-      markConversationRead(selectedConv.id).catch(console.error);
+    // Always clear unread_count when any authorized operator opens the conversation.
+    // Optimistically reset locally so the green badge disappears immediately.
+    if ((selectedConv.unread_count ?? 0) > 0) {
+      setSelectedConv((prev) => (prev && prev.id === selectedConv.id ? { ...prev, unread_count: 0 } : prev));
+      queryClient.setQueriesData({ queryKey: ["conversations", tenantId] }, (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            data: (page.data || []).map((c: Conversation) =>
+              c.id === selectedConv.id ? { ...c, unread_count: 0 } : c
+            ),
+          })),
+        };
+      });
     }
-  }, [selectedConv?.id, selectedConv?.assigned_to, profile?.user_id, profile?.id]);
+    markConversationRead(selectedConv.id)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["conversation-counts", tenantId] });
+      })
+      .catch(console.error);
+  }, [selectedConv?.id, tenantId, queryClient]);
 
   const handleLoadOlderMessages = useCallback(async () => {
     if (!selectedConv || loadingOlder || !hasMoreOlder) return;
