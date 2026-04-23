@@ -1,158 +1,62 @@
 
-## Plano: corrigir o fluxo de “dados faltantes” ao formalizar acordo
 
-### Objetivo
-Fazer com que, ao abrir o modal de dados faltantes (ex.: e-mail ausente), o operador possa preencher o campo e clicar em **“Salvar e Gerar Boletos”**, e o sistema:
-1. salve os dados cadastrais,
-2. crie o acordo pelo fluxo canônico,
-3. dispare a geração de boletos pelo path novo,
-4. sem obrigar o operador a sair da tela.
+## Plano: corrigir "Extension SIP não encontrada" no click2call (operador Gustavo, agent 100706)
 
-### Arquivo afetado
-- `src/components/client-detail/AgreementCalculator.tsx`
+### Diagnóstico
 
-### Correção proposta
+Quando o operador clica para ligar:
 
-#### 1) Remover a dependência incorreta de `pendingAgreement`
-Hoje o modal abre no pre-flight antes do acordo existir, então `pendingAgreement` fica `null` e o botão parece morto.
+1. Edge function `threecplus-proxy` (action `click2call`) faz `GET /users?per_page=500`.
+2. Procura, no objeto do agente, um destes campos: `extension`, `extensions[0].extension`, ou `username`.
+3. Para o **Gustavo (agent_id 100706)**, o endpoint `/users` da 3CPlus **não retornou** nenhum desses campos — então a função aborta com 422 e mostra o toast exato:
+   > "Extension SIP não encontrada para o agente 100706. Configure a extension no 3CPlus."
 
-Ajuste:
-- remover o uso de `pendingAgreement` como pré-requisito em `handleSaveMissingFields`
-- eliminar o estado `pendingAgreement` se ele não for mais necessário
-- eliminar também o helper legado `generateBoletosForAgreement`, já que ele usa o path antigo
+Isso acontece porque na 3CPlus o vínculo "usuário ↔ extension SIP" mora em um recurso separado (`/extensions`), e nem sempre vem agregado dentro do objeto de `/users`. O Gustavo provavelmente **tem uma extension** atribuída na 3CPlus, mas o `/users` não a está expondo.
 
-Resultado:
-- o modal deixa de depender de um acordo “já criado”, porque de fato ele ainda não existe nesse ponto do fluxo
+### Causa raiz
+- **Fonte única de verdade incompleta**: dependemos só de `/users` para descobrir a extension. Se a 3CPlus não embutir a extension nesse payload (o que varia por tenant/configuração), a discagem trava — mesmo com o agente perfeitamente configurado lá.
+- **Sem override**: não temos um lugar no nosso lado para o admin "dizer" qual é a extension do operador caso a API da 3CPlus não devolva.
 
-#### 2) Fazer `handleSaveMissingFields` salvar cadastro e reexecutar o fluxo oficial
-Refatorar `handleSaveMissingFields` para:
+### Correção (2 frentes)
 
-1. validar se todos os campos faltantes foram preenchidos
-2. persistir os dados em:
-   - `clients` (retrocompatibilidade)
-   - `client_profiles` via `upsertClientProfile` (fonte canônica)
-3. fechar o modal
-4. reexecutar o mesmo fluxo de formalização usado por `handleConfirmedSubmit`
+#### Frente 1 — Fallback robusto na Edge Function `threecplus-proxy` (case `click2call`)
 
-Implementação sugerida:
-- extrair a criação do acordo para uma função central, por exemplo:
-  - `submitAgreement(options?: { skipMissingCheck?: boolean; markBoletoPendente?: boolean })`
-- `handleConfirmedSubmit` passa a chamar essa função
-- `handleSaveMissingFields` salva os dados e depois chama:
-  - `submitAgreement({ skipMissingCheck: false })`
+Cadeia de resolução da extension, na ordem (para no primeiro hit):
 
-Assim, após preencher o e-mail, o sistema volta ao fluxo normal:
-- revalida os campos
-- cria o acordo
-- chama `generate-agreement-boletos`
-- fecha tudo corretamente
+1. **Override manual no nosso DB** (ver Frente 2): se `profiles.threecplus_extension` existir para o operador, usa direto.
+2. **`/users`** (já existe hoje): `agent.extension` → `agent.extensions[0].extension` → `agent.username`.
+3. **NOVO Fallback `/extensions`**: `GET /extensions?per_page=500`, procurar item onde `user_id == agent_id` (ou `agent_id == agent_id`), pegar campo `extension_number` / `number` / `extension`. Cachear por invocação como já é feito em `agentTokenCache`.
+4. **NOVO Fallback `/agents/:id`** (recurso individual, geralmente mais detalhado que a listagem): pegar o mesmo conjunto de campos.
 
-#### 3) Corrigir o botão “Pular (sem boleto)”
-Hoje o botão tenta marcar `boleto_pendente` em um `pendingAgreement` que não existe.
+Só se TODOS falharem é que a função retorna 422 com a mensagem atual — agora indicando, no log, qual rota foi tentada.
 
-Ajuste:
-- o botão “Pular (sem boleto)” também deve usar o mesmo fluxo central de criação
-- mas com override explícito, por exemplo:
-  - `submitAgreement({ skipMissingCheck: true, markBoletoPendente: true })`
+Bonus: aceitar `body.extension` vindo do frontend como override de runtime (caso o admin queira testar). Se vier preenchido, pula toda a cadeia de resolução.
 
-Comportamento esperado:
-- cria o acordo normalmente
-- marca `boleto_pendente = true`
-- não chama a Edge Function de geração de boletos
-- registra auditoria `acordo_criado_sem_boleto`
+#### Frente 2 — Override manual por operador (admin UI)
 
-#### 4) Corrigir o texto mentiroso do modal
-Trocar o texto atual:
-- “O acordo foi criado com sucesso...”
+**Migração SQL**: adicionar coluna opcional `threecplus_extension TEXT` em `profiles`.
 
-Por algo correto, por exemplo:
-- “Para formalizar o acordo e gerar o(s) boleto(s), preencha o(s) campo(s) abaixo.”
+**UI Admin → Usuários → editar operador**: campo opcional **"Extension SIP 3CPlus"** com helper text:
+> "Preencha apenas se o sistema não conseguir descobrir automaticamente a extension do operador (ex.: erro 'Extension SIP não encontrada')."
 
-Isso alinha a UX com o estado real do sistema.
+**Frontend `callService.ts`**: ao chamar `click2call`, se o profile do operador logado tiver `threecplus_extension`, enviar no body como `extension: "xxx"`.
 
-#### 5) Corrigir o fechamento do modal
-Hoje `onOpenChange` chama `onAgreementCreated()` ao fechar o modal, mesmo sem acordo criado.
+### Arquivos afetados
 
-Ajuste:
-- ao fechar o dialog por ESC/clique fora, apenas limpar:
-  - `missingFieldsOpen`
-  - `missingFields`
-  - estados auxiliares de loading
-- não chamar `onAgreementCreated()`
-- não limpar/acusar acordo criado sem que ele exista
-
-#### 6) Popular corretamente `foundFields`
-O estado `foundFields` existe, mas não está sendo abastecido no fluxo exibido.
-
-Ajuste:
-- quando `checkRequiredFields()` retornar `consolidated` e `missing`, ao abrir o modal salvar:
-  - `setFoundFields(post.consolidated)`
-
-Resultado:
-- a seção “Dados encontrados” passa a refletir os dados já existentes de verdade
-
-### Desenho técnico sugerido
-
-```text
-Confirmar formalização
-  -> handleConfirmedSubmit()
-    -> submitAgreement({ skipMissingCheck: false, markBoletoPendente: false })
-
-submitAgreement(...)
-  -> se não for skipMissingCheck:
-       checkRequiredFields()
-       tentar enrichClientAddress()
-       checkRequiredFields() novamente
-       se ainda faltar:
-         setFoundFields(post.consolidated)
-         setMissingFields(post.missing)
-         abrir modal
-         return
-  -> createAgreement(...)
-  -> se markBoletoPendente:
-       update agreements set boleto_pendente = true
-       audit log
-       não invocar boletos
-     senão:
-       invoke("generate-agreement-boletos")
-  -> onAgreementCreated()
-```
-
-### Regras preservadas
-- `client_profiles` continua como fonte canônica
-- atualização em `clients` continua por retrocompatibilidade
-- criação do acordo continua usando `createAgreement`
-- geração de boletos continua usando a Edge Function `generate-agreement-boletos`
-- fluxo fora do padrão (`pending_approval`) permanece intacto
+1. `supabase/functions/threecplus-proxy/index.ts` — adicionar fallbacks `/extensions` e `/agents/:id` no case `click2call`; aceitar `body.extension` como override.
+2. **Migração SQL** — `ALTER TABLE profiles ADD COLUMN threecplus_extension TEXT NULL;`
+3. `src/services/callService.ts` — incluir `extension` do profile no payload se presente.
+4. `src/components/admin/users/...` (form de edição de operador) — campo input opcional para extension.
 
 ### Validação esperada
 
-1. Cliente sem e-mail:
-   - clicar em formalizar
-   - modal abre
-   - preencher e-mail
-   - clicar em “Salvar e Gerar Boletos”
-   - acordo é criado e boletos são disparados
+1. **Operador Gustavo (cenário atual)**: clicar no ícone verde → fallback `/extensions` encontra a SIP do 100706 → discagem completa sem erro.
+2. **Operador sem extension em lugar nenhum**: mesmo erro 422 atual, mas log da edge mostra "tentado /users + /extensions + /agents/100706 — nenhum trouxe extension".
+3. **Admin preenche manualmente "Extension SIP" = 1234**: discagem usa "1234" direto, sem nem chamar `/users`.
+4. **Operador antigo que já funciona** (extension veio em `/users`): nenhuma regressão, primeira camada da cadeia resolve igual hoje.
 
-2. Após salvar e-mail:
-   - nova tentativa no mesmo cliente não abre mais o modal se os dados estiverem completos
+### Esforço
+- 1 edge function (~40 linhas), 1 migração trivial, 1 ajuste no `callService`, 1 campo no form admin.
+- Sem mudança em `AgreementCalculator`, `ClientHeader`, ou outras telas.
+- Risco baixo, valor alto: destrava operação de telefonia de operadores cuja extension não vem no `/users`.
 
-3. Clicar em “Pular (sem boleto)”:
-   - cria acordo
-   - marca `boleto_pendente = true`
-   - não chama geração automática de boletos
-
-4. Fechar modal por ESC/clique fora:
-   - nada é salvo
-   - nenhum acordo é criado
-   - nenhuma atualização falsa ocorre
-
-5. Se algum campo continuar vazio:
-   - toast claro informando quais campos faltam
-   - fluxo não segue silenciosamente
-
-### Impacto
-- 1 arquivo
-- sem migração de banco
-- sem mudança em edge functions
-- correção localizada, com baixo risco de regressão e alto impacto operacional
