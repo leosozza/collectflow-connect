@@ -66,6 +66,8 @@ interface DialOptions {
   assumeConnected?: boolean;
   /** Callback opcional para navegar para a tela de telefonia (caso desconectado). */
   onNeedsConnection?: () => void;
+  /** Override manual da extension SIP do operador (profiles.threecplus_extension). */
+  extension?: string | null;
 }
 
 interface DialResult {
@@ -87,7 +89,7 @@ const isConnectedStatus = (status: number | string | undefined): boolean => {
 };
 
 export async function dialClientPhone(opts: DialOptions): Promise<DialResult> {
-  const { tenantId, agentId, phone, clientId, agentStatus, assumeConnected, onNeedsConnection } = opts;
+  const { tenantId, agentId, phone, clientId, agentStatus, assumeConnected, onNeedsConnection, extension } = opts;
 
   const cleanPhone = (phone || "").replace(/\D/g, "");
   if (!cleanPhone) {
@@ -155,6 +157,7 @@ export async function dialClientPhone(opts: DialOptions): Promise<DialResult> {
         agent_id: agentId,
         phone_number: cleanPhone,
         client_id: clientId ?? undefined,
+        extension: extension && String(extension).trim() ? String(extension).trim() : undefined,
       },
     });
 

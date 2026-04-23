@@ -33,6 +33,7 @@ const CallButton = ({ phone, clientId, size = "icon", className }: CallButtonPro
 
   const cleanPhone = (phone || "").replace(/\D/g, "");
   const agentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
+  const extension = (profile as any)?.threecplus_extension as string | null | undefined;
   const status = liveAgentState?.status;
 
   const inCall = status === 2 || status === 3;
@@ -56,6 +57,7 @@ const CallButton = ({ phone, clientId, size = "icon", className }: CallButtonPro
         phone: cleanPhone,
         clientId,
         agentStatus: status,
+        extension,
         onNeedsConnection: () => navigate("/contact-center/telefonia"),
       });
     } finally {
