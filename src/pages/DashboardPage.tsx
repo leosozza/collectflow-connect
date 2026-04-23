@@ -240,50 +240,49 @@ const DashboardPage = () => {
 
 
 
-      {/* Vencimentos strip */}
-      <div className="bg-card rounded-xl border border-border px-4 py-3 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold text-card-foreground">Vencimentos</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button className="text-sm font-semibold text-primary min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-                {format(browseDate, "dd/MM/yyyy")}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none z-50" align="center" side="bottom" sideOffset={8}>
-              <GlassCalendar
-                selectedDate={browseDate}
-                onDateSelect={(date) => setBrowseDate(date)}
-              />
-            </PopoverContent>
-          </Popover>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-        </div>
-        <span className="text-base font-semibold text-success">
-          {vencimentos.length} registros • {formatCurrency(totalVencimentos)}
-        </span>
-      </div>
+      {/* Parcelas do Dia (com navegador de data integrado) */}
+      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-card-foreground">Parcelas do Dia</h2>
+          </div>
 
-      {/* Meus Clientes table — virtual installments from agreements */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-card-foreground">Parcelas do Dia</h2>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-success/15 text-success border border-success/30 text-xs font-semibold">
-              {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
+          <div className="flex items-center gap-1">
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(-1)}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="text-sm font-semibold text-primary min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
+                  {format(browseDate, "dd/MM/yyyy")}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none z-50" align="center" side="bottom" sideOffset={8}>
+                <GlassCalendar
+                  selectedDate={browseDate}
+                  onDateSelect={(date) => setBrowseDate(date)}
+                />
+              </PopoverContent>
+            </Popover>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => navigateDate(1)}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-success">
+              {vencimentos.length} registros • {formatCurrency(totalVencimentos)}
             </span>
-            <span className="text-muted-foreground text-xs">/</span>
-            <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-muted text-foreground border border-border text-xs font-semibold">
-              {vencimentos.length}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-success/15 text-success border border-success/30 text-xs font-semibold">
+                {vencimentos.filter((v) => (v as any).effective_status === "paid").length}
+              </span>
+              <span className="text-muted-foreground text-xs">/</span>
+              <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-muted text-foreground border border-border text-xs font-semibold">
+                {vencimentos.length}
+              </span>
+            </div>
           </div>
         </div>
 
