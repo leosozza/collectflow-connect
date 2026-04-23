@@ -481,6 +481,7 @@ const ChatPanel = ({
                       message={msg}
                       onReply={(m) => setReplyTo(m)}
                       allMessages={messages}
+                      isOfficialApi={isOfficialApi}
                     />
                   ))}
                   <div ref={bottomRef} />

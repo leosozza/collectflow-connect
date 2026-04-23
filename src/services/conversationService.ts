@@ -31,12 +31,17 @@ export interface ChatMessage {
   content: string | null;
   media_url: string | null;
   media_mime_type: string | null;
-  status: "pending" | "sent" | "delivered" | "read" | "failed";
+  status: "pending" | "sent" | "delivered" | "read" | "failed" | "sending";
   external_id: string | null;
   is_internal: boolean;
   reply_to_message_id: string | null;
   metadata?: Record<string, any> | null;
   created_at: string;
+  // Edit / delete-for-recipient state
+  deleted_for_recipient_at?: string | null;
+  deleted_by?: string | null;
+  edited_at?: string | null;
+  original_content?: string | null;
 }
 
 export interface QuickReply {
@@ -404,6 +409,22 @@ export async function deleteConversation(id: string) {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+export async function deleteChatMessageForRecipient(messageId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("manage-chat-message", {
+    body: { messageId, action: "delete" },
+  });
+  if (error) throw new Error(error.message || "Erro ao excluir mensagem");
+  if (data?.error) throw new Error(data.error);
+}
+
+export async function editChatMessage(messageId: string, newText: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("manage-chat-message", {
+    body: { messageId, action: "edit", newText },
+  });
+  if (error) throw new Error(error.message || "Erro ao editar mensagem");
+  if (data?.error) throw new Error(data.error);
 }
 
 export async function linkClientToConversation(conversationId: string, clientId: string | null) {

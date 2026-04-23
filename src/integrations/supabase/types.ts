@@ -1058,7 +1058,10 @@ export type Database = {
           content: string | null
           conversation_id: string
           created_at: string
+          deleted_by: string | null
+          deleted_for_recipient_at: string | null
           direction: string
+          edited_at: string | null
           endpoint_id: string | null
           external_id: string | null
           id: string
@@ -1067,6 +1070,7 @@ export type Database = {
           media_url: string | null
           message_type: string
           metadata: Json | null
+          original_content: string | null
           provider: string | null
           provider_message_id: string | null
           reply_to_message_id: string | null
@@ -1078,7 +1082,10 @@ export type Database = {
           content?: string | null
           conversation_id: string
           created_at?: string
+          deleted_by?: string | null
+          deleted_for_recipient_at?: string | null
           direction: string
+          edited_at?: string | null
           endpoint_id?: string | null
           external_id?: string | null
           id?: string
@@ -1087,6 +1094,7 @@ export type Database = {
           media_url?: string | null
           message_type?: string
           metadata?: Json | null
+          original_content?: string | null
           provider?: string | null
           provider_message_id?: string | null
           reply_to_message_id?: string | null
@@ -1098,7 +1106,10 @@ export type Database = {
           content?: string | null
           conversation_id?: string
           created_at?: string
+          deleted_by?: string | null
+          deleted_for_recipient_at?: string | null
           direction?: string
+          edited_at?: string | null
           endpoint_id?: string | null
           external_id?: string | null
           id?: string
@@ -1107,6 +1118,7 @@ export type Database = {
           media_url?: string | null
           message_type?: string
           metadata?: Json | null
+          original_content?: string | null
           provider?: string | null
           provider_message_id?: string | null
           reply_to_message_id?: string | null
