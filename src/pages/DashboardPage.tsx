@@ -199,7 +199,7 @@ const DashboardPage = () => {
               options={operators}
               selected={selectedOperators}
               onChange={setSelectedOperators}
-              allLabel="Operador"
+              allLabel="Todos"
               className="w-[160px]"
               searchable
               searchPlaceholder="Buscar operador..."
