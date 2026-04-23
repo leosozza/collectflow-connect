@@ -756,6 +756,7 @@ const WhatsAppChatLayout = () => {
             onSelect={handleSelectConv}
             onStatusChange={handleStatusChangeFromList}
             onDelete={handleDeleteConversation}
+            onMarkUnread={handleMarkUnread}
             instances={instances.map((i) => ({ id: i.id, name: i.name, provider_category: i.provider_category }))}
             operators={operators}
             isAdmin={canManageContactCenterAdmin}
