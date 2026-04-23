@@ -293,44 +293,35 @@ const DashboardPage = () => {
         ) : (
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="text-xs">Nome</TableHead>
-                  <TableHead className="text-xs">CPF</TableHead>
-                  <TableHead className="text-xs">Credor</TableHead>
-                  <TableHead className="text-xs text-center">Parcela</TableHead>
-                  <TableHead className="text-xs text-right">Valor da Parcela</TableHead>
-                  <TableHead className="text-xs text-center">Status</TableHead>
-                </TableRow>
-              </TableHeader>
               <TableBody>
-                {vencimentos.map((v, idx) => (
-                  <TableRow key={`${v.agreement_id}-${v.numero_parcela}-${idx}`} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="text-xs font-medium">
-                      <Link
-                        to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
-                        className="text-primary hover:underline"
-                      >
-                        {v.client_name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{v.client_cpf}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{v.credor}</TableCell>
-                    <TableCell className="text-xs text-center">{v.numero_parcela}</TableCell>
-                    <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
-                    <TableCell className="text-xs text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                        (v as any).effective_status === "paid" 
-                          ? "bg-success/10 text-success border-success/30" 
-                          : (v as any).effective_status === "overdue"
-                            ? "bg-destructive/10 text-destructive border-destructive/30"
-                            : "bg-warning/10 text-warning border-warning/30"
-                      }`}>
-                        {(v as any).effective_status === "paid" ? "Pago" : (v as any).effective_status === "overdue" ? "Acordo Atrasado" : "Pendente"}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {vencimentos.map((v, idx) => {
+                  const credorShort = (v.credor || "").trim().split(/\s+/).slice(0, 2).join(" ");
+                  return (
+                    <TableRow key={`${v.agreement_id}-${v.numero_parcela}-${idx}`} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="text-xs font-medium">
+                        <Link
+                          to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
+                          className="text-primary hover:underline"
+                        >
+                          {v.client_name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{credorShort}</TableCell>
+                      <TableCell className="text-xs text-right">{formatCurrency(Number(v.valor_parcela))}</TableCell>
+                      <TableCell className="text-xs text-center">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          (v as any).effective_status === "paid"
+                            ? "bg-success/10 text-success border-success/30"
+                            : (v as any).effective_status === "overdue"
+                              ? "bg-destructive/10 text-destructive border-destructive/30"
+                              : "bg-warning/10 text-warning border-warning/30"
+                        }`}>
+                          {(v as any).effective_status === "paid" ? "Pago" : (v as any).effective_status === "overdue" ? "Acordo Atrasado" : "Pendente"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
