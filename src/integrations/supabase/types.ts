@@ -1433,6 +1433,7 @@ export type Database = {
           nome_completo: string
           numero: string | null
           phone: string | null
+          phone_has_whatsapp: boolean
           phone2: string | null
           phone3: string | null
           source: string | null
@@ -1454,6 +1455,7 @@ export type Database = {
           nome_completo?: string
           numero?: string | null
           phone?: string | null
+          phone_has_whatsapp?: boolean
           phone2?: string | null
           phone3?: string | null
           source?: string | null
@@ -1475,6 +1477,7 @@ export type Database = {
           nome_completo?: string
           numero?: string | null
           phone?: string | null
+          phone_has_whatsapp?: boolean
           phone2?: string | null
           phone3?: string | null
           source?: string | null
