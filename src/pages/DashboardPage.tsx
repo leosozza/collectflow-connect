@@ -67,7 +67,8 @@ const DashboardPage = () => {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
   const [browseDate, setBrowseDate] = useState(new Date());
-  const { callbacks, canViewAll: canViewAllAgendados } = useScheduledCallbacks();
+  const [scheduledDate, setScheduledDate] = useState(new Date());
+  const { callbacks, canViewAll: canViewAllAgendados } = useScheduledCallbacks(scheduledDate);
 
   const canViewAll = permissions.canViewAllDashboard;
 
@@ -228,7 +229,12 @@ const DashboardPage = () => {
 
       {/* Agendamentos + Parcelas Programadas + Metas lado a lado */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ScheduledCallbacksCard callbacks={callbacks} showOperator={canViewAllAgendados} />
+        <ScheduledCallbacksCard
+          callbacks={callbacks}
+          showOperator={canViewAllAgendados}
+          selectedDate={scheduledDate}
+          onDateChange={setScheduledDate}
+        />
         <DashboardMetaCard
           year={filterYear ?? now.getFullYear()}
           month={filterMonth ?? (now.getMonth() + 1)}
@@ -254,7 +260,7 @@ const DashboardPage = () => {
               <Popover>
                 <PopoverTrigger asChild>
                   <button className="text-sm font-semibold text-primary min-w-[110px] text-center px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer">
-                    {format(browseDate, "dd/MM/yyyy")}
+                    {format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd") ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0 border-0 bg-transparent shadow-none z-50" align="center" side="bottom" sideOffset={8}>
