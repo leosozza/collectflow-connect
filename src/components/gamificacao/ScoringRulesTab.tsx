@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Info, RotateCcw, RefreshCw, Save } from "lucide-react";
 
 type Draft = Record<string, { label: string; points: string; unit_size: string; enabled: boolean }>;
@@ -73,7 +74,15 @@ const ScoringRulesTab = () => {
     try {
       await updateScoringRule(r.id, { label: d.label.trim(), points, unit_size, enabled: d.enabled });
       await qc.invalidateQueries({ queryKey: ["scoring-rules"] });
-      toast({ title: "Regra salva" });
+      toast({
+        title: "Regra salva",
+        description: "As alterações valem para cálculos futuros. Aplicar agora ao mês atual?",
+        action: (
+          <ToastAction altText="Aplicar agora" onClick={() => handleRecalc()}>
+            Aplicar agora
+          </ToastAction>
+        ),
+      });
     } catch (e: any) {
       toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
     } finally {
