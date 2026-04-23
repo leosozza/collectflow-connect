@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { format, isSameDay } from "date-fns";
-import { Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, ChevronLeft, ChevronRight, CalendarX2 } from "lucide-react";
 import { ScheduledCallback } from "@/hooks/useScheduledCallbacks";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -30,14 +30,14 @@ export default function ScheduledCallbacksCard({ callbacks, showOperator, select
   const dateLabel = isToday ? "HOJE" : format(selectedDate, "dd/MM/yyyy");
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full">
-      <div className="px-4 pt-3 pb-2 border-b border-border">
+    <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full h-full flex flex-col">
+      <div className="px-4 py-3 border-b border-border/60">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
-            <h2 className="text-base font-bold text-card-foreground">Agendados</h2>
+            <Clock className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Agendados</h2>
           </div>
-          <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-md bg-primary text-primary-foreground text-xs font-bold">
+          <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-2 rounded-md bg-primary text-primary-foreground text-[11px] font-bold">
             {callbacks.length}
           </span>
         </div>
@@ -66,11 +66,15 @@ export default function ScheduledCallbacksCard({ callbacks, showOperator, select
       </div>
 
       {callbacks.length === 0 ? (
-        <div className="p-5 text-center text-muted-foreground text-xs">
-          Nenhum agendamento para esta data
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-5 py-10 text-muted-foreground">
+          <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mb-3">
+            <CalendarX2 className="w-5 h-5 text-muted-foreground/70" />
+          </div>
+          <p className="text-xs font-medium">Nenhum agendamento</p>
+          <p className="text-[11px] text-muted-foreground/80 mt-0.5">para esta data</p>
         </div>
       ) : (
-        <div className="overflow-auto max-h-[420px]">
+        <div className="overflow-auto flex-1">
           <Table>
             <TableBody>
               {callbacks.map((cb) => {

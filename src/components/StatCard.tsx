@@ -24,14 +24,16 @@ const iconMap = {
   phone: Phone,
 };
 
+// Cor semântica apenas para sinalizadores rápidos (verde/vermelho).
+// Os demais usam o acento laranja padrão da marca.
 const colorMap = {
   projected: "text-primary",
   received: "text-success",
   broken: "text-destructive",
-  commission: "text-warning",
+  commission: "text-primary",
   receivable: "text-primary",
-  percent: "text-muted-foreground",
-  agreement: "text-accent-foreground",
+  percent: "text-primary",
+  agreement: "text-primary",
   target: "text-primary",
   phone: "text-primary",
 };
@@ -40,10 +42,10 @@ const bgMap = {
   projected: "bg-primary/10",
   received: "bg-success/10",
   broken: "bg-destructive/10",
-  commission: "bg-warning/10",
+  commission: "bg-primary/10",
   receivable: "bg-primary/10",
-  percent: "bg-muted",
-  agreement: "bg-accent",
+  percent: "bg-primary/10",
+  agreement: "bg-primary/10",
   target: "bg-primary/10",
   phone: "bg-primary/10",
 };
@@ -57,19 +59,18 @@ const StatCard = ({ title, value, icon, trend, tooltip, variant = "default", com
   return (
     <div
       className={cn(
-        "rounded-xl border shadow-sm animate-fade-in",
-        compact ? "p-3" : "p-4",
+        "rounded-xl border shadow-sm animate-fade-in transition-all",
+        "p-4",
         isGradient
           ? "gradient-orange border-transparent text-primary-foreground"
-          : "bg-card border-border"
+          : "bg-card border-border/60 hover:border-primary/30 hover:shadow-md"
       )}
     >
-      <div className={cn("flex items-center justify-between", compact ? "mb-1.5" : "mb-2")}>
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1 min-w-0">
           <span
             className={cn(
-              "font-medium truncate",
-              compact ? "text-[11px]" : "text-xs",
+              "font-medium truncate uppercase tracking-wide text-[11px]",
               isGradient ? "text-primary-foreground/85" : "text-muted-foreground"
             )}
           >
@@ -95,25 +96,23 @@ const StatCard = ({ title, value, icon, trend, tooltip, variant = "default", com
         </div>
         <div
           className={cn(
-            "rounded-lg flex items-center justify-center shrink-0",
-            compact ? "w-7 h-7" : "w-8 h-8",
+            "rounded-lg flex items-center justify-center shrink-0 w-8 h-8",
             isGradient ? "bg-white/20" : bg
           )}
         >
-          <Icon className={cn(compact ? "w-4 h-4" : "w-4 h-4", isGradient ? "text-primary-foreground" : color)} />
+          <Icon className={cn("w-4 h-4", isGradient ? "text-primary-foreground" : color)} />
         </div>
       </div>
       <p
         className={cn(
-          "font-bold tracking-tight",
-          compact ? "text-lg" : "text-xl",
-          isGradient ? "text-primary-foreground" : "text-card-foreground"
+          "font-bold tracking-tight text-xl",
+          isGradient ? "text-primary-foreground" : "text-foreground"
         )}
       >
         {value}
       </p>
       {trend && (
-        <p className={cn("mt-0.5", compact ? "text-[10px]" : "text-xs", isGradient ? "text-primary-foreground/80" : "text-muted-foreground")}>
+        <p className={cn("mt-0.5 text-[10px]", isGradient ? "text-primary-foreground/80" : "text-muted-foreground")}>
           {trend}
         </p>
       )}
