@@ -287,6 +287,30 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "cancelar-cobranca": {
+        const idParcela = (params as any).id_parcela ?? (params.data as any)?.id_parcela;
+        if (!idParcela) {
+          return new Response(JSON.stringify({ error: "id_parcela é obrigatório" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const idStr = String(idParcela);
+        console.log(`[negociarie-proxy] cancelar-cobranca id_parcela=${idStr}`);
+        try {
+          result = await negociarieRequest("DELETE", `/cobranca/${encodeURIComponent(idStr)}`);
+        } catch (e) {
+          // 404 means already cancelled / not found — treat as success for idempotency
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes("404")) {
+            result = { cancelled: false, reason: "not_found", id_parcela: idStr };
+          } else {
+            throw e;
+          }
+        }
+        break;
+      }
+
       case "inadimplencia-nova": {
         result = await negociarieRequest("POST", "/inadimplencia/nova", params.data);
         break;

@@ -413,7 +413,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
   try {
     const { data: agreement } = await supabase
       .from("agreements")
-      .select("client_cpf, credor")
+      .select("client_cpf, credor, tenant_id")
       .eq("id", id)
       .single();
 
@@ -424,13 +424,37 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     if (error) throw error;
 
-    // Cancelar boletos pendentes na negociarie_cobrancas
+    // Cancelar boletos pendentes na negociarie_cobrancas + invalidar no provider
     try {
+      const { data: pendingCobrancas } = await supabase
+        .from("negociarie_cobrancas")
+        .select("id, id_parcela")
+        .eq("agreement_id", id)
+        .in("status", ["pendente", "em_aberto"]);
+
+      // Update local status first (UI consistency)
       await supabase
         .from("negociarie_cobrancas")
         .update({ status: "cancelado" } as any)
         .eq("agreement_id", id)
         .in("status", ["pendente", "em_aberto"]);
+
+      // Fire cancellation calls to Negociarie in parallel (best-effort)
+      const toCancel = (pendingCobrancas || []).filter((c: any) => c.id_parcela);
+      if (toCancel.length > 0) {
+        Promise.allSettled(
+          toCancel.map((c: any) =>
+            supabase.functions.invoke("negociarie-proxy", {
+              body: { action: "cancelar-cobranca", id_parcela: String(c.id_parcela) },
+            })
+          )
+        ).then((results) => {
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (failed > 0) {
+            logger.warn(MODULE, "cancel_negociarie_partial", { failed, total: toCancel.length });
+          }
+        });
+      }
     } catch (e) {
       logger.error(MODULE, "cancel_boletos", e);
     }
@@ -499,6 +523,21 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     logger.info(MODULE, "cancel", { id });
     logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+
+    // Audit event in client_events timeline
+    if (agreement?.tenant_id && agreement?.client_cpf) {
+      try {
+        await supabase.from("client_events").insert({
+          tenant_id: agreement.tenant_id,
+          client_cpf: agreement.client_cpf,
+          event_source: "operator",
+          event_type: "agreement_broken",
+          metadata: { agreement_id: id, credor: agreement.credor },
+        } as any);
+      } catch (e) {
+        logger.error(MODULE, "cancel_event_log", e);
+      }
+    }
 
     // Recalc score after cancellation
     if (agreement?.client_cpf) {
@@ -745,6 +784,33 @@ export const reopenAgreement = async (
 
     logger.info(MODULE, "reopen", { id });
     logAction({ action: "reopen", entity_type: "agreement", entity_id: id, details: { cpf: agreement.client_cpf } });
+
+    // Audit event in client_events timeline
+    try {
+      await supabase.from("client_events").insert({
+        tenant_id: agreement.tenant_id,
+        client_cpf: agreement.client_cpf,
+        event_source: "operator",
+        event_type: "agreement_reopened",
+        metadata: { agreement_id: id, credor: agreement.credor, reopened_by: userId },
+      } as any);
+    } catch (e) {
+      logger.error(MODULE, "reopen_event_log", e);
+    }
+
+    // Fire-and-forget: regenerate boletos for future installments
+    supabase.functions
+      .invoke("generate-agreement-boletos", { body: { agreement_id: id } })
+      .then(({ data, error }) => {
+        if (error) {
+          logger.error(MODULE, "reopen_regenerate_boletos", error);
+        } else {
+          logger.info(MODULE, "reopen_regenerate_boletos", {
+            id, success: data?.success, failed: data?.failed, skipped: data?.skipped,
+          });
+        }
+      })
+      .catch((e) => logger.error(MODULE, "reopen_regenerate_boletos", e));
 
     recalcScoreForCpf(agreement.client_cpf).catch(() => {});
   } catch (error) {
