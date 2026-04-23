@@ -33,10 +33,12 @@ const GoalsTab = () => {
           await recalculateMySnapshot(year, month);
         }
         if (!cancelled) {
-          qc.invalidateQueries({ queryKey: ["my-points-goal"] });
-          qc.invalidateQueries({ queryKey: ["operator-points-all"] });
-          qc.invalidateQueries({ queryKey: ["my-points"] });
-          qc.invalidateQueries({ queryKey: ["ranking"] });
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: ["my-points-goal"] }),
+            qc.invalidateQueries({ queryKey: ["operator-points-all"] }),
+            qc.invalidateQueries({ queryKey: ["my-points"] }),
+            qc.invalidateQueries({ queryKey: ["ranking"] }),
+          ]);
         }
       } catch (e) {
         console.error("recalculate snapshot error:", e);
