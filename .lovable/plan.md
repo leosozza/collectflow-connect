@@ -1,77 +1,89 @@
 
 
-## Corrigir valores de Recebido e Progresso em Metas
+## Pontuação configurável por tenant (admin)
 
-### Diagnóstico
-
-A aba **Metas** mostra valores muito menores que o dashboard porque a RPC `recalculate_operator_gamification_snapshot` usa **fonte de verdade errada**:
-
-| Fonte | Valor mês atual | Onde é usado |
-|---|---|---|
-| `clients.valor_pago` (com `data_quitacao` no mês) | R$ 6.617 | Gamificação (atual — errado) |
-| `client_events.metadata.valor_pago` em `payment_confirmed` / `manual_payment_confirmed` | R$ 84.982 | Dashboard "Total Recebido" (correto) |
-
-Além disso, a atribuição ao operador está em `clients.operator_id` (carteira), mas o pagamento real costuma vir de um acordo cujo dono é `agreements.created_by` (quem negociou). Operadores que negociam carteira de outro nunca são creditados.
-
-### Solução
-
-Padronizar a gamificação para usar a **mesma fonte de verdade do dashboard** (`client_events` + `agreements.created_by`), eliminando a divergência.
-
-### Mudanças
-
-**1. Nova migration SQL — substituir `recalculate_operator_gamification_snapshot`**
-
-Recalcular `total_received` e `payments_count` a partir de `client_events`, atribuindo ao operador via `agreements.created_by`:
-
-```sql
-SELECT
-  COUNT(*),
-  COALESCE(SUM(COALESCE(
-    (ce.metadata->>'valor_pago')::numeric,
-    (ce.metadata->>'amount_paid')::numeric,
-    0
-  )), 0)
-INTO _payments_count, _total_received
-FROM public.client_events ce
-JOIN public.agreements a
-  ON a.id = (ce.metadata->>'agreement_id')::uuid
-WHERE ce.tenant_id = _tenant_id
-  AND ce.event_type IN ('payment_confirmed', 'manual_payment_confirmed')
-  AND ce.created_at >= _month_start
-  AND ce.created_at < _next_month
-  AND a.created_by = _operator_user_id;
+Hoje a fórmula de pontos está fixa no SQL (`recalculate_operator_gamification_snapshot`):
 ```
++10 por pagamento, +5 a cada R$100, -3 por quebra, +50 por conquista, +100 meta
+```
+O admin não consegue alterar. A proposta é permitir que cada tenant configure suas próprias regras via UI.
 
-- Mantém `agreements_count` e `breaks_count` como já estão (já usam `created_by`).
-- Mantém `goal` lendo de `operator_goals`.
-- Mantém fórmula de pontos.
-- Resultado: o "Realizado" da gamificação passa a bater exatamente com o card "Total Recebido" do dashboard quando filtrado pelo mesmo operador.
+### 1) Banco — nova tabela `gamification_scoring_rules`
 
-**2. Garantir recálculo ao abrir a aba Metas**
-
-`src/components/gamificacao/GoalsTab.tsx` já chama `recalculateMySnapshot` / `recalculateTenantSnapshot` no `useEffect`. Apenas validar que o `invalidateQueries` está acionando o refetch após o recálculo (adicionar `await` antes do invalidate, se necessário) para evitar exibir valores cacheados antes da RPC concluir.
-
-**3. Card de Metas no Dashboard (`DashboardMetaCard.tsx`)**
-
-Já usa `stats.total_recebido` direto da RPC do dashboard — **não precisa mudar nada**. Continuará correto e agora ficará coerente com a aba Metas da Gamificação.
-
-### Resultado esperado
-
-| Tela | Antes | Depois |
+| coluna | tipo | descrição |
 |---|---|---|
-| Dashboard → Metas (gauge) | R$ 84.982 (correto) | R$ 84.982 (mantido) |
-| Gamificação → Metas (operador) | R$ 6.617 (errado) | bate com o que o operador realmente recebeu |
-| Gamificação → Metas (admin, total) | subestimado | soma real do mês por tenant |
-| Progresso (%) | distorcido | recalculado corretamente sobre o `target_amount` |
+| `id` | uuid PK | |
+| `tenant_id` | uuid | isolamento multi-tenant |
+| `metric` | text | uma das métricas suportadas (lista fixa abaixo) |
+| `points` | numeric | pontos por unidade da métrica (pode ser negativo) |
+| `unit_size` | numeric | tamanho da unidade (ex.: 100 → "a cada R$100"). Default 1 |
+| `enabled` | boolean | liga/desliga a regra |
+| `label` | text | rótulo customizável exibido na UI |
+| `created_at`, `updated_at` | timestamps | |
 
-### Arquivos alterados
+**Métricas suportadas (enum lógico, validado por trigger):**
+- `payment_count` — pagamento confirmado
+- `total_received` — valor recebido (usa `unit_size`)
+- `agreement_created` — acordo formalizado
+- `agreement_paid` — acordo totalmente quitado (todas parcelas pagas)
+- `agreement_break` — quebra de acordo
+- `achievement_unlocked` — conquista desbloqueada
+- `goal_reached` — meta do mês atingida (bônus único)
 
-- nova migration SQL substituindo `recalculate_operator_gamification_snapshot`
-- `src/components/gamificacao/GoalsTab.tsx` (apenas garantir await/refetch após recálculo)
+**RLS:** SELECT para qualquer membro do tenant; INSERT/UPDATE/DELETE apenas admins (`is_tenant_admin`).
+
+**Seed:** ao criar o primeiro acesso ao módulo (ou via migration), inserir as 7 regras default com os mesmos valores atuais para não quebrar nada.
+
+### 2) Backend — refatorar `recalculate_operator_gamification_snapshot`
+
+A RPC continua igual em assinatura, mas agora:
+1. Calcula as métricas brutas (já faz hoje) + duas novas:
+   - `agreements_paid_count` — acordos do operador 100% quitados no mês
+2. Lê `gamification_scoring_rules` do tenant.
+3. Para cada regra `enabled`, soma `(metric_value / unit_size) * points`.
+4. `points = GREATEST(0, soma)`.
+
+Adiciona colunas no retorno JSON com o detalhamento por métrica para a UI mostrar "como cheguei nesta pontuação".
+
+Sem mudança em `operator_points` (continua persistindo `points`, `payments_count`, `breaks_count`, `total_received`).
+
+### 3) UI — nova aba "Regras de Pontuação" em Gamificação
+
+**Arquivo novo:** `src/components/gamificacao/ScoringRulesTab.tsx`
+**Arquivo novo:** `src/services/scoringRulesService.ts`
+
+**Página:** `src/pages/GamificacaoPage.tsx` — adicionar aba "Pontuação" visível **somente para admin**.
+
+**Layout:** tabela editável com uma linha por métrica:
+
+| Ativa | Métrica | Rótulo | Pontos | Por unidade | |
+|---|---|---|---|---|---|
+| ☑ | Pagamento confirmado | "Pagamento" | 10 | 1 | Salvar |
+| ☑ | Valor recebido | "Cada R$100" | 5 | 100 | |
+| ☑ | Acordo formalizado | "Novo acordo" | 0 | 1 | |
+| ☑ | Acordo totalmente quitado | "Acordo pago" | 30 | 1 | |
+| ☑ | Quebra de acordo | "Quebra" | -3 | 1 | |
+| ☑ | Conquista desbloqueada | "Conquista" | 50 | 1 | |
+| ☑ | Meta do mês atingida | "Meta atingida" | 100 | 1 | |
+
+- Botão "Restaurar padrões" volta aos valores originais.
+- Botão "Recalcular mês atual" chama `recalculate_tenant_gamification_snapshot` para aplicar imediatamente.
+- Aviso visual: "As alterações afetam apenas cálculos futuros até você clicar em Recalcular."
+
+### 4) Tooltip explicativo no card de pontos do operador
+
+`MetaGaugeCard` / aba Ranking ganham um ícone "?" que abre um popover listando as regras ativas do tenant — assim o operador entende como ganha pontos.
+
+### Arquivos alterados/criados
+
+- nova migration SQL: tabela `gamification_scoring_rules` + RLS + seed por tenant existente + refatoração da RPC
+- novo `src/services/scoringRulesService.ts`
+- novo `src/components/gamificacao/ScoringRulesTab.tsx`
+- `src/pages/GamificacaoPage.tsx` — adicionar aba (apenas admin)
+- `src/components/gamificacao/RankingTab.tsx` (ou equivalente) — tooltip explicativo
 
 ### Não incluído
 
-- Sem mudança de schema (apenas corpo da função).
-- Sem alteração no `DashboardMetaCard` nem em `gamificationService.ts`.
-- Histórico mensal anterior será naturalmente recalculado da próxima vez que cada tela abrir.
+- Não permite criar métricas totalmente novas (só ativar/desativar e ajustar pesos das 7 existentes). Métricas livres exigiriam definir como calcular — fora do escopo deste passo.
+- Sem histórico versionado das regras (só estado atual). Caso queira auditoria, fica como próximo passo.
 
