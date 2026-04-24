@@ -1,4 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isSameDay } from "date-fns";
+import DateSeparator from "./DateSeparator";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -76,6 +78,24 @@ const ChatPanel = ({
   const [transferOpen, setTransferOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+
+  // Build a flat list interleaving date separators between messages of different days
+  const messageItems = useMemo(() => {
+    const items: Array<
+      | { type: "separator"; key: string; date: Date }
+      | { type: "message"; key: string; message: ChatMessage }
+    > = [];
+    let prevDate: Date | null = null;
+    for (const msg of messages) {
+      const curr = new Date(msg.created_at);
+      if (!prevDate || !isSameDay(prevDate, curr)) {
+        items.push({ type: "separator", key: `sep-${curr.toDateString()}`, date: curr });
+      }
+      items.push({ type: "message", key: msg.id, message: msg });
+      prevDate = curr;
+    }
+    return items;
+  }, [messages]);
   const [slaRemaining, setSlaRemaining] = useState<string | null>(null);
   const [slaRemainingMs, setSlaRemainingMs] = useState<number>(0);
 
@@ -475,15 +495,20 @@ const ChatPanel = ({
                       </div>
                     </div>
                   )}
-                  {messages.map((msg) => (
-                    <ChatMessageBubble
-                      key={msg.id}
-                      message={msg}
-                      onReply={(m) => setReplyTo(m)}
-                      allMessages={messages}
-                      isOfficialApi={isOfficialApi}
-                    />
-                  ))}
+                  {messageItems.map((item) => {
+                    if (item.type === "separator") {
+                      return <DateSeparator key={item.key} date={item.date} />;
+                    }
+                    return (
+                      <ChatMessageBubble
+                        key={item.key}
+                        message={item.message}
+                        onReply={(m) => setReplyTo(m)}
+                        allMessages={messages}
+                        isOfficialApi={isOfficialApi}
+                      />
+                    );
+                  })}
                   <div ref={bottomRef} />
                 </div>
               </ScrollArea>
