@@ -213,7 +213,7 @@ const DashboardPage = () => {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Coluna 1: Acionados / Acordos Dia / Acordos Mês  +  Agendados */}
         <div className="flex flex-col gap-3 min-h-0">
-          <div className="shrink-0 flex flex-col gap-2">
+          <div className="shrink-0 grid grid-cols-3 gap-2">
             {[
               {
                 label: "Acionados Hoje",
