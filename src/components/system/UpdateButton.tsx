@@ -7,13 +7,14 @@ import { cn } from "@/lib/utils";
 
 /**
  * Botão pequeno e discreto ao lado do sininho.
- * - Faz polling no /index.html a cada 60s e compara um hash simples do HTML.
- * - Quando o hash muda (nova publicação), o botão começa a piscar.
+ * - A cada 60s consulta o servidor e lê o header `x-deployment-id` (Lovable Hosting).
+ * - Quando o ID muda (nova publicação), o botão pisca + toast persistente.
+ * - Fallback: se o header não vier, usa hash do HTML como segundo critério.
  * - Ao clicar, limpa caches e força reload (equivalente a Ctrl+Shift+R).
  */
 const POLL_INTERVAL_MS = 60_000;
-// v2: chave nova força re-baseline para usuários que já tinham o hash antigo armazenado.
-const STORAGE_KEY = "rivo-app-version-hash-v2";
+// v3: detecção baseada em x-deployment-id (mais confiável entre navegadores).
+const STORAGE_KEY = "rivo-deployment-id-v1";
 
 const hashString = (str: string): string => {
   // FNV-1a 32-bit — leve e suficiente para detectar mudança no index.html
@@ -25,18 +26,22 @@ const hashString = (str: string): string => {
   return h.toString(16);
 };
 
-const fetchCurrentHash = async (): Promise<string | null> => {
+const fetchCurrentVersion = async (): Promise<string | null> => {
   try {
-    const resp = await fetch(`/index.html?_=${Date.now()}`, {
+    const resp = await fetch(`/?_=${Date.now()}`, {
       cache: "no-store",
-      headers: { "Cache-Control": "no-cache" },
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      credentials: "omit",
     });
     if (!resp.ok) return null;
+    // Preferência 1: header de deployment do hosting (muda a cada publish).
+    const deploymentId = resp.headers.get("x-deployment-id");
+    if (deploymentId) return `dpl:${deploymentId}`;
+    // Fallback: hash do HTML.
     const text = await resp.text();
-    // Mantém apenas as referências aos assets (mudam a cada build do Vite).
     const matches = text.match(/(?:src|href)="[^"]*\/assets\/[^"]+"/g);
     const signature = matches && matches.length ? matches.sort().join("|") : text;
-    return hashString(signature);
+    return `h:${hashString(signature)}`;
   } catch {
     return null;
   }
@@ -67,7 +72,7 @@ const UpdateButton = () => {
   const toastShownRef = useRef(false);
 
   const check = useCallback(async () => {
-    const current = await fetchCurrentHash();
+    const current = await fetchCurrentVersion();
     if (!current) return;
 
     if (!baselineHashRef.current) {
@@ -102,7 +107,7 @@ const UpdateButton = () => {
   }, [check]);
 
   const handleClick = useCallback(async () => {
-    const current = await fetchCurrentHash();
+    const current = await fetchCurrentVersion();
     if (current) {
       try { localStorage.setItem(STORAGE_KEY, current); } catch { /* ignore */ }
     }

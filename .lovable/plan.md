@@ -1,49 +1,38 @@
-# Corrigir pedido indevido de CEP ao reemitir boleto
+## Problema
 
-## Causa raiz (confirmada no banco)
+O botão de "Atualizar" hoje compara um hash do `index.html`, esperando que mudanças em `/assets/...` denunciem nova versão. Mas o `index.html` publicado pela Lovable não referencia `/assets/` — só `/src/main.tsx?t=...` (timestamp fixo de build) e poucos meta tags. Resultado:
 
-Ao trocar a data de uma parcela e clicar em **Reemitir Boleto**, o sistema chama `getClientProfile()` em `src/services/clientProfileService.ts`. Essa função:
+- O regex de assets nunca casa, então cai no hash do HTML inteiro.
+- O HTML praticamente não muda entre versões.
+- Pior: a Lovable serve o cookie `__dpl=<deployment-id>` que prende o navegador do usuário ao mesmo deployment (sticky). Mesmo após uma nova publicação, o operador continua recebendo o HTML antigo, e o hash nunca diverge.
 
-1. Lê `client_profiles` (perfil canônico).
-2. **Se o registro existir, retorna direto** — mesmo com campos vazios (CEP, endereço, etc.).
-3. Só faz fallback para a tabela `clients` (que tem o CEP correto) quando NÃO há linha em `client_profiles`.
+Por isso o botão **nunca pisca** em produção, mesmo após mais de 1 minuto da publicação.
 
-Consulta no banco:
+## Solução
 
-- 132.068 registros em `client_profiles`, dos quais **131.938 estão sem CEP**.
-- 333 CPFs têm CEP correto em `clients` mas o perfil canônico está vazio.
+Trocar a estratégia de detecção para usar o **`x-deployment-id`** que a Lovable envia no header de toda resposta HTML (e fazer a requisição forçando bypass do cookie sticky `__dpl`).
 
-Resultado: o `negociarieService` recebe `cep=""` e dispara `"Preencha o cadastro do devedor antes de gerar o boleto. Campo obrigatório ausente: cep"` — exatamente o aviso de "atualizar CEP" que o operador vê, mesmo com o CEP correto cadastrado no cliente.
+### Como funciona
 
-O fluxo "Gerar TODOS os boletos" tem o mesmo defeito (usa o mesmo `getClientProfile`) e abre o dialog "Dados pendentes" pedindo CEP que já existe.
+1. A cada 60s (e quando a aba volta ao foco), fazer um `fetch('/?_=timestamp')` com `cache: 'no-store'` e ler o header `x-deployment-id` da resposta. Esse ID muda a cada nova publicação.
+2. Salvar o primeiro ID visto em `localStorage` como baseline (chave nova `rivo-deployment-id-v1`).
+3. Quando o ID retornado pelo servidor for diferente do baseline, marcar `hasUpdate = true` → botão pisca + toast persistente "Nova versão disponível".
+4. Ao clicar "Atualizar": atualizar o baseline para o novo ID, limpar caches/SW e recarregar com cache-buster (lógica atual de `hardReload` mantida).
 
-## Correção
+### Por que isso funciona em todos os navegadores
 
-### 1. `src/services/clientProfileService.ts` — fallback por campo (não por registro)
+- O `x-deployment-id` é controlado pelo servidor de hospedagem, não depende do conteúdo do HTML.
+- Forçando `?_=timestamp` + `cache: 'no-store'` evitamos cache do navegador e do edge.
+- Como Cloudflare/Lovable já enviam o header em toda resposta (verificado em `https://rivoconnect.com/index.html` agora: `x-deployment-id: a2d337dd-...`), todo navegador (Chrome, Firefox, Safari, Edge, mobile) verá a mudança.
 
-Mudar a lógica de "ou perfil ou fallback" para **mesclar perfil + clients sempre que houver campos faltando**:
+### Fallback de segurança
 
-- Carregar perfil canônico de `client_profiles`.
-- Carregar linhas de `clients` (mesmo CPF / tenant).
-- Para CADA campo (cep, endereco, bairro, cidade, uf, email, phone, nome_completo) que estiver vazio no perfil, preencher com o primeiro valor não vazio encontrado em `clients`.
-- Se algum campo foi preenchido pelo fallback, disparar `upsertClientProfile` em background para autocorrigir o perfil canônico (sem bloquear a geração do boleto).
+Se em alguma resposta o header `x-deployment-id` não vier (ex.: ambiente de preview/local), mantemos o hash do HTML como segundo critério, para não regredir.
 
-Isso resolve os 131.938 perfis incompletos de forma incremental e transparente — sem precisar de migração massiva.
+## Arquivos alterados
 
-### 2. Validação simétrica no UI "Gerar todos boletos"
+- `src/components/system/UpdateButton.tsx` — substituir `fetchCurrentHash` por `fetchCurrentDeploymentId` lendo o header; usar nova chave de storage `rivo-deployment-id-v1`; manter toast e `hardReload` como hoje.
 
-`handleGenerateAllBoletos` em `AgreementInstallments.tsx` também usa `getClientProfile`, então passa a se beneficiar automaticamente da correção acima. Nada mais precisa mudar nesse fluxo.
+## Resultado esperado
 
-### 3. (Opcional, não bloqueante) Backfill em background
-
-Depois que a correção estiver no ar, executar uma rotina única de backfill que percorre os 333 CPFs com CEP em `clients` e atualiza `client_profiles`. Isto é apenas higiene de dados — a correção do fallback já elimina o problema do operador imediatamente, sem depender desse backfill.
-
-## Arquivos editados
-
-- `src/services/clientProfileService.ts` — nova lógica de merge perfil + clients por campo.
-
-## Validação esperada
-
-- Reemitir boleto após trocar data em cliente que tem CEP em `clients` mas perfil canônico vazio: gera boleto sem pedir CEP.
-- "Gerar todos os boletos" no mesmo cenário: não abre mais o dialog "Dados pendentes" indevidamente.
-- Após a primeira reemissão, o perfil canônico fica preenchido (auto-cura).
+Após a próxima publicação, os operadores em qualquer navegador verão, em até 60s, o ícone de atualizar piscando + toast persistente com botão "Atualizar".
