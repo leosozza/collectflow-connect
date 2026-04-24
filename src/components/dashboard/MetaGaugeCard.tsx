@@ -21,17 +21,16 @@ const MetaGaugeCard = ({
   monthLabel,
   year,
   month,
-  size = 200,
+  size = 220,
   duration = 1.2,
 }: MetaGaugeCardProps) => {
   const clampedPct = Math.min(100, Math.max(0, percent));
 
-  // Geometry
-  const strokeWidth = Math.max(12, size * 0.06);
-  const radius = size * 0.35;
+  // Geometry - thicker stroke for a bolder look
+  const strokeWidth = Math.max(16, size * 0.085);
+  const radius = size * 0.38;
   const center = size / 2;
   const circumference = Math.PI * radius;
-  const innerLineRadius = radius - strokeWidth - 4;
   const innerRadius = radius - strokeWidth / 2;
 
   // Animation
@@ -55,6 +54,15 @@ const MetaGaugeCard = ({
       ? "#f97316"
       : "hsl(var(--destructive))";
 
+  const progressColorEnd =
+    clampedPct >= 91
+      ? "hsl(var(--success))"
+      : clampedPct >= 81
+      ? "#60a5fa"
+      : clampedPct >= 41
+      ? "#fb923c"
+      : "hsl(var(--destructive))";
+
   // Period label
   const ref = year && month ? new Date(year, month - 1, 1) : new Date();
   const m = ref.getMonth();
@@ -63,55 +71,42 @@ const MetaGaugeCard = ({
   const lastDay = new Date(y, m + 1, 0).getDate();
   const lastDayStr = `${lastDay}/${String(m + 1).padStart(2, "0")}/${String(y).slice(-2)}`;
 
-  const fontSize = Math.max(28, size * 0.13);
-  const labelFontSize = Math.max(11, size * 0.038);
+  const fontSize = Math.max(34, size * 0.18);
   const uniqueId = `meta-${size}`;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative mx-auto" style={{ width: size, height: size * 0.7 }}>
+    <div className="flex items-center gap-4 w-full">
+      {/* Gauge - left side, larger */}
+      <div className="relative shrink-0" style={{ width: size, height: size * 0.62 }}>
         <svg
           width={size}
-          height={size * 0.7}
-          viewBox={`0 0 ${size} ${size * 0.7}`}
+          height={size * 0.62}
+          viewBox={`0 0 ${size} ${size * 0.55}`}
           className="overflow-visible"
         >
           <defs>
-            {/* Base track gradient */}
             <linearGradient id={`baseGradient-${uniqueId}`} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.25" />
-              <stop offset="50%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.12" />
+              <stop offset="0%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.08" />
             </linearGradient>
 
-            {/* Progress gradient — performance-based */}
             <linearGradient id={`progressGradient-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={progressColorVar} stopOpacity="0.85" />
-              <stop offset="50%" stopColor={progressColorVar} />
-              <stop offset="100%" stopColor={progressColorVar} stopOpacity="0.95" />
+              <stop offset="0%" stopColor={progressColorVar} stopOpacity="0.9" />
+              <stop offset="100%" stopColor={progressColorEnd} />
             </linearGradient>
 
-            {/* Subtle inner-line gradient */}
-            <linearGradient id={`textGradient-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.2" />
-            </linearGradient>
+            <filter id={`glow-${uniqueId}`} x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
 
-            {/* Drop shadow */}
             <filter id={`dropshadow-${uniqueId}`} x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="hsl(var(--foreground))" floodOpacity="0.18" />
+              <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor={progressColorVar} floodOpacity="0.35" />
             </filter>
           </defs>
-
-          {/* Inner thin line */}
-          <path
-            d={`M ${center - innerLineRadius} ${center} A ${innerLineRadius} ${innerLineRadius} 0 0 1 ${center + innerLineRadius} ${center}`}
-            fill="none"
-            stroke="hsl(var(--muted-foreground))"
-            strokeWidth="1"
-            strokeLinecap="butt"
-            opacity="0.4"
-          />
 
           {/* Base track */}
           <path
@@ -119,8 +114,7 @@ const MetaGaugeCard = ({
             fill="none"
             stroke={`url(#baseGradient-${uniqueId})`}
             strokeWidth={strokeWidth}
-            strokeLinecap="butt"
-            filter={`url(#dropshadow-${uniqueId})`}
+            strokeLinecap="round"
           />
 
           {/* Animated progress arc */}
@@ -129,26 +123,27 @@ const MetaGaugeCard = ({
             fill="none"
             stroke={`url(#progressGradient-${uniqueId})`}
             strokeWidth={strokeWidth}
-            strokeLinecap="butt"
+            strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             filter={`url(#dropshadow-${uniqueId})`}
           />
 
-          {/* Animated extending tick line at progress end */}
-          <motion.line
-            x1={useTransform(progressAngle, (a) => center + Math.cos(a) * innerRadius)}
-            y1={useTransform(progressAngle, (a) => center + Math.sin(a) * innerRadius)}
-            x2={useTransform(progressAngle, (a) => center + Math.cos(a) * innerRadius - Math.cos(a) * 30)}
-            y2={useTransform(progressAngle, (a) => center + Math.sin(a) * innerRadius - Math.sin(a) * 30)}
-            stroke={`url(#textGradient-${uniqueId})`}
-            strokeWidth="1"
-            strokeLinecap="butt"
+          {/* Glowing dot at progress end */}
+          <motion.circle
+            cx={useTransform(progressAngle, (a) => center + Math.cos(a) * innerRadius)}
+            cy={useTransform(progressAngle, (a) => center + Math.sin(a) * innerRadius)}
+            r={strokeWidth / 2.2}
+            fill={progressColorEnd}
+            filter={`url(#glow-${uniqueId})`}
           />
         </svg>
 
         {/* Animated percentage display */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ paddingTop: size * 0.12 }}>
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-end pointer-events-none"
+          style={{ paddingBottom: size * 0.02 }}
+        >
           <motion.div
             className="font-bold tracking-tight leading-none"
             style={{ fontSize: `${fontSize}px`, color: progressColorVar }}
@@ -156,62 +151,45 @@ const MetaGaugeCard = ({
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: duration * 0.6 }}
           >
-            <motion.span>{displayPct}</motion.span>%
+            <motion.span>{displayPct}</motion.span>
+            <span style={{ fontSize: `${fontSize * 0.55}px` }}>%</span>
           </motion.div>
           <p className="text-[10px] text-muted-foreground font-medium mt-1">
-            {clampedPct >= 100 ? "🏆 META ATINGIDA!" : "do objetivo mensal"}
+            {clampedPct >= 100 ? "🏆 META ATINGIDA!" : "do objetivo"}
+          </p>
+        </div>
+      </div>
+
+      {/* Meta / Realizado - right side, compact */}
+      <div className="flex-1 flex flex-col gap-2 min-w-0">
+        <div className="rounded-lg border border-primary/20 bg-muted/30 px-3 py-2">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <Target className="w-3 h-3 text-primary" />
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+              Meta
+            </p>
+          </div>
+          <p className="text-sm font-bold text-foreground tabular-nums truncate">
+            {formatCurrency(goal)}
           </p>
         </div>
 
-        {/* 0% / 100% labels */}
-        <motion.div
-          className="absolute text-muted-foreground font-medium"
-          style={{
-            fontSize: `${labelFontSize}px`,
-            left: center - radius - 5,
-            top: center + strokeWidth / 2,
-          }}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: duration * 0.25 }}
-        >
-          0%
-        </motion.div>
-        <motion.div
-          className="absolute text-muted-foreground font-medium"
-          style={{
-            fontSize: `${labelFontSize}px`,
-            left: center + radius - 20,
-            top: center + strokeWidth / 2,
-          }}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: duration * 0.25 }}
-        >
-          100%
-        </motion.div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 w-full">
-        <div className="rounded-lg border border-primary/20 bg-muted/30 p-2.5 text-center">
-          <div className="flex items-center justify-center gap-1 mb-0.5">
-            <Target className="w-3 h-3 text-primary" />
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Meta</p>
-          </div>
-          <p className="text-sm font-bold text-foreground tabular-nums">{formatCurrency(goal)}</p>
-        </div>
-        <div className="rounded-lg border border-success/20 bg-muted/30 p-2.5 text-center">
-          <div className="flex items-center justify-center gap-1 mb-0.5">
+        <div className="rounded-lg border border-success/20 bg-muted/30 px-3 py-2">
+          <div className="flex items-center gap-1.5 mb-0.5">
             <TrendingUp className="w-3 h-3 text-success" />
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Realizado</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+              Realizado
+            </p>
           </div>
-          <p className="text-sm font-bold text-success tabular-nums">{formatCurrency(received)}</p>
+          <p className="text-sm font-bold text-success tabular-nums truncate">
+            {formatCurrency(received)}
+          </p>
         </div>
-      </div>
 
-      <p className="text-[9px] text-muted-foreground text-center">
-        {firstDay} à {lastDayStr} • {monthLabel}
-      </p>
+        <p className="text-[9px] text-muted-foreground text-center mt-0.5">
+          {firstDay} à {lastDayStr}
+        </p>
+      </div>
     </div>
   );
 };
