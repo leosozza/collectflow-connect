@@ -56,6 +56,37 @@ interface DashboardStats {
   total_pendente: number;
   acordos_dia: number;
   acordos_mes: number;
+  acionados_ontem: number;
+  acordos_dia_anterior: number;
+  acordos_mes_anterior: number;
+  total_negociado_mes_anterior: number;
+  total_recebido_mes_anterior: number;
+  total_quebra_mes_anterior: number;
+  total_pendente_mes_anterior: number;
+}
+
+// Calcula variação percentual entre período atual e anterior.
+// Retorna { value, isPositive } ou null quando não houver base de comparação.
+// `invert=true` para métricas onde queda é positiva (Quebra, Pendentes).
+function pctDelta(
+  current: number,
+  previous: number,
+  invert = false
+): { value: string; isPositive: boolean } | null {
+  const c = Number(current) || 0;
+  const p = Number(previous) || 0;
+  if (p === 0 && c === 0) return null;
+  if (p === 0) {
+    return { value: "+100%", isPositive: !invert };
+  }
+  const pct = ((c - p) / p) * 100;
+  const rounded = Math.round(pct);
+  const sign = rounded > 0 ? "+" : "";
+  const isUp = rounded >= 0;
+  return {
+    value: `${sign}${rounded}%`,
+    isPositive: invert ? !isUp : isUp,
+  };
 }
 
 const DashboardPage = () => {
@@ -199,6 +230,13 @@ const DashboardPage = () => {
     }
   };
 
+  const trendAcionados = pctDelta(acionadosHoje, stats?.acionados_ontem ?? 0);
+  const trendAcordosDia = pctDelta(stats?.acordos_dia ?? 0, stats?.acordos_dia_anterior ?? 0);
+  const trendAcordosMes = pctDelta(stats?.acordos_mes ?? 0, stats?.acordos_mes_anterior ?? 0);
+  const trendNegociadoMes = pctDelta(stats?.total_negociado_mes ?? 0, stats?.total_negociado_mes_anterior ?? 0);
+  const trendQuebra = pctDelta(stats?.total_quebra ?? 0, stats?.total_quebra_mes_anterior ?? 0, true);
+  const trendPendentes = pctDelta(stats?.total_pendente ?? 0, stats?.total_pendente_mes_anterior ?? 0, true);
+
   const kpis = [
     {
       label: "Acionados Hoje",
@@ -206,7 +244,7 @@ const DashboardPage = () => {
       Icon: Phone,
       iconColor: "text-orange-500",
       iconBg: "bg-orange-500/10",
-      trend: { value: "+12%", text: "vs ontem", isPositive: true },
+      trend: trendAcionados ? { ...trendAcionados, text: "vs ontem" } : undefined,
     },
     {
       label: "Acordos do Dia",
@@ -214,7 +252,7 @@ const DashboardPage = () => {
       Icon: FileText,
       iconColor: "text-green-500",
       iconBg: "bg-green-500/10",
-      trend: { value: "+100%", text: "vs ontem", isPositive: true },
+      trend: trendAcordosDia ? { ...trendAcordosDia, text: "vs ontem" } : undefined,
     },
     {
       label: "Acordos do Mês",
@@ -222,7 +260,7 @@ const DashboardPage = () => {
       Icon: CalendarCheck,
       iconColor: "text-blue-500",
       iconBg: "bg-blue-500/10",
-      trend: { value: "+18%", text: "vs mês anterior", isPositive: true },
+      trend: trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : undefined,
     },
     {
       label: "Total Negociado no Mês",
@@ -230,7 +268,7 @@ const DashboardPage = () => {
       Icon: Handshake,
       iconColor: "text-purple-500",
       iconBg: "bg-purple-500/10",
-      trend: { value: "+31%", text: "vs mês anterior", isPositive: true },
+      trend: trendNegociadoMes ? { ...trendNegociadoMes, text: "vs mês anterior" } : undefined,
     },
     {
       label: "Total de Quebra",
@@ -238,7 +276,7 @@ const DashboardPage = () => {
       Icon: TrendingDown,
       iconColor: "text-red-500",
       iconBg: "bg-red-500/10",
-      trend: { value: "-8%", text: "vs mês anterior", isPositive: false },
+      trend: trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : undefined,
     },
     {
       label: "Pendentes",
@@ -246,7 +284,7 @@ const DashboardPage = () => {
       Icon: Hourglass,
       iconColor: "text-amber-500",
       iconBg: "bg-amber-500/10",
-      trend: { value: "+5%", text: "vs mês anterior", isPositive: true },
+      trend: trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : undefined,
     },
     {
       label: "Colchão de Acordos",

@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown } from "lucide-react";
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { format, startOfMonth, endOfMonth, subMonths, differenceInDays } from "date-fns";
+import { ComposedChart, Area, Line, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { format, startOfMonth, endOfMonth, subMonths, differenceInDays, getDate, getDaysInMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
@@ -11,132 +11,123 @@ interface Props {
   totalRecebido: number;
 }
 
-interface DailyPoint {
-  date: string; // yyyy-MM-dd
-  label: string; // dd
-  value: number;
+interface DailyMap {
+  // dayOfMonth (1..31) -> total
+  [day: number]: number;
+}
+
+interface ChartPoint {
+  day: number;
+  label: string;
+  value: number | null;
+  prevValue: number;
+}
+
+async function fetchDailyTotals(
+  tenantId: string,
+  start: Date,
+  end: Date
+): Promise<DailyMap> {
+  const startIso = format(start, "yyyy-MM-dd");
+  const endIso = format(end, "yyyy-MM-dd");
+  const buckets: DailyMap = {};
+
+  try {
+    const { data: manual } = await supabase
+      .from("manual_payments")
+      .select("amount_paid, payment_date, status, tenant_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "approved")
+      .gte("payment_date", startIso)
+      .lte("payment_date", endIso);
+
+    (manual || []).forEach((row: any) => {
+      const d = new Date(String(row.payment_date) + "T00:00:00");
+      const day = d.getDate();
+      buckets[day] = (buckets[day] || 0) + Number(row.amount_paid || 0);
+    });
+  } catch {
+    /* silent */
+  }
+
+  try {
+    const { data: portal } = await supabase
+      .from("portal_payments")
+      .select("amount, status, updated_at, tenant_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "paid")
+      .gte("updated_at", `${startIso}T00:00:00Z`)
+      .lte("updated_at", `${endIso}T23:59:59Z`);
+
+    (portal || []).forEach((row: any) => {
+      const day = new Date(row.updated_at).getDate();
+      buckets[day] = (buckets[day] || 0) + Number(row.amount || 0);
+    });
+  } catch {
+    /* silent */
+  }
+
+  return buckets;
 }
 
 export default function TotalRecebidoCard({ totalRecebido }: Props) {
   const { profile } = useAuth();
   const tenantId = profile?.tenant_id;
 
-  // Série diária do mês corrente
-  const { data: series = [] } = useQuery<DailyPoint[]>({
-    queryKey: ["dashboard-recebido-current-month", tenantId],
+  // Série mês corrente (até hoje)
+  const { data: currentMap = {} } = useQuery<DailyMap>({
+    queryKey: ["dashboard-recebido-current-month-map", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const today = new Date();
       const start = startOfMonth(today);
-      const startIso = format(start, "yyyy-MM-dd");
-      const endIso = format(today, "yyyy-MM-dd");
-
-      const totalDays = differenceInDays(today, start) + 1;
-      const buckets = new Map<string, number>();
-      for (let i = 0; i < totalDays; i++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
-        const key = format(d, "yyyy-MM-dd");
-        buckets.set(key, 0);
-      }
-
-      try {
-        const { data: manual } = await supabase
-          .from("manual_payments")
-          .select("amount_paid, payment_date, status, tenant_id")
-          .eq("tenant_id", tenantId!)
-          .eq("status", "approved")
-          .gte("payment_date", startIso)
-          .lte("payment_date", endIso);
-
-        (manual || []).forEach((row: any) => {
-          const key = String(row.payment_date).slice(0, 10);
-          if (buckets.has(key)) {
-            buckets.set(key, (buckets.get(key) || 0) + Number(row.amount_paid || 0));
-          }
-        });
-      } catch {
-        /* fallback silently */
-      }
-
-      try {
-        const { data: portal } = await supabase
-          .from("portal_payments")
-          .select("amount, status, updated_at, tenant_id")
-          .eq("tenant_id", tenantId!)
-          .eq("status", "paid")
-          .gte("updated_at", `${startIso}T00:00:00Z`)
-          .lte("updated_at", `${endIso}T23:59:59Z`);
-
-        (portal || []).forEach((row: any) => {
-          const key = String(row.updated_at).slice(0, 10);
-          if (buckets.has(key)) {
-            buckets.set(key, (buckets.get(key) || 0) + Number(row.amount || 0));
-          }
-        });
-      } catch {
-        /* fallback silently */
-      }
-
-      return Array.from(buckets.entries()).map(([date, value]) => ({
-        date,
-        label: date.slice(8, 10),
-        value,
-      }));
+      return fetchDailyTotals(tenantId!, start, today);
     },
   });
 
-  // Total do mês anterior (para comparação)
-  const { data: prevMonthTotal = 0 } = useQuery<number>({
-    queryKey: ["dashboard-recebido-prev-month", tenantId],
+  // Série mês anterior (mês inteiro)
+  const { data: prevMap = {} } = useQuery<DailyMap>({
+    queryKey: ["dashboard-recebido-prev-month-map", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const today = new Date();
-      const prevMonth = subMonths(today, 1);
-      const prevStart = startOfMonth(prevMonth);
-      const prevEnd = endOfMonth(prevMonth);
-      const prevStartIso = format(prevStart, "yyyy-MM-dd");
-      const prevEndIso = format(prevEnd, "yyyy-MM-dd");
-
-      let total = 0;
-
-      try {
-        const { data: manual } = await supabase
-          .from("manual_payments")
-          .select("amount_paid")
-          .eq("tenant_id", tenantId!)
-          .eq("status", "approved")
-          .gte("payment_date", prevStartIso)
-          .lte("payment_date", prevEndIso);
-
-        (manual || []).forEach((row: any) => {
-          total += Number(row.amount_paid || 0);
-        });
-      } catch {
-        /* silent */
-      }
-
-      try {
-        const { data: portal } = await supabase
-          .from("portal_payments")
-          .select("amount")
-          .eq("tenant_id", tenantId!)
-          .eq("status", "paid")
-          .gte("updated_at", `${prevStartIso}T00:00:00Z`)
-          .lte("updated_at", `${prevEndIso}T23:59:59Z`);
-
-        (portal || []).forEach((row: any) => {
-          total += Number(row.amount || 0);
-        });
-      } catch {
-        /* silent */
-      }
-
-      return total;
+      const prev = subMonths(today, 1);
+      const prevStart = startOfMonth(prev);
+      const prevEnd = endOfMonth(prev);
+      return fetchDailyTotals(tenantId!, prevStart, prevEnd);
     },
   });
 
-  const hasData = useMemo(() => series.some((p) => p.value > 0), [series]);
+  // Mescla as duas séries em um único array indexado por dia do mês
+  const series: ChartPoint[] = useMemo(() => {
+    const today = new Date();
+    const todayDay = getDate(today);
+    const totalDays = Math.max(
+      getDaysInMonth(today),
+      getDaysInMonth(subMonths(today, 1))
+    );
+
+    const points: ChartPoint[] = [];
+    for (let d = 1; d <= totalDays; d++) {
+      points.push({
+        day: d,
+        label: String(d).padStart(2, "0"),
+        value: d <= todayDay ? Number(currentMap[d] || 0) : null,
+        prevValue: Number(prevMap[d] || 0),
+      });
+    }
+    return points;
+  }, [currentMap, prevMap]);
+
+  const prevMonthTotal = useMemo(
+    () => Object.values(prevMap).reduce((sum, v) => sum + Number(v || 0), 0),
+    [prevMap]
+  );
+
+  const hasData = useMemo(
+    () => series.some((p) => (p.value ?? 0) > 0 || p.prevValue > 0),
+    [series]
+  );
 
   const diffPct = useMemo(() => {
     if (prevMonthTotal <= 0) return null;
@@ -152,6 +143,17 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Total Recebido</h2>
+        </div>
+        {/* Legenda */}
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500" />
+            Atual
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-2.5 h-0.5 bg-slate-400" style={{ borderTop: "1px dashed #94a3b8" }} />
+            Mês anterior
+          </span>
         </div>
       </div>
 
@@ -185,7 +187,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
 
       <div className="h-[90px] sm:h-[110px] w-full px-1 pb-2">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
+          <ComposedChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
             <defs>
               <linearGradient id="recebidoGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
@@ -207,12 +209,24 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
                 background: "hsl(var(--card))",
                 fontSize: 12,
               }}
-              formatter={(v: number) => formatCurrency(Number(v))}
-              labelFormatter={(l: string, payload: any) => {
-                const d = payload?.[0]?.payload?.date;
-                return d ? format(new Date(d + "T00:00:00"), "dd/MM/yyyy") : l;
-              }}
+              formatter={(v: number, name: string) => [
+                formatCurrency(Number(v || 0)),
+                name === "value" ? "Atual" : "Mês anterior",
+              ]}
+              labelFormatter={(l: string) => `Dia ${l}`}
             />
+            {/* Linha mês anterior - cinza pontilhada (renderizada antes para ficar atrás) */}
+            <Line
+              type="monotone"
+              dataKey="prevValue"
+              stroke="#94a3b8"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              isAnimationActive={hasData}
+              activeDot={{ r: 3, fill: "#94a3b8" }}
+            />
+            {/* Área mês corrente - azul */}
             <Area
               type="monotone"
               dataKey="value"
@@ -220,8 +234,10 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
               strokeWidth={2.5}
               fill="url(#recebidoGradient)"
               isAnimationActive={hasData}
+              connectNulls={false}
+              activeDot={{ r: 4, fill: "#3b82f6" }}
             />
-          </AreaChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
