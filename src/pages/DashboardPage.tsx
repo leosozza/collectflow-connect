@@ -28,11 +28,9 @@ import ParcelasProgramadasCard, {
 } from "@/components/dashboard/ParcelasProgramadasCard";
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
+import TotalAcordosMiniCard from "@/components/dashboard/TotalAcordosMiniCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
-import {
-  useDashboardLayout,
-  DashboardBlockId,
-} from "@/hooks/useDashboardLayout";
+import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
 
 const generateYearOptions = () => {
