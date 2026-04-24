@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown } from "lucide-react";
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, Line } from "recharts";
+import { ComposedChart, Area, Line, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { format, startOfMonth, endOfMonth, subMonths, differenceInDays, getDate, getDaysInMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -187,7 +187,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
 
       <div className="h-[90px] sm:h-[110px] w-full px-1 pb-2">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
+          <ComposedChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
             <defs>
               <linearGradient id="recebidoGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
@@ -237,7 +237,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
               connectNulls={false}
               activeDot={{ r: 4, fill: "#3b82f6" }}
             />
-          </AreaChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
