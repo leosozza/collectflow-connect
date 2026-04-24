@@ -135,7 +135,7 @@ export default function ParcelasProgramadasCard({
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
                     className="border-b border-border/40 hover:bg-muted/30 transition-colors"
                   >
-                    <TableCell className="py-2.5 px-4 text-sm font-medium">
+                    <TableCell className="py-3.5 px-4 text-sm font-medium">
                       <Link
                         to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
                         className="text-primary hover:underline"
@@ -143,13 +143,13 @@ export default function ParcelasProgramadasCard({
                         {v.client_name}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-2.5 px-2 text-sm text-muted-foreground">
+                    <TableCell className="py-3.5 px-2 text-sm text-muted-foreground">
                       {credorShort}
                     </TableCell>
-                    <TableCell className="py-2.5 px-2 text-sm text-right text-foreground tabular-nums">
+                    <TableCell className="py-3.5 px-2 text-sm text-right text-foreground tabular-nums">
                       {formatCurrency(Number(v.valor_parcela))}
                     </TableCell>
-                    <TableCell className="py-2.5 px-4 text-center">
+                    <TableCell className="py-3.5 px-4 text-center">
                       <span
                         className={`inline-flex items-center justify-center min-w-[96px] rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusClass}`}
                       >

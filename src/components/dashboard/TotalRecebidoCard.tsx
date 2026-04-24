@@ -116,7 +116,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
         </p>
       </div>
 
-      <div className="h-[140px] w-full px-1 pb-2">
+      <div className="h-[180px] w-full px-1 pb-3">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
             <defs>
