@@ -27,7 +27,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
           Nenhum agendamento para hoje
         </div>
       ) : (
-        <div className="overflow-auto max-h-[200px]">
+        <div className="overflow-auto max-h-[160px]">
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border/60 hover:bg-transparent">
