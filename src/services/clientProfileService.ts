@@ -73,52 +73,87 @@ export async function getClientProfile(tenantId: string, cpf: string): Promise<C
       .eq("cpf", clean)
       .maybeSingle();
 
-    if (profile) {
+    // Build base from canonical profile (may be partial / missing fields)
+    const baseFromProfile: Partial<ClientProfile> = profile
+      ? {
+          nome_completo: (profile as any).nome_completo || "",
+          email: (profile as any).email || "",
+          phone: (profile as any).phone || "",
+          phone2: (profile as any).phone2 || "",
+          phone3: (profile as any).phone3 || "",
+          cep: (profile as any).cep || "",
+          endereco: (profile as any).endereco || "",
+          numero: (profile as any).numero || "",
+          complemento: (profile as any).complemento || "",
+          bairro: (profile as any).bairro || "",
+          cidade: (profile as any).cidade || "",
+          uf: (profile as any).uf || "",
+        }
+      : {};
+
+    // Determine which fields are still missing
+    const checkFields = [
+      "nome_completo", "email", "phone", "phone2", "phone3",
+      "cep", "endereco", "bairro", "cidade", "uf",
+    ] as const;
+    const missingFields = checkFields.filter(
+      (f) => !String((baseFromProfile as any)[f] || "").trim()
+    );
+
+    // If profile fully populated for the relevant fields, return as-is
+    if (profile && missingFields.length === 0) {
       return {
-        nome_completo: (profile as any).nome_completo || "",
+        ...EMPTY_PROFILE,
+        ...baseFromProfile,
         cpf: clean,
-        email: (profile as any).email || "",
-        phone: (profile as any).phone || "",
-        phone2: (profile as any).phone2 || "",
-        phone3: (profile as any).phone3 || "",
-        cep: (profile as any).cep || "",
-        endereco: (profile as any).endereco || "",
-        numero: (profile as any).numero || "",
-        complemento: (profile as any).complemento || "",
-        bairro: (profile as any).bairro || "",
-        cidade: (profile as any).cidade || "",
-        uf: (profile as any).uf || "",
         source: (profile as any).source || "client_profiles",
       };
     }
 
-    // 2. Fallback: consolidate from clients
+    // Otherwise, fall back to clients to fill missing fields
     const { data: clientRows } = await supabase
       .from("clients")
       .select("nome_completo, email, phone, phone2, phone3, cep, endereco, bairro, cidade, uf")
       .eq("tenant_id", tenantId)
       .or(`cpf.eq.${clean},cpf.eq.${formatCPFDisplay(clean)}`);
 
-    if (!clientRows || clientRows.length === 0) {
+    if (!profile && (!clientRows || clientRows.length === 0)) {
       return { ...EMPTY_PROFILE, cpf: clean };
     }
 
-    const consolidated = consolidateFromClients(clientRows);
-    const result: ClientProfile = {
-      ...EMPTY_PROFILE,
-      cpf: clean,
-      ...consolidated,
-      source: "fallback_clients",
-    };
+    const consolidated = clientRows && clientRows.length > 0
+      ? consolidateFromClients(clientRows)
+      : {};
 
-    // Auto-upsert to canonical table for future use
-    try {
-      await upsertClientProfile(tenantId, clean, consolidated, "auto_consolidation");
-    } catch (e) {
-      logger.error(MODULE, "auto_upsert_fallback", e);
+    // Merge: profile values take precedence; fall back to consolidated for empty fields
+    const merged: Partial<ClientProfile> = { ...baseFromProfile };
+    const filledFromFallback: Partial<ClientProfile> = {};
+    for (const f of checkFields) {
+      const current = String((merged as any)[f] || "").trim();
+      if (!current) {
+        const fallback = String((consolidated as any)[f] || "").trim();
+        if (fallback) {
+          (merged as any)[f] = fallback;
+          (filledFromFallback as any)[f] = fallback;
+        }
+      }
     }
 
-    return result;
+    // Auto-heal canonical profile in background if we filled anything from clients
+    if (Object.keys(filledFromFallback).length > 0) {
+      const healSource = profile ? "auto_heal_partial" : "auto_consolidation";
+      // fire-and-forget — never block boleto generation
+      void upsertClientProfile(tenantId, clean, filledFromFallback, healSource).catch((e) => {
+        logger.error(MODULE, "auto_heal_fallback", e);
+      });
+    }
+
+    return {
+      ...EMPTY_PROFILE,
+      ...merged,
+      cpf: clean,
+      source: profile ? "merged_profile_clients" : "fallback_clients",
+    };
   } catch (err) {
     logger.error(MODULE, "getClientProfile", err, { tenantId, cpf: clean });
     return { ...EMPTY_PROFILE, cpf: clean };

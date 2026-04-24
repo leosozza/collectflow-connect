@@ -1,21 +1,49 @@
-## Plano: melhorar detecção e visibilidade de novas versões
+# Corrigir pedido indevido de CEP ao reemitir boleto
 
-Aplicar as opções 1 e 3 no componente `src/components/system/UpdateButton.tsx`.
+## Causa raiz (confirmada no banco)
 
-### 1. Forçar re-baseline para usuários existentes
-O problema atual: usuários que já abriram o app antes desta mudança têm um `localStorage["rivo-app-version-hash"]` antigo. Como a lógica atual só detecta update se houver mudança em relação ao baseline armazenado, e como hoje o baseline já bate com o que está no servidor, eles nunca verão piscar até o PRÓXIMO deploy.
+Ao trocar a data de uma parcela e clicar em **Reemitir Boleto**, o sistema chama `getClientProfile()` em `src/services/clientProfileService.ts`. Essa função:
 
-Solução: trocar a chave de storage de `rivo-app-version-hash` para `rivo-app-version-hash-v2`. Isso reseta o baseline de todos os navegadores na próxima visita, deixando o sistema pronto para detectar a próxima publicação corretamente. (A primeira visita após a mudança grava o hash atual; a partir daí qualquer novo deploy aciona o "piscar".)
+1. Lê `client_profiles` (perfil canônico).
+2. **Se o registro existir, retorna direto** — mesmo com campos vazios (CEP, endereço, etc.).
+3. Só faz fallback para a tabela `clients` (que tem o CEP correto) quando NÃO há linha em `client_profiles`.
 
-### 2. Toast "Nova versão disponível"
-Disparar um toast (sonner) na primeira vez que `hasUpdate` virar `true` em cada sessão:
-- Mensagem: "Nova versão disponível"
-- Descrição: "Clique para atualizar agora"
-- Action button "Atualizar" no toast que chama o mesmo `handleClick` (limpa caches + hard reload)
-- Duração longa (ex.: `Infinity` até o usuário fechar) para não passar despercebido
-- Usar uma `useRef` para garantir que o toast só apareça uma vez por sessão (não a cada poll de 60s)
+Consulta no banco:
 
-### Arquivos alterados
-- `src/components/system/UpdateButton.tsx` — trocar `STORAGE_KEY`, adicionar `import { toast } from "sonner"`, disparar toast no `useEffect` quando `hasUpdate` passar de `false` → `true`.
+- 132.068 registros em `client_profiles`, dos quais **131.938 estão sem CEP**.
+- 333 CPFs têm CEP correto em `clients` mas o perfil canônico está vazio.
 
-Nenhuma outra parte do app é afetada. Sem mudanças de banco, edge functions ou rotas.
+Resultado: o `negociarieService` recebe `cep=""` e dispara `"Preencha o cadastro do devedor antes de gerar o boleto. Campo obrigatório ausente: cep"` — exatamente o aviso de "atualizar CEP" que o operador vê, mesmo com o CEP correto cadastrado no cliente.
+
+O fluxo "Gerar TODOS os boletos" tem o mesmo defeito (usa o mesmo `getClientProfile`) e abre o dialog "Dados pendentes" pedindo CEP que já existe.
+
+## Correção
+
+### 1. `src/services/clientProfileService.ts` — fallback por campo (não por registro)
+
+Mudar a lógica de "ou perfil ou fallback" para **mesclar perfil + clients sempre que houver campos faltando**:
+
+- Carregar perfil canônico de `client_profiles`.
+- Carregar linhas de `clients` (mesmo CPF / tenant).
+- Para CADA campo (cep, endereco, bairro, cidade, uf, email, phone, nome_completo) que estiver vazio no perfil, preencher com o primeiro valor não vazio encontrado em `clients`.
+- Se algum campo foi preenchido pelo fallback, disparar `upsertClientProfile` em background para autocorrigir o perfil canônico (sem bloquear a geração do boleto).
+
+Isso resolve os 131.938 perfis incompletos de forma incremental e transparente — sem precisar de migração massiva.
+
+### 2. Validação simétrica no UI "Gerar todos boletos"
+
+`handleGenerateAllBoletos` em `AgreementInstallments.tsx` também usa `getClientProfile`, então passa a se beneficiar automaticamente da correção acima. Nada mais precisa mudar nesse fluxo.
+
+### 3. (Opcional, não bloqueante) Backfill em background
+
+Depois que a correção estiver no ar, executar uma rotina única de backfill que percorre os 333 CPFs com CEP em `clients` e atualiza `client_profiles`. Isto é apenas higiene de dados — a correção do fallback já elimina o problema do operador imediatamente, sem depender desse backfill.
+
+## Arquivos editados
+
+- `src/services/clientProfileService.ts` — nova lógica de merge perfil + clients por campo.
+
+## Validação esperada
+
+- Reemitir boleto após trocar data em cliente que tem CEP em `clients` mas perfil canônico vazio: gera boleto sem pedir CEP.
+- "Gerar todos os boletos" no mesmo cenário: não abre mais o dialog "Dados pendentes" indevidamente.
+- Após a primeira reemissão, o perfil canônico fica preenchido (auto-cura).
