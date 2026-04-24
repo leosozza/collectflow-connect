@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
-import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import {
   BarChart3,
@@ -11,6 +10,9 @@ import {
   FileCheck,
   CalendarCheck,
   Settings2,
+  Handshake,
+  TrendingDown,
+  Hourglass,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -201,15 +203,17 @@ const DashboardPage = () => {
       label: "Acionados Hoje",
       value: String(acionadosHoje),
       Icon: Phone,
-      iconColor: "text-primary",
-      iconBg: "bg-primary/10",
+      iconColor: "text-orange-500",
+      iconBg: "bg-orange-500/10",
+      trend: { value: "+12%", text: "vs ontem", isPositive: true },
     },
     {
       label: "Acordos do Dia",
       value: String(stats?.acordos_dia ?? 0),
-      Icon: FileCheck,
-      iconColor: "text-success",
-      iconBg: "bg-success/10",
+      Icon: FileText,
+      iconColor: "text-green-500",
+      iconBg: "bg-green-500/10",
+      trend: { value: "+100%", text: "vs ontem", isPositive: true },
     },
     {
       label: "Acordos do Mês",
@@ -217,6 +221,31 @@ const DashboardPage = () => {
       Icon: CalendarCheck,
       iconColor: "text-blue-500",
       iconBg: "bg-blue-500/10",
+      trend: { value: "+18%", text: "vs mês anterior", isPositive: true },
+    },
+    {
+      label: "Total Negociado no Mês",
+      value: formatCurrency(stats?.total_negociado_mes ?? 0),
+      Icon: Handshake,
+      iconColor: "text-purple-500",
+      iconBg: "bg-purple-500/10",
+      trend: { value: "+31%", text: "vs mês anterior", isPositive: true },
+    },
+    {
+      label: "Total de Quebra",
+      value: formatCurrency(stats?.total_quebra ?? 0),
+      Icon: TrendingDown,
+      iconColor: "text-red-500",
+      iconBg: "bg-red-500/10",
+      trend: { value: "-8%", text: "vs mês anterior", isPositive: false },
+    },
+    {
+      label: "Pendentes",
+      value: formatCurrency(stats?.total_pendente ?? 0),
+      Icon: Hourglass,
+      iconColor: "text-amber-500",
+      iconBg: "bg-amber-500/10",
+      trend: { value: "+5%", text: "vs mês anterior", isPositive: true },
     },
   ];
 
@@ -291,44 +320,34 @@ const DashboardPage = () => {
 
       {/* KPI cards row (top) */}
       {layout.visible.kpisTop && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpis.map((item) => {
             const ItemIcon = item.Icon;
             return (
               <div
                 key={item.label}
-                className="bg-card rounded-xl border border-border shadow-sm px-4 py-3.5 flex flex-col"
+                className="bg-card rounded-xl border border-border shadow-sm px-5 py-4 flex flex-col justify-between"
               >
-                <div className={cn("rounded-lg p-2 w-fit", item.iconBg)}>
-                  <ItemIcon className={cn("w-4 h-4", item.iconColor)} />
+                <div>
+                  <div className={cn("rounded-lg p-2.5 w-fit mb-4", item.iconBg)}>
+                    <ItemIcon className={cn("w-5 h-5", item.iconColor)} />
+                  </div>
+                  <p className="text-[12.5px] text-muted-foreground font-medium mb-1.5">{item.label}</p>
+                  <p className="text-[26px] font-bold text-foreground tabular-nums leading-none tracking-tight">
+                    {item.value}
+                  </p>
                 </div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80 mt-2 font-medium">{item.label}</p>
-                <p className="text-xl font-bold text-foreground tabular-nums leading-tight mt-0.5">
-                  {item.value}
-                </p>
+                {item.trend && (
+                  <div className="mt-4 text-[11.5px] flex items-center gap-1">
+                    <span className={cn("font-bold tracking-tight", item.trend.isPositive ? "text-success" : "text-destructive")}>
+                      {item.trend.value}
+                    </span>
+                    <span className="text-muted-foreground font-medium">{item.trend.text}</span>
+                  </div>
+                )}
               </div>
             );
           })}
-          <StatCard
-            title="Colchão de Acordos"
-            value={formatCurrency(stats?.total_projetado ?? 0)}
-            icon="projected"
-          />
-          <StatCard
-            title="Total Negociado no Mês"
-            value={formatCurrency(stats?.total_negociado_mes ?? 0)}
-            icon="agreement"
-          />
-          <StatCard
-            title="Total de Quebra"
-            value={formatCurrency(stats?.total_quebra ?? 0)}
-            icon="broken"
-          />
-          <StatCard
-            title="Pendentes"
-            value={formatCurrency(stats?.total_pendente ?? 0)}
-            icon="receivable"
-          />
         </div>
       )}
 
