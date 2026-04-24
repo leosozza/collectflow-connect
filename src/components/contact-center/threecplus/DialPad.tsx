@@ -9,6 +9,8 @@ interface DialPadProps {
   domain: string;
   apiToken: string;
   agentId?: number;
+  /** Extension SIP do operador (profiles.threecplus_extension). */
+  extension?: string | null;
 }
 
 const keys = [
@@ -18,7 +20,7 @@ const keys = [
   ["*", "0", "#"],
 ];
 
-const DialPad = ({ domain, apiToken, agentId }: DialPadProps) => {
+const DialPad = ({ domain, apiToken, agentId, extension }: DialPadProps) => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [inManualMode, setInManualMode] = useState(false);
   const [calling, setCalling] = useState(false);
