@@ -348,7 +348,7 @@ const DashboardPage = () => {
         {rightBlocks.length > 0 && (
           <div
             className={cn(
-              "flex flex-col gap-4 min-h-0 h-full overflow-auto",
+              "flex flex-col gap-3 min-h-0 h-full overflow-y-auto pr-1",
               showParcelas ? "lg:col-span-1" : "lg:col-span-3"
             )}
           >
