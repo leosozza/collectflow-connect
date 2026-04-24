@@ -1,29 +1,50 @@
-# Melhoria de relevância na busca da Carteira
+## Tornar busca por nome exigir frase contígua na Carteira
 
-## Problema
-Ao buscar "Fernanda Pereira", o sistema retorna primeiro "Fernanda Helena dos Santos Pereira" antes de "Fernanda Pereira dos Santos", porque a RPC `get_carteira_grouped` usa `ILIKE ALL` com palavras desordenadas — sem priorizar correspondências em sequência.
+### Problema
+Ao buscar "Fernanda Pereira", aparecem variações como "Fernanda Helena dos Santos Pereira" porque o `ILIKE ALL` atual aceita as palavras em qualquer ordem.
 
-## Solução
-Migration SQL recriando `get_carteira_grouped` com **score de relevância** calculado por linha, agregado por grupo (CPF/Credor) e usado como critério primário do `ORDER BY` quando há `_search`.
+### Solução
+Nova migration SQL redefinindo `public.get_carteira_grouped` para detectar se a busca é "tipo nome" (sem dígitos) e, nesse caso, exigir **frase contígua** no `nome_completo`. Buscas com dígitos (CPF/telefone) mantêm o comportamento atual de palavras dispersas.
 
-### Score por linha (na CTE `filtered`)
-- **4** — nome exatamente igual ao termo (unaccent + lower)
-- **3** — nome começa com o termo (`ILIKE termo || '%'`)
-- **2** — nome contém a frase contígua (`ILIKE '%' || termo || '%'`) ← resolve o caso "Fernanda Pereira"
-- **1** — match por palavras desordenadas, CPF, telefone ou email (comportamento atual)
-- **0** — sem busca
+### Lógica SQL
+```sql
+-- Detecta se busca contém dígitos
+_has_digits := _search ~ '\d';
 
-### Agregação no `grouped`
-`MAX(match_score)` por grupo CPF/Credor — preserva o melhor match do grupo.
+WHERE (
+  _search IS NULL OR _search = ''
+  OR (
+    -- Busca por nome: exige frase contígua (em sequência)
+    NOT _has_digits
+    AND unaccent(lower(c.nome_completo)) ILIKE '%' || _search_norm || '%'
+  )
+  OR (
+    -- Busca com dígitos: CPF, telefone, email, palavras dispersas
+    _has_digits AND (
+      c.cpf ILIKE '%' || _search || '%'
+      OR c.telefone ILIKE '%' || _search || '%'
+      OR c.telefone2 ILIKE '%' || _search || '%'
+      OR c.telefone3 ILIKE '%' || _search || '%'
+      OR c.email ILIKE '%' || _search || '%'
+    )
+  )
+)
+```
 
-### Ordenação
-Quando `_search` é informado, `match_score DESC` torna-se o critério **primário**, mantendo os critérios atuais (`_sort_field`/`_sort_dir`) como desempate.
+### Resultado
+| Busca | Antes | Depois |
+|---|---|---|
+| `Fernanda Pereira` | Fernanda Pereira... **+** Fernanda Helena... Pereira | **Apenas** "Fernanda Pereira..." |
+| `Fernanda` | Todas as Fernandas | Todas (igual) |
+| `123.456` | CPF match | CPF match (igual) |
+| `1199998888` | Telefone match | Telefone match (igual) |
 
-## Arquivos
-- **Migration SQL**: redefine `public.get_carteira_grouped` (mesma assinatura, mesmas colunas de retorno)
-- Sem alterações em frontend (`clientService.ts`, `CarteiraPage.tsx`)
+### Arquivos
+- **Nova migration SQL** redefinindo `public.get_carteira_grouped` (assinatura idêntica, mesmas colunas)
+- Score de relevância criado anteriormente é preservado para ordenação
+- **Sem alterações em frontend** (`clientService.ts` / `CarteiraPage.tsx`)
 
-## Impacto
+### Impacto
 - Sem breaking changes (assinatura idêntica)
-- Performance equivalente (apenas expressões CASE adicionais; sem novos JOINs)
+- Performance equivalente
 - Comportamento sem busca preservado integralmente
