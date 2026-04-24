@@ -118,17 +118,23 @@ const StartWhatsAppConversationDialog = ({
     enabled: open && !!tenantId,
   });
 
-  // Pre-check for existing conversations across allowed instances
   const allowedInstanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
-  const phoneSuffixes = useMemo(
-    () => phoneOptions.map((p) => p.value.replace(/\D/g, "").slice(-8)).filter(Boolean),
-    [phoneOptions]
+
+  const [selectedPhone, setSelectedPhone] = useState<string>("");
+  const [selectedInstance, setSelectedInstance] = useState<string>("");
+
+  // Pre-check for existing conversations — restricted to the SELECTED phone only.
+  // This ensures a stale conversation on a wrong number doesn't hijack the flow
+  // when the operator promotes the correct number as HOT.
+  const selectedSuffix = useMemo(
+    () => (selectedPhone || "").replace(/\D/g, "").slice(-8),
+    [selectedPhone]
   );
 
   const { data: existingConvs = [], isLoading: loadingExisting } = useQuery({
-    queryKey: ["existing-convs-for-client", tenantId, allowedInstanceIds, phoneSuffixes],
+    queryKey: ["existing-convs-for-phone", tenantId, allowedInstanceIds, selectedSuffix],
     queryFn: async (): Promise<ExistingConv[]> => {
-      if (!tenantId || allowedInstanceIds.length === 0 || phoneSuffixes.length === 0) return [];
+      if (!tenantId || allowedInstanceIds.length === 0 || !selectedSuffix) return [];
       const { data, error } = await supabase
         .from("conversations")
         .select("id, instance_id, remote_phone, status, last_message_at, updated_at")
@@ -140,21 +146,16 @@ const StartWhatsAppConversationDialog = ({
         console.error("Error fetching existing conversations:", error);
         return [];
       }
-      // Filter client-side by phone suffix (last 8 digits)
       return (data || []).filter((c: any) => {
         const suf = (c.remote_phone || "").replace(/\D/g, "").slice(-8);
-        return phoneSuffixes.includes(suf);
+        return suf === selectedSuffix;
       }) as ExistingConv[];
     },
-    enabled: open && !!tenantId && allowedInstanceIds.length > 0 && phoneSuffixes.length > 0,
+    enabled: open && !!tenantId && allowedInstanceIds.length > 0 && !!selectedSuffix,
   });
 
   const hasExisting = existingConvs.length > 0;
   const topExisting = existingConvs[0];
-  const [forceNewMode, setForceNewMode] = useState(false);
-
-  const [selectedPhone, setSelectedPhone] = useState<string>("");
-  const [selectedInstance, setSelectedInstance] = useState<string>("");
 
   useEffect(() => {
     if (!open) return;
