@@ -225,13 +225,13 @@ const DashboardPage = () => {
             ].map((item) => (
               <div
                 key={item.label}
-                className={cn("flex items-center justify-between px-3 py-2.5")}
+                className={cn("flex flex-col items-start gap-0.5 px-3 py-2")}
                 title={item.tooltip}
               >
-                <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
                   {item.label}
                 </span>
-                <span className="text-lg font-bold text-foreground tabular-nums">
+                <span className="text-base font-bold text-foreground tabular-nums leading-tight">
                   {item.value}
                 </span>
               </div>
