@@ -1,93 +1,74 @@
-## Ajustes Finais — Dashboard
+## KPIs de Tendência Reais + Série Diária Comparativa (Total Recebido)
 
-Análise do estado atual revelou 3 problemas pós-refino:
-
-1. **Colchão de Acordos sumiu**: removido na última passada. Era um KPI baseado em `stats.total_projetado` (já retornado pela RPC `get_dashboard_stats`). Os 6 KPIs atuais não o incluem.
-2. **Total Recebido / Meta do Mês / Agendamentos cortados**: a coluna direita usa `overflow-y-auto` dentro de `flex-1 min-h-0`. Como cada card tem altura natural grande (chart 130px + Meta gauge 160px + tabela 160px), o conteúdo total estoura a altura disponível e os cards aparecem cortados sem rolagem clara. Além disso, os top KPIs estão ocupando muito espaço vertical (`px-5 py-4` + ícone 40px + valor 26px + trend), reduzindo o espaço da área principal.
-3. **Parcelas Programadas grande demais**: linhas com `py-4` + header com 4px = ocupa muito espaço vertical em telas 1431x876.
+Substituir os placeholders (`+12% vs ontem`, etc.) por valores reais calculados pela RPC, e adicionar uma segunda linha (mês anterior) no gráfico de Total Recebido para comparação dia-a-dia.
 
 ---
 
-### 1. Restaurar "Colchão de Acordos" no topo
+### 1. Estender RPC `get_dashboard_stats`
+
+Migration que faz `CREATE OR REPLACE` da função, mantendo todas as colunas atuais e adicionando 5 novas colunas comparativas:
+
+| Coluna nova | Tipo | Significado |
+|---|---|---|
+| `acionados_ontem` | bigint | Acionados de ontem (mesma lógica de `get_acionados_hoje`, deslocada -1 dia) |
+| `acordos_dia_anterior` | bigint | Acordos criados ontem (mesmo filtro de `_dia`) |
+| `acordos_mes_anterior` | bigint | Acordos criados no mês anterior |
+| `total_negociado_mes_anterior` | numeric | `_negociado_mes` calculado para o mês anterior |
+| `total_quebra_mes_anterior` | numeric | `_quebra` calculado para o mês anterior |
+| `total_pendente_mes_anterior` | numeric | `_pendente` calculado para o mês anterior |
+| `total_recebido_mes_anterior` | numeric | `_recebido` calculado para o mês anterior |
+
+Implementação: replicar os blocos de cálculo existentes parametrizando para `_prev_month_start` / `_prev_month_end` e `_yesterday`. A lógica de "Acionados Ontem" é incorporada na própria RPC (consulta a `user_activity_logs` + `agreements` deslocada -1 dia) para evitar nova chamada de rede.
+
+Manter `SECURITY DEFINER`, `search_path=public`, mesma assinatura de parâmetros (compatível).
+
+### 2. Frontend — consumir e calcular % de variação
 
 Arquivo: `src/pages/DashboardPage.tsx`
 
-- Adicionar como **7º KPI** no array `kpis` (após "Pendentes"):
-  - `label: "Colchão de Acordos"`
-  - `value: formatCurrency(stats?.total_projetado ?? 0)`
-  - `Icon: Wallet` (importar de lucide-react)
-  - `iconColor: "text-indigo-500"`, `iconBg: "bg-indigo-500/10"`
-  - sem `trend` (ou trend neutro)
-- Atualizar `interface DashboardStats` já contém `total_projetado` ✓.
-- Ajustar grid de KPIs: `grid-cols-2 sm:grid-cols-3 lg:grid-cols-6` → `grid-cols-2 sm:grid-cols-4 lg:grid-cols-7` para acomodar 7 cards alinhados em uma linha em telas grandes.
+- Atualizar `interface DashboardStats` com as 7 novas colunas.
+- Criar helper `pctDelta(current, previous)`:
+  - Retorna `null` se `previous === 0 && current === 0`.
+  - Se `previous === 0 && current > 0` → `+100%` positivo.
+  - Caso contrário: `((current - previous) / previous) * 100`, formatado como `+12%` / `-8%`.
+- Substituir os `trend` hardcoded por valores calculados:
+  - **Acionados Hoje**: `pctDelta(acionadosHoje, stats.acionados_ontem)` vs ontem.
+  - **Acordos do Dia**: `pctDelta(stats.acordos_dia, stats.acordos_dia_anterior)` vs ontem.
+  - **Acordos do Mês**: `pctDelta(stats.acordos_mes, stats.acordos_mes_anterior)` vs mês anterior.
+  - **Total Negociado no Mês**: `pctDelta(stats.total_negociado_mes, stats.total_negociado_mes_anterior)`.
+  - **Total de Quebra**: `pctDelta(stats.total_quebra, stats.total_quebra_mes_anterior)` — sinal invertido (queda na quebra é positivo).
+  - **Pendentes**: `pctDelta(stats.total_pendente, stats.total_pendente_mes_anterior)` — sinal invertido (queda em pendentes é positivo).
+- "Colchão de Acordos": permanece sem trend (não há histórico relevante).
 
-### 2. Compactar KPIs do topo (alinhar tudo na mesma linha visual)
-
-Arquivo: `src/pages/DashboardPage.tsx` (bloco linhas 322–352)
-
-- Padding: `px-5 py-4` → `px-4 py-3`.
-- Ícone: caixa `p-2.5` → `p-2`, ícone `w-5 h-5` → `w-4 h-4`, margem `mb-4` → `mb-2.5`.
-- Label: `text-[12.5px] mb-1.5` → `text-[11px] mb-1`.
-- Valor: `text-[26px]` → `text-[20px]` (cabe melhor em 7 colunas).
-- Trend: `mt-4` → `mt-2.5`, `text-[11.5px]` → `text-[10.5px]`.
-- Resultado: cards mais baixos, todos com altura uniforme, liberando ~40px verticais para a área principal.
-
-### 3. Corrigir corte da coluna direita (Total Recebido / Meta / Agendamentos)
-
-Arquivo: `src/pages/DashboardPage.tsx` (linhas 367–376)
-
-- Trocar a coluna direita de `flex flex-col gap-4 min-h-0 h-full overflow-y-auto pr-1` por `flex flex-col gap-3` (sem altura fixa — deixa o conteúdo fluir naturalmente).
-- Trocar o grid principal de `items-stretch flex-1 min-h-0` por `items-start` para que ParcelasProgramadas e a coluna direita não sejam forçadas à mesma altura.
-- Remover `h-full min-h-0` do wrapper de `ParcelasProgramadasCard` (linha 357) → manter apenas `flex flex-col`.
-- Em `ParcelasProgramadasCard.tsx`: trocar root `h-full min-h-0 flex flex-col` por `flex flex-col`, e a tabela `overflow-auto flex-1` para `overflow-auto max-h-[420px]` (limita altura, evita estourar).
-
-### 4. Compactar Parcelas Programadas
-
-Arquivo: `src/components/dashboard/ParcelasProgramadasCard.tsx`
-
-- Linhas da tabela: `py-4` → `py-2.5` em todas as 4 células (linhas 138, 146, 149, 152).
-- Header da tabela: `h-10` → `h-9`.
-- Header do card: `pt-4 pb-2` → `pt-3 pb-2`.
-- Banner azul HOJE: `py-1.5` mantido, mas botões `h-8 w-8` → `h-7 w-7`, ícones `w-5 h-5` → `w-4 h-4`.
-- Limita altura útil para que o card fique mais compacto e alinhado com a altura combinada dos 3 cards da direita.
-
-### 5. Compactar Total Recebido (altura)
+### 3. Total Recebido — série diária do mês anterior
 
 Arquivo: `src/components/dashboard/TotalRecebidoCard.tsx`
 
-- Chart container: `h-[110px] sm:h-[130px]` → `h-[90px] sm:h-[110px]`.
-- Header `pt-4 pb-3` → `pt-3 pb-2`.
-- Valor `text-3xl` → `text-2xl` (mais alinhado com o tamanho dos demais).
+- Adicionar nova `useQuery` `dashboard-recebido-prev-month-series` que monta um array de `DailyPoint` para o mês anterior usando a mesma lógica (manual_payments + portal_payments), com chave `day-of-month` (1..31).
+- Mesclar as duas séries em um único array, indexado por `day` (número do dia do mês), com campos `value` (atual) e `prevValue` (mês anterior). Para dias em que o mês atual ainda não chegou, `value` fica `null` (linha do mês corrente para de desenhar); `prevValue` continua o mês inteiro.
+- AreaChart com **duas séries**:
+  - Série atual: linha azul `#3b82f6`, gradiente azul (já existente).
+  - Série mês anterior: linha cinza `#94a3b8` (slate-400), pontilhada (`strokeDasharray="4 4"`), sem fill, opacity 0.7.
+- Tooltip: mostra ambos valores no mesmo dia (`Atual: R$ X | Anterior: R$ Y`).
+- Pequena legenda no header: dois pontos coloridos com labels "Atual" e "Mês anterior".
+- O total exibido no topo (`totalRecebido`) e o `diffPct` permanecem como estão (já comparam com o mês anterior via `prevMonthTotal`).
 
-### 6. Compactar Meta do Mês
+### 4. Compatibilidade
 
-Arquivo: `src/components/dashboard/DashboardMetaCard.tsx`
+- Antes de qualquer migração, a RPC retorna 8 colunas. Após, retorna 15. O frontend lê apenas o primeiro registro e desestrutura por nome → sem quebra de outros consumidores.
+- O hook `useScheduledCallbacks` e demais hooks não são tocados.
 
-- Gauge `size={160}` → `size={140}`.
-- Container do gauge: `p-3` → `p-2`.
+### 5. Ícone de tendência neutra
 
-### 7. Compactar Agendamentos para Hoje
-
-Arquivo: `src/components/dashboard/AgendamentosHojeCard.tsx`
-
-- `max-h-[160px]` → `max-h-[200px]` (mais respiro vertical).
-- Padding rows `py-2.5` mantido.
+- Quando `pctDelta` retorna `null`, exibir traço `—` em `text-muted-foreground` (sem cor de positivo/negativo).
 
 ---
 
-### Resultado Esperado
-- **7 KPIs** no topo (incluindo Colchão de Acordos) alinhados em uma única linha, mais compactos.
-- **Coluna direita inteira visível** (Total Recebido, Meta, Agendamentos) sem corte.
-- **Parcelas Programadas** mais compacta, alinhada visualmente com a altura combinada da coluna direita.
-- Identidade laranja preservada; azul mantido apenas no banner HOJE e gráfico.
+### Arquivos editados
+- Nova migration: `supabase/migrations/<timestamp>_dashboard_stats_with_deltas.sql`
+- `src/pages/DashboardPage.tsx`
+- `src/components/dashboard/TotalRecebidoCard.tsx`
 
 ### Fora do escopo
-- Nenhuma alteração de query, RPC, hook ou lógica.
-- Ordem dos blocos preservada.
-
-### Arquivos editados
-- `src/pages/DashboardPage.tsx`
-- `src/components/dashboard/ParcelasProgramadasCard.tsx`
-- `src/components/dashboard/TotalRecebidoCard.tsx`
-- `src/components/dashboard/DashboardMetaCard.tsx`
-- `src/components/dashboard/AgendamentosHojeCard.tsx`
+- Layout, espaçamentos, identidade visual (mantidos).
+- Outros cards (Meta, Agendamentos, Parcelas) — sem alteração.
