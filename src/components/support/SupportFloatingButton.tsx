@@ -295,8 +295,8 @@ const SupportFloatingButton = () => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="fixed bottom-24 right-6 z-50 w-[340px] max-w-[calc(100vw-2rem)] flex flex-col rounded-2xl border bg-card text-card-foreground shadow-2xl overflow-hidden"
-            style={{ height: 600 }}
+            className="fixed z-50 w-[340px] max-w-[calc(100vw-2rem)] flex flex-col rounded-2xl border bg-card text-card-foreground shadow-2xl overflow-hidden"
+            style={panelStyle}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
