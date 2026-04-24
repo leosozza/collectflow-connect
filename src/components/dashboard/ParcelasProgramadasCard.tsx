@@ -34,9 +34,9 @@ export default function ParcelasProgramadasCard({
   const isToday = format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full h-full min-h-0 flex flex-col">
+    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
         <div>
           <div className="flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-primary" />
@@ -60,10 +60,10 @@ export default function ParcelasProgramadasCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
+            className="h-7 w-7 text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(-1)}
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4" />
           </Button>
           <Popover>
             <PopoverTrigger asChild>
@@ -83,10 +83,10 @@ export default function ParcelasProgramadasCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
+            className="h-7 w-7 text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(1)}
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -100,20 +100,20 @@ export default function ParcelasProgramadasCard({
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">para esta data</p>
         </div>
       ) : (
-        <div className="overflow-auto flex-1">
+        <div className="overflow-auto max-h-[420px]">
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border hover:bg-transparent">
-                <TableHead className="h-10 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Nome
                 </TableHead>
-                <TableHead className="h-10 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Credor
                 </TableHead>
-                <TableHead className="h-10 px-4 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-9 px-4 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Valor
                 </TableHead>
-                <TableHead className="h-10 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-9 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Status
                 </TableHead>
               </TableRow>
@@ -135,7 +135,7 @@ export default function ParcelasProgramadasCard({
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
                     className="border-b border-border/30 hover:bg-muted/30 transition-colors"
                   >
-                    <TableCell className="py-4 px-4 text-sm font-medium">
+                    <TableCell className="py-2.5 px-4 text-sm font-medium">
                       <Link
                         to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
                         className="text-primary hover:underline underline-offset-2"
@@ -143,13 +143,13 @@ export default function ParcelasProgramadasCard({
                         {v.client_name}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-4 px-4 text-sm text-muted-foreground">
+                    <TableCell className="py-2.5 px-4 text-sm text-muted-foreground">
                       {credorShort}
                     </TableCell>
-                    <TableCell className="py-4 px-4 text-sm text-right text-foreground tabular-nums">
+                    <TableCell className="py-2.5 px-4 text-sm text-right text-foreground tabular-nums">
                       {formatCurrency(Number(v.valor_parcela))}
                     </TableCell>
-                    <TableCell className="py-4 px-4 text-center">
+                    <TableCell className="py-2.5 px-4 text-center">
                       <span
                         className={`inline-flex items-center justify-center min-w-[96px] rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusClass}`}
                       >

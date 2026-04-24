@@ -13,6 +13,7 @@ import {
   Handshake,
   TrendingDown,
   Hourglass,
+  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -247,6 +248,14 @@ const DashboardPage = () => {
       iconBg: "bg-amber-500/10",
       trend: { value: "+5%", text: "vs mês anterior", isPositive: true },
     },
+    {
+      label: "Colchão de Acordos",
+      value: formatCurrency(stats?.total_projetado ?? 0),
+      Icon: Wallet,
+      iconColor: "text-indigo-500",
+      iconBg: "bg-indigo-500/10",
+      trend: undefined as { value: string; text: string; isPositive: boolean } | undefined,
+    },
   ];
 
   return (
@@ -320,25 +329,25 @@ const DashboardPage = () => {
 
       {/* KPI cards row (top) */}
       {layout.visible.kpisTop && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           {kpis.map((item) => {
             const ItemIcon = item.Icon;
             return (
               <div
                 key={item.label}
-                className="bg-card rounded-xl border border-border shadow-sm px-5 py-4 flex flex-col justify-between"
+                className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col justify-between"
               >
                 <div>
-                  <div className={cn("rounded-lg p-2.5 w-fit mb-4", item.iconBg)}>
-                    <ItemIcon className={cn("w-5 h-5", item.iconColor)} />
+                  <div className={cn("rounded-lg p-2 w-fit mb-2.5", item.iconBg)}>
+                    <ItemIcon className={cn("w-4 h-4", item.iconColor)} />
                   </div>
-                  <p className="text-[12.5px] text-muted-foreground font-medium mb-1.5">{item.label}</p>
-                  <p className="text-[26px] font-bold text-foreground tabular-nums leading-none tracking-tight">
+                  <p className="text-[11px] text-muted-foreground font-medium mb-1">{item.label}</p>
+                  <p className="text-[20px] font-bold text-foreground tabular-nums leading-none tracking-tight">
                     {item.value}
                   </p>
                 </div>
                 {item.trend && (
-                  <div className="mt-4 text-[11.5px] flex items-center gap-1">
+                  <div className="mt-2.5 text-[10.5px] flex items-center gap-1">
                     <span className={cn("font-bold tracking-tight", item.trend.isPositive ? "text-success" : "text-destructive")}>
                       {item.trend.value}
                     </span>
@@ -352,9 +361,9 @@ const DashboardPage = () => {
       )}
 
       {/* Main area: 2 columns (Parcelas large left + stack right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         {showParcelas && (
-          <div className="lg:col-span-2 flex flex-col min-h-0 h-full">
+          <div className="lg:col-span-2 flex flex-col">
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
@@ -367,7 +376,7 @@ const DashboardPage = () => {
         {rightBlocks.length > 0 && (
           <div
             className={cn(
-              "flex flex-col gap-4 min-h-0 h-full overflow-y-auto pr-1",
+              "flex flex-col gap-3",
               showParcelas ? "lg:col-span-1" : "lg:col-span-3"
             )}
           >
