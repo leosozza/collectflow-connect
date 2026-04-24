@@ -78,7 +78,11 @@ const DialPad = ({ domain, apiToken, agentId, extension }: DialPadProps) => {
       if (inManualMode) {
         await invoke("manual_call_dial", { phone_number: phoneNumber });
       } else if (agentId) {
-        await invoke("click2call", { agent_id: agentId, phone_number: phoneNumber });
+        await invoke("click2call", {
+          agent_id: agentId,
+          phone_number: phoneNumber,
+          extension: extension && String(extension).trim() ? String(extension).trim() : undefined,
+        });
       } else {
         toast.error("Entre no modo manual ou vincule um agente");
         setCalling(false);
