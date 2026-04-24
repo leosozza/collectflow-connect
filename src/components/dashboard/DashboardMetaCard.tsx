@@ -82,7 +82,7 @@ const DashboardMetaCard = ({
         </div>
       </div>
 
-      <div className="p-3">
+      <div className="p-2.5">
         {goal === 0 ? (
           <div className="text-center py-4 text-muted-foreground text-xs">
             Nenhuma meta definida para este período.
@@ -95,7 +95,7 @@ const DashboardMetaCard = ({
             monthLabel={monthLabel}
             year={year}
             month={month}
-            size={200}
+            size={180}
             duration={1.2}
           />
         )}

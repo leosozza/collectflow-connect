@@ -21,8 +21,8 @@ const MetaGaugeCard = ({
   monthLabel,
   year,
   month,
-  size = 420,
-  duration = 1.6,
+  size = 200,
+  duration = 1.2,
 }: MetaGaugeCardProps) => {
   const clampedPct = Math.min(100, Math.max(0, percent));
 
@@ -68,7 +68,7 @@ const MetaGaugeCard = ({
   const uniqueId = `meta-${size}`;
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-2">
       <div className="relative mx-auto" style={{ width: size, height: size * 0.7 }}>
         <svg
           width={size}
@@ -192,25 +192,25 @@ const MetaGaugeCard = ({
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 w-full max-w-sm mx-auto">
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <Target className="w-3.5 h-3.5 text-primary" />
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Meta Recebimento</p>
+      <div className="grid grid-cols-2 gap-2 w-full">
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 text-center">
+          <div className="flex items-center justify-center gap-1 mb-0.5">
+            <Target className="w-3 h-3 text-primary" />
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Meta</p>
           </div>
-          <p className="text-lg font-bold text-foreground">{formatCurrency(goal)}</p>
+          <p className="text-sm font-bold text-foreground tabular-nums">{formatCurrency(goal)}</p>
         </div>
-        <div className="rounded-lg border border-success/20 bg-success/5 p-3 text-center">
-          <div className="flex items-center justify-center gap-1 mb-1">
-            <TrendingUp className="w-3.5 h-3.5 text-success" />
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Realizado</p>
+        <div className="rounded-lg border border-success/20 bg-success/5 p-2 text-center">
+          <div className="flex items-center justify-center gap-1 mb-0.5">
+            <TrendingUp className="w-3 h-3 text-success" />
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Realizado</p>
           </div>
-          <p className="text-lg font-bold text-success">{formatCurrency(received)}</p>
+          <p className="text-sm font-bold text-success tabular-nums">{formatCurrency(received)}</p>
         </div>
       </div>
 
-      <p className="text-[10px] text-muted-foreground">
-        Período: {firstDay} à {lastDayStr} • {monthLabel}
+      <p className="text-[9px] text-muted-foreground text-center">
+        {firstDay} à {lastDayStr} • {monthLabel}
       </p>
     </div>
   );
