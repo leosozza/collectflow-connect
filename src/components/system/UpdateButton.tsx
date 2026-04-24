@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -11,7 +12,8 @@ import { cn } from "@/lib/utils";
  * - Ao clicar, limpa caches e força reload (equivalente a Ctrl+Shift+R).
  */
 const POLL_INTERVAL_MS = 60_000;
-const STORAGE_KEY = "rivo-app-version-hash";
+// v2: chave nova força re-baseline para usuários que já tinham o hash antigo armazenado.
+const STORAGE_KEY = "rivo-app-version-hash-v2";
 
 const hashString = (str: string): string => {
   // FNV-1a 32-bit — leve e suficiente para detectar mudança no index.html
@@ -62,6 +64,7 @@ const hardReload = async () => {
 const UpdateButton = () => {
   const [hasUpdate, setHasUpdate] = useState(false);
   const baselineHashRef = useRef<string | null>(null);
+  const toastShownRef = useRef(false);
 
   const check = useCallback(async () => {
     const current = await fetchCurrentHash();
@@ -98,13 +101,27 @@ const UpdateButton = () => {
     };
   }, [check]);
 
-  const handleClick = async () => {
+  const handleClick = useCallback(async () => {
     const current = await fetchCurrentHash();
     if (current) {
       try { localStorage.setItem(STORAGE_KEY, current); } catch { /* ignore */ }
     }
     await hardReload();
-  };
+  }, []);
+
+  // Toast único por sessão quando uma nova versão é detectada.
+  useEffect(() => {
+    if (!hasUpdate || toastShownRef.current) return;
+    toastShownRef.current = true;
+    toast("Nova versão disponível", {
+      description: "Clique para atualizar agora",
+      duration: Infinity,
+      action: {
+        label: "Atualizar",
+        onClick: () => { void handleClick(); },
+      },
+    });
+  }, [hasUpdate, handleClick]);
 
   return (
     <TooltipProvider delayDuration={200}>
