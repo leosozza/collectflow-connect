@@ -185,48 +185,12 @@ const DashboardPage = () => {
     });
   };
 
-  // Right column blocks (parcelas is rendered separately on the left)
-  const rightBlocks = layout.order.filter(
-    (id) => id !== "parcelas" && layout.visible[id as DashboardBlockId]
-  );
+  // Visibility flags from saved layout (positions are now fixed in 3-column grid)
+  const showKpis = layout.visible.kpisTop;
   const showParcelas = layout.visible.parcelas;
-
-  const renderBlock = (id: DashboardBlockId) => {
-    switch (id) {
-      case "totalRecebido":
-        return (
-          <TotalRecebidoCard
-            key="totalRecebido"
-            totalRecebido={stats?.total_recebido ?? 0}
-          />
-        );
-      case "metas":
-        return (
-          <DashboardMetaCard
-            key="metas"
-            year={filterYear ?? now.getFullYear()}
-            month={filterMonth ?? now.getMonth() + 1}
-            monthLabel={new Date(
-              filterYear ?? now.getFullYear(),
-              (filterMonth ?? now.getMonth() + 1) - 1,
-              1
-            ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
-            selectedOperatorUserId={selectedOperators.length === 1 ? selectedOperators[0] : null}
-            received={stats?.total_recebido ?? 0}
-          />
-        );
-      case "agendamentos":
-        return (
-          <AgendamentosHojeCard
-            key="agendamentos"
-            callbacks={callbacks}
-            showOperator={canViewAllAgendados}
-          />
-        );
-      default:
-        return null;
-    }
-  };
+  const showTotalRecebido = layout.visible.totalRecebido;
+  const showMetas = layout.visible.metas;
+  const showAgendamentos = layout.visible.agendamentos;
 
   const trendAcionados = pctDelta(acionadosHoje, stats?.acionados_ontem ?? 0);
   const trendAcordosDia = pctDelta(stats?.acordos_dia ?? 0, stats?.acordos_dia_anterior ?? 0);
