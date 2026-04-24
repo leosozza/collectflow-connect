@@ -213,7 +213,7 @@ const DashboardPage = () => {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Coluna 1: Acionados / Acordos Dia / Acordos Mês  +  Agendados */}
         <div className="flex flex-col gap-3 min-h-0">
-          <div className={cn("shrink-0 bg-card rounded-xl border border-border/60 shadow-sm divide-y divide-border/60")}>
+          <div className={cn("shrink-0 bg-card rounded-xl border border-border/60 shadow-sm divide-y divide-border/60 flex flex-col")}>
             {[
               {
                 label: "Acionados Hoje",
@@ -225,13 +225,13 @@ const DashboardPage = () => {
             ].map((item) => (
               <div
                 key={item.label}
-                className={cn("flex flex-col items-start gap-0.5 px-3 py-2")}
+                className={cn("flex flex-col items-start justify-center gap-1 px-4 py-4 flex-1 min-h-[76px]")}
                 title={item.tooltip}
               >
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
                   {item.label}
                 </span>
-                <span className="text-base font-bold text-foreground tabular-nums leading-tight">
+                <span className="text-2xl font-bold text-foreground tabular-nums leading-none">
                   {item.value}
                 </span>
               </div>
