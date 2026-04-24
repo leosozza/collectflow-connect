@@ -333,9 +333,9 @@ const DashboardPage = () => {
       )}
 
       {/* Main area: 2 columns (Parcelas large left + stack right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         {showParcelas && (
-          <div className="lg:col-span-2 min-h-[520px] flex flex-col">
+          <div className="lg:col-span-2 flex flex-col">
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
