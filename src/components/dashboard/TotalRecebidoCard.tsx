@@ -20,7 +20,7 @@ interface ChartPoint {
   day: number;
   label: string;
   value: number | null;
-  prevValue: number;
+  prevValue: number | null;
 }
 
 async function fetchDailyTotals(
@@ -102,10 +102,8 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   const series: ChartPoint[] = useMemo(() => {
     const today = new Date();
     const todayDay = getDate(today);
-    const totalDays = Math.max(
-      getDaysInMonth(today),
-      getDaysInMonth(subMonths(today, 1))
-    );
+    const prevDays = getDaysInMonth(subMonths(today, 1));
+    const totalDays = Math.max(getDaysInMonth(today), prevDays);
 
     const points: ChartPoint[] = [];
     for (let d = 1; d <= totalDays; d++) {
@@ -113,7 +111,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
         day: d,
         label: String(d).padStart(2, "0"),
         value: d <= todayDay ? Number(currentMap[d] || 0) : null,
-        prevValue: Number(prevMap[d] || 0),
+        prevValue: d <= prevDays ? Number(prevMap[d] || 0) : null,
       });
     }
     return points;
@@ -125,7 +123,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   );
 
   const hasData = useMemo(
-    () => series.some((p) => (p.value ?? 0) > 0 || p.prevValue > 0),
+    () => series.some((p) => (p.value ?? 0) > 0 || (p.prevValue ?? 0) > 0),
     [series]
   );
 
@@ -223,6 +221,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
               strokeWidth={1.5}
               strokeDasharray="4 4"
               dot={false}
+              connectNulls={false}
               isAnimationActive={hasData}
               activeDot={{ r: 3, fill: "#94a3b8" }}
             />
