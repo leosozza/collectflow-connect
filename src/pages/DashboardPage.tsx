@@ -221,7 +221,7 @@ const DashboardPage = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-4 animate-fade-in">
+    <div className="flex flex-col gap-4 animate-fade-in h-full min-h-0">
       {/* Header with filters */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
@@ -333,9 +333,9 @@ const DashboardPage = () => {
       )}
 
       {/* Main area: 2 columns (Parcelas large left + stack right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch flex-1 min-h-0">
         {showParcelas && (
-          <div className="lg:col-span-2 flex flex-col">
+          <div className="lg:col-span-2 flex flex-col min-h-0 h-full">
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
@@ -348,7 +348,7 @@ const DashboardPage = () => {
         {rightBlocks.length > 0 && (
           <div
             className={cn(
-              "flex flex-col gap-4",
+              "flex flex-col gap-4 min-h-0 h-full overflow-auto",
               showParcelas ? "lg:col-span-1" : "lg:col-span-3"
             )}
           >
