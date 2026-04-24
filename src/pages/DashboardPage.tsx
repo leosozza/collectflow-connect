@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, BarChart3, FileText, Phone, FileCheck, CalendarCheck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { GlassCalendar } from "@/components/ui/glass-calendar";
@@ -213,29 +213,52 @@ const DashboardPage = () => {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Coluna 1: Acionados / Acordos Dia / Acordos Mês  +  Agendados */}
         <div className="flex flex-col gap-3 min-h-0">
-          <div className={cn("shrink-0 bg-card rounded-xl border border-border/60 shadow-sm divide-y divide-border/60 flex flex-col")}>
+          <div className="shrink-0 flex flex-col gap-2">
             {[
               {
                 label: "Acionados Hoje",
                 value: String(acionadosHoje),
                 tooltip: "Clientes únicos acessados hoje (perfil ou atendimento), excluindo os que já viraram acordo seu.",
+                Icon: Phone,
+                iconColor: "text-primary",
+                iconBg: "bg-primary/10",
               },
-              { label: "Acordos do Dia", value: String(stats?.acordos_dia ?? 0) },
-              { label: "Acordos do Mês", value: String(stats?.acordos_mes ?? 0) },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className={cn("flex flex-col items-start justify-center gap-1 px-4 py-4 flex-1 min-h-[76px]")}
-                title={item.tooltip}
-              >
-                <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-                  {item.label}
-                </span>
-                <span className="text-2xl font-bold text-foreground tabular-nums leading-none">
-                  {item.value}
-                </span>
-              </div>
-            ))}
+              {
+                label: "Acordos do Dia",
+                value: String(stats?.acordos_dia ?? 0),
+                Icon: FileCheck,
+                iconColor: "text-success",
+                iconBg: "bg-success/10",
+              },
+              {
+                label: "Acordos do Mês",
+                value: String(stats?.acordos_mes ?? 0),
+                Icon: CalendarCheck,
+                iconColor: "text-blue-500",
+                iconBg: "bg-blue-500/10",
+              },
+            ].map((item) => {
+              const ItemIcon = item.Icon;
+              return (
+                <div
+                  key={item.label}
+                  className={cn(
+                    "bg-card rounded-xl border border-border/60 shadow-sm px-4 py-3 flex-1 min-h-0 flex flex-col justify-center"
+                  )}
+                  title={item.tooltip}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className={cn("rounded-lg p-1.5", item.iconBg)}>
+                      <ItemIcon className={cn("w-4 h-4", item.iconColor)} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">{item.label}</p>
+                  <p className="text-2xl font-bold text-foreground tabular-nums leading-tight">
+                    {item.value}
+                  </p>
+                </div>
+              );
+            })}
           </div>
           <div className="flex-1 min-h-0 flex flex-col">
             <ScheduledCallbacksCard
