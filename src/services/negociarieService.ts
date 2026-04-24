@@ -1,13 +1,70 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 import { logger } from "@/lib/logger";
-import { getClientProfile } from "@/services/clientProfileService";
+import { getClientProfile, upsertClientProfile } from "@/services/clientProfileService";
 
 /** Format CEP to XXXXX-XXX pattern expected by Negociarie API */
 function formatCepForApi(cep: string): string {
   const digits = (cep || "").replace(/\D/g, "");
   if (digits.length === 8) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
   return cep || "";
+}
+
+/**
+ * Last-resort enrichment: if any required field is still missing after getClientProfile,
+ * query the clients table directly (with multiple CPF formats) and fill the gaps.
+ * Protects against stale code/cache, race conditions, or incomplete canonical profiles.
+ */
+async function enrichClientDataFromClients(
+  tenantId: string,
+  cpf: string,
+  clientData: any
+): Promise<any> {
+  const required = ["cep", "endereco", "bairro", "cidade", "uf", "email", "phone", "nome_completo"] as const;
+  const missing = required.filter((f) => !String(clientData?.[f] || "").trim());
+  if (missing.length === 0) return clientData;
+
+  const cleanCpf = String(cpf || "").replace(/\D/g, "");
+  if (!tenantId || !cleanCpf || cleanCpf.length !== 11) return clientData;
+
+  const cpfFormatted = `${cleanCpf.slice(0, 3)}.${cleanCpf.slice(3, 6)}.${cleanCpf.slice(6, 9)}-${cleanCpf.slice(9, 11)}`;
+
+  try {
+    const { data: rows } = await supabase
+      .from("clients")
+      .select("nome_completo, email, phone, phone2, phone3, cep, endereco, bairro, cidade, uf")
+      .eq("tenant_id", tenantId)
+      .or(`cpf.eq.${cleanCpf},cpf.eq.${cpfFormatted}`);
+
+    if (!rows || rows.length === 0) return clientData;
+
+    const enriched = { ...clientData };
+    const filled: Record<string, string> = {};
+
+    for (const field of missing) {
+      for (const row of rows) {
+        const val = (row as any)[field];
+        if (val && String(val).trim()) {
+          enriched[field] = String(val).trim();
+          filled[field] = enriched[field];
+          break;
+        }
+      }
+    }
+
+    if (Object.keys(filled).length > 0) {
+      logger.info("negociarieService", "enriched_from_clients", { cpf: cleanCpf, fields: Object.keys(filled) });
+      // Auto-heal canonical profile in background — never blocks boleto generation
+      void upsertClientProfile(tenantId, cleanCpf, filled, "boleto_auto_heal").catch((e) => {
+        logger.error("negociarieService", "auto_heal_during_boleto", e);
+      });
+    }
+
+    return enriched;
+  } catch (e) {
+    logger.error("negociarieService", "enrich_from_clients", e);
+    return clientData;
+  }
 }
 
 /** validateDevedorFields is now replaced by validateClienteFields in buildBoletoPayload */
@@ -271,6 +328,8 @@ export const negociarieService = {
     } catch (e) {
       logger.error(MODULE, "fetch_client_for_single_boleto", e);
     }
+    // Defense-in-depth: fill any still-missing fields directly from clients table.
+    clientData = await enrichClientDataFromClients(agreement.tenant_id, agreement.client_cpf, clientData);
 
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
@@ -349,6 +408,8 @@ export const negociarieService = {
     } catch (e) {
       logger.error(MODULE, "fetch_client_for_boleto", e);
     }
+    // Defense-in-depth: fill any still-missing fields directly from clients table.
+    clientData = await enrichClientDataFromClients(agreement.tenant_id, agreement.client_cpf, clientData);
 
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
 
