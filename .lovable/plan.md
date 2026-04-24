@@ -1,1 +1,29 @@
-Reestruturar o bloco KPI da Coluna 1 em `src/pages/DashboardPage.tsx` (linhas 215–239) substituindo o container único por 3 cards independentes empilhados verticalmente com `flex flex-col gap-2`. Cada card terá: ícone colorido em quadrado arredondado (`bg-{cor}/10 rounded-lg p-1.5`) no topo-esquerda, badge de tendência opcional no topo-direita, label `text-xs text-muted-foreground` e valor `text-2xl font-bold`. Usar `flex-1 min-h-0` em cada card para manter a altura total ~228px e preservar o alinhamento horizontal das Colunas 2/3 abaixo. Ícones: `Phone` (Acionados Hoje, primary), `FileCheck` (Acordos do Dia, success), `CalendarCheck` (Acordos do Mês, blue-500). Manter tooltip de Acionados Hoje.
+# Melhoria de relevância na busca da Carteira
+
+## Problema
+Ao buscar "Fernanda Pereira", o sistema retorna primeiro "Fernanda Helena dos Santos Pereira" antes de "Fernanda Pereira dos Santos", porque a RPC `get_carteira_grouped` usa `ILIKE ALL` com palavras desordenadas — sem priorizar correspondências em sequência.
+
+## Solução
+Migration SQL recriando `get_carteira_grouped` com **score de relevância** calculado por linha, agregado por grupo (CPF/Credor) e usado como critério primário do `ORDER BY` quando há `_search`.
+
+### Score por linha (na CTE `filtered`)
+- **4** — nome exatamente igual ao termo (unaccent + lower)
+- **3** — nome começa com o termo (`ILIKE termo || '%'`)
+- **2** — nome contém a frase contígua (`ILIKE '%' || termo || '%'`) ← resolve o caso "Fernanda Pereira"
+- **1** — match por palavras desordenadas, CPF, telefone ou email (comportamento atual)
+- **0** — sem busca
+
+### Agregação no `grouped`
+`MAX(match_score)` por grupo CPF/Credor — preserva o melhor match do grupo.
+
+### Ordenação
+Quando `_search` é informado, `match_score DESC` torna-se o critério **primário**, mantendo os critérios atuais (`_sort_field`/`_sort_dir`) como desempate.
+
+## Arquivos
+- **Migration SQL**: redefine `public.get_carteira_grouped` (mesma assinatura, mesmas colunas de retorno)
+- Sem alterações em frontend (`clientService.ts`, `CarteiraPage.tsx`)
+
+## Impacto
+- Sem breaking changes (assinatura idêntica)
+- Performance equivalente (apenas expressões CASE adicionais; sem novos JOINs)
+- Comportamento sem busca preservado integralmente
