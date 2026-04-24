@@ -1,46 +1,28 @@
 ## Objetivo
 
-Adicionar separadores de data entre as mensagens do WhatsApp, no padrão clean e discreto que o próprio app utiliza (uma "pílula" centralizada com Hoje / Ontem / data).
+Tornar o botão flutuante "RIVO Suporte" arrastável e mais discreto visualmente.
 
-## Como será
+## Mudanças
 
-Entre as mensagens, sempre que o **dia** mudar em relação à mensagem anterior, inserir uma pílula central com o rótulo da data:
+### 1. Drag & drop livre
+- Usar `framer-motion` (já no projeto) com `drag` no botão FAB.
+- Limitar dentro da viewport (`dragConstraints`) com margem segura.
+- Persistir a posição em `localStorage` (`rivo-support-fab-pos`) para sobreviver entre sessões.
+- Distinguir clique de arrasto: se o ponteiro moveu mais do que ~5px durante o press, é drag e não dispara `onClick` (`onDragStart` seta um flag, `onPointerUp` consulta o flag antes de abrir o chat).
 
-- Mensagem de hoje → **Hoje**
-- Mensagem de ontem → **Ontem**
-- Últimos 7 dias → **dia da semana** (ex.: "Quarta-feira")
-- Anterior → **dd/MM/yyyy** (ex.: "24/04/2026")
+### 2. Visual translúcido com hover colorido
+- Estado padrão: `bg-primary/30 text-primary-foreground/80` + `backdrop-blur-sm`.
+- Hover: `hover:bg-primary hover:text-primary-foreground` (volta ao 100%).
+- Sombra mais sutil (`shadow-md`) que cresce no hover (`hover:shadow-xl`).
+- Quando o chat está aberto, mantém o estilo atual `bg-muted` (sem mudança).
+- Cursor: `cursor-grab` em repouso, `cursor-grabbing` enquanto arrasta.
 
-Sempre em pt-BR, sem emojis.
+### 3. Painel de chat acompanha a posição
+- O painel (que hoje usa `bottom-24 right-6`) passa a se posicionar relativamente ao FAB: ancorado acima do botão, ajustado para não sair da tela (se o FAB estiver no topo, abre para baixo; se estiver à esquerda, alinha à esquerda).
 
-### Estilo visual (clean & discreto)
+## Arquivo alterado
+- `src/components/support/SupportFloatingButton.tsx` (apenas o JSX do FAB, o wrapper de posição e o cálculo do anchor do painel).
 
-```
-            ─────  Hoje  ─────
-[mensagem 1]
-[mensagem 2]
-
-            ─────  Ontem  ─────
-[mensagem 3]
-```
-
-- Pílula centralizada (`mx-auto`), padding `px-3 py-1`.
-- Background `bg-muted/70` com `backdrop-blur-sm`, borda sutil `border-border/50`, raio `rounded-full`.
-- Texto `text-[11px] font-medium text-muted-foreground uppercase tracking-wide`.
-- Margem vertical `my-3` para respirar entre blocos sem destoar.
-- Usa apenas tokens semânticos do design system (sem cores hardcoded).
-
-## Arquivos alterados
-
-- **`src/components/contact-center/whatsapp/ChatPanel.tsx`** — alterar o `messages.map` para intercalar um componente `<DateSeparator label="..." />` quando `isSameDay(prev, curr)` for falso.
-- **`src/components/contact-center/whatsapp/DateSeparator.tsx`** (novo) — componente puro de apresentação da pílula.
-
-Sem mudanças no banco, no `ChatMessage.tsx` (timestamp HH:mm da mensagem permanece) ou em outros lugares.
-
-## Implementação técnica
-
-- Reaproveitar `date-fns` (já em uso no projeto, ver `format` em `ChatMessage.tsx`).
-- Usar `isSameDay`, `isToday`, `isYesterday`, `differenceInCalendarDays` e `format` com `locale: ptBR`.
-- Lógica em um `useMemo` para evitar recomputar a cada render: percorrer `messages` uma vez e produzir uma lista de itens `{ type: "separator" | "message", ... }`.
+Sem mudanças de banco, sem novos componentes.
 
 **Posso aplicar?**

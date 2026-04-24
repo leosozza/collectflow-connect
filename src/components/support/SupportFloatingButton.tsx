@@ -22,6 +22,26 @@ interface LocalMessage {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-ai-chat`;
 
+const FAB_SIZE = 56;
+const FAB_MARGIN = 16;
+const POS_STORAGE_KEY = "rivo-support-fab-pos";
+
+const loadInitialPos = () => {
+  if (typeof window === "undefined") return { x: 0, y: 0 };
+  try {
+    const raw = localStorage.getItem(POS_STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (typeof p.x === "number" && typeof p.y === "number") return p;
+    }
+  } catch { /* ignore */ }
+  // default: bottom-right
+  return {
+    x: window.innerWidth - FAB_SIZE - 24,
+    y: window.innerHeight - FAB_SIZE - 24,
+  };
+};
+
 const SupportFloatingButton = () => {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -29,6 +49,44 @@ const SupportFloatingButton = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [humanMode, setHumanMode] = useState(false);
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [pos, setPos] = useState(loadInitialPos);
+  const [isDragging, setIsDragging] = useState(false);
+  const draggedRef = useRef(false);
+
+  // Keep within viewport on resize
+  useEffect(() => {
+    const onResize = () => {
+      setPos((p) => ({
+        x: Math.min(Math.max(FAB_MARGIN, p.x), window.innerWidth - FAB_SIZE - FAB_MARGIN),
+        y: Math.min(Math.max(FAB_MARGIN, p.y), window.innerHeight - FAB_SIZE - FAB_MARGIN),
+      }));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Persist
+  useEffect(() => {
+    try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos)); } catch { /* ignore */ }
+  }, [pos]);
+
+  // Compute panel anchor based on FAB position
+  const panelStyle = (() => {
+    if (typeof window === "undefined") return {};
+    const PANEL_W = 340;
+    const PANEL_H = 600;
+    const GAP = 12;
+    const openUp = pos.y > window.innerHeight / 2;
+    const alignRight = pos.x + FAB_SIZE / 2 > window.innerWidth / 2;
+    const top = openUp
+      ? Math.max(FAB_MARGIN, pos.y - PANEL_H - GAP)
+      : Math.min(window.innerHeight - PANEL_H - FAB_MARGIN, pos.y + FAB_SIZE + GAP);
+    const left = alignRight
+      ? Math.max(FAB_MARGIN, pos.x + FAB_SIZE - PANEL_W)
+      : Math.min(window.innerWidth - PANEL_W - FAB_MARGIN, pos.x);
+    return { top, left, height: PANEL_H } as React.CSSProperties;
+  })();
+
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
