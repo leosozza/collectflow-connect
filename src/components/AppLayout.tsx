@@ -25,6 +25,7 @@ import {
   Handshake,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import UpdateButton from "@/components/system/UpdateButton";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
