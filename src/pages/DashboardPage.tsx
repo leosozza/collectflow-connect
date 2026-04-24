@@ -327,62 +327,101 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* KPI cards row (top) */}
-      {layout.visible.kpisTop && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          {kpis.map((item) => {
-            const ItemIcon = item.Icon;
-            return (
-              <div
-                key={item.label}
-                className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col justify-between"
-              >
-                <div>
-                  <div className={cn("rounded-lg p-2 w-fit mb-2.5", item.iconBg)}>
-                    <ItemIcon className={cn("w-4 h-4", item.iconColor)} />
-                  </div>
-                  <p className="text-[11px] text-muted-foreground font-medium mb-1">{item.label}</p>
-                  <p className="text-[20px] font-bold text-foreground tabular-nums leading-none tracking-tight">
-                    {item.value}
-                  </p>
-                </div>
-                {item.trend && (
-                  <div className="mt-2.5 text-[10.5px] flex items-center gap-1">
-                    <span className={cn("font-bold tracking-tight", item.trend.isPositive ? "text-success" : "text-destructive")}>
-                      {item.trend.value}
-                    </span>
-                    <span className="text-muted-foreground font-medium">{item.trend.text}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {/* Main area: 3 columns layout (left compact / center wide / right KPIs+meta) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* COLUMN 1 — left (3/12) */}
+        <div className="lg:col-span-3 flex flex-col gap-3">
+          <TotalAcordosMiniCard totalNegociado={stats?.total_negociado_mes ?? 0} />
+          {showAgendamentos && (
+            <AgendamentosHojeCard
+              callbacks={callbacks}
+              showOperator={canViewAllAgendados}
+            />
+          )}
         </div>
-      )}
 
-      {/* Main area: 2 columns (Parcelas large left + stack right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        {showParcelas && (
-          <div className="lg:col-span-2 flex flex-col">
+        {/* COLUMN 2 — center (6/12) */}
+        <div className="lg:col-span-6 flex flex-col gap-3">
+          {showTotalRecebido && (
+            <TotalRecebidoCard totalRecebido={stats?.total_recebido ?? 0} />
+          )}
+          {showParcelas && (
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
               onNavigateDate={navigateDate}
               onPickDate={setBrowseDate}
             />
-          </div>
-        )}
+          )}
+        </div>
 
-        {rightBlocks.length > 0 && (
-          <div
-            className={cn(
-              "flex flex-col gap-3",
-              showParcelas ? "lg:col-span-1" : "lg:col-span-3"
-            )}
-          >
-            {rightBlocks.map((id) => renderBlock(id as DashboardBlockId))}
-          </div>
-        )}
+        {/* COLUMN 3 — right (3/12): compact KPIs + Meta gauge */}
+        <div className="lg:col-span-3 flex flex-col gap-3">
+          {showKpis && (
+            <div className="grid grid-cols-2 gap-2.5">
+              {kpis.map((item) => {
+                const ItemIcon = item.Icon;
+                const isMoney = item.value.startsWith("R$");
+                return (
+                  <div
+                    key={item.label}
+                    className="bg-card rounded-xl border border-border shadow-sm px-3 py-2.5 flex flex-col justify-between min-w-0"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
+                          <ItemIcon className={cn("w-3.5 h-3.5", item.iconColor)} />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-medium leading-tight mb-1 break-words">
+                        {item.label}
+                      </p>
+                      <p
+                        className={cn(
+                          "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
+                          isMoney ? "text-sm" : "text-lg"
+                        )}
+                      >
+                        {item.value}
+                      </p>
+                    </div>
+                    {item.trend && (
+                      <div className="mt-1.5 text-[9.5px] flex items-center gap-1 flex-wrap leading-tight">
+                        <span
+                          className={cn(
+                            "font-bold tracking-tight",
+                            item.trend.isPositive ? "text-success" : "text-destructive"
+                          )}
+                        >
+                          {item.trend.value}
+                        </span>
+                        <span className="text-muted-foreground font-medium truncate">
+                          {item.trend.text}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {showMetas && (
+            <DashboardMetaCard
+              year={filterYear ?? now.getFullYear()}
+              month={filterMonth ?? now.getMonth() + 1}
+              monthLabel={new Date(
+                filterYear ?? now.getFullYear(),
+                (filterMonth ?? now.getMonth() + 1) - 1,
+                1
+              ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+              selectedOperatorUserId={
+                selectedOperators.length === 1 ? selectedOperators[0] : null
+              }
+              received={stats?.total_recebido ?? 0}
+            />
+          )}
+        </div>
       </div>
 
       <CustomizeDashboardDialog
