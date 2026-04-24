@@ -1,18 +1,11 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, TrendingDown } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { format, subDays } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, differenceInDays } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface Props {
   totalRecebido: number;
@@ -28,19 +21,23 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   const { profile } = useAuth();
   const tenantId = profile?.tenant_id;
 
+  // Série diária do mês corrente
   const { data: series = [] } = useQuery<DailyPoint[]>({
-    queryKey: ["dashboard-recebido-30d", tenantId],
+    queryKey: ["dashboard-recebido-current-month", tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
       const today = new Date();
-      const start = subDays(today, 29);
+      const start = startOfMonth(today);
       const startIso = format(start, "yyyy-MM-dd");
+      const endIso = format(today, "yyyy-MM-dd");
 
-      // Build empty buckets for last 30 days
+      const totalDays = differenceInDays(today, start) + 1;
       const buckets = new Map<string, number>();
-      for (let i = 0; i < 30; i++) {
-        const d = format(subDays(today, 29 - i), "yyyy-MM-dd");
-        buckets.set(d, 0);
+      for (let i = 0; i < totalDays; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const key = format(d, "yyyy-MM-dd");
+        buckets.set(key, 0);
       }
 
       try {
@@ -49,7 +46,8 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
           .select("amount_paid, payment_date, status, tenant_id")
           .eq("tenant_id", tenantId!)
           .eq("status", "approved")
-          .gte("payment_date", startIso);
+          .gte("payment_date", startIso)
+          .lte("payment_date", endIso);
 
         (manual || []).forEach((row: any) => {
           const key = String(row.payment_date).slice(0, 10);
@@ -67,7 +65,8 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
           .select("amount, status, updated_at, tenant_id")
           .eq("tenant_id", tenantId!)
           .eq("status", "paid")
-          .gte("updated_at", `${startIso}T00:00:00Z`);
+          .gte("updated_at", `${startIso}T00:00:00Z`)
+          .lte("updated_at", `${endIso}T23:59:59Z`);
 
         (portal || []).forEach((row: any) => {
           const key = String(row.updated_at).slice(0, 10);
@@ -87,7 +86,64 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
     },
   });
 
+  // Total do mês anterior (para comparação)
+  const { data: prevMonthTotal = 0 } = useQuery<number>({
+    queryKey: ["dashboard-recebido-prev-month", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const today = new Date();
+      const prevMonth = subMonths(today, 1);
+      const prevStart = startOfMonth(prevMonth);
+      const prevEnd = endOfMonth(prevMonth);
+      const prevStartIso = format(prevStart, "yyyy-MM-dd");
+      const prevEndIso = format(prevEnd, "yyyy-MM-dd");
+
+      let total = 0;
+
+      try {
+        const { data: manual } = await supabase
+          .from("manual_payments")
+          .select("amount_paid")
+          .eq("tenant_id", tenantId!)
+          .eq("status", "approved")
+          .gte("payment_date", prevStartIso)
+          .lte("payment_date", prevEndIso);
+
+        (manual || []).forEach((row: any) => {
+          total += Number(row.amount_paid || 0);
+        });
+      } catch {
+        /* silent */
+      }
+
+      try {
+        const { data: portal } = await supabase
+          .from("portal_payments")
+          .select("amount")
+          .eq("tenant_id", tenantId!)
+          .eq("status", "paid")
+          .gte("updated_at", `${prevStartIso}T00:00:00Z`)
+          .lte("updated_at", `${prevEndIso}T23:59:59Z`);
+
+        (portal || []).forEach((row: any) => {
+          total += Number(row.amount || 0);
+        });
+      } catch {
+        /* silent */
+      }
+
+      return total;
+    },
+  });
+
   const hasData = useMemo(() => series.some((p) => p.value > 0), [series]);
+
+  const diffPct = useMemo(() => {
+    if (prevMonthTotal <= 0) return null;
+    return ((totalRecebido - prevMonthTotal) / prevMonthTotal) * 100;
+  }, [totalRecebido, prevMonthTotal]);
+
+  const isPositive = diffPct !== null && diffPct >= 0;
 
   return (
     <div className="bg-card rounded-xl border border-border/60 shadow-sm w-full flex flex-col overflow-hidden">
@@ -97,23 +153,34 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
           <TrendingUp className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Total Recebido</h2>
         </div>
-        <Select defaultValue="mensal">
-          <SelectTrigger className="h-7 w-[100px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="mensal">Mensal</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="px-4 pb-1">
         <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
           Total Recebido
         </p>
-        <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
-          {formatCurrency(totalRecebido)}
-        </p>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
+            {formatCurrency(totalRecebido)}
+          </p>
+          {diffPct !== null ? (
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                isPositive ? "text-emerald-600" : "text-red-600"
+              }`}
+            >
+              {isPositive ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
+              )}
+              {`${isPositive ? "+" : ""}${diffPct.toFixed(0)}%`}
+              <span className="text-muted-foreground font-normal">vs mês anterior</span>
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">— vs mês anterior</span>
+          )}
+        </div>
       </div>
 
       <div className="h-[110px] sm:h-[130px] w-full px-1 pb-2">
@@ -130,7 +197,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
               tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
               axisLine={false}
               tickLine={false}
-              interval={Math.max(0, Math.floor(series.length / 8))}
+              interval={Math.max(0, Math.ceil(series.length / 9) - 1)}
             />
             <Tooltip
               cursor={{ stroke: "hsl(var(--primary))", strokeOpacity: 0.2 }}
