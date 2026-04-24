@@ -449,19 +449,60 @@ const SupportFloatingButton = () => {
         )}
       </AnimatePresence>
 
-      {/* FAB */}
-      <Button
-        onClick={() => setOpen((prev) => !prev)}
-        size="icon"
+      {/* FAB - draggable */}
+      <motion.button
+        drag
+        dragMomentum={false}
+        dragElastic={0}
+        dragConstraints={{
+          left: FAB_MARGIN,
+          top: FAB_MARGIN,
+          right: (typeof window !== "undefined" ? window.innerWidth : 1024) - FAB_SIZE - FAB_MARGIN,
+          bottom: (typeof window !== "undefined" ? window.innerHeight : 768) - FAB_SIZE - FAB_MARGIN,
+        }}
+        style={{ left: pos.x, top: pos.y }}
+        onDragStart={() => {
+          draggedRef.current = true;
+          setIsDragging(true);
+        }}
+        onDragEnd={(_, info) => {
+          setIsDragging(false);
+          setPos((p) => {
+            const nx = Math.min(
+              Math.max(FAB_MARGIN, p.x + info.offset.x),
+              window.innerWidth - FAB_SIZE - FAB_MARGIN,
+            );
+            const ny = Math.min(
+              Math.max(FAB_MARGIN, p.y + info.offset.y),
+              window.innerHeight - FAB_SIZE - FAB_MARGIN,
+            );
+            return { x: nx, y: ny };
+          });
+          // reset drag flag shortly after so click event (if any) is suppressed
+          setTimeout(() => { draggedRef.current = false; }, 50);
+        }}
+        // reset offset after we commit pos
+        animate={{ x: 0, y: 0 }}
+        transition={{ duration: 0 }}
+        onClick={(e) => {
+          if (draggedRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          setOpen((prev) => !prev);
+        }}
         className={cn(
-          "fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg transition-all duration-200",
+          "fixed z-50 h-14 w-14 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm",
+          isDragging ? "cursor-grabbing scale-105" : "cursor-grab",
           open
-            ? "bg-muted text-muted-foreground hover:bg-muted/80"
-            : "bg-primary text-primary-foreground hover:bg-primary/90"
+            ? "bg-muted text-muted-foreground hover:bg-muted/80 shadow-lg"
+            : "bg-primary/30 text-primary-foreground/80 shadow-md hover:bg-primary hover:text-primary-foreground hover:shadow-xl"
         )}
       >
         {open ? <X className="w-6 h-6" /> : <LifeBuoy className="w-6 h-6" />}
-      </Button>
+      </motion.button>
+
     </>
   );
 };
