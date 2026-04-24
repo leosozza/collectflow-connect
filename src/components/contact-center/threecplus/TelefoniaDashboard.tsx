@@ -295,6 +295,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [qualifying, setQualifying] = useState(false);
 
   const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
+  const operatorExtension = (profile as any)?.threecplus_extension as string | null | undefined;
 
   const todayStart = useMemo(() => {
     const d = new Date();
