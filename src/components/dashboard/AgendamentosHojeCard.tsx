@@ -11,8 +11,8 @@ interface Props {
 
 export default function AgendamentosHojeCard({ callbacks, showOperator }: Props) {
   return (
-    <div className="bg-card rounded-xl border border-border/60 shadow-sm w-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+    <div className="bg-card rounded-xl border border-border shadow-sm w-full flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <CalendarCheck className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Agendamentos para Hoje</h2>
@@ -23,18 +23,22 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
       </div>
 
       {callbacks.length === 0 ? (
-        <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-          Nenhum agendamento para hoje
+        <div className="flex flex-col items-center justify-center text-center px-5 py-6 text-muted-foreground">
+          <div className="w-10 h-10 rounded-full bg-muted/40 flex items-center justify-center mb-2">
+            <CalendarCheck className="w-4 h-4 text-muted-foreground/70" />
+          </div>
+          <p className="text-xs font-medium">Nenhum agendamento</p>
+          <p className="text-[11px] text-muted-foreground/80 mt-0.5">para hoje</p>
         </div>
       ) : (
         <div className="overflow-auto max-h-[160px]">
           <Table>
             <TableHeader>
-              <TableRow className="border-b border-border/60 hover:bg-transparent">
+              <TableRow className="border-b border-border hover:bg-transparent">
                 <TableHead className="h-8 px-4 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Nome do Cliente
                 </TableHead>
-                <TableHead className="h-8 px-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-8 px-4 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Data
                 </TableHead>
                 <TableHead className="h-8 px-4 text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -48,11 +52,11 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
                 const cpf = cb.client_cpf?.replace(/\D/g, "") || "";
                 return (
                   <TableRow key={cb.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="py-2 px-4 text-xs font-medium">
+                    <TableCell className="py-2.5 px-4 text-[12px] font-medium">
                       {cpf ? (
                         <Link
                           to={`/carteira/${encodeURIComponent(cpf)}`}
-                          className="text-primary hover:underline"
+                          className="text-primary hover:underline underline-offset-2"
                         >
                           {cb.client_name}
                         </Link>
@@ -65,10 +69,10 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="py-2 px-2 text-xs text-muted-foreground tabular-nums">
+                    <TableCell className="py-2.5 px-4 text-[12px] text-muted-foreground tabular-nums">
                       {format(cbTime, "dd/MM/yyyy")}
                     </TableCell>
-                    <TableCell className="py-2 px-4 text-xs text-right font-semibold tabular-nums">
+                    <TableCell className="py-2.5 px-4 text-[12px] text-right font-semibold tabular-nums">
                       {format(cbTime, "HH:mm")}
                     </TableCell>
                   </TableRow>
@@ -79,7 +83,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
         </div>
       )}
 
-      <div className="px-4 py-2 border-t border-border/40">
+      <div className="px-4 py-2 border-t border-border">
         <Link to="/atendimento" className="text-xs text-primary hover:underline font-medium">
           Ver todos
         </Link>

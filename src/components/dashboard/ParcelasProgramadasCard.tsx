@@ -34,7 +34,7 @@ export default function ParcelasProgramadasCard({
   const isToday = format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
   return (
-    <div className="bg-card rounded-xl border border-border/60 overflow-hidden shadow-sm w-full h-full min-h-0 flex flex-col">
+    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full h-full min-h-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 shrink-0">
         <div>
@@ -56,18 +56,18 @@ export default function ParcelasProgramadasCard({
 
       {/* Banner azul HOJE */}
       <div className="px-3 pb-3 shrink-0">
-        <div className="flex items-center justify-between bg-primary rounded-xl px-2 py-1.5">
+        <div className="flex items-center justify-between bg-blue-600 hover:bg-blue-700 transition-colors rounded-xl px-2 py-1.5">
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+            className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(-1)}
           >
             <ChevronLeft className="w-5 h-5" />
           </Button>
           <Popover>
             <PopoverTrigger asChild>
-              <button className="flex-1 text-sm font-bold text-primary-foreground tracking-wide text-center py-1 transition-colors cursor-pointer">
+              <button className="flex-1 text-sm font-bold text-white tracking-wide text-center py-1 transition-colors cursor-pointer">
                 {isToday ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
               </button>
             </PopoverTrigger>
@@ -83,7 +83,7 @@ export default function ParcelasProgramadasCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+            className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(1)}
           >
             <ChevronRight className="w-5 h-5" />
@@ -103,17 +103,17 @@ export default function ParcelasProgramadasCard({
         <div className="overflow-auto flex-1">
           <Table>
             <TableHeader>
-              <TableRow className="border-b border-border/60 hover:bg-transparent">
-                <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              <TableRow className="border-b border-border hover:bg-transparent">
+                <TableHead className="h-10 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Nome
                 </TableHead>
-                <TableHead className="h-9 px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-10 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Credor
                 </TableHead>
-                <TableHead className="h-9 px-2 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-10 px-4 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Valor
                 </TableHead>
-                <TableHead className="h-9 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-10 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Status
                 </TableHead>
               </TableRow>
@@ -133,23 +133,23 @@ export default function ParcelasProgramadasCard({
                 return (
                   <TableRow
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
-                    className="border-b border-border/40 hover:bg-muted/30 transition-colors"
+                    className="border-b border-border/30 hover:bg-muted/30 transition-colors"
                   >
-                    <TableCell className="py-3.5 px-4 text-sm font-medium">
+                    <TableCell className="py-4 px-4 text-sm font-medium">
                       <Link
                         to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
-                        className="text-primary hover:underline"
+                        className="text-primary hover:underline underline-offset-2"
                       >
                         {v.client_name}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-3.5 px-2 text-sm text-muted-foreground">
+                    <TableCell className="py-4 px-4 text-sm text-muted-foreground">
                       {credorShort}
                     </TableCell>
-                    <TableCell className="py-3.5 px-2 text-sm text-right text-foreground tabular-nums">
+                    <TableCell className="py-4 px-4 text-sm text-right text-foreground tabular-nums">
                       {formatCurrency(Number(v.valor_parcela))}
                     </TableCell>
-                    <TableCell className="py-3.5 px-4 text-center">
+                    <TableCell className="py-4 px-4 text-center">
                       <span
                         className={`inline-flex items-center justify-center min-w-[96px] rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusClass}`}
                       >

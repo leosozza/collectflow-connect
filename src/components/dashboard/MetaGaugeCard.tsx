@@ -192,15 +192,15 @@ const MetaGaugeCard = ({
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 w-full">
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 text-center">
+      <div className="grid grid-cols-2 gap-3 w-full">
+        <div className="rounded-lg border border-primary/20 bg-muted/30 p-2.5 text-center">
           <div className="flex items-center justify-center gap-1 mb-0.5">
             <Target className="w-3 h-3 text-primary" />
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Meta</p>
           </div>
           <p className="text-sm font-bold text-foreground tabular-nums">{formatCurrency(goal)}</p>
         </div>
-        <div className="rounded-lg border border-success/20 bg-success/5 p-2 text-center">
+        <div className="rounded-lg border border-success/20 bg-muted/30 p-2.5 text-center">
           <div className="flex items-center justify-center gap-1 mb-0.5">
             <TrendingUp className="w-3 h-3 text-success" />
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Realizado</p>

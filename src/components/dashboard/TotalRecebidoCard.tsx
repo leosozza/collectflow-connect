@@ -146,21 +146,21 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   const isPositive = diffPct !== null && diffPct >= 0;
 
   return (
-    <div className="bg-card rounded-xl border border-border/60 shadow-sm w-full flex flex-col overflow-hidden">
+    <div className="bg-card rounded-xl border border-border shadow-sm w-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Total Recebido</h2>
         </div>
       </div>
 
-      <div className="px-4 pb-1">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+      <div className="px-4 pb-2">
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-semibold">
           Total Recebido
         </p>
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
+        <div className="flex items-baseline gap-2 flex-wrap mt-0.5">
+          <p className="text-3xl font-bold text-primary tabular-nums leading-tight">
             {formatCurrency(totalRecebido)}
           </p>
           {diffPct !== null ? (
@@ -188,8 +188,8 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
           <AreaChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
             <defs>
               <linearGradient id="recebidoGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
-                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
               </linearGradient>
             </defs>
             <XAxis
@@ -200,7 +200,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
               interval={Math.max(0, Math.ceil(series.length / 9) - 1)}
             />
             <Tooltip
-              cursor={{ stroke: "hsl(var(--primary))", strokeOpacity: 0.2 }}
+              cursor={{ stroke: "#3b82f6", strokeOpacity: 0.25 }}
               contentStyle={{
                 borderRadius: 8,
                 border: "1px solid hsl(var(--border))",
@@ -216,8 +216,8 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
             <Area
               type="monotone"
               dataKey="value"
-              stroke="hsl(var(--primary))"
-              strokeWidth={2}
+              stroke="#3b82f6"
+              strokeWidth={2.5}
               fill="url(#recebidoGradient)"
               isAnimationActive={hasData}
             />
