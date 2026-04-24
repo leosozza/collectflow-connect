@@ -308,6 +308,7 @@ const AppLayout = () => {
             })()}
           </div>
           <div className="flex items-center gap-2">
+            <UpdateButton />
             <NotificationBell />
             <button
               onClick={() => navigate("/perfil")}
