@@ -56,6 +56,37 @@ interface DashboardStats {
   total_pendente: number;
   acordos_dia: number;
   acordos_mes: number;
+  acionados_ontem: number;
+  acordos_dia_anterior: number;
+  acordos_mes_anterior: number;
+  total_negociado_mes_anterior: number;
+  total_recebido_mes_anterior: number;
+  total_quebra_mes_anterior: number;
+  total_pendente_mes_anterior: number;
+}
+
+// Calcula variação percentual entre período atual e anterior.
+// Retorna { value, isPositive } ou null quando não houver base de comparação.
+// `invert=true` para métricas onde queda é positiva (Quebra, Pendentes).
+function pctDelta(
+  current: number,
+  previous: number,
+  invert = false
+): { value: string; isPositive: boolean } | null {
+  const c = Number(current) || 0;
+  const p = Number(previous) || 0;
+  if (p === 0 && c === 0) return null;
+  if (p === 0) {
+    return { value: "+100%", isPositive: !invert };
+  }
+  const pct = ((c - p) / p) * 100;
+  const rounded = Math.round(pct);
+  const sign = rounded > 0 ? "+" : "";
+  const isUp = rounded >= 0;
+  return {
+    value: `${sign}${rounded}%`,
+    isPositive: invert ? !isUp : isUp,
+  };
 }
 
 const DashboardPage = () => {
