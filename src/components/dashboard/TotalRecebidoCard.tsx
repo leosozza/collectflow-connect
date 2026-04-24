@@ -215,7 +215,6 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
             />
             {/* Linha mês anterior - cinza pontilhada (renderizada antes para ficar atrás) */}
             <Line
-            <Line
               type="monotone"
               dataKey="prevValue"
               stroke="#94a3b8"
