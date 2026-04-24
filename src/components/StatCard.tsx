@@ -59,18 +59,18 @@ const StatCard = ({ title, value, icon, trend, tooltip, variant = "default", com
   return (
     <div
       className={cn(
-        "rounded-xl border shadow-sm animate-fade-in transition-all p-3",
+        "rounded-xl border shadow-sm animate-fade-in px-4 py-3.5",
         isGradient
           ? "gradient-orange border-transparent text-primary-foreground"
-          : "bg-card border-border/60 hover:border-primary/30 hover:shadow-md"
+          : "bg-card border-border"
       )}
     >
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1 min-w-0">
           <span
             className={cn(
-              "font-medium truncate uppercase tracking-wide text-[10px]",
-              isGradient ? "text-primary-foreground/85" : "text-muted-foreground"
+              "font-medium truncate uppercase tracking-wide text-[11px]",
+              isGradient ? "text-primary-foreground/85" : "text-muted-foreground/80"
             )}
           >
             {title}
@@ -104,7 +104,7 @@ const StatCard = ({ title, value, icon, trend, tooltip, variant = "default", com
       </div>
       <p
         className={cn(
-          "font-bold tracking-tight text-lg leading-tight",
+          "font-bold tracking-tight text-xl leading-tight",
           isGradient ? "text-primary-foreground" : "text-foreground"
         )}
       >

@@ -291,19 +291,19 @@ const DashboardPage = () => {
 
       {/* KPI cards row (top) */}
       {layout.visible.kpisTop && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
           {kpis.map((item) => {
             const ItemIcon = item.Icon;
             return (
               <div
                 key={item.label}
-                className="bg-card rounded-xl border border-border/60 shadow-sm px-4 py-3 flex flex-col"
+                className="bg-card rounded-xl border border-border shadow-sm px-4 py-3.5 flex flex-col"
               >
-                <div className={cn("rounded-lg p-1.5 w-fit", item.iconBg)}>
+                <div className={cn("rounded-lg p-2 w-fit", item.iconBg)}>
                   <ItemIcon className={cn("w-4 h-4", item.iconColor)} />
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">{item.label}</p>
-                <p className="text-2xl font-bold text-foreground tabular-nums leading-tight">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80 mt-2 font-medium">{item.label}</p>
+                <p className="text-xl font-bold text-foreground tabular-nums leading-tight mt-0.5">
                   {item.value}
                 </p>
               </div>
@@ -348,7 +348,7 @@ const DashboardPage = () => {
         {rightBlocks.length > 0 && (
           <div
             className={cn(
-              "flex flex-col gap-3 min-h-0 h-full overflow-y-auto pr-1",
+              "flex flex-col gap-4 min-h-0 h-full overflow-y-auto pr-1",
               showParcelas ? "lg:col-span-1" : "lg:col-span-3"
             )}
           >
