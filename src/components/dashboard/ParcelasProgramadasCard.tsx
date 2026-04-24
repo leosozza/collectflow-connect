@@ -129,7 +129,7 @@ export default function ParcelasProgramadasCard({
                     ? "bg-success/15 text-success"
                     : status === "overdue"
                       ? "bg-destructive/15 text-destructive"
-                      : "bg-primary/10 text-primary";
+                      : "bg-blue-500/15 text-blue-600";
                 return (
                   <TableRow
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
