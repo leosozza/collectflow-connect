@@ -464,8 +464,16 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
     if (!domain || !apiToken) { toast.error("Telefonia 3CPlus não configurada neste tenant"); return; }
     setCallingPhone(true);
     try {
+      const callExtension = (profile as any)?.threecplus_extension as string | null | undefined;
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "click2call", domain, api_token: apiToken, agent_id: callAgentId, phone_number: phone.replace(/\D/g, "") },
+        body: {
+          action: "click2call",
+          domain,
+          api_token: apiToken,
+          agent_id: callAgentId,
+          phone_number: phone.replace(/\D/g, ""),
+          extension: callExtension && String(callExtension).trim() ? String(callExtension).trim() : undefined,
+        },
       });
       if (error) throw error;
       if (data?.status && data.status >= 400) {

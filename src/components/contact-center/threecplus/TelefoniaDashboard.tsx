@@ -295,6 +295,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   const [qualifying, setQualifying] = useState(false);
 
   const operatorAgentId = (profile as any)?.threecplus_agent_id as number | null | undefined;
+  const operatorExtension = (profile as any)?.threecplus_extension as string | null | undefined;
 
   const todayStart = useMemo(() => {
     const d = new Date();
@@ -1439,7 +1440,14 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         <div className="px-4">
           <OperatorCallHistory onClickToCall={(phone) => {
             if (operatorAgentId) {
-              invoke("click2call", { agent_id: operatorAgentId, phone }).then(() => {
+              invoke("click2call", {
+                agent_id: operatorAgentId,
+                phone,
+                phone_number: phone,
+                extension: operatorExtension && String(operatorExtension).trim()
+                  ? String(operatorExtension).trim()
+                  : undefined,
+              }).then(() => {
                 toast.success(`Ligando para ${phone}...`);
               }).catch(() => {
                 toast.error("Erro ao iniciar ligação");
