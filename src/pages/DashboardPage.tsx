@@ -22,6 +22,7 @@ import DashboardMetaCard from "@/components/dashboard/DashboardMetaCard";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -212,15 +213,29 @@ const DashboardPage = () => {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Coluna 1: Acionados / Acordos Dia / Acordos Mês  +  Agendados */}
         <div className="flex flex-col gap-3 min-h-0">
-          <div className="grid grid-cols-1 gap-2.5 shrink-0">
-            <StatCard
-              title="Acionados Hoje"
-              value={String(acionadosHoje)}
-              icon="phone"
-              tooltip="Clientes únicos acessados hoje (perfil ou atendimento), excluindo os que já viraram acordo seu."
-            />
-            <StatCard title="Acordos do Dia" value={String(stats?.acordos_dia ?? 0)} icon="agreement" />
-            <StatCard title="Acordos do Mês" value={String(stats?.acordos_mes ?? 0)} icon="agreement" />
+          <div className={cn("shrink-0 bg-card rounded-xl border border-border/60 shadow-sm divide-y divide-border/60")}>
+            {[
+              {
+                label: "Acionados Hoje",
+                value: String(acionadosHoje),
+                tooltip: "Clientes únicos acessados hoje (perfil ou atendimento), excluindo os que já viraram acordo seu.",
+              },
+              { label: "Acordos do Dia", value: String(stats?.acordos_dia ?? 0) },
+              { label: "Acordos do Mês", value: String(stats?.acordos_mes ?? 0) },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={cn("flex items-center justify-between px-3 py-2.5")}
+                title={item.tooltip}
+              >
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                  {item.label}
+                </span>
+                <span className="text-lg font-bold text-foreground tabular-nums">
+                  {item.value}
+                </span>
+              </div>
+            ))}
           </div>
           <div className="flex-1 min-h-0 flex flex-col">
             <ScheduledCallbacksCard
