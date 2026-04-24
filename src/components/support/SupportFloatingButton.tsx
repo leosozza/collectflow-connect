@@ -22,6 +22,26 @@ interface LocalMessage {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-ai-chat`;
 
+const FAB_SIZE = 56;
+const FAB_MARGIN = 16;
+const POS_STORAGE_KEY = "rivo-support-fab-pos";
+
+const loadInitialPos = () => {
+  if (typeof window === "undefined") return { x: 0, y: 0 };
+  try {
+    const raw = localStorage.getItem(POS_STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (typeof p.x === "number" && typeof p.y === "number") return p;
+    }
+  } catch { /* ignore */ }
+  // default: bottom-right
+  return {
+    x: window.innerWidth - FAB_SIZE - 24,
+    y: window.innerHeight - FAB_SIZE - 24,
+  };
+};
+
 const SupportFloatingButton = () => {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -29,6 +49,44 @@ const SupportFloatingButton = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [humanMode, setHumanMode] = useState(false);
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [pos, setPos] = useState(loadInitialPos);
+  const [isDragging, setIsDragging] = useState(false);
+  const draggedRef = useRef(false);
+
+  // Keep within viewport on resize
+  useEffect(() => {
+    const onResize = () => {
+      setPos((p) => ({
+        x: Math.min(Math.max(FAB_MARGIN, p.x), window.innerWidth - FAB_SIZE - FAB_MARGIN),
+        y: Math.min(Math.max(FAB_MARGIN, p.y), window.innerHeight - FAB_SIZE - FAB_MARGIN),
+      }));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Persist
+  useEffect(() => {
+    try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(pos)); } catch { /* ignore */ }
+  }, [pos]);
+
+  // Compute panel anchor based on FAB position
+  const panelStyle = (() => {
+    if (typeof window === "undefined") return {};
+    const PANEL_W = 340;
+    const PANEL_H = 600;
+    const GAP = 12;
+    const openUp = pos.y > window.innerHeight / 2;
+    const alignRight = pos.x + FAB_SIZE / 2 > window.innerWidth / 2;
+    const top = openUp
+      ? Math.max(FAB_MARGIN, pos.y - PANEL_H - GAP)
+      : Math.min(window.innerHeight - PANEL_H - FAB_MARGIN, pos.y + FAB_SIZE + GAP);
+    const left = alignRight
+      ? Math.max(FAB_MARGIN, pos.x + FAB_SIZE - PANEL_W)
+      : Math.min(window.innerWidth - PANEL_W - FAB_MARGIN, pos.x);
+    return { top, left, height: PANEL_H } as React.CSSProperties;
+  })();
+
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
@@ -237,8 +295,8 @@ const SupportFloatingButton = () => {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="fixed bottom-24 right-6 z-50 w-[340px] max-w-[calc(100vw-2rem)] flex flex-col rounded-2xl border bg-card text-card-foreground shadow-2xl overflow-hidden"
-            style={{ height: 600 }}
+            className="fixed z-50 w-[340px] max-w-[calc(100vw-2rem)] flex flex-col rounded-2xl border bg-card text-card-foreground shadow-2xl overflow-hidden"
+            style={panelStyle}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
@@ -391,19 +449,60 @@ const SupportFloatingButton = () => {
         )}
       </AnimatePresence>
 
-      {/* FAB */}
-      <Button
-        onClick={() => setOpen((prev) => !prev)}
-        size="icon"
+      {/* FAB - draggable */}
+      <motion.button
+        drag
+        dragMomentum={false}
+        dragElastic={0}
+        dragConstraints={{
+          left: FAB_MARGIN,
+          top: FAB_MARGIN,
+          right: (typeof window !== "undefined" ? window.innerWidth : 1024) - FAB_SIZE - FAB_MARGIN,
+          bottom: (typeof window !== "undefined" ? window.innerHeight : 768) - FAB_SIZE - FAB_MARGIN,
+        }}
+        style={{ left: pos.x, top: pos.y }}
+        onDragStart={() => {
+          draggedRef.current = true;
+          setIsDragging(true);
+        }}
+        onDragEnd={(_, info) => {
+          setIsDragging(false);
+          setPos((p) => {
+            const nx = Math.min(
+              Math.max(FAB_MARGIN, p.x + info.offset.x),
+              window.innerWidth - FAB_SIZE - FAB_MARGIN,
+            );
+            const ny = Math.min(
+              Math.max(FAB_MARGIN, p.y + info.offset.y),
+              window.innerHeight - FAB_SIZE - FAB_MARGIN,
+            );
+            return { x: nx, y: ny };
+          });
+          // reset drag flag shortly after so click event (if any) is suppressed
+          setTimeout(() => { draggedRef.current = false; }, 50);
+        }}
+        // reset offset after we commit pos
+        animate={{ x: 0, y: 0 }}
+        transition={{ duration: 0 }}
+        onClick={(e) => {
+          if (draggedRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          setOpen((prev) => !prev);
+        }}
         className={cn(
-          "fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg transition-all duration-200",
+          "fixed z-50 h-14 w-14 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm",
+          isDragging ? "cursor-grabbing scale-105" : "cursor-grab",
           open
-            ? "bg-muted text-muted-foreground hover:bg-muted/80"
-            : "bg-primary text-primary-foreground hover:bg-primary/90"
+            ? "bg-muted text-muted-foreground hover:bg-muted/80 shadow-lg"
+            : "bg-primary/30 text-primary-foreground/80 shadow-md hover:bg-primary hover:text-primary-foreground hover:shadow-xl"
         )}
       >
         {open ? <X className="w-6 h-6" /> : <LifeBuoy className="w-6 h-6" />}
-      </Button>
+      </motion.button>
+
     </>
   );
 };
