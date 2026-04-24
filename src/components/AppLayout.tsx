@@ -25,6 +25,7 @@ import {
   Handshake,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import UpdateButton from "@/components/system/UpdateButton";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Button } from "@/components/ui/button";
@@ -307,6 +308,7 @@ const AppLayout = () => {
             })()}
           </div>
           <div className="flex items-center gap-2">
+            <UpdateButton />
             <NotificationBell />
             <button
               onClick={() => navigate("/perfil")}
