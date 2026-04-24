@@ -57,18 +57,18 @@ const DashboardMetaCard = ({
     if (!isTenantAdmin) {
       return {
         goal: Number(myGoal?.target_amount || 0),
-        title: "Minha Meta do Mês",
+        title: "Meta do Mês",
       };
     }
     if (selectedOperatorUserId && selectedProfile?.id) {
       const opGoal = allGoals.find((g) => g.operator_id === selectedProfile.id);
       return {
         goal: Number(opGoal?.target_amount || 0),
-        title: `Meta — ${selectedProfile.full_name || "Operador"}`,
+        title: "Meta do Mês",
       };
     }
     const total = allGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
-    return { goal: total, title: "Meta — Total da Empresa" };
+    return { goal: total, title: "Meta do Mês" };
   }, [isTenantAdmin, myGoal, allGoals, selectedOperatorUserId, selectedProfile]);
 
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
