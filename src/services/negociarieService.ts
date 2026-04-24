@@ -328,6 +328,8 @@ export const negociarieService = {
     } catch (e) {
       logger.error(MODULE, "fetch_client_for_single_boleto", e);
     }
+    // Defense-in-depth: fill any still-missing fields directly from clients table.
+    clientData = await enrichClientDataFromClients(agreement.tenant_id, agreement.client_cpf, clientData);
 
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
@@ -406,6 +408,8 @@ export const negociarieService = {
     } catch (e) {
       logger.error(MODULE, "fetch_client_for_boleto", e);
     }
+    // Defense-in-depth: fill any still-missing fields directly from clients table.
+    clientData = await enrichClientDataFromClients(agreement.tenant_id, agreement.client_cpf, clientData);
 
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
 
