@@ -148,7 +148,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm w-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-3">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Total Recebido</h2>
@@ -160,7 +160,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
           Total Recebido
         </p>
         <div className="flex items-baseline gap-2 flex-wrap mt-0.5">
-          <p className="text-3xl font-bold text-primary tabular-nums leading-tight">
+          <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
             {formatCurrency(totalRecebido)}
           </p>
           {diffPct !== null ? (
@@ -183,7 +183,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
         </div>
       </div>
 
-      <div className="h-[110px] sm:h-[130px] w-full px-1 pb-2">
+      <div className="h-[90px] sm:h-[110px] w-full px-1 pb-2">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
             <defs>

@@ -31,7 +31,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">para hoje</p>
         </div>
       ) : (
-        <div className="overflow-auto max-h-[160px]">
+        <div className="overflow-auto max-h-[200px]">
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border hover:bg-transparent">
