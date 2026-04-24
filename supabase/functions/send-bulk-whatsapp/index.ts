@@ -461,7 +461,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         break;
       }
 
-      const instanceKey = instId || "__gupshup__";
+      const instanceKey: string = (instId as any) || "__gupshup__";
 
       // ===== BATCH RESTING per instance =====
       const currentCount = instanceSendCounts.get(instanceKey) || 0;
