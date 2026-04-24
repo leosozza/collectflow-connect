@@ -178,7 +178,6 @@ const StartWhatsAppConversationDialog = ({
     if (!open) {
       setSelectedPhone("");
       setSelectedInstance("");
-      setForceNewMode(false);
     }
   }, [open]);
 
@@ -204,7 +203,6 @@ const StartWhatsAppConversationDialog = ({
   };
 
   const noInstances = !loadingInstances && instances.length === 0;
-  const showForm = !hasExisting || forceNewMode;
   const instanceName = (id: string | null) =>
     instances.find((i) => i.id === id)?.name || "Instância";
 
@@ -214,24 +212,80 @@ const StartWhatsAppConversationDialog = ({
         <DialogHeader>
           <DialogTitle className="text-left">Abrir conversa no WhatsApp</DialogTitle>
           <DialogDescription className="text-left">
-            {hasExisting && !forceNewMode
-              ? "Encontramos um histórico existente com este devedor."
-              : "Escolha o telefone do devedor e a instância pela qual deseja iniciar a conversa."}
+            Escolha o telefone do devedor e a instância pela qual deseja iniciar a conversa.
           </DialogDescription>
         </DialogHeader>
 
-        {loadingExisting && !hasExisting && (
-          <div className="py-2 text-sm text-muted-foreground">Verificando conversas existentes...</div>
-        )}
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Telefone do devedor</Label>
+            {phoneOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum telefone cadastrado para este devedor.</p>
+            ) : (
+              <Select value={selectedPhone} onValueChange={setSelectedPhone}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar telefone" />
+                </SelectTrigger>
+                <SelectContent>
+                  {phoneOptions.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      <div className="flex items-center gap-2">
+                        <span>{formatPhone(p.raw)}</span>
+                        {p.isPrimary && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Principal</Badge>
+                        )}
+                        {p.source && !p.isPrimary && (
+                          <span className="text-xs text-muted-foreground">· {p.source}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
 
-        {hasExisting && !forceNewMode && (
-          <div className="space-y-3 py-2">
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+          <div className="space-y-2">
+            <Label>Instância de envio</Label>
+            {loadingInstances ? (
+              <p className="text-sm text-muted-foreground">Carregando instâncias...</p>
+            ) : noInstances ? (
+              <p className="text-sm text-destructive">
+                Você não possui nenhuma instância de WhatsApp atribuída. Solicite acesso ao administrador.
+              </p>
+            ) : (
+              <Select value={selectedInstance} onValueChange={setSelectedInstance}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar instância" />
+                </SelectTrigger>
+                <SelectContent>
+                  {instances.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{i.name}</span>
+                        <span className="text-xs text-muted-foreground">· {i.provider}</span>
+                        {i.is_default && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Padrão</Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {loadingExisting && (
+            <div className="text-xs text-muted-foreground">Verificando conversas existentes...</div>
+          )}
+
+          {hasExisting && topExisting && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <History className="h-4 w-4 text-primary" />
-                Já existe uma conversa em andamento
+                Já existe conversa para este número
               </div>
-              <div className="text-sm text-muted-foreground space-y-1">
+              <div className="text-xs text-muted-foreground space-y-0.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-foreground">{instanceName(topExisting.instance_id)}</span>
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
@@ -240,110 +294,39 @@ const StartWhatsAppConversationDialog = ({
                 </div>
                 <div>📞 {formatPhone(topExisting.remote_phone)}</div>
                 {topExisting.last_message_at && (
-                  <div className="text-xs">
+                  <div>
                     Último contato: {new Date(topExisting.last_message_at).toLocaleString("pt-BR")}
                   </div>
                 )}
                 {existingConvs.length > 1 && (
-                  <div className="text-xs italic">
-                    +{existingConvs.length - 1} outra(s) conversa(s) encontrada(s)
+                  <div className="italic">
+                    +{existingConvs.length - 1} outra(s) conversa(s)
                   </div>
                 )}
               </div>
             </div>
-          </div>
-        )}
-
-        {showForm && (
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Telefone do devedor</Label>
-              {phoneOptions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum telefone cadastrado para este devedor.</p>
-              ) : (
-                <Select value={selectedPhone} onValueChange={setSelectedPhone}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar telefone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {phoneOptions.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>
-                        <div className="flex items-center gap-2">
-                          <span>{formatPhone(p.raw)}</span>
-                          {p.isPrimary && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Principal</Badge>
-                          )}
-                          {p.source && !p.isPrimary && (
-                            <span className="text-xs text-muted-foreground">· {p.source}</span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Instância de envio</Label>
-              {loadingInstances ? (
-                <p className="text-sm text-muted-foreground">Carregando instâncias...</p>
-              ) : noInstances ? (
-                <p className="text-sm text-destructive">
-                  Você não possui nenhuma instância de WhatsApp atribuída. Solicite acesso ao administrador.
-                </p>
-              ) : (
-                <Select value={selectedInstance} onValueChange={setSelectedInstance}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar instância" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {instances.map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{i.name}</span>
-                          <span className="text-xs text-muted-foreground">· {i.provider}</span>
-                          {i.is_default && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Padrão</Badge>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <DialogFooter className="gap-2 flex-col sm:flex-row">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
 
-          {hasExisting && !forceNewMode && (
-            <>
-              {isAdmin && (
-                <Button variant="ghost" size="sm" onClick={() => setForceNewMode(true)}>
-                  Iniciar nova mesmo assim
-                </Button>
-              )}
-              <Button onClick={handleOpenExisting} autoFocus>
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Abrir conversa existente
-              </Button>
-            </>
-          )}
-
-          {showForm && (
-            <Button
-              onClick={handleConfirm}
-              disabled={!selectedPhone || !selectedInstance || noInstances}
-              autoFocus
-            >
-              Abrir conversa
+          {hasExisting && (
+            <Button variant="secondary" onClick={handleOpenExisting}>
+              <MessageCircle className="h-4 w-4 mr-2" />
+              Abrir existente
             </Button>
           )}
+
+          <Button
+            onClick={handleConfirm}
+            disabled={!selectedPhone || !selectedInstance || noInstances}
+            autoFocus
+          >
+            {hasExisting ? "Abrir nova conversa" : "Abrir conversa"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
