@@ -115,6 +115,30 @@ Deno.serve(async (req) => {
     }
     console.log(`[maxlist-import] vencidoStatusId resolved: ${vencidoStatusId}`);
 
+    // Fetch Credor to load UI-configured payment mappings
+    const { data: credorData } = await supabase
+      .from("credores")
+      .select("id")
+      .eq("tenant_id", tenant_id)
+      .eq("razao_social", credor)
+      .maybeSingle();
+
+    const credorId = credorData?.id;
+    const uiMappings = new Map<string, string>();
+    if (credorId) {
+      const { data: mappings } = await supabase
+        .from("meio_pagamento_mappings")
+        .select("external_code, meios_pagamento(nome)")
+        .eq("credor_id", credorId);
+      
+      if (mappings) {
+        for (const m of mappings) {
+          const nome = (m.meios_pagamento as any)?.nome;
+          if (nome) uiMappings.set(String(m.external_code), nome.trim().toLowerCase());
+        }
+      }
+    }
+
     // Fetch ALL debt types for this tenant and build PaymentType → tipo_divida_id map
     const paymentTypeToDividaMap = new Map<string, string>();
     const { data: allTiposDivida } = await supabase
@@ -128,7 +152,7 @@ Deno.serve(async (req) => {
       const nameToIdCredor = new Map<string, string>();
       for (const td of allTiposDivida) {
         const normalizedName = (td.nome || "").trim().toLowerCase();
-        if (td.credor_id === credor) {
+        if (td.credor_id === credorId) {
           nameToIdCredor.set(normalizedName, td.id);
         } else if (!td.credor_id) {
           nameToIdGeneric.set(normalizedName, td.id);
@@ -150,18 +174,28 @@ Deno.serve(async (req) => {
         "7": "transferência bancária",
       };
 
+      // 1. Process hardcoded defaults
       for (const [ptCode, tdName] of Object.entries(paymentTypeNameMap)) {
+        if (uiMappings.has(ptCode)) continue; // Skip if overridden by UI
         const id = resolve(tdName);
-        // For cheque caução, fallback to cheque if not found
         if (!id && tdName === "cheque caução") {
           const fallback = resolve("cheque");
           if (fallback) paymentTypeToDividaMap.set(ptCode, fallback);
         } else if (!id && tdName === "transferência bancária") {
-          // Try alternate names
           const fallback = resolve("transf. bancária") || resolve("transferencia bancaria") || resolve("transf bancaria");
           if (fallback) paymentTypeToDividaMap.set(ptCode, fallback);
         } else if (id) {
           paymentTypeToDividaMap.set(ptCode, id);
+        }
+      }
+
+      // 2. Process UI-defined overrides
+      for (const [ptCode, tdName] of uiMappings.entries()) {
+        const id = resolve(tdName);
+        if (id) {
+          paymentTypeToDividaMap.set(ptCode, id);
+        } else {
+           console.log(`[maxlist-import] Warning: UI mapping for code ${ptCode} (${tdName}) could not be resolved to a tipo_divida.`);
         }
       }
     }
@@ -252,27 +286,6 @@ Deno.serve(async (req) => {
 
     console.log(`[maxlist-import] Total records: ${allItems.length}`);
 
-    // Step 1.1: Fetch Payment Mappings for this Creditor
-    const { data: credorData } = await supabase
-      .from("credores")
-      .select("id")
-      .eq("tenant_id", tenant_id)
-      .eq("razao_social", credor)
-      .maybeSingle();
-
-    const credorId = credorData?.id;
-    const paymentMappings = new Map<string, string>();
-    if (credorId) {
-      const { data: mappings } = await supabase
-        .from("meio_pagamento_mappings")
-        .select("external_code, internal_id")
-        .eq("credor_id", credorId);
-
-      if (mappings) {
-        for (const m of mappings) paymentMappings.set(String(m.external_code), m.internal_id);
-      }
-    }
-
     // Step 2: Map records using field_mapping
     const records: any[] = [];
     const rejected: { nome?: string; cpf?: string; reason: string }[] = [];
@@ -315,7 +328,6 @@ Deno.serve(async (req) => {
 
       const isDevolvido = !!rawReturnDate;
       const hasPagamento = !!record.data_pagamento || !!rawPaymentEffected;
-      const meioPagamentoId = rawPaymentType ? paymentMappings.get(String(rawPaymentType)) : null;
 
       let derivedStatus: string;
       if (rawIsCancelled) {
