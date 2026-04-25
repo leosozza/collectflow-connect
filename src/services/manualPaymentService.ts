@@ -46,6 +46,10 @@ export interface CreateManualPaymentData {
   payment_method: string;
   receiver: string;
   notes?: string;
+  interest_amount?: number;
+  penalty_amount?: number;
+  fees_amount?: number;
+  discount_amount?: number;
 }
 
 /**
