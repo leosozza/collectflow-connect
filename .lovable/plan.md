@@ -1,41 +1,33 @@
-## Restaurar card "Total Primeira Parcela do Mês"
+## Corrigir card "Total Primeira Parcela" e restaurar "Total Negociado no Mês"
 
-### Contexto
-- O valor "Total Primeira Parcela do Mês" corresponde ao campo `total_negociado_mes` do RPC `get_dashboard_stats` (soma da primeira parcela dos acordos criados no mês).
-- Hoje esse valor aparece duplicado:
-  1. Como KPI "Total Negociado no Mês" (Handshake roxo) na grade da coluna direita.
-  2. Como `TotalAcordosMiniCard` ("Total de Acordos Realizados") na coluna esquerda, com gráfico de barras 30d.
-- O usuário quer remover o `TotalAcordosMiniCard` e colocar no lugar dele o card antigo simples de "Total Primeira Parcela do Mês".
+### Diagnóstico
+O RPC `get_dashboard_stats` retorna **dois campos distintos** que estavam sendo confundidos:
 
-### Mudanças
+| Campo | O que calcula | Card correto |
+|---|---|---|
+| `total_negociado` | Soma APENAS da **1ª parcela** (entrada OU primeira) dos acordos criados no mês | **Total Primeira Parcela do Mês** |
+| `total_negociado_mes` | Soma de **TODAS as parcelas** dos acordos criados no mês (~R$ 466.274,07) | **Total Negociado no Mês** |
 
-**1. `src/pages/DashboardPage.tsx`**
-- Remover o import de `TotalAcordosMiniCard`.
-- Na Coluna 1 (esquerda), substituir `<TotalAcordosMiniCard ... />` por um card compacto inline (mesmo estilo dos KPIs da coluna direita) com:
-  - Label: "Total Primeira Parcela do Mês"
-  - Ícone: `Handshake` em roxo (`text-purple-500` / `bg-purple-500/10`)
-  - Valor: `formatCurrency(stats?.total_negociado_mes ?? 0)`
-  - Tendência: `trendNegociadoMes` ("vs mês anterior")
-- Como agora esse KPI passa a viver na coluna esquerda como card dedicado, **remover** "Total Negociado no Mês" do array `kpis` da coluna direita para evitar duplicidade. Restam 6 KPIs na grade 2×3 da direita (já era a quantidade prevista no plano original).
+Hoje o card da coluna esquerda foi renomeado para "Total Primeira Parcela do Mês" mas continua usando `total_negociado_mes` — está mostrando o valor errado. E o KPI "Total Negociado no Mês" foi removido da grade da direita.
 
-**2. `src/components/dashboard/TotalAcordosMiniCard.tsx`**
-- Excluir o arquivo (componente deixará de ser usado).
+### Mudanças em `src/pages/DashboardPage.tsx`
 
-### Layout resultante
-```text
-COLUNA 1 (esquerda)            COLUNA 2 (centro)        COLUNA 3 (direita)
-┌─────────────────────┐        ┌──────────────────┐     ┌───────────┬───────────┐
-│ Total Primeira      │        │ Total Recebido   │     │ Acionados │ Acordos D │
-│ Parcela do Mês      │        │ (gráfico)        │     ├───────────┼───────────┤
-└─────────────────────┘        │                  │     │ Acordos M │ Quebra    │
-┌─────────────────────┐        ├──────────────────┤     ├───────────┼───────────┤
-│ Agendamentos Hoje   │        │ Parcelas         │     │ Pendentes │ Colchão   │
-│                     │        │ Programadas      │     └───────────┴───────────┘
-└─────────────────────┘        └──────────────────┘     ┌───────────────────────┐
-                                                        │ Metas (gauge)         │
-                                                        └───────────────────────┘
-```
+**1. Card da coluna esquerda — usar campo correto:**
+- Trocar `stats?.total_negociado_mes` por `stats?.total_negociado` no valor.
+- Remover o bloco de tendência (`trendNegociadoMes`) — esse campo não tem `_anterior` no RPC.
+- Adicionar legenda discreta: "Soma da 1ª parcela dos acordos do mês".
+
+**2. Restaurar KPI "Total Negociado no Mês" na grade da direita:**
+- Reinserir no array `kpis` (antes de "Total de Quebra"):
+  - Label: "Total Negociado no Mês"
+  - Valor: `formatCurrency(stats?.total_negociado_mes ?? 0)` → mostra os ~R$ 466k
+  - Ícone: `Handshake` roxo
+  - Trend: `trendNegociadoMes` ("vs mês anterior")
+
+### Resultado
+- **Coluna esquerda (acima de Agendamentos):** "Total Primeira Parcela do Mês" com `total_negociado` (valor distinto, menor).
+- **Coluna direita (grade KPIs):** volta a ter "Total Negociado no Mês" com `total_negociado_mes` (R$ 466.274,07).
+- Sem duplicidade — cada card mostra um valor diferente vindo do mesmo RPC.
 
 ### Fora de escopo
-- Nenhuma mudança em RPCs, lógica de cálculo ou nos demais cards.
-- Personalização (`CustomizeDashboardDialog`) e flags de visibilidade permanecem inalteradas.
+- Nenhuma mudança no RPC, na lógica de cálculo ou em outros cards.
