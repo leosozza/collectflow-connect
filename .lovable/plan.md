@@ -1,152 +1,96 @@
-# Plano: Dashboard fix + Módulo FINANCEIRO + Baixas Realizadas
+# Correções: Financeiro + Breakdown de Parcelas + UX
 
-## Descobertas relevantes
+## 1. Remover duplicidade nas abas de Acordos
 
-- O `_recebido` atual da `get_dashboard_stats` **já usa** `manual_payments` (`confirmed`) + `portal_payments` (`paid`). Está faltando `negociarie_cobrancas` (`pago`) e o status `approved` em `manual_payments`.
-- **Não existe tabela `agreement_installments`** — as parcelas são virtuais, geradas a partir de `agreements.first_due_date + new_installments` e `custom_installment_values`/`custom_installment_dates`. O "pagamento" da parcela vive em 3 fontes:
-  - `manual_payments` (campos: `agreement_id`, `installment_number`, `installment_key`, `amount_paid`, `status`, `payment_date`, `payment_method`, `receiver`).
-  - `portal_payments` (campos: `agreement_id`, `amount`, `status`, `payment_method`, `payment_data`, `updated_at`).
-  - `negociarie_cobrancas` (campos: `agreement_id`, `installment_key`, `valor_pago`, `data_pagamento`, `status`).
-- A tela de "Aguardando Liberação" e "Confirmação de Pagamento" hoje são **abas** dentro de `/acordos` (`statusFilter = 'pending_approval' | 'payment_confirmation'`). Vamos transformá-las em rotas próprias reaproveitando os mesmos componentes.
-- Sidebar é hand-coded em `src/components/AppLayout.tsx` (não usa shadcn sidebar).
+**Problema:** as rotas `/financeiro/aguardando-liberacao` e `/financeiro/confirmacao-pagamento` foram criadas, mas as abas continuam aparecendo dentro de `/acordos`, gerando duplicidade.
 
----
+**Correção:**
+- Remover os chips `Aguardando Liberação` e `Confirmação de Pagamento` da barra de filtros de status em `src/pages/AcordosPage.tsx` (`statusFilterConfig`).
+- Manter apenas: Pagos, Vigentes, Vencidos, Cancelados.
+- Se o usuário entrar em `/acordos?status=pending_approval` ou `?status=payment_confirmation` (link antigo), redirecionar para a rota correspondente em `/financeiro/...`.
+- Os wrappers `AguardandoLiberacaoPage` e `ConfirmacaoPagamentoPage` continuam usando a `AcordosPage`, mas passando uma prop `lockedStatus` que:
+  - força o filtro internamente,
+  - **esconde a barra de chips de status** completamente,
+  - ajusta o título da página ("Aguardando Liberação" / "Confirmação de Pagamento").
 
-## FASE 1 — Migration: corrigir `_recebido` em `get_dashboard_stats`
+## 2. Breakdown de juros, multa, honorários e desconto por parcela
 
-Nova migration que faz `CREATE OR REPLACE` da função (mantém assinatura `(_user_id, _year, _month, _user_ids)`, sem dropar nada). Substitui só o bloco do `_recebido` e do `_recebido_mes_ant`:
+**Estado atual:** a tabela `agreements` só armazena `original_total`, `proposed_total`, `discount_percent`, `entrada_value`, `new_installment_value` e `custom_installment_values` (jsonb com valor por parcela). Não existem campos de juros/multa/honorários/desconto separados nem na parcela nem no acordo. A tabela `manual_payments` também não persiste esse breakdown.
 
-```sql
--- Mês corrente
-_recebido :=
-  COALESCE((SELECT SUM(mp.amount_paid)
-    FROM manual_payments mp JOIN agreements a ON a.id = mp.agreement_id
-    WHERE mp.tenant_id = _tenant
-      AND mp.status IN ('confirmed','approved')
-      AND mp.payment_date BETWEEN _month_start AND _month_end
-      AND (_no_op_filter OR a.created_by = _user_id
-           OR a.created_by = ANY(COALESCE(_user_ids,'{}'::uuid[])))), 0)
-  + COALESCE((SELECT SUM(pp.amount)
-    FROM portal_payments pp JOIN agreements a ON a.id = pp.agreement_id
-    WHERE pp.tenant_id = _tenant
-      AND pp.status = 'paid'
-      AND pp.updated_at >= _month_start::timestamptz
-      AND pp.updated_at <  (_month_end + 1)::timestamptz
-      AND (_no_op_filter OR a.created_by = _user_id
-           OR a.created_by = ANY(COALESCE(_user_ids,'{}'::uuid[])))), 0)
-  + COALESCE((SELECT SUM(nc.valor_pago)
-    FROM negociarie_cobrancas nc JOIN agreements a ON a.id = nc.agreement_id
-    WHERE nc.tenant_id = _tenant
-      AND nc.status = 'pago'
-      AND nc.data_pagamento BETWEEN _month_start AND _month_end
-      AND (_no_op_filter OR a.created_by = _user_id
-           OR a.created_by = ANY(COALESCE(_user_ids,'{}'::uuid[])))), 0);
-```
-Mesmo bloco replicado para `_recebido_mes_ant` com `_prev_month_start/_prev_month_end`.
+**Migration (segura, aditiva — nada é apagado):**
 
-Garantias: não dropa, não muda assinatura, não toca dados.
+Adicionar à tabela `agreements`:
+- `interest_amount numeric default 0` — juros total do acordo
+- `penalty_amount numeric default 0` — multa total do acordo
+- `fees_amount numeric default 0` — honorários total do acordo
+- `discount_amount numeric default 0` — desconto total em R$ (complementa o `discount_percent` existente)
+- `installment_breakdown jsonb default '{}'::jsonb` — breakdown por parcela no formato:
+  ```json
+  { "1": { "principal": 100, "juros": 5, "multa": 2, "honorarios": 3, "desconto": 0 }, "2": {...} }
+  ```
 
----
+Adicionar à tabela `manual_payments`:
+- `interest_amount numeric default 0`
+- `penalty_amount numeric default 0`
+- `fees_amount numeric default 0`
+- `discount_amount numeric default 0`
 
-## FASE 2 — Sidebar: agrupador FINANCEIRO
+**Frontend:**
+- Em `AgreementForm.tsx`, adicionar 4 inputs (Juros, Multa, Honorários, Desconto R$) na seção de valores.
+- Ao calcular as parcelas, distribuir proporcionalmente os valores entre as parcelas e gravar em `installment_breakdown`. Se o usuário usar "valores customizados por parcela", permitir editar o breakdown individualmente (modo avançado, opcional num primeiro momento — por padrão distribuição linear).
+- Em `ManualPaymentDialog.tsx`, expor 4 campos opcionais para informar quanto do pagamento é juros/multa/honorários/desconto.
+- A RPC `get_baixas_realizadas` passa a ler esses campos diretamente (não mais 0 fixo para `manual_payments`), e para `portal_payments` continua tentando extrair de `payment_data` jsonb.
 
-Edição em `src/components/AppLayout.tsx`:
+## 3. Filtros mais clean em Baixas Realizadas + filtro multi-mês
 
-1. Remover o item topo `Acordos` da lista `preContactItems`.
-2. Adicionar um novo `<Collapsible>` "Financeiro" (ícone `Banknote` ou `HandCoins`) com filhos:
-   - **Acordos** → `/acordos` (visível se `permissions.canViewAcordos`)
-   - **Baixas Realizadas** → `/financeiro/baixas` (visível se `canViewAcordos`)
-   - **Aguardando Liberação** → `/financeiro/aguardando-liberacao` (apenas se `permissions.canApproveAcordos` ou role admin/super_admin)
-   - **Confirmação de Pagamento** → `/financeiro/confirmacao-pagamento` (apenas se `permissions.canApproveAcordos` ou admin)
-3. Estado `financeiroOpen` controlado, abre automaticamente quando rota começa com `/acordos` ou `/financeiro`.
+**Refatoração de `BaixasRealizadasPage.tsx`:**
+- Substituir o card grande de filtros por uma barra horizontal compacta (mesmo padrão de `/acordos`: `flex flex-wrap gap-3 items-center`, sem `Card` envolvendo).
+- Substituir os 2 popovers separados (De / Até) por **um único filtro de Mês multi-select** (combobox/popover com checkbox por mês do ano corrente + anos anteriores), seguindo o mesmo visual dos selects do sistema. Default: mês corrente selecionado.
+- Manter, mais enxutos: Busca (nome/CPF), Credor, Local, Meio de pagamento. Tudo na mesma linha.
+- Ajustar a query: derivar `_date_from`/`_date_to` a partir do menor/maior mês selecionado e filtrar lado-cliente os meses intermediários não selecionados (cobre seleção descontínua tipo "Janeiro + Março").
+- Manter o card de resumo (Total / Quantidade de baixas).
 
-Roteamento em `src/App.tsx` (dentro do `AppLayout`):
-- `acordos` continua mas com URL search default `?status=vigentes` (mantém abas atuais Pagos/Vigentes/Vencidos/Aguardando/Cancelados/Confirmação) — **as abas continuam existindo na página** para uso interno; o sidebar apenas adiciona atalhos diretos.
-- `financeiro/baixas` → nova `<BaixasRealizadasPage />`.
-- `financeiro/aguardando-liberacao` → renderiza `AcordosPage` com prop/initial filter `pending_approval` (ou navega com `?status=pending_approval` e oculta o seletor de abas).
-- `financeiro/confirmacao-pagamento` → mesmo padrão com `?status=payment_confirmation`.
+## 4. Padronizar exibição de Credor (2 primeiros nomes) em todo o sistema
 
-Forma mais simples: criar 2 wrappers finos `AguardandoLiberacaoPage.tsx` e `ConfirmacaoPagamentoPage.tsx` que importam `AcordosPage` passando um `lockedStatus` prop. Ajustar `AcordosPage` para aceitar `lockedStatus?: StatusFilter` e, quando presente, esconder os chips de status.
-
-Guarda de rota (dentro dos wrappers):
-```tsx
-if (!permissions.canApproveAcordos) return <Navigate to="/acordos" replace />;
+**Criar helper** em `src/lib/formatters.ts`:
+```ts
+export const shortCredor = (nome?: string | null, words = 2) =>
+  (nome ?? "").trim().split(/\s+/).slice(0, words).join(" ") || "—";
 ```
 
----
+**Aplicar em todas as superfícies onde Credor aparece:**
+- `BaixasRealizadasPage` (coluna Credor + filtro select mostra abreviado, mas o `value` continua sendo o nome completo).
+- `AcordosPage` / `AgreementsList` (lista, filtro de credor).
+- Dashboard (cards e listas de vencimentos / acionados hoje).
+- Cards de cliente (`ClientHeader`, `ClientTable`, `ClientFilters`).
+- Carteira (tabela e kanban).
+- Componentes de portal e relatórios que mostram o credor em listagem.
 
-## FASE 3 — Página "Baixas Realizadas"
+Tooltip nativo (`title={credorCompleto}`) para mostrar o nome completo no hover. Onde houver coluna "Credor" em tabela, manter `truncate max-w-[180px]` + tooltip.
 
-### Backend: nova RPC `get_baixas_realizadas`
+## Detalhes técnicos
 
-```sql
-CREATE OR REPLACE FUNCTION public.get_baixas_realizadas(
-  _date_from date DEFAULT NULL,
-  _date_to date DEFAULT NULL,
-  _credor text DEFAULT NULL,
-  _local text DEFAULT NULL,        -- 'credora' | 'cobradora' | NULL
-  _payment_method text DEFAULT NULL
-) RETURNS TABLE (
-  source text,                     -- 'manual' | 'portal' | 'negociarie'
-  payment_id uuid,
-  agreement_id uuid,
-  client_cpf text,
-  client_name text,
-  credor text,
-  installment_number int,          -- parcela X
-  total_installments int,          -- de Y
-  installment_key text,
-  valor_original numeric,          -- da parcela (custom_installment_values ou new_installment_value)
-  juros numeric,                   -- best-effort: do payment_data jsonb se existir, senão 0
-  multa numeric,
-  honorarios numeric,
-  valor_pago numeric,
-  payment_date date,
-  payment_method text,
-  local_pagamento text             -- 'cobradora' p/ manual+portal+negociarie por padrão; 'credora' se receiver/payment_data indicar
-) ...
-```
+### Arquivos editados
+- `src/pages/AcordosPage.tsx` — remover chips duplicados; aceitar prop `lockedStatus?: StatusFilter`; esconder barra de chips e ajustar título quando `lockedStatus` está setado; redirect dos query params antigos.
+- `src/pages/financeiro/AguardandoLiberacaoPage.tsx` — passar `lockedStatus="pending_approval"`.
+- `src/pages/financeiro/ConfirmacaoPagamentoPage.tsx` — passar `lockedStatus="payment_confirmation"`.
+- `src/pages/financeiro/BaixasRealizadasPage.tsx` — refator de filtros + multi-mês.
+- `src/components/acordos/AgreementForm.tsx` — inputs de juros/multa/honorários/desconto e geração de `installment_breakdown`.
+- `src/components/acordos/ManualPaymentDialog.tsx` — campos opcionais de breakdown.
+- `src/services/agreementService.ts` — propagar novos campos.
+- `src/services/manualPaymentService.ts` — propagar novos campos.
+- `src/lib/formatters.ts` — `shortCredor()`.
+- Pontos de exibição de credor: `AgreementsList.tsx`, `ClientTable.tsx`, `ClientHeader.tsx`, `CarteiraTable.tsx`, `CarteiraKanban.tsx`, `KPICards.tsx`/cards de dashboard relevantes, `BaixasRealizadasPage.tsx`.
 
-Lógica:
-- UNION ALL das 3 fontes filtradas por status pago, `tenant_id` resolvido por `auth.uid()` → `tenant_users`.
-- `installment_number`/`total_installments` derivados do JOIN com `agreements` (`new_installments`, e installment_key/installment_number).
-- `local_pagamento`: `manual_payments.receiver` mapeia para `credora` quando = 'credora'/'creditor'; portal+negociarie default `cobradora` (ajustável).
-- `valor_original` = `COALESCE(custom_installment_values->>installment_number, new_installment_value)`; para entrada, `entrada_value`.
-- `juros/multa/honorarios`: não há colunas dedicadas hoje — extraímos do `portal_payments.payment_data` (jsonb) quando disponível; `manual_payments` não persiste breakdown, então retornamos `0` para esses campos e exibimos "—" no front. *Decisão de produto: aceitar best-effort agora; uma evolução futura adicionaria colunas `interest_amount/penalty_amount/fees_amount` em `manual_payments`.*
+### Migrations (aditivas, sem perda de dados)
+1. `ALTER TABLE agreements ADD COLUMN interest_amount/penalty_amount/fees_amount/discount_amount numeric DEFAULT 0, ADD COLUMN installment_breakdown jsonb DEFAULT '{}'::jsonb;`
+2. `ALTER TABLE manual_payments ADD COLUMN interest_amount/penalty_amount/fees_amount/discount_amount numeric DEFAULT 0;`
+3. `CREATE OR REPLACE FUNCTION public.get_baixas_realizadas(...)` — atualizar para ler os novos campos de `manual_payments` (em vez de retornar 0). Mantém assinatura.
 
-Filtros aplicados via parâmetros; tudo opcional.
+### Validação pós-implementação
+1. `/acordos` mostra apenas 4 chips: Pagos, Vigentes, Vencidos, Cancelados.
+2. `/financeiro/aguardando-liberacao` e `/financeiro/confirmacao-pagamento` exibem só a lista filtrada, sem chips.
+3. Criar acordo com juros/multa/honorários/desconto → parcelas mostram breakdown; baixa manual permite informar a composição → aparece em Baixas Realizadas.
+4. Filtro de meses em Baixas aceita múltipla seleção; default = mês atual.
+5. Em todas as listagens, Credor aparece com 2 nomes; hover mostra nome completo.
 
-### Frontend: `src/pages/financeiro/BaixasRealizadasPage.tsx`
-
-- Header com filtros (shadcn): `DateRangePicker` (Data de pagamento), `Select` Credor, `Select` Local (Credora/Cobradora/Todos), `Select` Meio de Pagamento (Pix/Boleto/Cartão/Outros), botão "Limpar".
-- Default: período = mês corrente (`startOfMonth`..`endOfMonth`).
-- Lista renderizada como tabela responsiva agrupada por mês (cabeçalho "Outubro/2025", "Novembro/2025"...).
-- Colunas: Devedor (nome + CPF), Credor, Parcela ("3 de 6"), Valor original, Juros, Multa, Honorários, Valor pago, Data, Meio, Local.
-- Total no rodapé do grupo (soma de valor pago).
-- Export para Excel reutilizando `exportToExcel` de `src/lib/exportUtils.ts`.
-
-### Permissões
-Visível para todo usuário com `canViewAcordos`. Sem restrição extra além de tenant.
-
----
-
-## Arquivos a criar/editar
-
-**Criar:**
-- `supabase/migrations/<ts>_fix_recebido_negociarie.sql` (Fase 1).
-- `supabase/migrations/<ts>_baixas_realizadas_rpc.sql` (Fase 3).
-- `src/pages/financeiro/BaixasRealizadasPage.tsx`.
-- `src/pages/financeiro/AguardandoLiberacaoPage.tsx` (wrapper).
-- `src/pages/financeiro/ConfirmacaoPagamentoPage.tsx` (wrapper).
-
-**Editar:**
-- `src/components/AppLayout.tsx` (sidebar: novo grupo Financeiro, remove Acordos do topo).
-- `src/App.tsx` (3 novas rotas dentro do `AppLayout`).
-- `src/pages/AcordosPage.tsx` (aceitar prop opcional `lockedStatus` para esconder chips).
-
-## Validação pós-implementação
-
-1. SQL: `SELECT total_recebido FROM get_dashboard_stats(NULL,2025,11,NULL);` antes/depois.
-2. UI: navegar `/dashboard` (KPI Total Recebido), `/acordos`, `/financeiro/baixas`, `/financeiro/aguardando-liberacao`, `/financeiro/confirmacao-pagamento`.
-3. Permissões: usuário sem `canApproveAcordos` não vê os 2 últimos itens do menu nem acessa as rotas (redireciona).
-4. Sidebar collapsible mantém-se aberto quando rota ativa começa com `/acordos` ou `/financeiro`.
