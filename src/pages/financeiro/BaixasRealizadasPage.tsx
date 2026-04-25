@@ -130,8 +130,8 @@ const BaixasRealizadasPage = () => {
 
   const operatorNameFor = (r: BaixaRow): string => {
     const id = operatorIdFor(r);
-    if (!id) return "—";
-    return operatorNameById[id] ?? "—";
+    if (!id) return "Sistema/Importação";
+    return operatorNameById[id] ?? "Sistema/Importação";
   };
 
   const credores = useMemo(

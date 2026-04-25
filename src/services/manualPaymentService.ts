@@ -42,6 +42,10 @@ export interface CreateManualPaymentData {
   installment_number: number;
   installment_key?: string;
   amount_paid: number;
+  interest_amount?: number;
+  penalty_amount?: number;
+  fees_amount?: number;
+  discount_amount?: number;
   payment_date: string;
   payment_method: string;
   receiver: string;

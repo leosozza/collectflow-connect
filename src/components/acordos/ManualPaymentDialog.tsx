@@ -45,6 +45,13 @@ const ManualPaymentDialog = ({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [receiver, setReceiver] = useState("");
   const [notes, setNotes] = useState("");
+  
+  // Encargos adicionais / opcionais
+  const [interestAmount, setInterestAmount] = useState(0);
+  const [penaltyAmount, setPenaltyAmount] = useState(0);
+  const [feesAmount, setFeesAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
+
   const [existing, setExisting] = useState<ManualPayment | null>(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
 
@@ -73,6 +80,10 @@ const ManualPaymentDialog = ({
         installment_number: installmentNumber,
         installment_key: installmentKey,
         amount_paid: amountPaid,
+        interest_amount: interestAmount || 0,
+        penalty_amount: penaltyAmount || 0,
+        fees_amount: feesAmount || 0,
+        discount_amount: discountAmount || 0,
         payment_date: paymentDate,
         payment_method: paymentMethod,
         receiver,
@@ -138,6 +149,25 @@ const ManualPaymentDialog = ({
                   Ao confirmar, o valor da parcela será atualizado para refletir o valor recebido.
                 </p>
               )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">Juros Cobrados</Label>
+                <CurrencyInput value={interestAmount} onValueChange={setInterestAmount} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Multa Cobrada</Label>
+                <CurrencyInput value={penaltyAmount} onValueChange={setPenaltyAmount} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Honorários</Label>
+                <CurrencyInput value={feesAmount} onValueChange={setFeesAmount} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Desconto Concedido</Label>
+                <CurrencyInput value={discountAmount} onValueChange={setDiscountAmount} />
+              </div>
             </div>
 
             <div>
