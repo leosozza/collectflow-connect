@@ -322,9 +322,7 @@ const AcordosPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {statusFilterConfig
-          .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
-          .map(({ key, label, color, selectedColor }) => (
+        {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
           <button
             key={key}
             onClick={() => setStatusFilter(key)}
@@ -332,7 +330,6 @@ const AcordosPage = () => {
               statusFilter === key ? selectedColor : color
             }`}
           >
-            {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
             {label}
           </button>
         ))}
