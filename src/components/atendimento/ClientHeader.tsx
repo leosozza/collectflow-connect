@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP } from "@/lib/formatters";
+import { formatCPF, formatCurrency, formatPhone, formatDate, formatCEP, shortCredor } from "@/lib/formatters";
 import { User, Building, ChevronDown, ChevronUp, Phone, PhoneOff, Mail, MapPin, FileText, DollarSign, Tag, Handshake, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { promotePhoneToHot, type PhoneSlot } from "@/services/clientPhoneService";
@@ -317,9 +317,9 @@ const ClientHeader = ({ client, clientRecords = [], totalAberto, totalPago, dias
             
             <div className="flex items-center gap-x-4 mt-1 text-sm text-muted-foreground">
               <span>CPF: {formatCPF(client.cpf)}</span>
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5" title={client.credor}>
                 <Building className="w-3.5 h-3.5" />
-                Credor: {client.credor}
+                Credor: {shortCredor(client.credor)}
               </span>
             </div>
           </div>

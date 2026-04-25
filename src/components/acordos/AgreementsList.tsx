@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Agreement } from "@/services/agreementService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { formatCPF } from "@/lib/formatters";
+import { formatCPF, shortCredor } from "@/lib/formatters";
 
 interface AgreementsListProps {
   agreements: Agreement[];
@@ -90,7 +90,7 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                   </Link>
                 </TableCell>
                 <TableCell>{formatCPF(a.client_cpf)}</TableCell>
-                <TableCell>{a.credor}</TableCell>
+                <TableCell title={a.credor} className="max-w-[180px] truncate">{shortCredor(a.credor)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {(a as any).creator_name || "—"}
                 </TableCell>

@@ -45,6 +45,10 @@ const ManualPaymentDialog = ({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [receiver, setReceiver] = useState("");
   const [notes, setNotes] = useState("");
+  const [interestAmount, setInterestAmount] = useState(0);
+  const [penaltyAmount, setPenaltyAmount] = useState(0);
+  const [feesAmount, setFeesAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [existing, setExisting] = useState<ManualPayment | null>(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
 
@@ -77,6 +81,10 @@ const ManualPaymentDialog = ({
         payment_method: paymentMethod,
         receiver,
         notes: notes || undefined,
+        interest_amount: interestAmount || 0,
+        penalty_amount: penaltyAmount || 0,
+        fees_amount: feesAmount || 0,
+        discount_amount: discountAmount || 0,
       };
       await manualPaymentService.create(data, tenantId, profileId);
       toast({ title: "Solicitação de baixa registrada", description: "Aguardando confirmação do administrador." });
@@ -170,6 +178,31 @@ const ManualPaymentDialog = ({
                   <SelectItem value="COBRADORA">COBRADORA</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+
+            <div className="rounded-md border p-3 space-y-3 bg-muted/30">
+              <div className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">
+                Composição do pagamento (opcional)
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Juros (R$)</Label>
+                  <CurrencyInput value={interestAmount} onValueChange={setInterestAmount} />
+                </div>
+                <div>
+                  <Label className="text-xs">Multa (R$)</Label>
+                  <CurrencyInput value={penaltyAmount} onValueChange={setPenaltyAmount} />
+                </div>
+                <div>
+                  <Label className="text-xs">Honorários (R$)</Label>
+                  <CurrencyInput value={feesAmount} onValueChange={setFeesAmount} />
+                </div>
+                <div>
+                  <Label className="text-xs">Desconto (R$)</Label>
+                  <CurrencyInput value={discountAmount} onValueChange={setDiscountAmount} />
+                </div>
+              </div>
             </div>
 
             <div>
