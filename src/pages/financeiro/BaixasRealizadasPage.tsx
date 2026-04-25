@@ -36,6 +36,7 @@ type BaixaRow = {
   payment_date: string | null;
   payment_method: string | null;
   local_pagamento: "credora" | "cobradora" | null;
+  operator_id: string | null;
 };
 
 const fmtBRL = (n: number | null | undefined) =>
@@ -124,34 +125,8 @@ const BaixasRealizadasPage = () => {
     return map;
   }, [tenantOperators]);
 
-  // Resolver requested_by por payment_id (apenas baixas manuais).
-  const manualIds = useMemo(
-    () => rows.filter(r => r.source === "manual").map(r => r.payment_id),
-    [rows],
-  );
-
-  const { data: requestedByMap = {} as Record<string, string | null> } = useQuery<Record<string, string | null>>({
-    queryKey: ["baixas-manual-requesters", tenant?.id, manualIds.length, manualIds[0] ?? "", manualIds[manualIds.length - 1] ?? ""],
-    enabled: !!tenant?.id && manualIds.length > 0,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const { data: mp } = await supabase
-        .from("manual_payments")
-        .select("id, requested_by")
-        .in("id", manualIds);
-      const map: Record<string, string | null> = {};
-      (mp ?? []).forEach((m: any) => {
-        map[m.id] = m.requested_by ?? null;
-      });
-      return map;
-    },
-  });
-
-  // Retorna user_id do operador da linha (ou null se for portal/negociarie).
-  const operatorIdFor = (r: BaixaRow): string | null => {
-    if (r.source !== "manual") return null;
-    return requestedByMap[r.payment_id] ?? null;
-  };
+  // Retorna user_id do operador da linha
+  const operatorIdFor = (r: BaixaRow): string | null => r.operator_id;
 
   const operatorNameFor = (r: BaixaRow): string => {
     const id = operatorIdFor(r);
@@ -181,7 +156,7 @@ const BaixasRealizadasPage = () => {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, searchQuery, operatorFilter, requestedByMap]);
+  }, [rows, searchQuery, operatorFilter]);
 
   // Agrupa por mês de pagamento
   const grouped = useMemo(() => {
