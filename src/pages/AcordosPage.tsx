@@ -382,6 +382,25 @@ const AcordosPage = () => {
           </SelectContent>
         </Select>
 
+        {isAdmin && (
+          <Select value={operatorFilter} onValueChange={setOperatorFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filtrar operador" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os Operadores</SelectItem>
+              {operators.map((op) => (
+                <SelectItem
+                  key={op.user_id ?? "portal"}
+                  value={op.user_id ?? "portal"}
+                >
+                  {op.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         <Select value={selectedYear} onValueChange={(v) => { setSelectedYear(v); setDateFrom(undefined); setDateTo(undefined); }}>
           <SelectTrigger className="w-28">
             <SelectValue placeholder="Ano" />
