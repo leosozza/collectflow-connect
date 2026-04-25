@@ -74,21 +74,34 @@ const BaixasRealizadasPage = () => {
   const { tenant } = useTenant();
   const today = new Date();
 
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(startOfMonth(today));
-  const [dateTo, setDateTo] = useState<Date | undefined>(endOfMonth(today));
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [yearFilter, setYearFilter] = useState<string>(String(today.getFullYear()));
+  const [monthsFilter, setMonthsFilter] = useState<number[]>([today.getMonth()]); // 0-11
   const [credorFilter, setCredorFilter] = useState<string>("todos");
   const [localFilter, setLocalFilter] = useState<string>("todos");
   const [methodFilter, setMethodFilter] = useState<string>("todos");
   const [operatorFilter, setOperatorFilter] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Range efetivo: De/Até prevalecem; senão, deriva de Ano + Meses selecionados.
+  const effectiveRange = useMemo(() => {
+    if (dateFrom || dateTo) return { from: dateFrom ?? null, to: dateTo ?? null };
+    const yr = parseInt(yearFilter, 10);
+    const months = monthsFilter.length > 0 ? [...monthsFilter].sort((a, b) => a - b) : [0, 11];
+    return {
+      from: startOfMonth(new Date(yr, months[0], 1)),
+      to: endOfMonth(new Date(yr, months[months.length - 1], 1)),
+    };
+  }, [dateFrom, dateTo, yearFilter, monthsFilter]);
+
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["baixas-realizadas", tenant?.id, dateFrom?.toISOString(), dateTo?.toISOString(), credorFilter, localFilter, methodFilter],
+    queryKey: ["baixas-realizadas", tenant?.id, effectiveRange.from?.toISOString(), effectiveRange.to?.toISOString(), credorFilter, localFilter, methodFilter],
     enabled: !!tenant?.id,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_baixas_realizadas" as any, {
-        _date_from: dateFrom ? format(dateFrom, "yyyy-MM-dd") : null,
-        _date_to: dateTo ? format(dateTo, "yyyy-MM-dd") : null,
+        _date_from: effectiveRange.from ? format(effectiveRange.from, "yyyy-MM-dd") : null,
+        _date_to: effectiveRange.to ? format(effectiveRange.to, "yyyy-MM-dd") : null,
         _credor: credorFilter === "todos" ? null : credorFilter,
         _local: localFilter === "todos" ? null : localFilter,
         _payment_method: methodFilter === "todos" ? null : methodFilter,
