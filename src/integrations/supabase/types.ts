@@ -276,15 +276,20 @@ export type Database = {
           credor: string
           custom_installment_dates: Json | null
           custom_installment_values: Json | null
+          discount_amount: number
           discount_percent: number | null
           entrada_date: string | null
           entrada_value: number | null
+          fees_amount: number
           first_due_date: string
           id: string
+          installment_breakdown: Json
+          interest_amount: number
           new_installment_value: number
           new_installments: number
           notes: string | null
           original_total: number
+          penalty_amount: number
           portal_origin: boolean
           previous_agreement_id: string | null
           proposed_total: number
@@ -306,15 +311,20 @@ export type Database = {
           credor: string
           custom_installment_dates?: Json | null
           custom_installment_values?: Json | null
+          discount_amount?: number
           discount_percent?: number | null
           entrada_date?: string | null
           entrada_value?: number | null
+          fees_amount?: number
           first_due_date: string
           id?: string
+          installment_breakdown?: Json
+          interest_amount?: number
           new_installment_value?: number
           new_installments?: number
           notes?: string | null
           original_total?: number
+          penalty_amount?: number
           portal_origin?: boolean
           previous_agreement_id?: string | null
           proposed_total?: number
@@ -336,15 +346,20 @@ export type Database = {
           credor?: string
           custom_installment_dates?: Json | null
           custom_installment_values?: Json | null
+          discount_amount?: number
           discount_percent?: number | null
           entrada_date?: string | null
           entrada_value?: number | null
+          fees_amount?: number
           first_due_date?: string
           id?: string
+          installment_breakdown?: Json
+          interest_amount?: number
           new_installment_value?: number
           new_installments?: number
           notes?: string | null
           original_total?: number
+          penalty_amount?: number
           portal_origin?: boolean
           previous_agreement_id?: string | null
           proposed_total?: number
@@ -3526,12 +3541,16 @@ export type Database = {
           agreement_id: string
           amount_paid: number
           created_at: string
+          discount_amount: number
+          fees_amount: number
           id: string
           installment_key: string | null
           installment_number: number
+          interest_amount: number
           notes: string | null
           payment_date: string
           payment_method: string
+          penalty_amount: number
           receiver: string
           requested_by: string
           review_notes: string | null
@@ -3544,12 +3563,16 @@ export type Database = {
           agreement_id: string
           amount_paid: number
           created_at?: string
+          discount_amount?: number
+          fees_amount?: number
           id?: string
           installment_key?: string | null
           installment_number: number
+          interest_amount?: number
           notes?: string | null
           payment_date: string
           payment_method: string
+          penalty_amount?: number
           receiver: string
           requested_by: string
           review_notes?: string | null
@@ -3562,12 +3585,16 @@ export type Database = {
           agreement_id?: string
           amount_paid?: number
           created_at?: string
+          discount_amount?: number
+          fees_amount?: number
           id?: string
           installment_key?: string | null
           installment_number?: number
+          interest_amount?: number
           notes?: string | null
           payment_date?: string
           payment_method?: string
+          penalty_amount?: number
           receiver?: string
           requested_by?: string
           review_notes?: string | null
@@ -6650,6 +6677,7 @@ export type Database = {
           client_cpf: string
           client_name: string
           credor: string
+          desconto: number
           honorarios: number
           installment_key: string
           installment_number: number

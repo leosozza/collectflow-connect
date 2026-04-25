@@ -37,9 +37,7 @@ const statusFilterConfig: { key: StatusFilter; label: string; color: string; sel
   { key: "approved", label: "Pagos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "vigentes", label: "Vigentes", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "overdue", label: "Vencidos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "cancelled", label: "Cancelados", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "payment_confirmation", label: "Confirmação de Pagamento", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
 ];
 
 const AcordosPage = () => {
@@ -324,9 +322,7 @@ const AcordosPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {statusFilterConfig
-          .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
-          .map(({ key, label, color, selectedColor }) => (
+        {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
           <button
             key={key}
             onClick={() => setStatusFilter(key)}
@@ -334,7 +330,6 @@ const AcordosPage = () => {
               statusFilter === key ? selectedColor : color
             }`}
           >
-            {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
             {label}
           </button>
         ))}
