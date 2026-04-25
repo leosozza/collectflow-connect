@@ -37,12 +37,17 @@ const statusFilterConfig: { key: StatusFilter; label: string; color: string; sel
   { key: "approved", label: "Pagos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "vigentes", label: "Vigentes", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "overdue", label: "Vencidos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "cancelled", label: "Cancelados", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "payment_confirmation", label: "Confirmação de Pagamento", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
 ];
 
-const AcordosPage = () => {
+interface AcordosPageProps {
+  /** Quando definido, oculta a barra de chips e força o filtro de status. Usado por rotas /financeiro/... */
+  lockedStatus?: StatusFilter;
+  /** Título alternativo para a página (usado pelos wrappers). */
+  pageTitle?: string;
+}
+
+const AcordosPage = ({ lockedStatus, pageTitle }: AcordosPageProps = {}) => {
   useScrollRestore();
   const { trackAction } = useActivityTracker();
   const { user, profile } = useAuth();
@@ -53,7 +58,10 @@ const AcordosPage = () => {
   const [cobrancas, setCobrancas] = useState<CobrancaRecord[]>([]);
   const [manualPayments, setManualPayments] = useState<ManualPaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
+  const [statusFilterUrl, setStatusFilterUrl] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
+  // Quando lockedStatus está definido, ignoramos o estado da URL para o filtro de status
+  const statusFilter: StatusFilter = lockedStatus ?? statusFilterUrl;
+  const setStatusFilter = lockedStatus ? () => {} : setStatusFilterUrl;
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
   const [selectedMonth, setSelectedMonth] = useUrlState("month", String(new Date().getMonth()));
