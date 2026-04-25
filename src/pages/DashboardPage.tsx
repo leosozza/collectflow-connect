@@ -346,48 +346,7 @@ const DashboardPage = () => {
               received={stats?.total_recebido ?? 0}
             />
           )}
-          <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
-                <Handshake className="w-4 h-4 text-purple-500" />
-              </div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
-                Total Negociado no Mês
-              </p>
-            </div>
-            <p className="text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words">
-              {formatCurrency(stats?.total_negociado_mes ?? 0)}
-            </p>
-            {trendNegociadoMes && (
-              <div className="text-[11px] flex items-center gap-1 leading-tight">
-                <span
-                  className={cn(
-                    "font-bold tracking-tight",
-                    trendNegociadoMes.isPositive ? "text-success" : "text-destructive"
-                  )}
-                >
-                  {trendNegociadoMes.value}
-                </span>
-                <span className="text-muted-foreground font-medium">vs mês anterior</span>
-              </div>
-            )}
-          </div>
-          <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
-                <Handshake className="w-4 h-4 text-purple-500" />
-              </div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
-                Total Primeira Parcela do Mês
-              </p>
-            </div>
-            <p className="text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words">
-              {formatCurrency(stats?.total_negociado ?? 0)}
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-tight">
-              Soma da 1ª parcela dos acordos do mês
-            </p>
-          </div>
+
           {showAgendamentos && (
             <AgendamentosHojeCard
               callbacks={callbacks}

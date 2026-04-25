@@ -9,7 +9,7 @@ import { fetchAllRows } from "@/lib/supabaseUtils";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { ArrowLeft, Download, Target, Award, TrendingUp, AlertTriangle, MessageCircle } from "lucide-react";
+import { ArrowLeft, Download, Target, Award, TrendingUp, AlertTriangle, MessageCircle, Handshake } from "lucide-react";
 import { parseISO } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -200,6 +200,7 @@ const AnalyticsPage = () => {
 
   const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
   const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
+  const totalPrimeiraParcela = activeAgreements.reduce((s, a) => s + Number(a.entrada_value || 0), 0);
 
   // === PAGAMENTO REAL CONSOLIDADO === soma de manual_payments + negociarie_cobrancas
   const totalRecebido = activeAgreements.reduce((s, a) => s + a.total_paid_real, 0);
@@ -339,15 +340,51 @@ const AnalyticsPage = () => {
           </div>
         </div>
 
-        {/* KPIs */}
+        {/* Global Highlight KPIs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
+                <Handshake className="w-4 h-4 text-purple-500" />
+              </div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
+                Total Negociado no Período
+              </p>
+            </div>
+            <p className="text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words">
+              {formatCurrency(totalNegociado)}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-tight">
+              Soma do valor de todos os acordos
+            </p>
+          </div>
+          <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
+                <Handshake className="w-4 h-4 text-purple-500" />
+              </div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
+                Total Primeira Parcela no Período
+              </p>
+            </div>
+            <p className="text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words">
+              {formatCurrency(totalPrimeiraParcela)}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-tight">
+              Soma da 1ª parcela dos acordos
+            </p>
+          </div>
+        </div>
+
+        {/* Operational KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {isOperator ? (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor negociado de todos os acordos ativos no período." /></div>
-                <AlertTriangle className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Negociado</p>
-                <p className="text-xl font-bold text-foreground">{formatCurrency(totalNegociado)}</p>
+                <div className="absolute top-2 right-2"><InfoTooltip text="Quantidade de acordos ativos gerados no período." /></div>
+                <Handshake className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Acordos Ativos</p>
+                <p className="text-xl font-bold text-foreground">{activeAgreements.length}</p>
               </div>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
                 <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos cancelados (quebra)." /></div>
