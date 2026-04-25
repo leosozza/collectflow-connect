@@ -94,9 +94,11 @@ const AppLayout = () => {
   const showContactCenter = contactCenterItems.length > 0;
 
   const [contactCenterOpen, setContactCenterOpen] = useState(isContactCenterRoute);
+  const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroRoute);
 
   useEffect(() => {
     if (isContactCenterRoute) setContactCenterOpen(true);
+    if (isFinanceiroRoute) setFinanceiroOpen(true);
   }, [location.pathname]);
 
   const handleSignOut = async () => {
