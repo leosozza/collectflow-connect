@@ -189,6 +189,30 @@ const BaixasRealizadasPage = () => {
     [rows],
   );
 
+  // Anos para o filtro: ano atual ± 2 (cobre seleção retroativa sem depender dos dados).
+  const availableYears = useMemo(() => {
+    const cur = today.getFullYear();
+    return [cur + 1, cur, cur - 1, cur - 2, cur - 3].map(String);
+  }, [today]);
+
+  const monthNames = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => format(new Date(2000, i, 1), "LLLL", { locale: ptBR })),
+    [],
+  );
+
+  const monthsLabel = useMemo(() => {
+    if (monthsFilter.length === 0 || monthsFilter.length === 12) return "Todos os meses";
+    if (monthsFilter.length === 1) {
+      const n = monthNames[monthsFilter[0]];
+      return n.charAt(0).toUpperCase() + n.slice(1);
+    }
+    return `${monthsFilter.length} meses`;
+  }, [monthsFilter, monthNames]);
+
+  const toggleMonth = (m: number) => {
+    setMonthsFilter(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m].sort((a, b) => a - b));
+  };
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return rows.filter(r => {
