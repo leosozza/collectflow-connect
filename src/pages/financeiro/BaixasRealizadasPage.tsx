@@ -110,6 +110,7 @@ const BaixasRealizadasPage = () => {
         Local: r.local_pagamento ?? "",
         Origem: r.source,
       })),
+      "Baixas",
       `baixas-realizadas-${format(new Date(), "yyyy-MM-dd")}`
     );
   };
