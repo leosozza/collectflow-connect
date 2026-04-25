@@ -125,6 +125,56 @@ export const fetchAgreements = async (
   }
 };
 
+export interface AgreementOperator {
+  user_id: string | null; // null => Portal-originated
+  full_name: string;
+}
+
+/**
+ * Returns the distinct operators (creators) that have at least one agreement
+ * in the tenant. Used to populate the "Operador" filter on the Acordos page.
+ */
+export const fetchAgreementOperators = async (
+  tenantId: string,
+): Promise<AgreementOperator[]> => {
+  try {
+    if (!tenantId) return [];
+
+    const { data, error } = await supabase
+      .from("agreements")
+      .select("created_by, portal_origin")
+      .eq("tenant_id", tenantId)
+      .limit(5000);
+    if (error) throw error;
+
+    const userIds = new Set<string>();
+    let hasPortal = false;
+    (data || []).forEach((a: any) => {
+      if (a.created_by) userIds.add(a.created_by);
+      if (a.portal_origin) hasPortal = true;
+    });
+
+    let profiles: { user_id: string; full_name: string }[] = [];
+    if (userIds.size > 0) {
+      const { data: profData } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", Array.from(userIds));
+      profiles = (profData || []) as any;
+    }
+
+    const result: AgreementOperator[] = profiles
+      .map((p) => ({ user_id: p.user_id, full_name: p.full_name || "Sem nome" }))
+      .sort((a, b) => a.full_name.localeCompare(b.full_name, "pt-BR"));
+
+    if (hasPortal) result.push({ user_id: null, full_name: "Portal" });
+    return result;
+  } catch (error) {
+    logger.error(MODULE, "fetch_operators", error);
+    return [];
+  }
+};
+
 export const createAgreement = async (
   data: AgreementFormData,
   userId: string,
