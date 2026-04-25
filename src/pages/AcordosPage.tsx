@@ -213,8 +213,11 @@ const AcordosPage = () => {
     const result: ClassifiedAgreement[] = [];
 
     for (const agreement of agreements) {
-      // Apply credor filter
+      // Apply credor filter (server already filters; kept as safety)
       if (credorFilter !== "todos" && agreement.credor !== credorFilter) continue;
+
+      // Apply operator filter — "portal" is a pseudo-operator (created_by null + portal_origin true)
+      if (operatorFilter === "portal" && !(agreement as any).portal_origin) continue;
 
       // Apply search filter
       if (searchQuery.trim()) {
