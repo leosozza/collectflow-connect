@@ -1,152 +1,55 @@
-# Plano: Dashboard fix + Módulo FINANCEIRO + Baixas Realizadas
+# Gestão de Acordos: Performance + Filtro de Operador
 
-## Descobertas relevantes
+## Diagnóstico de performance
 
-- O `_recebido` atual da `get_dashboard_stats` **já usa** `manual_payments` (`confirmed`) + `portal_payments` (`paid`). Está faltando `negociarie_cobrancas` (`pago`) e o status `approved` em `manual_payments`.
-- **Não existe tabela `agreement_installments`** — as parcelas são virtuais, geradas a partir de `agreements.first_due_date + new_installments` e `custom_installment_values`/`custom_installment_dates`. O "pagamento" da parcela vive em 3 fontes:
-  - `manual_payments` (campos: `agreement_id`, `installment_number`, `installment_key`, `amount_paid`, `status`, `payment_date`, `payment_method`, `receiver`).
-  - `portal_payments` (campos: `agreement_id`, `amount`, `status`, `payment_method`, `payment_data`, `updated_at`).
-  - `negociarie_cobrancas` (campos: `agreement_id`, `installment_key`, `valor_pago`, `data_pagamento`, `status`).
-- A tela de "Aguardando Liberação" e "Confirmação de Pagamento" hoje são **abas** dentro de `/acordos` (`statusFilter = 'pending_approval' | 'payment_confirmation'`). Vamos transformá-las em rotas próprias reaproveitando os mesmos componentes.
-- Sidebar é hand-coded em `src/components/AppLayout.tsx` (não usa shadcn sidebar).
+A tela hoje carrega ~498 acordos de uma vez e depois faz processamento pesado no navegador. Pontos identificados:
 
----
+1. `fetchAgreements` faz `SELECT *` sem paginação e traz TODOS os acordos do tenant (mesmo cancelados/rejeitados antigos).
+2. Logo em seguida, busca em paralelo TODAS as `negociarie_cobrancas` e TODOS os `manual_payments` desses 498 acordos — payload muito grande para classificar parcelas.
+3. Para cada acordo, o frontend reconstrói o cronograma de parcelas (`buildInstallmentSchedule`) e classifica cada parcela (`classifyInstallment`) a cada mudança de filtro — trabalho O(N×parcelas) feito em JS.
+4. Toda navegação dispara `supabase.functions.invoke("auto-expire-agreements")` de forma bloqueante antes de listar.
+5. `useEffect` recarrega tudo ao trocar usuário/admin, sem cache. Sem `React Query`, voltar pra tela refaz toda a busca.
+6. Avisos no console (`Function components cannot be given refs` em `AgreementsList` e `PaymentConfirmationTab`) indicam re-renders desnecessários e props mal aplicadas.
 
-## FASE 1 — Migration: corrigir `_recebido` em `get_dashboard_stats`
+## Otimizações que serão aplicadas
 
-Nova migration que faz `CREATE OR REPLACE` da função (mantém assinatura `(_user_id, _year, _month, _user_ids)`, sem dropar nada). Substitui só o bloco do `_recebido` e do `_recebido_mes_ant`:
+**Backend / fetch**
+- Tornar `auto-expire-agreements` não-bloqueante (fire-and-forget): a lista carrega imediatamente; expiração roda em background.
+- Adicionar uma RPC `get_acordos_listagem(tenant_id, status_group, credor, operator_id, year, month, search, limit, offset)` que:
+  - Aplica filtros (status group, credor, operador, mês/ano, busca por nome/CPF) já no Postgres.
+  - Faz `LEFT JOIN profiles` para retornar `creator_name` num único round-trip.
+  - Calcula `paid_count` / `total_count` por acordo via subquery agregada de `manual_payments` + `negociarie_cobrancas`, eliminando a busca paralela gigante.
+  - Retorna apenas os campos usados pela tabela.
+- Paginação server-side de 50 por página (com `total_count` para o rodapé).
 
-```sql
--- Mês corrente
-_recebido :=
-  COALESCE((SELECT SUM(mp.amount_paid)
-    FROM manual_payments mp JOIN agreements a ON a.id = mp.agreement_id
-    WHERE mp.tenant_id = _tenant
-      AND mp.status IN ('confirmed','approved')
-      AND mp.payment_date BETWEEN _month_start AND _month_end
-      AND (_no_op_filter OR a.created_by = _user_id
-           OR a.created_by = ANY(COALESCE(_user_ids,'{}'::uuid[])))), 0)
-  + COALESCE((SELECT SUM(pp.amount)
-    FROM portal_payments pp JOIN agreements a ON a.id = pp.agreement_id
-    WHERE pp.tenant_id = _tenant
-      AND pp.status = 'paid'
-      AND pp.updated_at >= _month_start::timestamptz
-      AND pp.updated_at <  (_month_end + 1)::timestamptz
-      AND (_no_op_filter OR a.created_by = _user_id
-           OR a.created_by = ANY(COALESCE(_user_ids,'{}'::uuid[])))), 0)
-  + COALESCE((SELECT SUM(nc.valor_pago)
-    FROM negociarie_cobrancas nc JOIN agreements a ON a.id = nc.agreement_id
-    WHERE nc.tenant_id = _tenant
-      AND nc.status = 'pago'
-      AND nc.data_pagamento BETWEEN _month_start AND _month_end
-      AND (_no_op_filter OR a.created_by = _user_id
-           OR a.created_by = ANY(COALESCE(_user_ids,'{}'::uuid[])))), 0);
-```
-Mesmo bloco replicado para `_recebido_mes_ant` com `_prev_month_start/_prev_month_end`.
+**Frontend**
+- Migrar `AcordosPage` para `useQuery` com `queryKey` baseado nos filtros, `staleTime: 30s` e `keepPreviousData` — evita refetch ao alternar abas e dá UX instantânea com cache.
+- Mover a classificação por mês para um `useMemo` enxuto que opera só sobre os 50 itens da página atual (não mais 498).
+- Corrigir `forwardRef` em `AgreementsList` e `PaymentConfirmationTab` para silenciar os warnings e evitar invalidações de árvore.
 
-Garantias: não dropa, não muda assinatura, não toca dados.
+**Resultado esperado:** primeira renderização cai de vários segundos para <800ms; trocas de filtro/aba ficam instantâneas (cache + filtragem no servidor).
 
----
+## Novo filtro: Operador
 
-## FASE 2 — Sidebar: agrupador FINANCEIRO
+- Adicionar `<Select>` "Operador" imediatamente à direita do filtro "Credor" (mesmo padrão visual já usado na barra de filtros de Acordos).
+- Opções:
+  - "Todos os Operadores" (default)
+  - Lista distinta de operadores que possuem acordos no tenant (label = `full_name`, value = `user_id`), ordenada alfabeticamente.
+  - Item especial "Portal" para acordos originados pelo Portal do Devedor (quando `created_by` é nulo / `portal_origin = true`).
+- Estado persistido na URL via `useUrlState("operator", "todos")`, igual aos outros filtros.
+- O filtro é enviado para a RPC (`operator_id`), não filtra no cliente.
+- Para não-admins o filtro fica oculto (continuam vendo só os próprios acordos).
+- Lista de operadores vem de uma query leve separada (`SELECT DISTINCT created_by, full_name FROM agreements JOIN profiles …`) cacheada por 5 min.
 
-Edição em `src/components/AppLayout.tsx`:
+## Arquivos a alterar
 
-1. Remover o item topo `Acordos` da lista `preContactItems`.
-2. Adicionar um novo `<Collapsible>` "Financeiro" (ícone `Banknote` ou `HandCoins`) com filhos:
-   - **Acordos** → `/acordos` (visível se `permissions.canViewAcordos`)
-   - **Baixas Realizadas** → `/financeiro/baixas` (visível se `canViewAcordos`)
-   - **Aguardando Liberação** → `/financeiro/aguardando-liberacao` (apenas se `permissions.canApproveAcordos` ou role admin/super_admin)
-   - **Confirmação de Pagamento** → `/financeiro/confirmacao-pagamento` (apenas se `permissions.canApproveAcordos` ou admin)
-3. Estado `financeiroOpen` controlado, abre automaticamente quando rota começa com `/acordos` ou `/financeiro`.
+- `supabase/migrations/<novo>.sql` — nova RPC `get_acordos_listagem` + RPC `get_acordos_operators`.
+- `src/services/agreementService.ts` — usar a nova RPC, manter API antiga apenas como fallback.
+- `src/pages/AcordosPage.tsx` — React Query, novo filtro de operador, paginação, classificação reduzida ao page slice.
+- `src/components/acordos/AgreementsList.tsx` — `forwardRef`, paginação no rodapé.
+- `src/components/acordos/PaymentConfirmationTab.tsx` — `forwardRef`.
 
-Roteamento em `src/App.tsx` (dentro do `AppLayout`):
-- `acordos` continua mas com URL search default `?status=vigentes` (mantém abas atuais Pagos/Vigentes/Vencidos/Aguardando/Cancelados/Confirmação) — **as abas continuam existindo na página** para uso interno; o sidebar apenas adiciona atalhos diretos.
-- `financeiro/baixas` → nova `<BaixasRealizadasPage />`.
-- `financeiro/aguardando-liberacao` → renderiza `AcordosPage` com prop/initial filter `pending_approval` (ou navega com `?status=pending_approval` e oculta o seletor de abas).
-- `financeiro/confirmacao-pagamento` → mesmo padrão com `?status=payment_confirmation`.
+## Fora do escopo
 
-Forma mais simples: criar 2 wrappers finos `AguardandoLiberacaoPage.tsx` e `ConfirmacaoPagamentoPage.tsx` que importam `AcordosPage` passando um `lockedStatus` prop. Ajustar `AcordosPage` para aceitar `lockedStatus?: StatusFilter` e, quando presente, esconder os chips de status.
-
-Guarda de rota (dentro dos wrappers):
-```tsx
-if (!permissions.canApproveAcordos) return <Navigate to="/acordos" replace />;
-```
-
----
-
-## FASE 3 — Página "Baixas Realizadas"
-
-### Backend: nova RPC `get_baixas_realizadas`
-
-```sql
-CREATE OR REPLACE FUNCTION public.get_baixas_realizadas(
-  _date_from date DEFAULT NULL,
-  _date_to date DEFAULT NULL,
-  _credor text DEFAULT NULL,
-  _local text DEFAULT NULL,        -- 'credora' | 'cobradora' | NULL
-  _payment_method text DEFAULT NULL
-) RETURNS TABLE (
-  source text,                     -- 'manual' | 'portal' | 'negociarie'
-  payment_id uuid,
-  agreement_id uuid,
-  client_cpf text,
-  client_name text,
-  credor text,
-  installment_number int,          -- parcela X
-  total_installments int,          -- de Y
-  installment_key text,
-  valor_original numeric,          -- da parcela (custom_installment_values ou new_installment_value)
-  juros numeric,                   -- best-effort: do payment_data jsonb se existir, senão 0
-  multa numeric,
-  honorarios numeric,
-  valor_pago numeric,
-  payment_date date,
-  payment_method text,
-  local_pagamento text             -- 'cobradora' p/ manual+portal+negociarie por padrão; 'credora' se receiver/payment_data indicar
-) ...
-```
-
-Lógica:
-- UNION ALL das 3 fontes filtradas por status pago, `tenant_id` resolvido por `auth.uid()` → `tenant_users`.
-- `installment_number`/`total_installments` derivados do JOIN com `agreements` (`new_installments`, e installment_key/installment_number).
-- `local_pagamento`: `manual_payments.receiver` mapeia para `credora` quando = 'credora'/'creditor'; portal+negociarie default `cobradora` (ajustável).
-- `valor_original` = `COALESCE(custom_installment_values->>installment_number, new_installment_value)`; para entrada, `entrada_value`.
-- `juros/multa/honorarios`: não há colunas dedicadas hoje — extraímos do `portal_payments.payment_data` (jsonb) quando disponível; `manual_payments` não persiste breakdown, então retornamos `0` para esses campos e exibimos "—" no front. *Decisão de produto: aceitar best-effort agora; uma evolução futura adicionaria colunas `interest_amount/penalty_amount/fees_amount` em `manual_payments`.*
-
-Filtros aplicados via parâmetros; tudo opcional.
-
-### Frontend: `src/pages/financeiro/BaixasRealizadasPage.tsx`
-
-- Header com filtros (shadcn): `DateRangePicker` (Data de pagamento), `Select` Credor, `Select` Local (Credora/Cobradora/Todos), `Select` Meio de Pagamento (Pix/Boleto/Cartão/Outros), botão "Limpar".
-- Default: período = mês corrente (`startOfMonth`..`endOfMonth`).
-- Lista renderizada como tabela responsiva agrupada por mês (cabeçalho "Outubro/2025", "Novembro/2025"...).
-- Colunas: Devedor (nome + CPF), Credor, Parcela ("3 de 6"), Valor original, Juros, Multa, Honorários, Valor pago, Data, Meio, Local.
-- Total no rodapé do grupo (soma de valor pago).
-- Export para Excel reutilizando `exportToExcel` de `src/lib/exportUtils.ts`.
-
-### Permissões
-Visível para todo usuário com `canViewAcordos`. Sem restrição extra além de tenant.
-
----
-
-## Arquivos a criar/editar
-
-**Criar:**
-- `supabase/migrations/<ts>_fix_recebido_negociarie.sql` (Fase 1).
-- `supabase/migrations/<ts>_baixas_realizadas_rpc.sql` (Fase 3).
-- `src/pages/financeiro/BaixasRealizadasPage.tsx`.
-- `src/pages/financeiro/AguardandoLiberacaoPage.tsx` (wrapper).
-- `src/pages/financeiro/ConfirmacaoPagamentoPage.tsx` (wrapper).
-
-**Editar:**
-- `src/components/AppLayout.tsx` (sidebar: novo grupo Financeiro, remove Acordos do topo).
-- `src/App.tsx` (3 novas rotas dentro do `AppLayout`).
-- `src/pages/AcordosPage.tsx` (aceitar prop opcional `lockedStatus` para esconder chips).
-
-## Validação pós-implementação
-
-1. SQL: `SELECT total_recebido FROM get_dashboard_stats(NULL,2025,11,NULL);` antes/depois.
-2. UI: navegar `/dashboard` (KPI Total Recebido), `/acordos`, `/financeiro/baixas`, `/financeiro/aguardando-liberacao`, `/financeiro/confirmacao-pagamento`.
-3. Permissões: usuário sem `canApproveAcordos` não vê os 2 últimos itens do menu nem acessa as rotas (redireciona).
-4. Sidebar collapsible mantém-se aberto quando rota ativa começa com `/acordos` ou `/financeiro`.
+- Mudanças visuais nas demais abas (Aguardando Liberação / Confirmação de Pagamento).
+- Quebra dos campos financeiros (juros/multa/honorários) — fica para a iteração seguinte conforme já discutido.

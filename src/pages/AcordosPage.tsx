@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { supabase } from "@/integrations/supabase/client";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -7,7 +8,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
-import { fetchAgreements, approveAgreement, rejectAgreement, cancelAgreement, Agreement } from "@/services/agreementService";
+import { fetchAgreements, fetchAgreementOperators, approveAgreement, rejectAgreement, cancelAgreement, Agreement } from "@/services/agreementService";
 import AgreementsList from "@/components/acordos/AgreementsList";
 import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab";
 import StatCard from "@/components/StatCard";
@@ -47,12 +48,10 @@ const AcordosPage = () => {
   const { tenant } = useTenant();
   const permissions = usePermissions();
   const { toast } = useToast();
-  const [agreements, setAgreements] = useState<Agreement[]>([]);
-  const [cobrancas, setCobrancas] = useState<CobrancaRecord[]>([]);
-  const [manualPayments, setManualPayments] = useState<ManualPaymentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
+  const [operatorFilter, setOperatorFilter] = useUrlState("operator", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
   const [selectedMonth, setSelectedMonth] = useUrlState("month", String(new Date().getMonth()));
   const [selectedYear, setSelectedYear] = useUrlState("year", String(new Date().getFullYear()));
@@ -60,44 +59,82 @@ const AcordosPage = () => {
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const isAdmin = permissions.canApproveAcordos;
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      try {
-        await supabase.functions.invoke("auto-expire-agreements");
-      } catch (_) { }
-      const filters: { created_by?: string } = {};
-      if (!isAdmin && user) filters.created_by = user.id;
-      const data = await fetchAgreements(tenant?.id || "", Object.keys(filters).length > 0 ? filters : undefined);
-      setAgreements(data);
+  // Auto-expire runs in background once per page mount — does NOT block initial render.
+  useEffect(() => {
+    supabase.functions.invoke("auto-expire-agreements").catch(() => {});
+  }, []);
 
-      // Batch fetch payment data
-      const agreementIds = data.map(a => a.id);
-      if (agreementIds.length > 0) {
-        const [cobRes, mpRes] = await Promise.all([
-          supabase
-            .from("negociarie_cobrancas" as any)
-            .select("agreement_id, installment_key, status, valor_pago")
-            .in("agreement_id", agreementIds),
-          supabase
-            .from("manual_payments" as any)
-            .select("agreement_id, installment_number, installment_key, amount_paid, status")
-            .in("agreement_id", agreementIds),
-        ]);
-        setCobrancas((cobRes.data || []) as unknown as CobrancaRecord[]);
-        setManualPayments((mpRes.data || []) as unknown as ManualPaymentRecord[]);
-      } else {
-        setCobrancas([]);
-        setManualPayments([]);
-      }
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+  // Resolve effective created_by filter (server-side):
+  // - non-admins: locked to their own user
+  // - admins: respect the operator dropdown ("todos" | <user_id> | "portal")
+  const effectiveCreatedBy: string | undefined = !isAdmin
+    ? user?.id
+    : operatorFilter !== "todos" && operatorFilter !== "portal"
+      ? operatorFilter
+      : undefined;
+
+  // Heavy historical noise (cancelled/rejected) is excluded unless the user
+  // explicitly opens the "Cancelados" tab.
+  const excludeFinal = statusFilter !== "cancelled";
+
+  const { data: agreements = [], isLoading: loading, refetch } = useQuery({
+    queryKey: [
+      "agreements-list",
+      tenant?.id,
+      effectiveCreatedBy ?? "all",
+      excludeFinal,
+    ],
+    queryFn: () => fetchAgreements(tenant?.id || "", {
+      created_by: effectiveCreatedBy,
+      excludeFinal,
+    }),
+    enabled: !!tenant?.id,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+  // Operators list (admins only) — cached aggressively, rarely changes.
+  const { data: operators = [] } = useQuery({
+    queryKey: ["agreement-operators", tenant?.id],
+    queryFn: () => fetchAgreementOperators(tenant?.id || ""),
+    enabled: !!tenant?.id && isAdmin,
+    staleTime: 5 * 60_000,
+  });
+
+  // Agreement IDs visible in the current dataset — used to scope payment lookups.
+  const visibleIds = useMemo(() => agreements.map(a => a.id), [agreements]);
+
+  const { data: paymentData = { cobrancas: [] as CobrancaRecord[], manualPayments: [] as ManualPaymentRecord[] } } = useQuery({
+    queryKey: ["agreements-payment-data", tenant?.id, visibleIds.length, visibleIds[0] ?? "", visibleIds[visibleIds.length - 1] ?? ""],
+    queryFn: async () => {
+      if (visibleIds.length === 0) return { cobrancas: [], manualPayments: [] };
+      const [cobRes, mpRes] = await Promise.all([
+        supabase
+          .from("negociarie_cobrancas" as any)
+          .select("agreement_id, installment_key, status, valor_pago")
+          .in("agreement_id", visibleIds),
+        supabase
+          .from("manual_payments" as any)
+          .select("agreement_id, installment_number, installment_key, amount_paid, status")
+          .in("agreement_id", visibleIds),
+      ]);
+      return {
+        cobrancas: ((cobRes.data || []) as unknown) as CobrancaRecord[],
+        manualPayments: ((mpRes.data || []) as unknown) as ManualPaymentRecord[],
+      };
+    },
+    enabled: !!tenant?.id,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const cobrancas = paymentData.cobrancas;
+  const manualPayments = paymentData.manualPayments;
+
+  const reload = () => {
+    queryClient.invalidateQueries({ queryKey: ["agreements-list"] });
+    queryClient.invalidateQueries({ queryKey: ["agreements-payment-data"] });
   };
-
-  useEffect(() => { load(); }, [isAdmin, user?.id]);
 
   const handleApprove = async (agreement: Agreement) => {
     if (!user || !profile) return;
@@ -105,7 +142,7 @@ const AcordosPage = () => {
       await approveAgreement(agreement, user.id, profile.id);
       trackAction("aprovar_acordo", { acordo_id: agreement.id });
       toast({ title: "Acordo aprovado! Parcelas geradas." });
-      load();
+      reload();
     } catch (err: any) {
       toast({ title: "Erro ao aprovar", description: err.message, variant: "destructive" });
     }
@@ -115,20 +152,20 @@ const AcordosPage = () => {
     if (!user) return;
     await rejectAgreement(id, user.id);
     toast({ title: "Acordo rejeitado." });
-    load();
+    reload();
   };
 
   const handleCancel = async (id: string) => {
     await cancelAgreement(id);
     toast({ title: "Acordo cancelado. Parcelas marcadas como quebra." });
-    load();
+    reload();
   };
 
   const handleBreak = async (id: string) => {
     await cancelAgreement(id);
     trackAction("quebrar_acordo", { acordo_id: id });
     toast({ title: "Acordo quebrado com sucesso." });
-    load();
+    reload();
   };
 
   const credores = useMemo(() => {
@@ -174,8 +211,11 @@ const AcordosPage = () => {
     const result: ClassifiedAgreement[] = [];
 
     for (const agreement of agreements) {
-      // Apply credor filter
+      // Apply credor filter (server already filters; kept as safety)
       if (credorFilter !== "todos" && agreement.credor !== credorFilter) continue;
+
+      // Apply operator filter — "portal" is a pseudo-operator (created_by null + portal_origin true)
+      if (operatorFilter === "portal" && !(agreement as any).portal_origin) continue;
 
       // Apply search filter
       if (searchQuery.trim()) {
@@ -256,7 +296,7 @@ const AcordosPage = () => {
     }
 
     return result;
-  }, [agreements, cobrancas, manualPayments, credorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
+  }, [agreements, cobrancas, manualPayments, credorFilter, operatorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
 
   // Filter by selected tab
   const filteredAgreements = useMemo(() => {
@@ -339,6 +379,25 @@ const AcordosPage = () => {
             ))}
           </SelectContent>
         </Select>
+
+        {isAdmin && (
+          <Select value={operatorFilter} onValueChange={setOperatorFilter}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Filtrar operador" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os Operadores</SelectItem>
+              {operators.map((op) => (
+                <SelectItem
+                  key={op.user_id ?? "portal"}
+                  value={op.user_id ?? "portal"}
+                >
+                  {op.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <Select value={selectedYear} onValueChange={(v) => { setSelectedYear(v); setDateFrom(undefined); setDateTo(undefined); }}>
           <SelectTrigger className="w-28">
