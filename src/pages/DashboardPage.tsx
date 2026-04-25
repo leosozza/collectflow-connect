@@ -28,7 +28,6 @@ import ParcelasProgramadasCard, {
 } from "@/components/dashboard/ParcelasProgramadasCard";
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
-import TotalAcordosMiniCard from "@/components/dashboard/TotalAcordosMiniCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
@@ -225,14 +224,6 @@ const DashboardPage = () => {
       trend: trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : undefined,
     },
     {
-      label: "Total Negociado no Mês",
-      value: formatCurrency(stats?.total_negociado_mes ?? 0),
-      Icon: Handshake,
-      iconColor: "text-purple-500",
-      iconBg: "bg-purple-500/10",
-      trend: trendNegociadoMes ? { ...trendNegociadoMes, text: "vs mês anterior" } : undefined,
-    },
-    {
       label: "Total de Quebra",
       value: formatCurrency(stats?.total_quebra ?? 0),
       Icon: TrendingDown,
@@ -331,7 +322,32 @@ const DashboardPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* COLUMN 1 — left (3/12) */}
         <div className="lg:col-span-3 flex flex-col gap-3">
-          <TotalAcordosMiniCard totalNegociado={stats?.total_negociado_mes ?? 0} />
+          <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
+                <Handshake className="w-4 h-4 text-purple-500" />
+              </div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
+                Total Primeira Parcela do Mês
+              </p>
+            </div>
+            <p className="text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words">
+              {formatCurrency(stats?.total_negociado_mes ?? 0)}
+            </p>
+            {trendNegociadoMes && (
+              <div className="text-[11px] flex items-center gap-1 leading-tight">
+                <span
+                  className={cn(
+                    "font-bold tracking-tight",
+                    trendNegociadoMes.isPositive ? "text-success" : "text-destructive"
+                  )}
+                >
+                  {trendNegociadoMes.value}
+                </span>
+                <span className="text-muted-foreground font-medium">vs mês anterior</span>
+              </div>
+            )}
+          </div>
           {showAgendamentos && (
             <AgendamentosHojeCard
               callbacks={callbacks}
