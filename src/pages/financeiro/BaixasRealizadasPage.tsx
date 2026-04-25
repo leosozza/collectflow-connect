@@ -66,7 +66,16 @@ const parcelaLabel = (
     if (num === 0) return "Entrada";
     return String(num);
   }
-  if (key) return String(key);
+  if (key) {
+    if (key.includes(":")) {
+      const parts = key.split(":");
+      const lastPart = parts[parts.length - 1];
+      // Se a última parte for 0, chamamos de Entrada
+      if (lastPart === "0") return "Entrada";
+      return lastPart;
+    }
+    return String(key);
+  }
   return "Única"; // Geralmente pagamentos de portal que englobam o acordo inteiro
 };
 
