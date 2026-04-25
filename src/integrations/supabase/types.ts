@@ -6637,6 +6637,34 @@ export type Database = {
           total_pago: number
         }[]
       }
+      get_baixas_realizadas: {
+        Args: {
+          _credor?: string
+          _date_from?: string
+          _date_to?: string
+          _local?: string
+          _payment_method?: string
+        }
+        Returns: {
+          agreement_id: string
+          client_cpf: string
+          client_name: string
+          credor: string
+          honorarios: number
+          installment_key: string
+          installment_number: number
+          juros: number
+          local_pagamento: string
+          multa: number
+          payment_date: string
+          payment_id: string
+          payment_method: string
+          source: string
+          total_installments: number
+          valor_original: number
+          valor_pago: number
+        }[]
+      }
       get_carteira_grouped: {
         Args: {
           _cadastro_ate?: string
