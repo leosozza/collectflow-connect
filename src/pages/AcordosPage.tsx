@@ -13,7 +13,7 @@ import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab"
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Download, HandCoins, CalendarIcon } from "lucide-react";
+import { Search, Download, CalendarIcon } from "lucide-react";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
@@ -31,15 +31,13 @@ import {
   type InstallmentClassification,
 } from "@/lib/agreementInstallmentClassifier";
 
-type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled" | "payment_confirmation";
+type StatusFilter = "vigentes" | "approved" | "overdue" | "cancelled";
 
 const statusFilterConfig: { key: StatusFilter; label: string; color: string; selectedColor: string }[] = [
   { key: "approved", label: "Pagos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "vigentes", label: "Vigentes", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "overdue", label: "Vencidos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "cancelled", label: "Cancelados", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "payment_confirmation", label: "Confirmação de Pagamento", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
 ];
 
 const AcordosPage = () => {
@@ -281,13 +279,8 @@ const AcordosPage = () => {
         case "overdue":
           if (isMonthSelected && cls !== undefined) return cls === "vencido";
           return a.status === "overdue";
-        case "pending_approval":
-          return a.status === "pending_approval";
         case "cancelled":
           return a.status === "cancelled";
-        case "payment_confirmation":
-          if (isMonthSelected && cls !== undefined) return cls === "pending_confirmation";
-          return false; // handled by PaymentConfirmationTab
         default:
           return false;
       }
@@ -324,9 +317,7 @@ const AcordosPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {statusFilterConfig
-          .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
-          .map(({ key, label, color, selectedColor }) => (
+        {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
           <button
             key={key}
             onClick={() => setStatusFilter(key)}
@@ -334,7 +325,6 @@ const AcordosPage = () => {
               statusFilter === key ? selectedColor : color
             }`}
           >
-            {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
             {label}
           </button>
         ))}
@@ -441,9 +431,7 @@ const AcordosPage = () => {
         </Button>
       </div>
 
-      {statusFilter === "payment_confirmation" ? (
-        tenant?.id ? <PaymentConfirmationTab tenantId={tenant.id} /> : <p className="text-muted-foreground">Carregando...</p>
-      ) : loading ? (
+      {loading ? (
         <p className="text-muted-foreground">Carregando...</p>
       ) : (
         <AgreementsList agreements={filteredAgreements} />
