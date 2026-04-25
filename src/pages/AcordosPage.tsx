@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { Navigate } from "react-router-dom";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { supabase } from "@/integrations/supabase/client";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -38,17 +37,12 @@ const statusFilterConfig: { key: StatusFilter; label: string; color: string; sel
   { key: "approved", label: "Pagos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "vigentes", label: "Vigentes", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "overdue", label: "Vencidos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "cancelled", label: "Cancelados", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "payment_confirmation", label: "Confirmação de Pagamento", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
 ];
 
-interface AcordosPageProps {
-  /** Quando definido, oculta a barra de chips e força o filtro de status. Usado por rotas /financeiro/... */
-  lockedStatus?: StatusFilter;
-  /** Título alternativo para a página (usado pelos wrappers). */
-  pageTitle?: string;
-}
-
-const AcordosPage = ({ lockedStatus, pageTitle }: AcordosPageProps = {}) => {
+const AcordosPage = () => {
   useScrollRestore();
   const { trackAction } = useActivityTracker();
   const { user, profile } = useAuth();
@@ -59,10 +53,7 @@ const AcordosPage = ({ lockedStatus, pageTitle }: AcordosPageProps = {}) => {
   const [cobrancas, setCobrancas] = useState<CobrancaRecord[]>([]);
   const [manualPayments, setManualPayments] = useState<ManualPaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilterUrl, setStatusFilterUrl] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
-  // Quando lockedStatus está definido, ignoramos o estado da URL para o filtro de status
-  const statusFilter: StatusFilter = lockedStatus ?? statusFilterUrl;
-  const setStatusFilter = lockedStatus ? () => {} : setStatusFilterUrl;
+  const [statusFilter, setStatusFilter] = useUrlState("status", "vigentes") as [StatusFilter, (val: string) => void];
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
   const [selectedMonth, setSelectedMonth] = useUrlState("month", String(new Date().getMonth()));
@@ -322,18 +313,9 @@ const AcordosPage = ({ lockedStatus, pageTitle }: AcordosPageProps = {}) => {
 
   const isOperationalFilter = statusFilter === "pending_approval" || statusFilter === "payment_confirmation";
 
-  // Redirect dos URLs antigos: /acordos?status=pending_approval|payment_confirmation
-  // Esses status agora vivem em /financeiro/aguardando-liberacao e /financeiro/confirmacao-pagamento.
-  if (!lockedStatus && statusFilterUrl === "pending_approval") {
-    return <Navigate to="/financeiro/aguardando-liberacao" replace />;
-  }
-  if (!lockedStatus && statusFilterUrl === "payment_confirmation") {
-    return <Navigate to="/financeiro/confirmacao-pagamento" replace />;
-  }
-
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{pageTitle ?? "Gestão de Acordos"}</h1>
+      <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard title="Total de Acordos" value={String(stats.total)} icon="agreement" />
@@ -341,21 +323,22 @@ const AcordosPage = ({ lockedStatus, pageTitle }: AcordosPageProps = {}) => {
         <StatCard title="Pagos" value={String(stats.paid)} icon="received" />
       </div>
 
-      {!lockedStatus && (
-        <div className="flex flex-wrap gap-2">
-          {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-                statusFilter === key ? selectedColor : color
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {statusFilterConfig
+          .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
+          .map(({ key, label, color, selectedColor }) => (
+          <button
+            key={key}
+            onClick={() => setStatusFilter(key)}
+            className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+              statusFilter === key ? selectedColor : color
+            }`}
+          >
+            {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
+            {label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-wrap gap-3 items-center">
         <Select value={credorFilter} onValueChange={setCredorFilter}>

@@ -48,12 +48,6 @@ export interface AgreementFormData {
   custom_installment_dates?: Record<string, string>;
   custom_installment_values?: Record<string, number>;
   notes?: string;
-  // Composição financeira do acordo
-  interest_amount?: number;
-  penalty_amount?: number;
-  fees_amount?: number;
-  discount_amount?: number;
-  installment_breakdown?: Record<string, { principal: number; juros: number; multa: number; honorarios: number; desconto: number }>;
 }
 
 const MODULE = "agreementService";
