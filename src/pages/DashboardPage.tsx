@@ -117,18 +117,25 @@ const DashboardPage = () => {
   });
 
   // Determine filter params for RPCs
+  // - 0 operadores selecionados (canViewAll): null = todos
+  // - 1 operador: usa _user_id (compat)
+  // - 2+ operadores: usa _user_ids (array)
+  const rpcUserIds: string[] | null =
+    canViewAll && selectedOperators.length > 1 ? selectedOperators : null;
   const rpcUserId = canViewAll
     ? (selectedOperators.length === 1 ? selectedOperators[0] : null)
     : (profile?.user_id ?? null);
+  const rpcUserIdsKey = rpcUserIds ? rpcUserIds.join(",") : null;
   const filterYear = selectedYears.length === 1 ? parseInt(selectedYears[0]) : null;
   const filterMonth = selectedMonths.length === 1 ? parseInt(selectedMonths[0]) + 1 : null;
 
   // Dashboard stats
   const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats", rpcUserId, filterYear, filterMonth],
+    queryKey: ["dashboard-stats", rpcUserId, rpcUserIdsKey, filterYear, filterMonth],
     queryFn: async () => {
       const params: Record<string, unknown> = {};
-      if (rpcUserId) params._user_id = rpcUserId;
+      if (rpcUserIds) params._user_ids = rpcUserIds;
+      else if (rpcUserId) params._user_id = rpcUserId;
       if (filterYear) params._year = filterYear;
       if (filterMonth) params._month = filterMonth;
 
@@ -141,10 +148,11 @@ const DashboardPage = () => {
 
   // Acionados hoje
   const { data: acionadosHoje = 0 } = useQuery({
-    queryKey: ["acionados-hoje", rpcUserId, profile?.tenant_id],
+    queryKey: ["acionados-hoje", rpcUserId, rpcUserIdsKey, profile?.tenant_id],
     queryFn: async () => {
       const params: Record<string, unknown> = {};
-      if (rpcUserId) params._user_id = rpcUserId;
+      if (rpcUserIds) params._user_ids = rpcUserIds;
+      else if (rpcUserId) params._user_id = rpcUserId;
       const { data, error } = await supabase.rpc("get_acionados_hoje", params as any);
       if (error) throw error;
       return Number(data) || 0;
@@ -156,10 +164,11 @@ const DashboardPage = () => {
   // Vencimentos
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
-    queryKey: ["dashboard-vencimentos", browseDateStr, rpcUserId],
+    queryKey: ["dashboard-vencimentos", browseDateStr, rpcUserId, rpcUserIdsKey],
     queryFn: async () => {
       const params: Record<string, unknown> = { _target_date: browseDateStr };
-      if (rpcUserId) params._user_id = rpcUserId;
+      if (rpcUserIds) params._user_ids = rpcUserIds;
+      else if (rpcUserId) params._user_id = rpcUserId;
 
       const { data, error } = await supabase.rpc("get_dashboard_vencimentos", params as any);
       if (error) throw error;
