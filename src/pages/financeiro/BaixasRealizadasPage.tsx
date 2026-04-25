@@ -66,7 +66,8 @@ const parcelaLabel = (
     if (num === 0) return "Entrada";
     return String(num);
   }
-  return "—";
+  if (key) return String(key);
+  return "Única"; // Geralmente pagamentos de portal que englobam o acordo inteiro
 };
 
 const onlyDigits = (v: string) => v.replace(/\D/g, "");
@@ -383,16 +384,16 @@ const BaixasRealizadasPage = () => {
                       </TableCell>
                       <TableCell className="text-right">{fmtBRL(Number(r.valor_original))}</TableCell>
                       <TableCell className="text-right">
-                        {Number(r.juros) ? fmtBRL(Number(r.juros)) : "—"}
+                        {r.juros != null ? fmtBRL(Number(r.juros)) : fmtBRL(0)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {Number(r.multa) ? fmtBRL(Number(r.multa)) : "—"}
+                        {r.multa != null ? fmtBRL(Number(r.multa)) : fmtBRL(0)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {Number(r.honorarios) ? fmtBRL(Number(r.honorarios)) : "—"}
+                        {r.honorarios != null ? fmtBRL(Number(r.honorarios)) : fmtBRL(0)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {Number(r.desconto) ? fmtBRL(Number(r.desconto)) : "—"}
+                        {r.desconto != null ? fmtBRL(Number(r.desconto)) : fmtBRL(0)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {fmtBRL(Number(r.valor_pago))}
