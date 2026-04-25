@@ -298,7 +298,7 @@ const AcordosPage = () => {
     }
 
     return result;
-  }, [agreements, cobrancas, manualPayments, credorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
+  }, [agreements, cobrancas, manualPayments, credorFilter, operatorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
 
   // Filter by selected tab
   const filteredAgreements = useMemo(() => {
