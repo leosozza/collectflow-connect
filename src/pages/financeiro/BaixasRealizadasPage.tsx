@@ -303,9 +303,9 @@ const BaixasRealizadasPage = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos operadores</SelectItem>
-              {operatorsOptions.map(op => (
-                <SelectItem key={op} value={op}>
-                  {op}
+              {tenantOperators.map(op => (
+                <SelectItem key={op.user_id} value={op.user_id}>
+                  {op.full_name}
                 </SelectItem>
               ))}
             </SelectContent>
