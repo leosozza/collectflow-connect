@@ -6596,16 +6596,10 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
-      get_acionados_hoje:
-        | { Args: { _tenant_id?: string; _user_id?: string }; Returns: number }
-        | {
-            Args: {
-              _tenant_id?: string
-              _user_id?: string
-              _user_ids?: string[]
-            }
-            Returns: number
-          }
+      get_acionados_hoje: {
+        Args: { _tenant_id?: string; _user_id?: string; _user_ids?: string[] }
+        Returns: number
+      }
       get_agreement_financials: {
         Args: { _tenant_id: string }
         Returns: {
@@ -6687,83 +6681,44 @@ export type Database = {
           valor_total: number
         }[]
       }
-      get_dashboard_stats:
-        | {
-            Args: { _month?: number; _user_id?: string; _year?: number }
-            Returns: {
-              acionados_ontem: number
-              acordos_dia: number
-              acordos_dia_anterior: number
-              acordos_mes: number
-              acordos_mes_anterior: number
-              total_negociado: number
-              total_negociado_mes: number
-              total_negociado_mes_anterior: number
-              total_pendente: number
-              total_pendente_mes_anterior: number
-              total_projetado: number
-              total_quebra: number
-              total_quebra_mes_anterior: number
-              total_recebido: number
-              total_recebido_mes_anterior: number
-            }[]
-          }
-        | {
-            Args: {
-              _month?: number
-              _user_id?: string
-              _user_ids?: string[]
-              _year?: number
-            }
-            Returns: {
-              acionados_ontem: number
-              acordos_dia: number
-              acordos_dia_anterior: number
-              acordos_mes: number
-              acordos_mes_anterior: number
-              total_negociado: number
-              total_negociado_mes: number
-              total_negociado_mes_anterior: number
-              total_pendente: number
-              total_pendente_mes_anterior: number
-              total_projetado: number
-              total_quebra: number
-              total_quebra_mes_anterior: number
-              total_recebido: number
-              total_recebido_mes_anterior: number
-            }[]
-          }
-      get_dashboard_vencimentos:
-        | {
-            Args: { _target_date?: string; _user_id?: string }
-            Returns: {
-              agreement_id: string
-              agreement_status: string
-              client_cpf: string
-              client_name: string
-              credor: string
-              effective_status: string
-              numero_parcela: number
-              valor_parcela: number
-            }[]
-          }
-        | {
-            Args: {
-              _target_date?: string
-              _user_id?: string
-              _user_ids?: string[]
-            }
-            Returns: {
-              agreement_id: string
-              agreement_status: string
-              client_cpf: string
-              client_name: string
-              credor: string
-              effective_status: string
-              numero_parcela: number
-              valor_parcela: number
-            }[]
-          }
+      get_dashboard_stats: {
+        Args: {
+          _month?: number
+          _user_id?: string
+          _user_ids?: string[]
+          _year?: number
+        }
+        Returns: {
+          acionados_ontem: number
+          acordos_dia: number
+          acordos_dia_anterior: number
+          acordos_mes: number
+          acordos_mes_anterior: number
+          total_negociado: number
+          total_negociado_mes: number
+          total_negociado_mes_anterior: number
+          total_pendente: number
+          total_pendente_mes_anterior: number
+          total_projetado: number
+          total_quebra: number
+          total_quebra_mes_anterior: number
+          total_recebido: number
+          total_recebido_mes_anterior: number
+        }[]
+      }
+      get_dashboard_vencimentos: {
+        Args: { _target_date?: string; _user_id?: string; _user_ids?: string[] }
+        Returns: {
+          agreement_id: string
+          agreement_status: string
+          client_cpf: string
+          client_name: string
+          credor: string
+          effective_status: string
+          numero_parcela: number
+          valor_parcela: number
+        }[]
+      }
       get_distinct_event_cpfs: {
         Args: { p_since: string; p_tenant_id: string }
         Returns: {
