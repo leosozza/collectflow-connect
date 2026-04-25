@@ -1,29 +1,125 @@
-## Problema
+## Contexto
 
-Em `/financeiro/baixas`, o filtro **Operador** atualmente é montado a partir das próprias linhas da tabela e inclui valores genéricos como `"Negociarie"` e `"Portal"` em vez de listar os usuários operadores do tenant (Gustavo, Vitor, etc.).
+A página `BaixasRealizadasPage.tsx` já está no estado-alvo (lê `desconto`, lê `operator_id`, sem query duplicada). O que está desalinhado é apenas a RPC `public.get_baixas_realizadas` no banco, que:
 
-A coluna **Operador** na tabela também exibe "Negociarie" / "Portal" para baixas que não foram lançadas manualmente, o que polui o filtro.
+1. Não retorna a coluna `operator_id` (a tela espera, então o operador aparece sempre como "—").
+2. Não rateia juros/multa/honorários/desconto entre as parcelas para pagamentos vindos do Portal e da Negociarie.
+3. Para Negociarie, não devolve `payment_method` nem número de parcela legível.
 
-## Solução
+A correção é uma **migration de schema/função** (substituir a RPC). Nenhuma alteração de tabela é necessária — todas as colunas-fonte já existem (`manual_payments.requested_by`, `portal_payments.payment_data`, `negociarie_cobrancas.installment_key`, etc.).
 
-Alinhar a tela ao padrão já usado em `RelatoriosPage` (e em `AssignOperatorDialog`), carregando a lista de operadores diretamente da tabela `profiles` filtrada por `tenant_id`.
+## Mudanças
 
-### Mudanças em `src/pages/financeiro/BaixasRealizadasPage.tsx`
+### 1. Migration: recriar `public.get_baixas_realizadas`
 
-1. **Nova query `tenant-operators`**: busca `profiles` (`user_id`, `full_name`) do tenant atual, ordenado por nome — mesma lógica de `RelatoriosPage` linhas 45-52.
+- Acrescentar `operator_id uuid` ao `RETURNS TABLE`.
+- **Manual**: devolver `mp.requested_by` como `operator_id` (demais campos inalterados).
+- **Portal**: continuar lendo encargos de `pp.payment_data`, mas **ratear** cada componente (`juros`, `multa`, `honorarios`, `desconto`) proporcionalmente entre as parcelas do acordo. Como `portal_payments` representa o pagamento total no portal, o rateio será feito dividindo o total de cada componente pela quantidade de parcelas do acordo (`a.new_installments`, com fallback 1) e o `valor_pago`/`amount` por parcela também rateado. Cada parcela vira uma linha (gerada via `generate_series`), com `installment_number` preenchido. `operator_id` = NULL.
+- **Negociarie**: idem rateio. Como `negociarie_cobrancas` já é por parcela (`installment_key`), não precisamos expandir; mas devemos preencher `installment_number` quando `installment_key` for numérico (ou `0` para "entrada"). Encargos continuam zerados (a fonte não fornece). `payment_method` e `operator_id` = NULL.
 
-2. **Filtro Operador (Select)**: as opções passam a vir dessa query (lista fixa de operadores do tenant), não mais derivadas das linhas. Remove "Negociarie" e "Portal" do dropdown.
+Estrutura (resumida):
 
-3. **Resolver operador por linha**:
-   - `manual` → buscar `requested_by` em `manual_payments` e mapear para `profiles.full_name` (já existe, é mantido).
-   - `portal` / `negociarie` → exibir `"—"` na coluna Operador (não há operador humano envolvido).
+```sql
+CREATE OR REPLACE FUNCTION public.get_baixas_realizadas(
+  _date_from date DEFAULT NULL,
+  _date_to date DEFAULT NULL,
+  _credor text DEFAULT NULL,
+  _local text DEFAULT NULL,
+  _payment_method text DEFAULT NULL
+)
+RETURNS TABLE (
+  source text, payment_id uuid, agreement_id uuid,
+  client_cpf text, client_name text, credor text,
+  installment_number integer, total_installments integer, installment_key text,
+  valor_original numeric, juros numeric, multa numeric,
+  honorarios numeric, desconto numeric, valor_pago numeric,
+  payment_date date, payment_method text, local_pagamento text,
+  operator_id uuid
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE _tenant uuid;
+BEGIN
+  SELECT tenant_id INTO _tenant FROM public.tenant_users WHERE user_id = auth.uid() LIMIT 1;
+  IF _tenant IS NULL THEN RETURN; END IF;
 
-4. **Lógica de filtragem**: ao selecionar um operador, filtra apenas as linhas cujo `requested_by` corresponde ao `user_id` selecionado. Se "Todos" estiver selecionado, mantém todas as linhas (incluindo portal/negociarie).
+  RETURN QUERY
+  -- MANUAL (1 linha por manual_payment)
+  SELECT 'manual', mp.id, a.id, a.client_cpf, a.client_name, a.credor,
+         mp.installment_number::int, a.new_installments::int, mp.installment_key,
+         COALESCE(NULLIF((a.custom_installment_values ->> mp.installment_number::text)::numeric, 0),
+                  a.new_installment_value),
+         COALESCE(mp.interest_amount,0), COALESCE(mp.penalty_amount,0),
+         COALESCE(mp.fees_amount,0),     COALESCE(mp.discount_amount,0),
+         mp.amount_paid, mp.payment_date, mp.payment_method,
+         CASE WHEN COALESCE(mp.receiver,'') IN ('credora','creditor') THEN 'credora' ELSE 'cobradora' END,
+         mp.requested_by
+  FROM public.manual_payments mp
+  JOIN public.agreements a ON a.id = mp.agreement_id
+  WHERE mp.tenant_id = _tenant
+    AND mp.status IN ('confirmed','approved')
+    AND (_date_from IS NULL OR mp.payment_date >= _date_from)
+    AND (_date_to   IS NULL OR mp.payment_date <= _date_to)
+    AND (_credor IS NULL OR a.credor = _credor)
+    AND (_payment_method IS NULL OR mp.payment_method = _payment_method)
+    AND (_local IS NULL
+         OR (_local='credora'  AND COALESCE(mp.receiver,'') IN ('credora','creditor'))
+         OR (_local='cobradora' AND COALESCE(mp.receiver,'') NOT IN ('credora','creditor')))
 
-5. **Export Excel**: campo Operador segue a mesma regra (nome do operador para manuais, `—` para portal/negociarie).
+  UNION ALL
+  -- PORTAL (expande em N parcelas com rateio proporcional)
+  SELECT 'portal', pp.id, a.id, a.client_cpf, a.client_name, a.credor,
+         gs::int AS installment_number,
+         a.new_installments::int,
+         NULL::text,
+         a.new_installment_value,
+         ROUND(COALESCE((pp.payment_data->>'juros')::numeric,0)      / GREATEST(a.new_installments,1), 2),
+         ROUND(COALESCE((pp.payment_data->>'multa')::numeric,0)      / GREATEST(a.new_installments,1), 2),
+         ROUND(COALESCE((pp.payment_data->>'honorarios')::numeric,0) / GREATEST(a.new_installments,1), 2),
+         ROUND(COALESCE((pp.payment_data->>'desconto')::numeric,0)   / GREATEST(a.new_installments,1), 2),
+         ROUND(pp.amount / GREATEST(a.new_installments,1), 2),
+         pp.updated_at::date, pp.payment_method, 'cobradora', NULL::uuid
+  FROM public.portal_payments pp
+  JOIN public.agreements a ON a.id = pp.agreement_id
+  CROSS JOIN LATERAL generate_series(1, GREATEST(a.new_installments,1)) AS gs
+  WHERE pp.tenant_id = _tenant
+    AND pp.status = 'paid'
+    AND (_date_from IS NULL OR pp.updated_at::date >= _date_from)
+    AND (_date_to   IS NULL OR pp.updated_at::date <= _date_to)
+    AND (_credor IS NULL OR a.credor = _credor)
+    AND (_payment_method IS NULL OR pp.payment_method = _payment_method)
+    AND (_local IS NULL OR _local = 'cobradora')
 
-### Resultado
+  UNION ALL
+  -- NEGOCIARIE (1 linha por cobrança paga; installment_number derivado de installment_key)
+  SELECT 'negociarie', nc.id, a.id, a.client_cpf, a.client_name, a.credor,
+         CASE
+           WHEN nc.installment_key ~ '^[0-9]+$' THEN nc.installment_key::int
+           WHEN nc.installment_key ILIKE 'entrada%' THEN 0
+           ELSE NULL
+         END,
+         a.new_installments::int, nc.installment_key,
+         a.new_installment_value,
+         0, 0, 0, 0,
+         nc.valor_pago, nc.data_pagamento, NULL::text, 'cobradora', NULL::uuid
+  FROM public.negociarie_cobrancas nc
+  JOIN public.agreements a ON a.id = nc.agreement_id
+  WHERE nc.tenant_id = _tenant
+    AND nc.status = 'pago'
+    AND (_date_from IS NULL OR nc.data_pagamento >= _date_from)
+    AND (_date_to   IS NULL OR nc.data_pagamento <= _date_to)
+    AND (_credor IS NULL OR a.credor = _credor)
+    AND (_local IS NULL OR _local = 'cobradora');
+END;
+$$;
+```
 
-- Dropdown "Operador" mostra apenas usuários reais do tenant (Gustavo, Vitor, …), em ordem alfabética.
-- "Negociarie" e "Portal" desaparecem do filtro.
-- Coluna Operador na tabela mostra o nome do usuário que lançou a baixa manual, ou `—` para baixas automáticas (portal/negociarie).
+### 2. Frontend
+
+Nenhuma alteração — `BaixasRealizadasPage.tsx` já está alinhado ao novo contrato (tipo `BaixaRow` já tem `desconto` e `operator_id`, e usa `operator_id` para o filtro/coluna Operador).
+
+## Resultado esperado
+
+- Coluna **Operador** passa a mostrar o nome real para baixas manuais (resolvido via `requested_by` → `profiles`) e "—" para Portal/Negociarie.
+- Linhas de Portal e Negociarie passam a aparecer **uma por parcela**, com encargos rateados proporcionalmente.
+- Filtros existentes (data, credor, local, meio, operador, busca) continuam funcionando.
