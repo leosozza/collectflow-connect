@@ -1,29 +1,42 @@
-## Problema
+## Objetivo
 
-Em `/financeiro/baixas`, o filtro **Operador** atualmente é montado a partir das próprias linhas da tabela e inclui valores genéricos como `"Negociarie"` e `"Portal"` em vez de listar os usuários operadores do tenant (Gustavo, Vitor, etc.).
+Reformular a barra de filtros da página `/financeiro/baixas` para seguir o padrão visual da imagem anexada: filtros principais em uma linha (controles arredondados e leves) e busca + ação Excel em uma segunda linha.
 
-A coluna **Operador** na tabela também exibe "Negociarie" / "Portal" para baixas que não foram lançadas manualmente, o que polui o filtro.
+## Layout final (em `src/pages/financeiro/BaixasRealizadasPage.tsx`)
 
-## Solução
+### Linha 1 — Filtros principais (espelha a imagem)
+`Todos os Credores` · `Todos os Operadores` · `Ano` · `Mês (multi)` · `De` · `Até`
 
-Alinhar a tela ao padrão já usado em `RelatoriosPage` (e em `AssignOperatorDialog`), carregando a lista de operadores diretamente da tabela `profiles` filtrada por `tenant_id`.
+- Controles com `h-10`, `rounded-xl`, fundo `bg-muted/40` (sem borda forte) — padrão `Select`/`Button outline` do shadcn já disponível, ajustado via classes.
+- **Ano**: `Select` populado dinamicamente com os anos presentes nas linhas (fallback: ano atual ± 2).
+- **Mês**: `DropdownMenu` com checkboxes (Jan…Dez) permitindo seleção múltipla. Rótulo do trigger:
+  - Vazio/12 marcados → "Todos os meses"
+  - 1 marcado → nome do mês (ex.: "Abril")
+  - N marcados → "N meses"
+- **De / Até**: continuam como `Popover` + `Calendar` (já existem). Se preenchidos, **prevalecem** sobre Ano/Mês; se ambos limpos, o range vem de Ano + Meses selecionados.
 
-### Mudanças em `src/pages/financeiro/BaixasRealizadasPage.tsx`
+### Linha 2 — Busca + ações
+- Input de busca ocupando toda a largura (ícone de lupa à esquerda), `h-10 rounded-xl bg-muted/40`.
+- Botão **Excel** à direita (substitui o botão "Exportar" do header), `variant="outline"`, ícone `Download`.
 
-1. **Nova query `tenant-operators`**: busca `profiles` (`user_id`, `full_name`) do tenant atual, ordenado por nome — mesma lógica de `RelatoriosPage` linhas 45-52.
+### Linha 3 (opcional, discreta) — Filtros secundários
+Mantemos `Local de Pagamento` e `Meio de Pagamento` como Selects compactos abaixo, para não perder funcionalidade. Mesmo estilo da linha 1.
 
-2. **Filtro Operador (Select)**: as opções passam a vir dessa query (lista fixa de operadores do tenant), não mais derivadas das linhas. Remove "Negociarie" e "Portal" do dropdown.
+### Header
+- Remover o botão "Exportar" do topo (passa a ser o botão "Excel" da linha 2).
+- Manter título "Baixas Realizadas" + subtítulo.
 
-3. **Resolver operador por linha**:
-   - `manual` → buscar `requested_by` em `manual_payments` e mapear para `profiles.full_name` (já existe, é mantido).
-   - `portal` / `negociarie` → exibir `"—"` na coluna Operador (não há operador humano envolvido).
+## Mudanças de estado
 
-4. **Lógica de filtragem**: ao selecionar um operador, filtra apenas as linhas cujo `requested_by` corresponde ao `user_id` selecionado. Se "Todos" estiver selecionado, mantém todas as linhas (incluindo portal/negociarie).
+```ts
+const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+const [yearFilter, setYearFilter] = useState<string>(String(today.getFullYear()));
+const [monthsFilter, setMonthsFilter] = useState<number[]>([today.getMonth()]); // 0-11
+```
 
-5. **Export Excel**: campo Operador segue a mesma regra (nome do operador para manuais, `—` para portal/negociarie).
+`effectiveRange` (memo): se `dateFrom`/`dateTo` definidos, usa-os; senão deriva de `yearFilter` + `monthsFilter` (min mês → `startOfMonth`, max mês → `endOfMonth`). É esse range que vai para a RPC `get_baixas_realizadas`.
 
-### Resultado
-
-- Dropdown "Operador" mostra apenas usuários reais do tenant (Gustavo, Vitor, …), em ordem alfabética.
-- "Negociarie" e "Portal" desaparecem do filtro.
-- Coluna Operador na tabela mostra o nome do usuário que lançou a baixa manual, ou `—` para baixas automáticas (portal/negociarie).
+## Fora de escopo
+- Sem alteração na RPC, na lógica de cálculo, na tabela ou no agrupamento por mês.
+- Filtro de Operador (já corrigido na iteração anterior) permanece igual.
