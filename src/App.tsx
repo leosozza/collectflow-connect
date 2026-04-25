@@ -23,6 +23,9 @@ import SignsPage from "./pages/SignsPage";
 import AutomacaoPage from "./pages/AutomacaoPage";
 import RelatoriosPage from "./pages/RelatoriosPage";
 import AcordosPage from "./pages/AcordosPage";
+import BaixasRealizadasPage from "./pages/financeiro/BaixasRealizadasPage";
+import AguardandoLiberacaoPage from "./pages/financeiro/AguardandoLiberacaoPage";
+import ConfirmacaoPagamentoPage from "./pages/financeiro/ConfirmacaoPagamentoPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import PortalPage from "./pages/PortalPage";
 import AuditoriaPage from "./pages/AuditoriaPage";
@@ -120,6 +123,9 @@ const App = () => (
               <Route path="automacao" element={<ModuleGuard module="automacao"><AutomacaoPage /></ModuleGuard>} />
               <Route path="relatorios" element={<ModuleGuard module="relatorios"><RelatoriosPage /></ModuleGuard>} />
               <Route path="acordos" element={<AcordosPage />} />
+              <Route path="financeiro/baixas" element={<BaixasRealizadasPage />} />
+              <Route path="financeiro/aguardando-liberacao" element={<AguardandoLiberacaoPage />} />
+              <Route path="financeiro/confirmacao-pagamento" element={<ConfirmacaoPagamentoPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="auditoria" element={<AuditoriaPage />} />
               <Route path="atendimento/:clientId?" element={<AtendimentoPage />} />

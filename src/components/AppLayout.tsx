@@ -23,6 +23,10 @@ import {
   BookUser,
   Zap,
   Handshake,
+  Banknote,
+  CheckCircle2,
+  ClipboardCheck,
+  Receipt,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import UpdateButton from "@/components/system/UpdateButton";
@@ -66,8 +70,18 @@ const AppLayout = () => {
     { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
     ...(permissions.canViewGamificacao && isModuleEnabled("gamificacao") ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
     ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
-    ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
   ];
+
+  // Financeiro group
+  const isAdminLike = permissions.canApproveAcordos;
+  const financeiroItems = [
+    ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
+    ...(permissions.canViewAcordos ? [{ label: "Baixas Realizadas", icon: Receipt, path: "/financeiro/baixas" }] : []),
+    ...(isAdminLike ? [{ label: "Aguardando Liberação", icon: ClipboardCheck, path: "/financeiro/aguardando-liberacao" }] : []),
+    ...(isAdminLike ? [{ label: "Confirmação de Pagamento", icon: CheckCircle2, path: "/financeiro/confirmacao-pagamento" }] : []),
+  ];
+  const isFinanceiroRoute =
+    location.pathname.startsWith("/acordos") || location.pathname.startsWith("/financeiro");
 
   const contactCenterEnabled = isModuleEnabled("contact_center");
   const contactCenterItems = [
@@ -80,9 +94,11 @@ const AppLayout = () => {
   const showContactCenter = contactCenterItems.length > 0;
 
   const [contactCenterOpen, setContactCenterOpen] = useState(isContactCenterRoute);
+  const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroRoute);
 
   useEffect(() => {
     if (isContactCenterRoute) setContactCenterOpen(true);
+    if (isFinanceiroRoute) setFinanceiroOpen(true);
   }, [location.pathname]);
 
   const handleSignOut = async () => {
@@ -136,7 +152,42 @@ const AppLayout = () => {
             );
           })}
 
-          {/* Automação — always visible if CRM active (absorbed module) */}
+          {/* Financeiro group */}
+          {financeiroItems.length > 0 && (
+            <Collapsible open={financeiroOpen} onOpenChange={setFinanceiroOpen}>
+              <CollapsibleTrigger className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} w-full ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors ${isFinanceiroRoute ? "text-primary" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}>
+                <div className="flex items-center gap-3">
+                  <Banknote className="w-5 h-5 flex-shrink-0" />
+                  {!collapsed && "Financeiro"}
+                </div>
+                {!collapsed && <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${financeiroOpen ? "rotate-180" : ""}`} />}
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-1 ml-4">
+                {financeiroItems.map((item) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      title={collapsed ? item.label : undefined}
+                      className={`
+                        flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2 rounded-lg text-sm font-medium transition-colors
+                        ${active
+                          ? "bg-primary text-primary-foreground"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        }
+                      `}
+                    >
+                      <item.icon className="w-4 h-4 flex-shrink-0" />
+                      {!collapsed && item.label}
+                    </Link>
+                  );
+                })}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           {permissions.canViewAutomacao && (
             <Link
               to="/automacao"
