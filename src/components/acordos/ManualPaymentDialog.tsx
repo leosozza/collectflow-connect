@@ -45,6 +45,10 @@ const ManualPaymentDialog = ({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [receiver, setReceiver] = useState("");
   const [notes, setNotes] = useState("");
+  const [interestAmount, setInterestAmount] = useState(0);
+  const [penaltyAmount, setPenaltyAmount] = useState(0);
+  const [feesAmount, setFeesAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [existing, setExisting] = useState<ManualPayment | null>(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
 
@@ -77,6 +81,10 @@ const ManualPaymentDialog = ({
         payment_method: paymentMethod,
         receiver,
         notes: notes || undefined,
+        interest_amount: interestAmount || 0,
+        penalty_amount: penaltyAmount || 0,
+        fees_amount: feesAmount || 0,
+        discount_amount: discountAmount || 0,
       };
       await manualPaymentService.create(data, tenantId, profileId);
       toast({ title: "Solicitação de baixa registrada", description: "Aguardando confirmação do administrador." });
