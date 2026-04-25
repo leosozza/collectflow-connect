@@ -1,28 +1,28 @@
-import { useEffect } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
-import AcordosPage from "@/pages/AcordosPage";
+import { useTenant } from "@/hooks/useTenant";
+import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab";
 
-/**
- * Rota /financeiro/confirmacao-pagamento
- * Restrita a usuários com permissão de aprovar acordos.
- */
 const ConfirmacaoPagamentoPage = () => {
   const permissions = usePermissions();
-  const [params, setParams] = useSearchParams();
+  const { tenant } = useTenant();
 
-  useEffect(() => {
-    if (params.get("status") !== "payment_confirmation") {
-      const next = new URLSearchParams(params);
-      next.set("status", "payment_confirmation");
-      setParams(next, { replace: true });
-    }
-  }, [params, setParams]);
+  if (permissions.loading) return <p className="text-muted-foreground p-6">Carregando permissões...</p>;
+  if (!permissions.canApproveAcordos) return <Navigate to="/financeiro/acordos" replace />;
 
-  if (permissions.loading) return null;
-  if (!permissions.canApproveAcordos) return <Navigate to="/acordos" replace />;
-
-  return <AcordosPage />;
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Confirmação de Pagamento</h1>
+      <p className="text-muted-foreground">
+        Abaixo estão os acordos que possuem envios de comprovante aguardando conferência e baixa.
+      </p>
+      {tenant?.id ? (
+        <PaymentConfirmationTab tenantId={tenant.id} />
+      ) : (
+        <p className="text-muted-foreground">Carregando dados do tenant...</p>
+      )}
+    </div>
+  );
 };
 
 export default ConfirmacaoPagamentoPage;

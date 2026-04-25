@@ -65,7 +65,7 @@ const AcordosPage = () => {
     try {
       try {
         await supabase.functions.invoke("auto-expire-agreements");
-      } catch (_) {}
+      } catch (_) { }
       const filters: { created_by?: string } = {};
       if (!isAdmin && user) filters.created_by = user.id;
       const data = await fetchAgreements(tenant?.id || "", Object.keys(filters).length > 0 ? filters : undefined);
@@ -295,16 +295,14 @@ const AcordosPage = () => {
     const total = relevant.length;
     const pending = isMonthSelected
       ? relevant.filter(a => {
-          const c = (a as any)._installmentClass as InstallmentClassification | undefined;
-          return c === "vigente" || c === "pending_confirmation";
-        }).length
+        const c = (a as any)._installmentClass as InstallmentClassification | undefined;
+        return c === "vigente" || c === "pending_confirmation";
+      }).length
       : relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
     // Inclusive paid: agreements with at least one paid installment in scope OR fully approved
     const paid = relevant.filter(a => (a as any)._hasPaidInScope === true || a.status === "approved").length;
     return { total, pending, paid };
   }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
-
-  const isOperationalFilter = statusFilter === "pending_approval" || statusFilter === "payment_confirmation";
 
   return (
     <div className="space-y-6">
@@ -318,16 +316,15 @@ const AcordosPage = () => {
 
       <div className="flex flex-wrap gap-2">
         {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
-          <button
-            key={key}
-            onClick={() => setStatusFilter(key)}
-            className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
-              statusFilter === key ? selectedColor : color
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color
+                }`}
+            >
+              {label}
+            </button>
+          ))}
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
