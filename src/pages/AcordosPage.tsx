@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
 import { supabase } from "@/integrations/supabase/client";
 import { useUrlState } from "@/hooks/useUrlState";
@@ -7,7 +8,7 @@ import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
-import { fetchAgreements, approveAgreement, rejectAgreement, cancelAgreement, Agreement } from "@/services/agreementService";
+import { fetchAgreements, fetchAgreementOperators, approveAgreement, rejectAgreement, cancelAgreement, Agreement } from "@/services/agreementService";
 import AgreementsList from "@/components/acordos/AgreementsList";
 import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab";
 import StatCard from "@/components/StatCard";
