@@ -98,14 +98,40 @@ const BaixasRealizadasPage = () => {
     },
   });
 
-  // Operador da baixa manual (resolvido via manual_payments + profiles).
+  // Lista oficial de operadores do tenant (padrão usado em RelatoriosPage).
+  const { data: tenantOperators = [] } = useQuery<{ user_id: string; full_name: string }[]>({
+    queryKey: ["tenant-operators-baixas", tenant?.id],
+    enabled: !!tenant?.id,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .eq("tenant_id", tenant!.id)
+        .order("full_name");
+      if (error) throw error;
+      return (data ?? []).map((p: any) => ({
+        user_id: p.user_id,
+        full_name: p.full_name || "Sem nome",
+      }));
+    },
+  });
+
+  // Mapa user_id -> nome para resolver rapidamente o nome do operador
+  const operatorNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    tenantOperators.forEach(o => { map[o.user_id] = o.full_name; });
+    return map;
+  }, [tenantOperators]);
+
+  // Resolver requested_by por payment_id (apenas baixas manuais).
   const manualIds = useMemo(
     () => rows.filter(r => r.source === "manual").map(r => r.payment_id),
     [rows],
   );
 
-  const { data: operatorMap = {} as Record<string, string> } = useQuery<Record<string, string>>({
-    queryKey: ["baixas-operators", tenant?.id, manualIds.length, manualIds[0] ?? "", manualIds[manualIds.length - 1] ?? ""],
+  const { data: requestedByMap = {} as Record<string, string | null> } = useQuery<Record<string, string | null>>({
+    queryKey: ["baixas-manual-requesters", tenant?.id, manualIds.length, manualIds[0] ?? "", manualIds[manualIds.length - 1] ?? ""],
     enabled: !!tenant?.id && manualIds.length > 0,
     staleTime: 60_000,
     queryFn: async () => {
@@ -113,31 +139,24 @@ const BaixasRealizadasPage = () => {
         .from("manual_payments")
         .select("id, requested_by")
         .in("id", manualIds);
-      const userIds = Array.from(
-        new Set((mp ?? []).map((m: any) => m.requested_by).filter(Boolean)),
-      );
-      const names: Record<string, string> = {};
-      if (userIds.length > 0) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("user_id, full_name")
-          .in("user_id", userIds);
-        (profs ?? []).forEach((p: any) => {
-          names[p.user_id] = p.full_name || "—";
-        });
-      }
-      const map: Record<string, string> = {};
+      const map: Record<string, string | null> = {};
       (mp ?? []).forEach((m: any) => {
-        map[m.id] = m.requested_by ? (names[m.requested_by] || "—") : "—";
+        map[m.id] = m.requested_by ?? null;
       });
       return map;
     },
   });
 
+  // Retorna user_id do operador da linha (ou null se for portal/negociarie).
+  const operatorIdFor = (r: BaixaRow): string | null => {
+    if (r.source !== "manual") return null;
+    return requestedByMap[r.payment_id] ?? null;
+  };
+
   const operatorNameFor = (r: BaixaRow): string => {
-    if (r.source === "manual") return operatorMap[r.payment_id] ?? "—";
-    if (r.source === "portal") return "Portal";
-    return "Negociarie";
+    const id = operatorIdFor(r);
+    if (!id) return "—";
+    return operatorNameById[id] ?? "—";
   };
 
   const credores = useMemo(
@@ -148,20 +167,11 @@ const BaixasRealizadasPage = () => {
     () => Array.from(new Set(rows.map(r => r.payment_method).filter(Boolean))).sort() as string[],
     [rows],
   );
-  const operatorsOptions = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach(r => {
-      const name = operatorNameFor(r);
-      if (name && name !== "—") set.add(name);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, operatorMap]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return rows.filter(r => {
-      if (operatorFilter !== "todos" && operatorNameFor(r) !== operatorFilter) return false;
+      if (operatorFilter !== "todos" && operatorIdFor(r) !== operatorFilter) return false;
       if (q) {
         const hit =
           r.client_name?.toLowerCase().includes(q) ||
@@ -171,7 +181,7 @@ const BaixasRealizadasPage = () => {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, searchQuery, operatorFilter, operatorMap]);
+  }, [rows, searchQuery, operatorFilter, requestedByMap]);
 
   // Agrupa por mês de pagamento
   const grouped = useMemo(() => {
@@ -293,9 +303,9 @@ const BaixasRealizadasPage = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos operadores</SelectItem>
-              {operatorsOptions.map(op => (
-                <SelectItem key={op} value={op}>
-                  {op}
+              {tenantOperators.map(op => (
+                <SelectItem key={op.user_id} value={op.user_id}>
+                  {op.full_name}
                 </SelectItem>
               ))}
             </SelectContent>

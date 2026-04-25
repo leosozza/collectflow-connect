@@ -1,28 +1,29 @@
-# Refinar tela "Baixas Realizadas"
+## Problema
 
-## Filtros (mais clean)
-- Substituir o grid de filtros por **uma única barra horizontal compacta** (altura `h-9`, ícones menores), seguindo o padrão visual já usado na barra de filtros de `Acordos`.
-- Sequência: Busca → De → Até → Credor → **Operador (novo)** → Local → Meio.
-- Labels mais curtos ("Todos credores", "Todos meios", "dd/MM/yy" no botão de data) para reduzir largura.
+Em `/financeiro/baixas`, o filtro **Operador** atualmente é montado a partir das próprias linhas da tabela e inclui valores genéricos como `"Negociarie"` e `"Portal"` em vez de listar os usuários operadores do tenant (Gustavo, Vitor, etc.).
 
-## Novo filtro: Operador
-- Select "Operador" entre Credor e Local.
-- Opções derivadas dos operadores que efetivamente registraram baixas no período carregado, mais "Portal" (origem portal) e "Negociarie" (gateway).
-- Para baixas manuais, busca paralela leve em `manual_payments(id, requested_by)` + `profiles(user_id, full_name)` apenas para os IDs já listados — sem alterar o RPC.
+A coluna **Operador** na tabela também exibe "Negociarie" / "Portal" para baixas que não foram lançadas manualmente, o que polui o filtro.
 
-## Tabela
-- **Devedor**: vira link clicável para `/carteira/<cpf>` (mesmo padrão da Gestão de Acordos). Remover a linha do CPF abaixo do nome — sobra só o nome (CPF visível no tooltip se necessário).
-- **Credor**: passar a mostrar apenas os 2 primeiros nomes (`split(' ').slice(0,2).join(' ')`), com nome completo no `title`. Será o padrão global daqui para frente; aqui já entra em uso.
-- **Parcela**: passar a mostrar apenas a referência da parcela ("Entrada", "Entrada 2", "1", "2", "3"), sem o sufixo "de N".
-- **Descontos**: nova coluna imediatamente à direita de "Honorários", consumindo o campo `desconto` que o RPC já retorna.
-- **Operador**: nova coluna ao final, exibindo o nome do operador que registrou a baixa (ou "Portal" / "Negociarie" para origens externas).
+## Solução
 
-## Exportação Excel
-- Acompanha as mesmas mudanças: credor abreviado, parcela simplificada, novas colunas "Descontos" e "Operador".
+Alinhar a tela ao padrão já usado em `RelatoriosPage` (e em `AssignOperatorDialog`), carregando a lista de operadores diretamente da tabela `profiles` filtrada por `tenant_id`.
 
-## Backend
-- **Sem alteração de RPC** nesta iteração (a função `get_baixas_realizadas` já retorna `desconto`). O nome do operador é resolvido no cliente via `manual_payments` + `profiles`, evitando uma migração só para isto.
-- Quando voltarmos para o passo de breakdown financeiro completo, podemos mover esse join para dentro da RPC.
+### Mudanças em `src/pages/financeiro/BaixasRealizadasPage.tsx`
 
-## Arquivos a alterar
-- `src/pages/financeiro/BaixasRealizadasPage.tsx` — único arquivo modificado.
+1. **Nova query `tenant-operators`**: busca `profiles` (`user_id`, `full_name`) do tenant atual, ordenado por nome — mesma lógica de `RelatoriosPage` linhas 45-52.
+
+2. **Filtro Operador (Select)**: as opções passam a vir dessa query (lista fixa de operadores do tenant), não mais derivadas das linhas. Remove "Negociarie" e "Portal" do dropdown.
+
+3. **Resolver operador por linha**:
+   - `manual` → buscar `requested_by` em `manual_payments` e mapear para `profiles.full_name` (já existe, é mantido).
+   - `portal` / `negociarie` → exibir `"—"` na coluna Operador (não há operador humano envolvido).
+
+4. **Lógica de filtragem**: ao selecionar um operador, filtra apenas as linhas cujo `requested_by` corresponde ao `user_id` selecionado. Se "Todos" estiver selecionado, mantém todas as linhas (incluindo portal/negociarie).
+
+5. **Export Excel**: campo Operador segue a mesma regra (nome do operador para manuais, `—` para portal/negociarie).
+
+### Resultado
+
+- Dropdown "Operador" mostra apenas usuários reais do tenant (Gustavo, Vitor, …), em ordem alfabética.
+- "Negociarie" e "Portal" desaparecem do filtro.
+- Coluna Operador na tabela mostra o nome do usuário que lançou a baixa manual, ou `—` para baixas automáticas (portal/negociarie).
