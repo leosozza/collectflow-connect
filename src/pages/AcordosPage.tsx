@@ -82,12 +82,10 @@ const AcordosPage = () => {
       "agreements-list",
       tenant?.id,
       effectiveCreatedBy ?? "all",
-      credorFilter,
       excludeFinal,
     ],
     queryFn: () => fetchAgreements(tenant?.id || "", {
       created_by: effectiveCreatedBy,
-      credor: credorFilter,
       excludeFinal,
     }),
     enabled: !!tenant?.id,
