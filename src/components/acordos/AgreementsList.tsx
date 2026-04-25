@@ -88,7 +88,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                     {a.client_name}
                   </Link>
                 </TableCell>
-                <TableCell>{formatCPF(a.client_cpf)}</TableCell>
                 <TableCell>{a.credor}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {(a as any).creator_name || "—"}
