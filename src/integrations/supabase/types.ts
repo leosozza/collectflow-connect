@@ -6684,6 +6684,7 @@ export type Database = {
           juros: number
           local_pagamento: string
           multa: number
+          operator_id: string
           payment_date: string
           payment_id: string
           payment_method: string
