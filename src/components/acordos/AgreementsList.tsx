@@ -61,7 +61,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
         <TableHeader>
           <TableRow>
             <TableHead>Cliente</TableHead>
-            <TableHead>CPF</TableHead>
             <TableHead>Credor</TableHead>
             <TableHead>Operador</TableHead>
             {showParcelaCol && (
@@ -89,7 +88,6 @@ const AgreementsList = ({ agreements }: AgreementsListProps) => {
                     {a.client_name}
                   </Link>
                 </TableCell>
-                <TableCell>{formatCPF(a.client_cpf)}</TableCell>
                 <TableCell>{a.credor}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {(a as any).creator_name || "—"}
