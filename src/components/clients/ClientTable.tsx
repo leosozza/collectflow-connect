@@ -1,5 +1,5 @@
 import { Client } from "@/services/clientService";
-import { formatCurrency, formatDate, statusColors, statusLabels } from "@/lib/formatters";
+import { formatCurrency, formatDate, statusColors, statusLabels, shortCredor } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Edit, Trash2, CreditCard } from "lucide-react";
 import {
@@ -70,7 +70,7 @@ const ClientTable = ({ clients, loading, onEdit, onDelete, onPayment }: ClientTa
               <TableRow key={client.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium text-card-foreground">{client.nome_completo}</TableCell>
                 <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
-                <TableCell className="text-muted-foreground">{client.credor}</TableCell>
+                <TableCell title={client.credor} className="text-muted-foreground max-w-[180px] truncate">{shortCredor(client.credor)}</TableCell>
                 <TableCell className="text-center">{client.numero_parcela}</TableCell>
                 <TableCell className="text-right">{formatCurrency(Number(client.valor_parcela))}</TableCell>
                 <TableCell className="text-right">{formatCurrency(Number(client.valor_pago))}</TableCell>

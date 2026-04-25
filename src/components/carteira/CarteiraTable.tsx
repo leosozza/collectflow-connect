@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Client } from "@/services/clientService";
-import { formatCurrency, formatDate } from "@/lib/formatters";
+import { formatCurrency, formatDate, shortCredor } from "@/lib/formatters";
 import { AlertTriangle, CalendarClock, Headset, Download } from "lucide-react";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
@@ -130,7 +130,7 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
                       {client.nome_completo}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{client.cpf}</TableCell>
-                    <TableCell className="text-muted-foreground">{client.credor}</TableCell>
+                    <TableCell title={client.credor} className="text-muted-foreground max-w-[180px] truncate">{shortCredor(client.credor)}</TableCell>
                     <TableCell>
                       <span className={isPast ? "text-destructive font-medium" : isToday ? "text-primary font-medium" : ""}>
                         {formatDate(client.data_vencimento)}

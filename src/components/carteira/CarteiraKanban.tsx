@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { Client } from "@/services/clientService";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, shortCredor } from "@/lib/formatters";
 import { Headset, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -167,7 +167,7 @@ const CarteiraKanban = ({ clients, loading, tiposStatus }: CarteiraKanbanProps) 
                       </div>
 
                       <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-muted-foreground">{client.credor}</span>
+                        <span title={client.credor} className="text-xs text-muted-foreground truncate max-w-[140px]">{shortCredor(client.credor)}</span>
                         <span className="text-sm font-semibold text-card-foreground">
                           {formatCurrency(Number(client.valor_parcela))}
                         </span>
