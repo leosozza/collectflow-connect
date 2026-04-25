@@ -23,6 +23,10 @@ import {
   BookUser,
   Zap,
   Handshake,
+  Banknote,
+  CheckCircle2,
+  ClipboardCheck,
+  Receipt,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import UpdateButton from "@/components/system/UpdateButton";
@@ -66,8 +70,18 @@ const AppLayout = () => {
     { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
     ...(permissions.canViewGamificacao && isModuleEnabled("gamificacao") ? [{ label: "Gamificação", icon: Trophy, path: "/gamificacao" }] : []),
     ...(permissions.canViewCarteira ? [{ label: "Carteira", icon: Wallet, path: "/carteira" }] : []),
-    ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
   ];
+
+  // Financeiro group
+  const isAdminLike = permissions.canApproveAcordos;
+  const financeiroItems = [
+    ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
+    ...(permissions.canViewAcordos ? [{ label: "Baixas Realizadas", icon: Receipt, path: "/financeiro/baixas" }] : []),
+    ...(isAdminLike ? [{ label: "Aguardando Liberação", icon: ClipboardCheck, path: "/financeiro/aguardando-liberacao" }] : []),
+    ...(isAdminLike ? [{ label: "Confirmação de Pagamento", icon: CheckCircle2, path: "/financeiro/confirmacao-pagamento" }] : []),
+  ];
+  const isFinanceiroRoute =
+    location.pathname.startsWith("/acordos") || location.pathname.startsWith("/financeiro");
 
   const contactCenterEnabled = isModuleEnabled("contact_center");
   const contactCenterItems = [
