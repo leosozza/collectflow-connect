@@ -679,7 +679,7 @@ const ClientDetailPage = () => {
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Credor</p>
-                            <p className="text-sm font-semibold">{agreement.credor}</p>
+                            <p className="text-sm font-semibold">{formatCredorName(agreement.credor)}</p>
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Operador / Canal</p>
@@ -860,7 +860,7 @@ const ClientDetailPage = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Credor</span>
-                  <span className="font-medium">{editingAgreement.credor}</span>
+                  <span className="font-medium">{formatCredorName(editingAgreement.credor)}</span>
                 </div>
               </div>
 

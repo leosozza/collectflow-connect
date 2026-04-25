@@ -68,3 +68,10 @@ export const maskEmail = (email: string): string => {
   if (!domain) return "***";
   return `${local.charAt(0)}***@${domain}`;
 };
+
+export const formatCredorName = (name: string | null | undefined): string => {
+  if (!name) return "—";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 2) return name;
+  return parts.slice(0, 2).join(" ");
+};

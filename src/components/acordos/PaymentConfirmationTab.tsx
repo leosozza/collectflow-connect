@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { manualPaymentService, ManualPaymentWithDetails } from "@/services/manualPaymentService";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, formatCredorName } from "@/lib/formatters";
 import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -302,7 +302,6 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
           <TableHeader>
             <TableRow>
               <TableHead>Cliente</TableHead>
-              <TableHead>CPF</TableHead>
               <TableHead>Credor</TableHead>
               <TableHead className="text-center">Parcela</TableHead>
               <TableHead className="text-right">Valor</TableHead>
@@ -329,8 +328,7 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
                     <span className="font-medium">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-sm">{p.agreement?.client_cpf || "—"}</TableCell>
-                <TableCell className="text-sm">{p.agreement?.credor || "—"}</TableCell>
+                <TableCell className="text-sm">{formatCredorName(p.agreement?.credor)}</TableCell>
                 <TableCell className="text-center text-sm">{getInstallmentLabel(p)}</TableCell>
                 <TableCell className="text-right font-medium">{formatCurrency(p.amount_paid)}</TableCell>
                 <TableCell className="text-sm">{format(new Date(p.payment_date + "T00:00:00"), "dd/MM/yyyy")}</TableCell>

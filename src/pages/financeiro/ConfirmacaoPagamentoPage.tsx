@@ -16,7 +16,7 @@ const ConfirmacaoPagamentoPage = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Confirmação de Pagamento</h1>
+      <h1 className="text-2xl font-bold">Confirmação Pagamento Manual</h1>
       {tenant?.id ? (
         <PaymentConfirmationTab tenantId={tenant.id} />
       ) : (

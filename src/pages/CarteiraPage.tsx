@@ -22,7 +22,7 @@ import {
   GroupedClient,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
-import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail } from "@/lib/formatters";
+import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail, formatCredorName } from "@/lib/formatters";
 import * as XLSX from "xlsx";
 import { Badge } from "@/components/ui/badge";
 import ClientFilters from "@/components/clients/ClientFilters";
@@ -835,7 +835,7 @@ const CarteiraPage = () => {
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.phone || "—") : maskPhone(client.phone || "")}</TableCell>
                       <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.email || "—") : maskEmail(client.email || "")}</TableCell>
-                      <TableCell className="text-muted-foreground">{client.credor}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatCredorName(client.credor)}</TableCell>
                       <TableCell>{formatDate(client.data_vencimento)}</TableCell>
                       
                       <TableCell className="text-center">
