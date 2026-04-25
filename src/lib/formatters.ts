@@ -1,3 +1,14 @@
+/**
+ * Encurta o nome do credor para exibição (padrão: 2 primeiras palavras).
+ * Use em listagens, tabelas, cards e filtros para otimizar o espaço.
+ * Mantenha o nome completo no atributo `title` para tooltip nativo.
+ */
+export const shortCredor = (nome?: string | null, words = 2): string => {
+  const str = (nome ?? "").trim();
+  if (!str) return "—";
+  return str.split(/\s+/).slice(0, words).join(" ");
+};
+
 export const formatCPF = (value: string): string => {
   const nums = value.replace(/\D/g, "").slice(0, 11);
   if (nums.length <= 3) return nums;
