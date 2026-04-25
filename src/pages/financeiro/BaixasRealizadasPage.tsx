@@ -13,7 +13,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Download, Search, Loader2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { CalendarIcon, Download, Search, Loader2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { exportToExcel } from "@/lib/exportUtils";
 
@@ -74,21 +82,34 @@ const BaixasRealizadasPage = () => {
   const { tenant } = useTenant();
   const today = new Date();
 
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(startOfMonth(today));
-  const [dateTo, setDateTo] = useState<Date | undefined>(endOfMonth(today));
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [yearFilter, setYearFilter] = useState<string>(String(today.getFullYear()));
+  const [monthsFilter, setMonthsFilter] = useState<number[]>([today.getMonth()]); // 0-11
   const [credorFilter, setCredorFilter] = useState<string>("todos");
   const [localFilter, setLocalFilter] = useState<string>("todos");
   const [methodFilter, setMethodFilter] = useState<string>("todos");
   const [operatorFilter, setOperatorFilter] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Range efetivo: De/Até prevalecem; senão, deriva de Ano + Meses selecionados.
+  const effectiveRange = useMemo(() => {
+    if (dateFrom || dateTo) return { from: dateFrom ?? null, to: dateTo ?? null };
+    const yr = parseInt(yearFilter, 10);
+    const months = monthsFilter.length > 0 ? [...monthsFilter].sort((a, b) => a - b) : [0, 11];
+    return {
+      from: startOfMonth(new Date(yr, months[0], 1)),
+      to: endOfMonth(new Date(yr, months[months.length - 1], 1)),
+    };
+  }, [dateFrom, dateTo, yearFilter, monthsFilter]);
+
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["baixas-realizadas", tenant?.id, dateFrom?.toISOString(), dateTo?.toISOString(), credorFilter, localFilter, methodFilter],
+    queryKey: ["baixas-realizadas", tenant?.id, effectiveRange.from?.toISOString(), effectiveRange.to?.toISOString(), credorFilter, localFilter, methodFilter],
     enabled: !!tenant?.id,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_baixas_realizadas" as any, {
-        _date_from: dateFrom ? format(dateFrom, "yyyy-MM-dd") : null,
-        _date_to: dateTo ? format(dateTo, "yyyy-MM-dd") : null,
+        _date_from: effectiveRange.from ? format(effectiveRange.from, "yyyy-MM-dd") : null,
+        _date_to: effectiveRange.to ? format(effectiveRange.to, "yyyy-MM-dd") : null,
         _credor: credorFilter === "todos" ? null : credorFilter,
         _local: localFilter === "todos" ? null : localFilter,
         _payment_method: methodFilter === "todos" ? null : methodFilter,
@@ -168,6 +189,30 @@ const BaixasRealizadasPage = () => {
     [rows],
   );
 
+  // Anos para o filtro: ano atual ± 2 (cobre seleção retroativa sem depender dos dados).
+  const availableYears = useMemo(() => {
+    const cur = today.getFullYear();
+    return [cur + 1, cur, cur - 1, cur - 2, cur - 3].map(String);
+  }, [today]);
+
+  const monthNames = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => format(new Date(2000, i, 1), "LLLL", { locale: ptBR })),
+    [],
+  );
+
+  const monthsLabel = useMemo(() => {
+    if (monthsFilter.length === 0 || monthsFilter.length === 12) return "Todos os meses";
+    if (monthsFilter.length === 1) {
+      const n = monthNames[monthsFilter[0]];
+      return n.charAt(0).toUpperCase() + n.slice(1);
+    }
+    return `${monthsFilter.length} meses`;
+  }, [monthsFilter, monthNames]);
+
+  const toggleMonth = (m: number) => {
+    setMonthsFilter(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m].sort((a, b) => a - b));
+  };
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return rows.filter(r => {
@@ -226,69 +271,23 @@ const BaixasRealizadasPage = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Baixas Realizadas</h1>
-          <p className="text-sm text-muted-foreground">
-            Histórico detalhado de parcelas efetivamente pagas.
-          </p>
-        </div>
-        <Button onClick={handleExport} variant="outline" size="sm" disabled={!filtered.length}>
-          <Download className="h-4 w-4 mr-2" /> Exportar
-        </Button>
+      <div>
+        <h1 className="text-2xl font-semibold">Baixas Realizadas</h1>
+        <p className="text-sm text-muted-foreground">
+          Histórico detalhado de parcelas efetivamente pagas.
+        </p>
       </div>
 
-      {/* Filtros — barra compacta */}
-      <Card className="p-3">
+      {/* Filtros — padrão visual: pílulas leves */}
+      <div className="space-y-3">
+        {/* Linha 1 — filtros principais */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Buscar nome ou CPF..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 h-9"
-            />
-          </div>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn("h-9 justify-start font-normal", !dateFrom && "text-muted-foreground")}
-              >
-                <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                {dateFrom ? format(dateFrom, "dd/MM/yy") : "De"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} />
-            </PopoverContent>
-          </Popover>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn("h-9 justify-start font-normal", !dateTo && "text-muted-foreground")}
-              >
-                <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                {dateTo ? format(dateTo, "dd/MM/yy") : "Até"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar mode="single" selected={dateTo} onSelect={setDateTo} />
-            </PopoverContent>
-          </Popover>
-
           <Select value={credorFilter} onValueChange={setCredorFilter}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="Credor" />
+            <SelectTrigger className="h-10 min-w-[170px] rounded-xl border-0 bg-muted/50 hover:bg-muted/70 transition-colors font-normal">
+              <SelectValue placeholder="Todos os Credores" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos credores</SelectItem>
+              <SelectItem value="todos">Todos os Credores</SelectItem>
               {credores.map(c => (
                 <SelectItem key={c} value={c}>
                   {shortCredor(c)}
@@ -298,11 +297,11 @@ const BaixasRealizadasPage = () => {
           </Select>
 
           <Select value={operatorFilter} onValueChange={setOperatorFilter}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="Operador" />
+            <SelectTrigger className="h-10 min-w-[180px] rounded-xl border-0 bg-muted/50 hover:bg-muted/70 transition-colors font-normal">
+              <SelectValue placeholder="Todos os Operadores" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos operadores</SelectItem>
+              <SelectItem value="todos">Todos os Operadores</SelectItem>
               {tenantOperators.map(op => (
                 <SelectItem key={op.user_id} value={op.user_id}>
                   {op.full_name}
@@ -311,23 +310,143 @@ const BaixasRealizadasPage = () => {
             </SelectContent>
           </Select>
 
-          <Select value={localFilter} onValueChange={setLocalFilter}>
-            <SelectTrigger className="h-9 w-32">
-              <SelectValue placeholder="Local" />
+          <Select value={yearFilter} onValueChange={setYearFilter}>
+            <SelectTrigger className="h-10 min-w-[110px] rounded-xl border-0 bg-muted/50 hover:bg-muted/70 transition-colors font-normal">
+              <SelectValue placeholder="Ano" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos locais</SelectItem>
+              {availableYears.map(y => (
+                <SelectItem key={y} value={y}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="h-10 min-w-[140px] justify-between rounded-xl bg-muted/50 hover:bg-muted/70 font-normal px-3"
+              >
+                <span className="capitalize">{monthsLabel}</span>
+                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48 bg-popover">
+              <DropdownMenuItem
+                onClick={(e) => { e.preventDefault(); setMonthsFilter([]); }}
+                className="text-xs"
+              >
+                Todos os meses
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => { e.preventDefault(); setMonthsFilter(Array.from({ length: 12 }, (_, i) => i)); }}
+                className="text-xs"
+              >
+                Selecionar todos
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {monthNames.map((name, i) => (
+                <DropdownMenuCheckboxItem
+                  key={i}
+                  checked={monthsFilter.includes(i)}
+                  onCheckedChange={() => toggleMonth(i)}
+                  onSelect={(e) => e.preventDefault()}
+                  className="capitalize"
+                >
+                  {name}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "h-10 min-w-[120px] justify-start rounded-xl bg-muted/50 hover:bg-muted/70 font-normal px-3",
+                  !dateFrom && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 opacity-60" />
+                {dateFrom ? format(dateFrom, "dd/MM/yy") : "De"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "h-10 min-w-[120px] justify-start rounded-xl bg-muted/50 hover:bg-muted/70 font-normal px-3",
+                  !dateTo && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 opacity-60" />
+                {dateTo ? format(dateTo, "dd/MM/yy") : "Até"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateTo} onSelect={setDateTo} className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+
+          {(dateFrom || dateTo) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-10 rounded-xl text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}
+            >
+              Limpar datas
+            </Button>
+          )}
+        </div>
+
+        {/* Linha 2 — busca + ações */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome ou CPF..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-10 rounded-xl border-0 bg-muted/50 focus-visible:bg-muted/70"
+            />
+          </div>
+          <Button
+            onClick={handleExport}
+            variant="outline"
+            className="h-10 rounded-xl gap-2"
+            disabled={!filtered.length}
+          >
+            <Download className="h-4 w-4" /> Excel
+          </Button>
+        </div>
+
+        {/* Linha 3 — filtros secundários (Local + Meio) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={localFilter} onValueChange={setLocalFilter}>
+            <SelectTrigger className="h-9 min-w-[150px] rounded-xl border-0 bg-muted/40 hover:bg-muted/60 transition-colors font-normal text-xs">
+              <SelectValue placeholder="Local de Pagamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os locais</SelectItem>
               <SelectItem value="credora">Credora</SelectItem>
               <SelectItem value="cobradora">Cobradora</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={methodFilter} onValueChange={setMethodFilter}>
-            <SelectTrigger className="h-9 w-36">
-              <SelectValue placeholder="Meio" />
+            <SelectTrigger className="h-9 min-w-[160px] rounded-xl border-0 bg-muted/40 hover:bg-muted/60 transition-colors font-normal text-xs">
+              <SelectValue placeholder="Meio de Pagamento" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos meios</SelectItem>
+              <SelectItem value="todos">Todos os meios</SelectItem>
               {methods.map(m => (
                 <SelectItem key={m} value={m}>
                   {m}
@@ -336,7 +455,7 @@ const BaixasRealizadasPage = () => {
             </SelectContent>
           </Select>
         </div>
-      </Card>
+      </div>
 
       {/* Resumo */}
       <Card className="p-4 flex items-center justify-between">
