@@ -322,6 +322,21 @@ const DashboardPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* COLUMN 1 — left (3/12) */}
         <div className="lg:col-span-3 flex flex-col gap-3">
+          {showMetas && (
+            <DashboardMetaCard
+              year={filterYear ?? now.getFullYear()}
+              month={filterMonth ?? now.getMonth() + 1}
+              monthLabel={new Date(
+                filterYear ?? now.getFullYear(),
+                (filterMonth ?? now.getMonth() + 1) - 1,
+                1
+              ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+              selectedOperatorUserId={
+                selectedOperators.length === 1 ? selectedOperators[0] : null
+              }
+              received={stats?.total_recebido ?? 0}
+            />
+          )}
           <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
@@ -438,21 +453,6 @@ const DashboardPage = () => {
             </div>
           )}
 
-          {showMetas && (
-            <DashboardMetaCard
-              year={filterYear ?? now.getFullYear()}
-              month={filterMonth ?? now.getMonth() + 1}
-              monthLabel={new Date(
-                filterYear ?? now.getFullYear(),
-                (filterMonth ?? now.getMonth() + 1) - 1,
-                1
-              ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
-              selectedOperatorUserId={
-                selectedOperators.length === 1 ? selectedOperators[0] : null
-              }
-              received={stats?.total_recebido ?? 0}
-            />
-          )}
         </div>
       </div>
 
