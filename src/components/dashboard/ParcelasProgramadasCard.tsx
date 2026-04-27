@@ -46,12 +46,6 @@ export default function ParcelasProgramadasCard({
             Visão geral das parcelas do dia
           </p>
         </div>
-        <Link
-          to="/acordos"
-          className="text-xs font-medium text-primary hover:underline"
-        >
-          Ver todas
-        </Link>
       </div>
 
       {/* Banner data + contadores */}
