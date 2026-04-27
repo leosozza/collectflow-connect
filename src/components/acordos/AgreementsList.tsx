@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Agreement } from "@/services/agreementService";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { formatCPF } from "@/lib/formatters";
+import { formatCPF, formatCredorName } from "@/lib/formatters";
 
 interface AgreementsListProps {
   agreements: Agreement[];
