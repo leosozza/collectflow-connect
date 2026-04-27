@@ -1,31 +1,40 @@
-## Alterações no card "Parcelas Programadas"
+## Problema
 
-Arquivo: `src/components/dashboard/ParcelasProgramadasCard.tsx`
+A Bárbara (admin) não consegue ver as baixas realizadas porque o perfil de permissão **"Admin Padrão"** do tenant dela tem apenas `["view", "manage"]` no módulo `financeiro` — **falta a ação `view_all`**.
 
-### 1. Reduzir a barra azul de data
-A barra azul ocupa 100% da largura do card. Ela vai ser reduzida ao tamanho do conteúdo (setas + data) e centralizada horizontalmente na linha.
+A página `BaixasRealizadasPage` aplica esta regra:
+- Sem `financeiro.view_all` → filtra server-side por `operator_id = user.id` (mostra só as baixas em que ela mesma operou).
+- Como ela nunca foi operadora direta de acordos, a tabela vem vazia.
 
-- Container externo: `flex items-center justify-center gap-2` (em vez de bloco full-width).
-- Barra azul: `inline-flex` com padding compacto (`px-1 py-1`), botões 24px (`h-6 w-6`) e ícones 14px.
-- Texto da data: `text-xs font-bold`, largura mínima `min-w-[88px]` para não "pular" ao trocar entre "HOJE" e datas.
+Importante: o perfil de permissão **sobrescreve** os defaults do role `admin` (em `usePermissions.ts`, `permProfile.permissions` tem prioridade sobre `ROLE_DEFAULTS["admin"]`). Por isso "ser admin" sozinho não basta — o perfil atribuído precisa ter `view_all`.
 
-### 2. Quadradinhos de contagem ao lado da data
-À direita da barra azul, dois badges quadrados mostrando apenas o número (como no modelo anexado):
+Isso afeta TODOS os perfis "Admin Padrão" criados via seed antigo (a constante `ROLE_DEFAULTS.admin` no código tem `view_all`, mas perfis já persistidos no banco não foram atualizados).
 
-- **Andamento** (cinza/azul claro): conta parcelas com status diferente de `paid` e `overdue`. Estilo: `bg-blue-500/15 text-blue-600`.
-- **Pagas** (verde): conta parcelas com status `paid`. Estilo: `bg-success text-success-foreground`.
+## Plano de correção
 
-Cada quadradinho: `h-8 min-w-[32px] px-2 rounded-md text-xs font-bold tabular-nums`, com `title` no hover indicando o significado do número.
+### 1. Corrigir os perfis "Admin Padrão" existentes no banco
+Migration que atualiza todos os `permission_profiles` com `base_role = 'admin'` e `is_default = true`, garantindo que `permissions->'financeiro'` contenha `view`, `view_all` e `manage`.
 
-### Layout resultante
+Fazer o mesmo para `gerente` (defaults também incluem `financeiro: [view, view_all, manage]`).
 
-```text
-              [‹  HOJE  ›]  [ 2 ]  [ 0 ]
+```sql
+UPDATE permission_profiles
+SET permissions = jsonb_set(
+  permissions,
+  '{financeiro}',
+  '["view","view_all","manage"]'::jsonb
+)
+WHERE base_role IN ('admin','gerente')
+  AND is_default = true
+  AND NOT (permissions->'financeiro' ? 'view_all');
 ```
 
-Centralizado dentro do card, sem ocupar toda a largura.
+### 2. Validar que a Bárbara passa a ver tudo
+Após a migration, a Bárbara (que está nesse perfil) automaticamente terá `financeiro.view_all = true`, a query usará `lockedOperatorId = null` e ela verá todas as baixas do tenant.
 
-### Observações
-- Sem mudança de dados/queries — os contadores derivam da prop `vencimentos` já existente.
-- Sem cores hardcoded fora do design system (uso de tokens `success`, `success-foreground` e classes de azul já usadas no componente).
-- Nenhum outro arquivo é alterado.
+### 3. (Opcional, futuro) Sincronização de perfis default
+Considerar uma rotina/edge function que reaplica `ROLE_DEFAULTS` aos perfis com `is_default = true` quando há divergência — evita esse tipo de drift quando novos módulos/ações são adicionados ao código sem atualizar perfis já criados. Não vou incluir agora para manter o escopo focado.
+
+## Resumo
+
+Uma migration única corrige o perfil "Admin Padrão" do tenant da Bárbara (e qualquer outro tenant na mesma situação), adicionando `view_all` em `financeiro`. Sem mexer no código frontend.
