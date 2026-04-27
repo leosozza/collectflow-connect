@@ -45,15 +45,19 @@ export default function ParcelasProgramadasCard({
         </div>
       </div>
 
-      {/* Banner data + contadores */}
+      {/* Banner data + total + contadores */}
       {(() => {
         const pagas = vencimentos.filter((v) => v.effective_status === "paid").length;
         const andamento = vencimentos.filter(
           (v) => v.effective_status !== "paid" && v.effective_status !== "overdue"
         ).length;
+        const totalDia = vencimentos.reduce(
+          (acc, v) => acc + Number(v.valor_parcela || 0),
+          0,
+        );
         return (
           <div className="px-3 pb-3 shrink-0 flex items-center gap-2 relative">
-            <div className="mx-auto inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
+            <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
               <Button
                 size="icon"
                 variant="ghost"
@@ -85,6 +89,16 @@ export default function ParcelasProgramadasCard({
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
+            </div>
+
+            {/* Valor total a receber no dia */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex flex-col items-center leading-tight pointer-events-none">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                A receber
+              </span>
+              <span className="text-sm font-bold text-foreground tabular-nums">
+                {formatCurrency(totalDia)}
+              </span>
             </div>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
               {/* Quadradinho: Andamento */}
