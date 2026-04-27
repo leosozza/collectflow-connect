@@ -72,9 +72,17 @@ export const updateScoringRule = async (
   id: string,
   patch: Partial<Pick<ScoringRule, "points" | "unit_size" | "enabled">>,
 ): Promise<void> => {
+  // Clamps defensivos (alinhados com CHECK constraints do banco)
+  const clamped: typeof patch = { ...patch };
+  if (typeof clamped.points === "number") {
+    clamped.points = Math.max(-1000, Math.min(1000, Math.round(clamped.points)));
+  }
+  if (typeof clamped.unit_size === "number") {
+    clamped.unit_size = Math.max(1, Math.round(clamped.unit_size));
+  }
   const { error } = await supabase
     .from("gamification_scoring_rules")
-    .update(patch)
+    .update(clamped)
     .eq("id", id);
   if (error) throw error;
 };
