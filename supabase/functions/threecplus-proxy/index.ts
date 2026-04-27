@@ -15,14 +15,16 @@ function buildUrl(baseUrl: string, path: string, authParam: string, queryParams?
   return url;
 }
 
-// In-memory cache for resolveAgentToken (per invocation lifetime)
-const agentTokenCache = new Map<string, any>();
+// In-memory cache for resolveAgentToken with 5-minute TTL to avoid stale tokens across warm invocations
+const AGENT_TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
+const agentTokenCache = new Map<string, { data: any; expiresAt: number }>();
 
 async function resolveAgentToken(baseUrl: string, authParam: string, agentId: number | string): Promise<any | null> {
   const cacheKey = `${baseUrl}:${agentId}`;
-  if (agentTokenCache.has(cacheKey)) {
+  const cached = agentTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
     console.log(`resolveAgentToken: Cache hit for agent ${agentId}`);
-    return agentTokenCache.get(cacheKey);
+    return cached.data;
   }
 
   const url = buildUrl(baseUrl, 'users', authParam, { per_page: '500' });
@@ -37,9 +39,10 @@ async function resolveAgentToken(baseUrl: string, authParam: string, agentId: nu
     : Array.isArray(raw?.data) ? raw.data
     : Array.isArray(raw) ? raw : [];
 
-  // Cache ALL agents from this response
+  // Cache ALL agents from this response with TTL
+  const expiresAt = Date.now() + AGENT_TOKEN_CACHE_TTL_MS;
   for (const user of list) {
-    agentTokenCache.set(`${baseUrl}:${user.id}`, user);
+    agentTokenCache.set(`${baseUrl}:${user.id}`, { data: user, expiresAt });
   }
 
   const numId = Number(agentId);
@@ -515,6 +518,7 @@ Deno.serve(async (req) => {
         const err = requireField(body, 'user_id', corsHeaders);
         if (err) return err;
         url = buildUrl(baseUrl, `users/${body.user_id}/deactivate`, authParam);
+        method = 'POST';
         break;
       }
 
@@ -905,7 +909,7 @@ Deno.serve(async (req) => {
         if (!extension) {
           triedRoutes.push(`/agents/${agentIdNum}`);
           try {
-            const agUrl = `${baseUrl}/agents/${agentIdNum}?api_token=${authParam.split('=')[1] || ''}`;
+            const agUrl = buildUrl(baseUrl, `agents/${agentIdNum}`, authParam);
             const agResp = await fetch(agUrl, { headers: { 'Content-Type': 'application/json' } });
             const agData = await agResp.json();
             const agent = agData?.data || agData;

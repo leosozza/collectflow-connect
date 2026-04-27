@@ -1,6 +1,7 @@
 // Edge Function: receives a batch of raw 3CPLUS Socket.IO events and persists
-// them in `threecplus_socket_events`. Dedup is enforced by a partial unique
-// index on (tenant_id, event_name, external_call_id, payload->>status).
+// them in `threecplus_socket_events`. Dedup is enforced by a unique index on
+// (tenant_id, event_name, external_call_id) for events that carry a call ID.
+// Events without a call ID are always inserted (no dedup guarantee).
 //
 // The function is callable by authenticated users only — it uses the caller's
 // JWT to enforce RLS (insert policy already restricts to the user's tenant).

@@ -45,14 +45,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Resolve tenant by 3CPlus domain
+    // Resolve tenant by 3CPlus domain — restrict query to tenants with 3CPLUS configured
+    // to avoid pulling settings for all tenants on every webhook event.
     let tenantId: string | null = null;
     if (domain) {
       const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
       const { data: tenants } = await supabase
         .from("tenants")
         .select("id, settings")
-        .eq("status", "active");
+        .eq("status", "active")
+        .not("settings->threecplus_domain" as any, "is", null);
 
       if (tenants) {
         for (const t of tenants) {

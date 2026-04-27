@@ -156,7 +156,6 @@ export function useThreeCPlusStatus(): ThreeCPlusAgentState {
       if (status === 1 || status === undefined) {
         _dismissedCallIds.clear();
       }
-      lastStatusRef.current = status;
     } catch {
       // silent — network errors shouldn't break the UI
     }

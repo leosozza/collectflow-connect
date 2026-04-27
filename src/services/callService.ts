@@ -76,8 +76,8 @@ interface DialResult {
 }
 
 const isBusyStatus = (status: number | string | undefined): boolean => {
-  // 3CPlus status: 1=idle, 2=on_call, 3=acw/wrap-up, 4=paused
-  if (status === 2 || status === 3) return true;
+  // 3CPlus status: 1=idle, 2=on_call, 3=paused, 4=acw/TPA, 6=work_break
+  if (status === 2 || status === 3 || status === 4 || status === 6) return true;
   if (status === "on_call" || status === "acw" || status === "wrap-up") return true;
   return false;
 };
