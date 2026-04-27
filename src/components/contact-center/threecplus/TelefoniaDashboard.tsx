@@ -25,6 +25,7 @@ import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
 import RealtimeStatusBadge from "./RealtimeStatusBadge";
+import TestConnectionButton from "./TestConnectionButton";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 
@@ -1502,6 +1503,12 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             onReconnect={atendimentoCtx.socketReconnect}
           />
         </div>
+        <div className="flex items-center gap-2">
+          <TestConnectionButton
+            socketStatus={atendimentoCtx.socketStatus}
+            socketLastEventAt={atendimentoCtx.socketLastEventAt}
+            socketReconnect={atendimentoCtx.socketReconnect}
+          />
         <Popover>
           <PopoverTrigger asChild>
             <button className="inline-flex items-center gap-1.5 cursor-pointer">
@@ -1550,6 +1557,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </Button>
           </PopoverContent>
         </Popover>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
