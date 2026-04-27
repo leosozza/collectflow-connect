@@ -178,10 +178,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
       </div>
 
       <div className="px-4 pb-2">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-semibold">
-          Total Recebido
-        </p>
-        <div className="flex items-baseline gap-2 flex-wrap mt-0.5">
+        <div className="flex items-baseline gap-2 flex-wrap">
           <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
             {formatCurrency(totalRecebido)}
           </p>
