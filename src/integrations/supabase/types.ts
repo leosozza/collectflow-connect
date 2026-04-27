@@ -7194,8 +7194,16 @@ export type Database = {
           read_ct: number
         }[]
       }
+      recalculate_my_full: {
+        Args: { _month: number; _year: number }
+        Returns: Json
+      }
       recalculate_my_gamification_snapshot: {
         Args: { _month: number; _year: number }
+        Returns: Json
+      }
+      recalculate_operator_full: {
+        Args: { _month: number; _profile_id: string; _year: number }
         Returns: Json
       }
       recalculate_operator_gamification_snapshot: {

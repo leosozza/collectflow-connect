@@ -347,40 +347,18 @@ async function computeCampaignScore(params: {
       return Number(data || 0);
     }
     case "negociado_e_recebido": {
-      // 1) Acordos criados pelo operador dentro da janela
-      let aq = supabase
-        .from("agreements")
-        .select("client_cpf, credor")
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .neq("status", "rejected")
-        .neq("status", "cancelled")
-        .gte("created_at", startDate)
-        .lt("created_at", endExclusiveStr);
-      if (credorNames) aq = aq.in("credor", credorNames);
-      const { data: ags } = await aq;
-      if (!ags || ags.length === 0) return 0;
-
-      const cpfs = [...new Set(ags.map((a: any) => a.client_cpf).filter(Boolean))];
-      const credors = [...new Set(ags.map((a: any) => a.credor).filter(Boolean))];
-      if (cpfs.length === 0) return 0;
-
-      // 2) Pagamentos confirmados na mesma janela para esses CPFs/credores
-      let pq = supabase
-        .from("clients")
-        .select("valor_pago, cpf, credor")
-        .eq("tenant_id", tenantId)
-        .in("cpf", cpfs)
-        .gte("data_quitacao", startDate)
-        .lt("data_quitacao", endExclusiveStr);
-      if (credors.length > 0) pq = pq.in("credor", credors);
-      const { data: paid } = await pq;
-
-      // 3) Filtra apenas tuplas (cpf, credor) que têm acordo desta janela
-      const allowed = new Set(ags.map((a: any) => `${a.client_cpf}::${a.credor}`));
-      return (paid || [])
-        .filter((c: any) => allowed.has(`${c.cpf}::${c.credor}`))
-        .reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
+      // SSoT: RPC unificada server-side (mesma lógica do Ranking)
+      const { data, error } = await supabase.rpc("get_operator_negotiated_and_received", {
+        _operator_user_id: authUid,
+        _start_date: startDate,
+        _end_date: endInclusiveStr,
+        _credor_names: credorNames,
+      });
+      if (error) {
+        console.error("get_operator_negotiated_and_received error:", error);
+        return 0;
+      }
+      return Number(data || 0);
     }
     case "maior_qtd_acordos": {
       let q = supabase
@@ -447,16 +425,18 @@ async function computeCampaignScore(params: {
       return (data || []).reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
     }
     default: {
-      let q = supabase
-        .from("clients")
-        .select("valor_pago")
-        .eq("tenant_id", tenantId)
-        .eq("operator_id", profileId)
-        .gte("data_quitacao", startDate)
-        .lt("data_quitacao", endExclusiveStr);
-      if (credorNames) q = q.in("credor", credorNames);
-      const { data } = await q;
-      return (data || []).reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
+      // SSoT unificada: mesma fórmula do Dashboard / Ranking
+      const { data, error } = await supabase.rpc("get_operator_received_total", {
+        _operator_user_id: authUid,
+        _start_date: startDate,
+        _end_date: endInclusiveStr,
+        _credor_names: credorNames,
+      });
+      if (error) {
+        console.error("get_operator_received_total (default) error:", error);
+        return 0;
+      }
+      return Number(data || 0);
     }
   }
 }
