@@ -208,6 +208,7 @@ export function usePermissions() {
 
     // Financeiro
     canViewFinanceiro: hasAny("financeiro"),
+    canViewAllFinanceiro: has("financeiro", "view_all"),
 
     // Integrações
     canViewIntegracoes: hasAny("integracoes"),
