@@ -1,7 +1,7 @@
-import { Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useTenant } from "@/hooks/useTenant";
-import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab";
+import AcordosPage from "@/pages/AcordosPage";
 
 /**
  * Rota /financeiro/confirmacao-pagamento
@@ -9,21 +9,20 @@ import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab"
  */
 const ConfirmacaoPagamentoPage = () => {
   const permissions = usePermissions();
-  const { tenant } = useTenant();
+  const [params, setParams] = useSearchParams();
+
+  useEffect(() => {
+    if (params.get("status") !== "payment_confirmation") {
+      const next = new URLSearchParams(params);
+      next.set("status", "payment_confirmation");
+      setParams(next, { replace: true });
+    }
+  }, [params, setParams]);
 
   if (permissions.loading) return null;
   if (!permissions.canApproveAcordos) return <Navigate to="/acordos" replace />;
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Confirmação Pagamento Manual</h1>
-      {tenant?.id ? (
-        <PaymentConfirmationTab tenantId={tenant.id} />
-      ) : (
-        <p className="text-muted-foreground">Carregando...</p>
-      )}
-    </div>
-  );
+  return <AcordosPage />;
 };
 
 export default ConfirmacaoPagamentoPage;

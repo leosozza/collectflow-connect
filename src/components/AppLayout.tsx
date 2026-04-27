@@ -6,10 +6,10 @@ import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useModules } from "@/hooks/useModules";
 import rivoLogo from "@/assets/rivo_connect.png";
-import { 
-  LayoutDashboard, 
-  LogOut, 
-  Menu, 
+import {
+  LayoutDashboard,
+  LogOut,
+  Menu,
   Wallet,
   PanelLeftClose,
   PanelLeftOpen,
@@ -55,7 +55,7 @@ const AppLayout = () => {
 
   const toggleCollapsed = (val: boolean) => {
     setCollapsed(val);
-    try { localStorage.setItem("sidebar-collapsed", String(val)); } catch {}
+    try { localStorage.setItem("sidebar-collapsed", String(val)); } catch { }
   };
 
   const ROLE_LABEL: Record<string, string> = {
@@ -78,7 +78,7 @@ const AppLayout = () => {
     ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
     ...(permissions.canViewAcordos ? [{ label: "Baixas Realizadas", icon: Receipt, path: "/financeiro/baixas" }] : []),
     ...(isAdminLike ? [{ label: "Aguardando Liberação", icon: ClipboardCheck, path: "/financeiro/aguardando-liberacao" }] : []),
-    ...(isAdminLike ? [{ label: "Confirmação Pgto Manual", icon: CheckCircle2, path: "/financeiro/confirmacao-pagamento" }] : []),
+    ...(isAdminLike ? [{ label: "Confirmação de Pagamento", icon: CheckCircle2, path: "/financeiro/confirmacao-pagamento" }] : []),
   ];
   const isFinanceiroRoute =
     location.pathname.startsWith("/acordos") || location.pathname.startsWith("/financeiro");
@@ -275,11 +275,10 @@ const AppLayout = () => {
               to="/central-empresa"
               onClick={() => setSidebarOpen(false)}
               title={collapsed ? "Central Empresa" : undefined}
-              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                location.pathname === "/central-empresa"
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${location.pathname === "/central-empresa"
                   ? "bg-primary text-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }`}
+                }`}
             >
               <Building2 className="w-5 h-5 flex-shrink-0" />
               {!collapsed && "Central Empresa"}
@@ -290,11 +289,10 @@ const AppLayout = () => {
               to="/configuracoes"
               onClick={() => setSidebarOpen(false)}
               title={collapsed ? "Configurações" : undefined}
-              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                location.pathname === "/configuracoes"
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${location.pathname === "/configuracoes"
                   ? "bg-primary text-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              }`}
+                }`}
             >
               <Settings className="w-5 h-5 flex-shrink-0" />
               {!collapsed && "Configurações"}

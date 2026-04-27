@@ -66,17 +66,7 @@ const parcelaLabel = (
     if (num === 0) return "Entrada";
     return String(num);
   }
-  if (key) {
-    if (key.includes(":")) {
-      const parts = key.split(":");
-      const lastPart = parts[parts.length - 1];
-      // Se a última parte for 0, chamamos de Entrada
-      if (lastPart === "0") return "Entrada";
-      return lastPart;
-    }
-    return String(key);
-  }
-  return "Única"; // Geralmente pagamentos de portal que englobam o acordo inteiro
+  return "—";
 };
 
 const onlyDigits = (v: string) => v.replace(/\D/g, "");
@@ -140,8 +130,8 @@ const BaixasRealizadasPage = () => {
 
   const operatorNameFor = (r: BaixaRow): string => {
     const id = operatorIdFor(r);
-    if (!id) return "Sistema/Importação";
-    return operatorNameById[id] ?? "Sistema/Importação";
+    if (!id) return "—";
+    return operatorNameById[id] ?? "—";
   };
 
   const credores = useMemo(
@@ -393,16 +383,16 @@ const BaixasRealizadasPage = () => {
                       </TableCell>
                       <TableCell className="text-right">{fmtBRL(Number(r.valor_original))}</TableCell>
                       <TableCell className="text-right">
-                        {r.juros != null ? fmtBRL(Number(r.juros)) : fmtBRL(0)}
+                        {Number(r.juros) ? fmtBRL(Number(r.juros)) : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {r.multa != null ? fmtBRL(Number(r.multa)) : fmtBRL(0)}
+                        {Number(r.multa) ? fmtBRL(Number(r.multa)) : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {r.honorarios != null ? fmtBRL(Number(r.honorarios)) : fmtBRL(0)}
+                        {Number(r.honorarios) ? fmtBRL(Number(r.honorarios)) : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {r.desconto != null ? fmtBRL(Number(r.desconto)) : fmtBRL(0)}
+                        {Number(r.desconto) ? fmtBRL(Number(r.desconto)) : "—"}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {fmtBRL(Number(r.valor_pago))}
@@ -433,6 +423,16 @@ const BaixasRealizadasPage = () => {
         })
       )}
     </div>
+  );
+};
+
+export default BaixasRealizadasPage;
+              </Table >
+            </Card >
+          );
+        })
+      )}
+    </div >
   );
 };
 

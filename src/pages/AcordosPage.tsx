@@ -10,6 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { fetchAgreements, fetchAgreementOperators, approveAgreement, rejectAgreement, cancelAgreement, Agreement } from "@/services/agreementService";
 import AgreementsList from "@/components/acordos/AgreementsList";
+import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab";
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +38,9 @@ const statusFilterConfig: { key: StatusFilter; label: string; color: string; sel
   { key: "approved", label: "Pagos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "vigentes", label: "Vigentes", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "overdue", label: "Vencidos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
   { key: "cancelled", label: "Cancelados", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+  { key: "payment_confirmation", label: "Confirmação de Pagamento", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
 ];
 
 const AcordosPage = () => {
@@ -60,7 +63,7 @@ const AcordosPage = () => {
 
   // Auto-expire runs in background once per page mount — does NOT block initial render.
   useEffect(() => {
-    supabase.functions.invoke("auto-expire-agreements").catch(() => {});
+    supabase.functions.invoke("auto-expire-agreements").catch(() => { });
   }, []);
 
   // Resolve effective created_by filter (server-side):
@@ -340,13 +343,15 @@ const AcordosPage = () => {
     const pending = isMonthSelected
       ? relevant.filter(a => {
         const c = (a as any)._installmentClass as InstallmentClassification | undefined;
-        return c === "vigente";
+        return c === "vigente" || c === "pending_confirmation";
       }).length
-      : relevant.filter(a => a.status === "pending").length;
+      : relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
     // Inclusive paid: agreements with at least one paid installment in scope OR fully approved
     const paid = relevant.filter(a => (a as any)._hasPaidInScope === true || a.status === "approved").length;
     return { total, pending, paid };
   }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
+
+  const isOperationalFilter = statusFilter === "pending_approval" || statusFilter === "payment_confirmation";
 
   return (
     <div className="space-y-6">
@@ -359,15 +364,19 @@ const AcordosPage = () => {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {statusFilterConfig.map(({ key, label, color, selectedColor }) => (
-          <button
-            key={key}
-            onClick={() => setStatusFilter(key)}
-            className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color}`}
-          >
-            {label}
-          </button>
-        ))}
+        {statusFilterConfig
+          .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
+          .map(({ key, label, color, selectedColor }) => (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color
+                }`}
+            >
+              {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
+              {label}
+            </button>
+          ))}
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -490,7 +499,9 @@ const AcordosPage = () => {
         </Button>
       </div>
 
-      {loading ? (
+      {statusFilter === "payment_confirmation" ? (
+        tenant?.id ? <PaymentConfirmationTab tenantId={tenant.id} /> : <p className="text-muted-foreground">Carregando...</p>
+      ) : loading ? (
         <p className="text-muted-foreground">Carregando...</p>
       ) : (
         <AgreementsList agreements={filteredAgreements} />

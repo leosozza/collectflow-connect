@@ -52,7 +52,7 @@ export const formatPhone = (value: string): string => {
 export const maskCPF = (cpf: string): string => {
   const nums = cpf.replace(/\D/g, "");
   if (nums.length < 5) return "***";
-  return `***.***.${ nums.slice(-5, -2)}-${nums.slice(-2)}`;
+  return `***.***.${nums.slice(-5, -2)}-${nums.slice(-2)}`;
 };
 
 export const maskPhone = (phone: string): string => {
@@ -67,11 +67,4 @@ export const maskEmail = (email: string): string => {
   const [local, domain] = email.split("@");
   if (!domain) return "***";
   return `${local.charAt(0)}***@${domain}`;
-};
-
-export const formatCredorName = (name: string | null | undefined): string => {
-  if (!name) return "—";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length <= 2) return name;
-  return parts.slice(0, 2).join(" ");
 };

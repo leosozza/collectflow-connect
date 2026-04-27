@@ -22,7 +22,7 @@ import {
   GroupedClient,
 } from "@/services/clientService";
 import type { ImportedRow } from "@/services/importService";
-import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail, formatCredorName } from "@/lib/formatters";
+import { formatCurrency, formatDate, maskCPF, maskPhone, maskEmail } from "@/lib/formatters";
 import * as XLSX from "xlsx";
 import { Badge } from "@/components/ui/badge";
 import ClientFilters from "@/components/clients/ClientFilters";
@@ -276,7 +276,7 @@ const CarteiraPage = () => {
     setSelectedIds(new Set());
     setSelectAllFiltered(false);
     setBulkClients(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rpcFiltersKey]);
 
   const { data: carteiraResult = { data: [], count: 0 }, isLoading } = useQuery({
@@ -786,7 +786,7 @@ const CarteiraPage = () => {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                <TableRow className="bg-muted/50">
+                  <TableRow className="bg-muted/50">
                     <TableHead className="w-10">
                       <Checkbox
                         checked={selectedIds.size === allClientIds.length && allClientIds.length > 0}
@@ -807,7 +807,7 @@ const CarteiraPage = () => {
                         1º Vencimento <SortIcon field="data_vencimento" />
                       </button>
                     </TableHead>
-                    
+
                     <TableHead className="text-center">Score</TableHead>
                     <TableHead className="text-center">Status Cobrança</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -817,70 +817,70 @@ const CarteiraPage = () => {
                   {displayClients.map((client) => {
                     const groupSelected = (client.allIds || [client.id]).every((id: string) => selectedIds.has(id));
                     return (
-                    <TableRow key={client.id} className={`transition-colors ${groupSelected ? "bg-primary/5" : "hover:bg-muted/30"}`}>
-                      <TableCell>
-                        <Checkbox
-                          checked={groupSelected}
-                          onCheckedChange={() => toggleSelect(client)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          to={`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}?credor=${encodeURIComponent(client.credor)}`}
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {client.nome_completo}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
-                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.phone || "—") : maskPhone(client.phone || "")}</TableCell>
-                      <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.email || "—") : maskEmail(client.email || "")}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatCredorName(client.credor)}</TableCell>
-                      <TableCell>{formatDate(client.data_vencimento)}</TableCell>
-                      
-                      <TableCell className="text-center">
-                        <PropensityBadge score={(client as any).propensity_score} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {client.status_cobranca_id && statusMap.has(client.status_cobranca_id) ? (
-                          <Badge
-                            variant="outline"
-                            className="text-xs border"
-                            style={{
-                              backgroundColor: `${statusMap.get(client.status_cobranca_id)!.cor}15`,
-                              color: statusMap.get(client.status_cobranca_id)!.cor,
-                              borderColor: `${statusMap.get(client.status_cobranca_id)!.cor}40`,
-                            }}
+                      <TableRow key={client.id} className={`transition-colors ${groupSelected ? "bg-primary/5" : "hover:bg-muted/30"}`}>
+                        <TableCell>
+                          <Checkbox
+                            checked={groupSelected}
+                            onCheckedChange={() => toggleSelect(client)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            to={`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}?credor=${encodeURIComponent(client.credor)}`}
+                            className="font-medium text-primary hover:underline"
                           >
-                            {statusMap.get(client.status_cobranca_id)!.nome}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-primary hover:text-primary"
-                            onClick={() => navigateWithOrigin(`/atendimento/${client.id}`)}
-                            title="Atender"
-                          >
-                            <Headset className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8"
-                            onClick={() => handleEdit(client as any)}
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                            {client.nome_completo}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{canSeeFullData(client) ? client.cpf : maskCPF(client.cpf)}</TableCell>
+                        <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.phone || "—") : maskPhone(client.phone || "")}</TableCell>
+                        <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.email || "—") : maskEmail(client.email || "")}</TableCell>
+                        <TableCell className="text-muted-foreground">{client.credor}</TableCell>
+                        <TableCell>{formatDate(client.data_vencimento)}</TableCell>
+
+                        <TableCell className="text-center">
+                          <PropensityBadge score={(client as any).propensity_score} />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {client.status_cobranca_id && statusMap.has(client.status_cobranca_id) ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border"
+                              style={{
+                                backgroundColor: `${statusMap.get(client.status_cobranca_id)!.cor}15`,
+                                color: statusMap.get(client.status_cobranca_id)!.cor,
+                                borderColor: `${statusMap.get(client.status_cobranca_id)!.cor}40`,
+                              }}
+                            >
+                              {statusMap.get(client.status_cobranca_id)!.nome}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-primary hover:text-primary"
+                              onClick={() => navigateWithOrigin(`/atendimento/${client.id}`)}
+                              title="Atender"
+                            >
+                              <Headset className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              onClick={() => handleEdit(client as any)}
+                              title="Editar"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
                 </TableBody>
