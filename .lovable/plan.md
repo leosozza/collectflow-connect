@@ -1,54 +1,50 @@
 ## Objetivo
 
-Deixar a tela **Regras de Pontuação** (`/gamificacao?tab=manage`) mais autoexplicativa. Hoje:
+Executar o recálculo de pontuação de todos os operadores do tenant para o mês vigente (Abril/2026) com base nas novas regras de pontuação que você acabou de salvar, e auditar o resultado para garantir que os novos pesos foram aplicados corretamente.
 
-- O nome da **Métrica** é editável, mas não deveria ser — são métricas fixas do sistema.
-- Os rótulos **Pontos** e **Por unidade** são genéricos e juntos ficam confusos (ex.: "5 pontos / por faixa de 100").
+## Como funciona o recálculo (já implementado)
 
-## Mudanças propostas
+A RPC `recalculate_tenant_gamification_snapshot(year, month)` já existe e:
+1. Valida se o usuário é admin do tenant.
+2. Itera sobre todos os participantes habilitados em `gamification_participants` (fallback: todos os perfis do tenant).
+3. Para cada operador, chama `recalculate_operator_gamification_snapshot`, que:
+   - Lê as regras vigentes em `gamification_scoring_rules` (já com seus novos pesos).
+   - Recalcula `payments_count`, `total_received`, `breaks_count`, `achievements_count` e verifica `goal_reached` no período do mês.
+   - Aplica os pesos das regras e regrava o snapshot em `operator_points`.
 
-### 1. Bloquear edição da Métrica
-- O campo "Métrica" deixa de ser um `Input` editável e passa a ser apresentado como **texto fixo** (label + ícone de info com tooltip explicativo). 
-- O usuário continua vendo o nome amigável (ex.: "Pagamento confirmado", "Cada R$ 100 recebidos"), mas não pode alterá-lo.
-- Remove `label` do payload de `updateScoringRule` e do estado de "dirty".
+Ou seja: nenhuma migração nova é necessária. Basta acionar a RPC e validar a saída.
 
-### 2. Renomear e contextualizar os campos numéricos
-Trocar a dupla **Pontos / Por unidade** por uma frase legível, montada dinamicamente por métrica, com 1 ou 2 inputs conforme o caso:
+## Etapas
 
-| Métrica | Layout proposto |
-|---|---|
-| Pagamento confirmado | `[ 10 ] pontos por pagamento confirmado` |
-| Cada R$ X recebidos | `[ 5 ] pontos a cada R$ [ 100 ] recebidos` |
-| Acordo formalizado | `[ 0 ] pontos por acordo formalizado` |
-| Acordo totalmente quitado | `[ 30 ] pontos por acordo quitado` |
-| Quebra de acordo | `[ -3 ] pontos por quebra de acordo` (aviso: use negativo para penalizar) |
-| Conquista desbloqueada | `[ 50 ] pontos por conquista desbloqueada` |
-| Meta do mês atingida | `[ 100 ] pontos (bônus único ao bater a meta do mês)` |
+1. **Snapshot ANTES do recálculo**
+   Consultar `operator_points` (Abril/2026) e `gamification_scoring_rules` para registrar o estado atual dos pontos por operador e os pesos vigentes.
 
-Ou seja:
-- **Pontos** vira sempre o número multiplicador.
-- **Por unidade** só aparece quando faz sentido (apenas em `total_received`, como "a cada R$ X").
-- Em todas as outras métricas o `unit_size` fica oculto e travado em `1`.
+2. **Executar o recálculo do tenant**
+   Chamar `recalculate_tenant_gamification_snapshot(2026, 4)` via SQL com o seu usuário/tenant. Isso reaplica as novas regras a todos os operadores ativos.
 
-### 3. Melhorar o cabeçalho explicativo
-Substituir o texto atual por algo mais direto:
+3. **Snapshot DEPOIS + verificação aritmética**
+   - Reconsultar `operator_points` para o mesmo período.
+   - Para cada operador, verificar manualmente que:
+     `points = (payments_count × peso_payment_count)
+            + floor(total_received / unit_size_total_received) × peso_total_received
+            + (breaks_count × peso_agreement_break)
+            + (achievements_count × peso_achievement_unlocked)
+            + (goal_reached ? peso_goal_reached : 0)`
+   - Sinalizar qualquer divergência entre o valor calculado e o gravado.
 
-> **Regras de Pontuação**  
-> Defina quantos pontos cada ação do operador vale neste mês. As métricas são fixas do sistema — você só configura o valor em pontos e ativa/desativa cada uma.  
-> Os pontos acumulados no mês são convertidos em **Rivo Coins (1:1)** no primeiro dia do mês seguinte.  
-> Alterações valem para cálculos futuros — use **Recalcular mês atual** para reaplicar agora.
+4. **Relatório de auditoria**
+   Apresentar uma tabela comparativa (operador → pontos antes → pontos depois → delta) e uma confirmação explícita de quantos snapshots foram regravados, com a lista de regras aplicadas para você conferir contra o que configurou na tela.
 
-### 4. Ajustes finos de UX
-- Tooltip da métrica passa a ter título em negrito + descrição (hoje só descrição).
-- Botão "Salvar" só fica ativo quando `points`, `unit_size` ou `enabled` mudam.
-- Mostrar abaixo de cada card uma pré-visualização: *"Exemplo: um pagamento de R$ 250 vale 12 pontos"* nas regras onde aplicável (apenas `total_received`).
+5. **Atualização do Ranking**
+   O Ranking (aba "Ranking" em `/gamificacao`) lê diretamente de `operator_points`, então após o recálculo já reflete os novos valores — basta abrir/atualizar a aba para conferir visualmente.
 
-## Arquivos afetados
+## Entrega
 
-- `src/components/gamificacao/ScoringRulesTab.tsx` — refazer layout dos cards, remover input de label, montar frase por métrica.
-- `src/services/scoringRulesService.ts` — `updateScoringRule` deixa de aceitar `label`; `restoreDefaultScoringRules` não precisa reescrever label (mantém o do banco como está).
+- Tabela de auditoria (antes/depois/delta) por operador no chat.
+- Confirmação dos pesos vigentes utilizados.
+- Lista de divergências (idealmente vazia) entre o cálculo esperado e o gravado.
+- Caso encontre alguma anomalia na RPC, registro o ponto e proponho correção em migração separada (não incluída neste plano).
 
-## Não faz parte
+## Observação
 
-- Não altera schema do banco (`gamification_scoring_rules` continua igual).
-- Não muda a lógica de cálculo nem a conversão mensal para Rivo Coins.
+Esta operação só altera a tabela `operator_points` (snapshot do mês). Não mexe em acordos, pagamentos, conquistas ou Rivo Coins — Rivo Coins só são creditados na virada do mês conforme a nova lógica aprovada anteriormente.
