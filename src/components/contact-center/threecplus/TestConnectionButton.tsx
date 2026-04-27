@@ -144,14 +144,14 @@ export const TestConnectionButton = ({
         size="sm"
         onClick={runTest}
         disabled={loading}
-        className="gap-1.5 h-8 text-xs"
+        className="gap-1 h-7 px-2 text-[11px]"
       >
         {loading ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <Loader2 className="w-3 h-3 animate-spin" />
         ) : (
-          <Activity className="w-3.5 h-3.5" />
+          <Activity className="w-3 h-3" />
         )}
-        {loading ? "Testando..." : "Testar conexão"}
+        {loading ? "Testando..." : "Testar"}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
