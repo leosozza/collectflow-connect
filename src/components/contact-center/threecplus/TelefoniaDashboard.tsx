@@ -589,7 +589,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { setAgentStatus, setOnFinishDisposition } = useAtendimentoModalSafe();
+  const atendimentoCtx = useAtendimentoModalSafe();
+  const { setAgentStatus, setOnFinishDisposition } = atendimentoCtx;
 
   // Load campaign qualifications — prioritize qualification_list_id from tenant settings
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
