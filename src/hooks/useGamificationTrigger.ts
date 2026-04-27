@@ -126,7 +126,7 @@ async function updateCampaignScores(params: {
   monthStart: string;
   nextMonth: string;
 }) {
-  const { tenantId, profileId, authUid, monthStart, nextMonth } = params;
+  const { tenantId, profileId, authUid } = params;
 
   const { data: participations } = await supabase
     .from("campaign_participants")
@@ -139,22 +139,46 @@ async function updateCampaignScores(params: {
   const campaignIds = [...new Set(participations.map((p: any) => p.campaign_id))];
   const { data: campaigns } = await supabase
     .from("gamification_campaigns")
-    .select("id, metric, status")
+    .select("id, metric, status, start_date, end_date")
     .in("id", campaignIds)
     .eq("tenant_id", tenantId)
     .eq("status", "ativa");
 
   if (!campaigns || campaigns.length === 0) return;
 
-  for (const campaign of campaigns) {
+  for (const campaign of campaigns as any[]) {
+    // Use the campaign's own [start_date, end_date] window — never the running month
+    const startDate = campaign.start_date as string;
+    const endDate = campaign.end_date as string;
+
+    const startTs = Date.parse(startDate);
+    const endTs = Date.parse(endDate);
+    if (
+      !startDate ||
+      !endDate ||
+      isNaN(startTs) ||
+      isNaN(endTs) ||
+      new Date(endTs).getFullYear() > 2100 ||
+      new Date(startTs).getFullYear() < 2000
+    ) {
+      console.warn(
+        `[gamification] Skipping campaign ${campaign.id}: invalid date window (${startDate} → ${endDate})`
+      );
+      continue;
+    }
+
+    const endExclusive = new Date(endDate + "T00:00:00");
+    endExclusive.setDate(endExclusive.getDate() + 1);
+    const endExclusiveStr = endExclusive.toISOString().split("T")[0];
+
     const credorNames = await getCampaignCredorNames(campaign.id, tenantId);
     const score = await calculateCampaignScore({
       metric: campaign.metric,
       tenantId,
       profileId,
       authUid,
-      monthStart,
-      nextMonth,
+      monthStart: startDate,
+      nextMonth: endExclusiveStr,
       credorNames,
     });
 

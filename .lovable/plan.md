@@ -1,92 +1,68 @@
 ## Diagnóstico
 
-Investigando o caso da Renata Cibin (acordo `c396d78e…`), encontrei dois problemas independentes que explicam o que você está vendo:
+A campanha "Recebidos" tem **dois problemas** combinados:
 
-### 1. Pagamento veio do Negociarie, não de baixa manual
-
-Na tabela `negociarie_cobrancas` há:
-```
-status: pago | valor: 1041,33 | valor_pago: 1043,41 | data: 2026-04-21
-```
-Não existe nenhum registro em `manual_payments` para esse acordo.
-
-Hoje, o botão "Desconfirmar Pagamento" (ícone $ azul) em `AgreementInstallments.tsx` (linha 796) só aparece quando existe um `manual_payment` confirmado:
+### 1. Data de término inválida (`end_date = "42026-02-24"`)
+Foi salva com 5 dígitos no ano (provável digitação acidental no input de data). Isso quebra o frontend:
 ```ts
-const hasConfirmedManual = manualPayments.some(
-  (mp) => mp.installment_number === inst.number && mp.status === "confirmed"
-);
-return hasConfirmedManual ? (...botão...) : null;
+const daysLeft = differenceInDays(parseISO("42026-02-24"), new Date());
+// → daysLeft = NaN → isActive = false → badge "Encerrada"
 ```
-Como o pagamento veio via boleto Negociarie, a condição é `false` → nenhum botão de estorno é renderizado. **Não há hoje nenhuma ação na UI para estornar/cancelar uma cobrança paga do Negociarie.**
 
-### 2. `reopenAgreement` está colocando o acordo em `pending` (Aguardando Aprovação), não em `approved` (Vigente)
+### 2. Cálculo do score ignora o período da campanha
+Em `src/hooks/useGamificationTrigger.ts` (`updateCampaignScores`), a janela usada é sempre o **mês corrente** (`monthStart`/`nextMonth`), não a janela da campanha (`start_date` → `end_date`). Pior: o trigger só roda quando o operador logado faz alguma ação no front. Se um pagamento entrou via webhook (Negociarie/portal) e ninguém abriu o app depois, o score nunca é atualizado.
 
-Em `src/services/agreementService.ts` linha 826:
-```ts
-.update({ status: "pending", cancellation_type: null })
-```
-Como combinamos no plano anterior, o esperado é voltar para `approved` ("Vigente").
-
-### 3. Efeito no Dashboard do operador
-
-Os KPIs financeiros (`get_dashboard_stats`, `TotalRecebidoCard`, ranking) somam pagamentos de:
-- `manual_payments` confirmados
-- `client_events` do tipo `payment_confirmed`
-- `negociarie_cobrancas` com status `pago`
-
-Para "sumir" esse R$ 1.041,33 do dashboard ao estornar, basta marcar a cobrança Negociarie como **estornada** (não-pago). É isso que precisamos implementar.
+Por isso os 4 operadores aparecem com 0.
 
 ---
 
 ## O que vou implementar
 
-### A) Botão "Estornar Pagamento" para parcelas pagas via Negociarie
+### A) Corrigir a data da campanha "Recebidos"
+Como não há ferramenta de migration disponível agora, vou resolver isso pela própria UI: depois dos fixes abaixo, você abre a campanha em **Editar** e troca a data para `26/04/2026` (domingo). O form passará a validar e bloquear datas absurdas.
 
-Em `AgreementInstallments.tsx`, adicionar uma segunda condição ao bloco de botões de "Desconfirmar":
-- Se a parcela tem `cobranca.status === "pago"` (Negociarie) **OU** tem `manual_payment` confirmado, mostrar o botão $ azul.
-- Comportamento ao clicar:
-  - **Se baixa manual**: mantém o fluxo atual (`status → pending_confirmation`).
-  - **Se cobrança Negociarie paga**: chama um novo handler `handleRefundCobranca` que faz `UPDATE negociarie_cobrancas SET status='estornado', valor_pago=0, data_pagamento=null WHERE id=...` e registra evento `payment_refunded` em `client_events`.
-- Diálogo de confirmação: "Tem certeza que deseja estornar este pagamento? O valor sairá das métricas do operador e do dashboard."
+### B) Validar a data no `CampaignForm.tsx`
+- Adicionar `min` (hoje) e `max` (hoje + 5 anos) no `<input type="date">` de início e fim.
+- Validação JS no submit: se `Date.parse()` for NaN ou ano > 2100, abortar com toast "Data inválida".
+- Garantir que `end_date >= start_date`.
 
-### B) Excluir cobranças `estornado` da contabilização do dashboard e do total do acordo
+### C) Corrigir cálculo do score para respeitar a janela da campanha
+Em `src/hooks/useGamificationTrigger.ts`, dentro de `updateCampaignScores`:
+- Buscar `start_date` e `end_date` da campanha junto com `metric` e `status`.
+- Passar essa janela para `calculateCampaignScore` no lugar de `monthStart`/`nextMonth`.
+- Validar a janela; se inválida, pular a campanha (sem quebrar).
 
-- `AgreementInstallments.tsx` linha 133: `cobrancas.filter(c => c.status === "pago")` — já filtra só pagos, então `estornado` sairá automaticamente. ✓
-- Verificar/ajustar a RPC `get_dashboard_stats` e queries de ranking para que filtrem `negociarie_cobrancas.status = 'pago'` (provavelmente já fazem; se não, adicionar `AND status = 'pago'`).
-- O evento `payment_refunded` no `client_events` permite auditoria sem afetar o KPI "Acionados Hoje".
+### D) Botão "Recalcular Ranking" no `CampaignCard.tsx`
+- Visível para usuários com permissão de admin (mesma usada no `CampaignsManagementTab`).
+- Ao clicar, chama nova função `recalculateCampaignScores(campaignId)` em `campaignService.ts` que:
+  1. Lê a campanha (metric + janela + tenant).
+  2. Lê credores vinculados.
+  3. Para cada participante, calcula o score usando a janela `[start_date, end_date]` da campanha.
+  4. Faz `UPDATE` em `campaign_participants`.
+  5. Retorna quantos foram atualizados; toast de sucesso.
+- Após executar, invalida a query `["campaign-participants", campaignId]` para recarregar.
 
-### C) Corrigir o status pós-reabrir para `approved` (Vigente)
-
-Em `src/services/agreementService.ts` linha 826, trocar:
-```ts
-.update({ status: "pending", cancellation_type: null })
-```
-por:
-```ts
-.update({ status: "approved", cancellation_type: null })
-```
-
-### D) Permitir reabrir acordos `pending` também
-
-Hoje, depois desse fix, se a Renata permanecer em `pending`, o botão "Reabrir" (ClientDetailPage linha 641) só funciona em `cancelled`/`completed`. Como ela já está `pending` agora, vou adicionar `pending` à lista temporariamente — **ou** criar um botão "Forçar Vigente" para casos órfãos. Recomendo: adicionar uma migration única para subir esse acordo específico para `approved` e seguir.
+### E) Detecção defensiva de data inválida no `CampaignCard.tsx`
+- Antes de chamar `differenceInDays`, validar que `end_date` é parseável.
+- Se não for, mostrar badge "Configuração inválida" (vermelho) em vez de "Encerrada", e logar um aviso visível para o admin "Edite a campanha para corrigir as datas".
 
 ---
 
 ## Fluxo final que você terá
 
-1. Acordo está como **Acordo Vigente** ✓ (após corrigir o status).
-2. Na tabela de parcelas do acordo, ao lado da parcela "Pago", aparecerá um ícone **$ azul** = "Estornar Pagamento".
-3. Ao clicar, confirmação → cobrança Negociarie vira `estornado`, valor sai das métricas.
-4. A parcela volta a aparecer como **"Pendente"** (porque `totalPaidFromClients` reduz).
-5. Você pode então cancelar o acordo e refazer corretamente.
+1. Abre **Gamificação → Campanhas → Editar "Recebidos"**.
+2. Corrige a data de fim para **26/04/2026**. Salva. (Validação impede datas absurdas no futuro.)
+3. Badge volta para **"Ativa"**.
+4. Clica em **"Recalcular Ranking"** no card. Os valores reais da semana entram no ranking.
+5. Próximas campanhas calculam corretamente em tempo real, respeitando o `period`.
 
 ---
 
 ## Arquivos a editar
 
-- `src/components/client-detail/AgreementInstallments.tsx` — adicionar handler `handleRefundCobranca` e expandir condicional do botão de estorno.
-- `src/services/agreementService.ts` — trocar `status: "pending"` por `status: "approved"` no `reopenAgreement`.
-- Migration única para corrigir o acordo `c396d78e-1651-4dfa-89b7-2de89478576e` para `approved`.
-- (Verificação) RPCs `get_dashboard_stats` e similares — confirmar que filtram só `status = 'pago'` em `negociarie_cobrancas`.
+- `src/services/campaignService.ts` — adicionar `recalculateCampaignScores(campaignId)`.
+- `src/hooks/useGamificationTrigger.ts` — usar janela da campanha em `updateCampaignScores`.
+- `src/components/gamificacao/CampaignForm.tsx` — validação de data + `min`/`max`.
+- `src/components/gamificacao/CampaignCard.tsx` — botão "Recalcular Ranking" + badge defensivo.
 
-Confirma esse plano?
+Confirma para implementar?

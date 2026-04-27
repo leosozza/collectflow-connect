@@ -1,10 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Campaign, CampaignParticipant, fetchCampaignParticipants, METRIC_OPTIONS, PERIOD_OPTIONS } from "@/services/campaignService";
+import { Button } from "@/components/ui/button";
+import {
+  Campaign,
+  fetchCampaignParticipants,
+  recalculateCampaignScores,
+  METRIC_OPTIONS,
+  PERIOD_OPTIONS,
+} from "@/services/campaignService";
 import { differenceInDays, parseISO } from "date-fns";
-import { Trophy, Clock, Gift, Building2 } from "lucide-react";
+import { Trophy, Clock, Gift, Building2, RefreshCw, AlertTriangle } from "lucide-react";
+import { useTenant } from "@/hooks/useTenant";
+import { toast } from "sonner";
 
 interface CampaignCardProps {
   campaign: Campaign;
@@ -13,7 +23,19 @@ interface CampaignCardProps {
 
 const medals = ["🥇", "🥈", "🥉"];
 
+const isValidDateString = (s?: string | null): boolean => {
+  if (!s) return false;
+  const ts = Date.parse(s);
+  if (isNaN(ts)) return false;
+  const y = new Date(ts).getFullYear();
+  return y >= 2000 && y <= 2100;
+};
+
 const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
+  const { isTenantAdmin } = useTenant();
+  const queryClient = useQueryClient();
+  const [recalculating, setRecalculating] = useState(false);
+
   const { data: participants = [] } = useQuery({
     queryKey: ["campaign-participants", campaign.id],
     queryFn: () => fetchCampaignParticipants(campaign.id),
@@ -21,23 +43,51 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
 
   const metricLabel = METRIC_OPTIONS.find((m) => m.value === campaign.metric)?.label || campaign.metric;
   const periodLabel = PERIOD_OPTIONS.find((p) => p.value === campaign.period)?.label || campaign.period;
-  const daysLeft = differenceInDays(parseISO(campaign.end_date), new Date());
-  const isActive = campaign.status === "ativa" && daysLeft >= 0;
+
+  const datesValid = isValidDateString(campaign.start_date) && isValidDateString(campaign.end_date);
+  const daysLeft = datesValid ? differenceInDays(parseISO(campaign.end_date), new Date()) : 0;
+  const isActive = datesValid && campaign.status === "ativa" && daysLeft >= 0;
+
+  const handleRecalculate = async () => {
+    setRecalculating(true);
+    try {
+      const { updated } = await recalculateCampaignScores(campaign.id);
+      toast.success(`Ranking recalculado (${updated} participante${updated === 1 ? "" : "s"}).`);
+      await queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] });
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao recalcular ranking.");
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   return (
     <Card className="border-border">
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <CardTitle className="text-base">{campaign.title}</CardTitle>
             {campaign.description && (
               <p className="text-xs text-muted-foreground mt-1">{campaign.description}</p>
             )}
           </div>
-          <Badge variant={isActive ? "default" : "secondary"} className="text-[10px]">
-            {isActive ? "Ativa" : campaign.status === "rascunho" ? "Rascunho" : "Encerrada"}
-          </Badge>
+          {!datesValid ? (
+            <Badge variant="destructive" className="text-[10px] gap-1 shrink-0">
+              <AlertTriangle className="w-3 h-3" />
+              Datas inválidas
+            </Badge>
+          ) : (
+            <Badge variant={isActive ? "default" : "secondary"} className="text-[10px] shrink-0">
+              {isActive ? "Ativa" : campaign.status === "rascunho" ? "Rascunho" : "Encerrada"}
+            </Badge>
+          )}
         </div>
+
+        {!datesValid && isTenantAdmin && (
+          <p className="text-[11px] text-destructive mt-1">
+            Edite a campanha para corrigir as datas de início/fim.
+          </p>
+        )}
 
         {/* Credores badges */}
         {campaign.credores && campaign.credores.length > 0 && (
@@ -99,6 +149,22 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground text-center py-2">Sem participantes ainda</p>
+        )}
+
+        {isTenantAdmin && (
+          <div className="pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-7 text-xs gap-1.5"
+              onClick={handleRecalculate}
+              disabled={recalculating || !datesValid}
+              title={!datesValid ? "Corrija as datas da campanha primeiro" : "Recalcula o ranking usando os dados reais do período"}
+            >
+              <RefreshCw className={`w-3 h-3 ${recalculating ? "animate-spin" : ""}`} />
+              {recalculating ? "Recalculando..." : "Recalcular Ranking"}
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

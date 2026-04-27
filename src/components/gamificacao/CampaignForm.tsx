@@ -12,6 +12,13 @@ import { Campaign, METRIC_OPTIONS, PERIOD_OPTIONS } from "@/services/campaignSer
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { Users, Building2 } from "lucide-react";
+import { toast } from "sonner";
+
+const MAX_DATE = (() => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 5);
+  return d.toISOString().split("T")[0];
+})();
 
 interface CampaignFormProps {
   open: boolean;
@@ -113,6 +120,25 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate dates: parseable, sane year range, end >= start
+    const startTs = Date.parse(startDate);
+    const endTs = Date.parse(endDate);
+    if (
+      isNaN(startTs) ||
+      isNaN(endTs) ||
+      new Date(startTs).getFullYear() < 2000 ||
+      new Date(startTs).getFullYear() > 2100 ||
+      new Date(endTs).getFullYear() < 2000 ||
+      new Date(endTs).getFullYear() > 2100
+    ) {
+      toast.error("Data inválida. Use uma data entre 2000 e 2100.");
+      return;
+    }
+    if (endTs < startTs) {
+      toast.error("A data de fim deve ser igual ou posterior à data de início.");
+      return;
+    }
+
     let participants: { operator_id: string; source_type: string; source_id: string | null }[] = [];
 
     if (participantMode === "equipe" && selectedEquipes.length > 0) {
@@ -205,11 +231,25 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Data Início *</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                min="2000-01-01"
+                max={MAX_DATE}
+                required
+              />
             </div>
             <div>
               <Label>Data Fim *</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate || "2000-01-01"}
+                max={MAX_DATE}
+                required
+              />
             </div>
           </div>
 
