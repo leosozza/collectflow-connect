@@ -32,12 +32,13 @@ async function fetchDailyTotals(
   const endIso = format(end, "yyyy-MM-dd");
   const buckets: DailyMap = {};
 
+  // 1) manual_payments — alinhado com get_dashboard_stats: confirmed OU approved
   try {
     const { data: manual } = await supabase
       .from("manual_payments")
       .select("amount_paid, payment_date, status, tenant_id")
       .eq("tenant_id", tenantId)
-      .eq("status", "approved")
+      .in("status", ["confirmed", "approved"])
       .gte("payment_date", startIso)
       .lte("payment_date", endIso);
 
@@ -50,6 +51,7 @@ async function fetchDailyTotals(
     /* silent */
   }
 
+  // 2) portal_payments — pagos via portal do devedor
   try {
     const { data: portal } = await supabase
       .from("portal_payments")
@@ -62,6 +64,26 @@ async function fetchDailyTotals(
     (portal || []).forEach((row: any) => {
       const day = new Date(row.updated_at).getDate();
       buckets[day] = (buckets[day] || 0) + Number(row.amount || 0);
+    });
+  } catch {
+    /* silent */
+  }
+
+  // 3) negociarie_cobrancas — pagamentos confirmados pelo gateway Negociarie
+  try {
+    const { data: negociarie } = await supabase
+      .from("negociarie_cobrancas")
+      .select("valor_pago, data_pagamento, status, tenant_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "pago")
+      .gte("data_pagamento", startIso)
+      .lte("data_pagamento", endIso);
+
+    (negociarie || []).forEach((row: any) => {
+      if (!row.data_pagamento) return;
+      const d = new Date(String(row.data_pagamento) + "T00:00:00");
+      const day = d.getDate();
+      buckets[day] = (buckets[day] || 0) + Number(row.valor_pago || 0);
     });
   } catch {
     /* silent */
