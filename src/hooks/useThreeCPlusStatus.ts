@@ -28,6 +28,16 @@ export function clearDismissedCallIds() {
 }
 
 /**
+ * Module-level flag toggled by the realtime socket layer. When true, this
+ * hook reduces polling to a long fallback cadence (60s) — the socket
+ * already pushes fresh state in real time.
+ */
+let _socketConnected = false;
+export function setRealtimeSocketConnected(connected: boolean) {
+  _socketConnected = !!connected;
+}
+
+/**
  * Shared hook that polls the 3CPlus agents_status + company_calls endpoints independently.
  * Works regardless of whether TelefoniaDashboard is mounted.
  * Polls every 5s when on call, 10s otherwise.
