@@ -45,15 +45,19 @@ export default function ParcelasProgramadasCard({
         </div>
       </div>
 
-      {/* Banner data + contadores */}
+      {/* Banner data + total + contadores */}
       {(() => {
         const pagas = vencimentos.filter((v) => v.effective_status === "paid").length;
         const andamento = vencimentos.filter(
           (v) => v.effective_status !== "paid" && v.effective_status !== "overdue"
         ).length;
+        const totalDia = vencimentos.reduce(
+          (acc, v) => acc + Number(v.valor_parcela || 0),
+          0,
+        );
         return (
           <div className="px-3 pb-3 shrink-0 flex items-center gap-2 relative">
-            <div className="mx-auto inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
+            <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
               <Button
                 size="icon"
                 variant="ghost"
