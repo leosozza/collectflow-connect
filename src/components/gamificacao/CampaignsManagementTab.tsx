@@ -4,12 +4,12 @@ import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import {
   fetchCampaigns, createCampaign, updateCampaign, deleteCampaign,
-  saveCampaignCredores, saveCampaignParticipants, Campaign,
+  saveCampaignCredores, saveCampaignParticipants, closeCampaignAndAward, Campaign,
 } from "@/services/campaignService";
 import CampaignForm from "./CampaignForm";
 import CampaignCard from "./CampaignCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Trophy } from "lucide-react";
 import { toast } from "sonner";
 
 const CampaignsManagementTab = () => {
@@ -59,6 +59,16 @@ const CampaignsManagementTab = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns"] });
       toast.success("Campanha excluída!");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const closeMut = useMutation({
+    mutationFn: closeCampaignAndAward,
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] });
+      const winners = data?.winners?.length || 0;
+      toast.success(`Campanha encerrada! ${winners} vencedor(es) premiado(s) com pontos.`);
     },
     onError: (e: any) => toast.error(e.message),
   });
