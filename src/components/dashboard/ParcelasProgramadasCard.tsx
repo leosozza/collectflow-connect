@@ -62,8 +62,7 @@ export default function ParcelasProgramadasCard({
         ).length;
         return (
           <div className="px-3 pb-3 shrink-0 flex items-center gap-2 relative">
-            <div className="flex-1 flex justify-center">
-            <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
+            <div className="mx-auto inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
               <Button
                 size="icon"
                 variant="ghost"
