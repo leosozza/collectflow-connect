@@ -12,6 +12,13 @@ import { Campaign, METRIC_OPTIONS, PERIOD_OPTIONS } from "@/services/campaignSer
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { Users, Building2 } from "lucide-react";
+import { toast } from "sonner";
+
+const MAX_DATE = (() => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 5);
+  return d.toISOString().split("T")[0];
+})();
 
 interface CampaignFormProps {
   open: boolean;
