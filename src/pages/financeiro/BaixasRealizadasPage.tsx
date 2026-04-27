@@ -292,19 +292,21 @@ const BaixasRealizadasPage = () => {
             </SelectContent>
           </Select>
 
-          <Select value={operatorFilter} onValueChange={setOperatorFilter}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="Operador" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos operadores</SelectItem>
-              {tenantOperators.map(op => (
-                <SelectItem key={op.user_id} value={op.user_id}>
-                  {op.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {canViewAll && (
+            <Select value={operatorFilter} onValueChange={setOperatorFilter}>
+              <SelectTrigger className="h-9 w-40">
+                <SelectValue placeholder="Operador" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos operadores</SelectItem>
+                {tenantOperators.map(op => (
+                  <SelectItem key={op.user_id} value={op.user_id}>
+                    {op.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Select value={localFilter} onValueChange={setLocalFilter}>
             <SelectTrigger className="h-9 w-32">
