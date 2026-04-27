@@ -1,50 +1,63 @@
-## Objetivo
+## Causa raiz da divergência
 
-Executar o recálculo de pontuação de todos os operadores do tenant para o mês vigente (Abril/2026) com base nas novas regras de pontuação que você acabou de salvar, e auditar o resultado para garantir que os novos pesos foram aplicados corretamente.
+O cálculo da gamificação estava ignorando os pagamentos via **Negociarie**. O sistema possui dois canais de pagamento real (consolidados na RPC `get_agreement_financials`, usada em Relatórios e Analytics):
 
-## Como funciona o recálculo (já implementado)
+1. `manual_payments` com status `confirmed` (parcelas confirmadas pelo admin)
+2. `negociarie_cobrancas` com status `pago` (pagamentos via gateway Negociarie)
 
-A RPC `recalculate_tenant_gamification_snapshot(year, month)` já existe e:
-1. Valida se o usuário é admin do tenant.
-2. Itera sobre todos os participantes habilitados em `gamification_participants` (fallback: todos os perfis do tenant).
-3. Para cada operador, chama `recalculate_operator_gamification_snapshot`, que:
-   - Lê as regras vigentes em `gamification_scoring_rules` (já com seus novos pesos).
-   - Recalcula `payments_count`, `total_received`, `breaks_count`, `achievements_count` e verifica `goal_reached` no período do mês.
-   - Aplica os pesos das regras e regrava o snapshot em `operator_points`.
+A RPC de gamificação só lia uma das fontes — por isso o Vitor aparecia com R$ 24.909 em vez de **R$ 37.885,02**.
 
-Ou seja: nenhuma migração nova é necessária. Basta acionar a RPC e validar a saída.
+## Fonte oficial confirmada (Abr/2026)
 
-## Etapas
+| Operador | Manual | Negociarie | **Total Real** | Pgtos |
+|---|---|---|---|---|
+| Vitor | R$ 24.909,28 | R$ 12.975,74 | **R$ 37.885,02** | 140 |
+| Gustavo | R$ 20.628,88 | R$ 1.328,27 | **R$ 21.957,15** | 84 |
+| Maria Eduarda | R$ 10.667,79 | R$ 4.573,06 | **R$ 15.240,85** | 76 |
+| Sabrina | R$ 8.470,00 | R$ 0,00 | **R$ 8.470,00** | 8 |
 
-1. **Snapshot ANTES do recálculo**
-   Consultar `operator_points` (Abril/2026) e `gamification_scoring_rules` para registrar o estado atual dos pontos por operador e os pesos vigentes.
+## O que vou corrigir
 
-2. **Executar o recálculo do tenant**
-   Chamar `recalculate_tenant_gamification_snapshot(2026, 4)` via SQL com o seu usuário/tenant. Isso reaplica as novas regras a todos os operadores ativos.
+### 1. Migração: corrigir `recalculate_operator_gamification_snapshot`
 
-3. **Snapshot DEPOIS + verificação aritmética**
-   - Reconsultar `operator_points` para o mesmo período.
-   - Para cada operador, verificar manualmente que:
-     `points = (payments_count × peso_payment_count)
-            + floor(total_received / unit_size_total_received) × peso_total_received
-            + (breaks_count × peso_agreement_break)
-            + (achievements_count × peso_achievement_unlocked)
-            + (goal_reached ? peso_goal_reached : 0)`
-   - Sinalizar qualquer divergência entre o valor calculado e o gravado.
+Trocar a lógica de "pagamentos / valor recebido" para usar a **mesma fonte canônica** do `get_agreement_financials`:
 
-4. **Relatório de auditoria**
-   Apresentar uma tabela comparativa (operador → pontos antes → pontos depois → delta) e uma confirmação explícita de quantos snapshots foram regravados, com a lista de regras aplicadas para você conferir contra o que configurou na tela.
+```sql
+-- Manual confirmadas
+SUM(amount_paid) FROM manual_payments
+WHERE status='confirmed' AND payment_date no mês
+  AND agreement.created_by = operador
 
-5. **Atualização do Ranking**
-   O Ranking (aba "Ranking" em `/gamificacao`) lê diretamente de `operator_points`, então após o recálculo já reflete os novos valores — basta abrir/atualizar a aba para conferir visualmente.
+-- + Negociarie pagas
+SUM(valor_pago) FROM negociarie_cobrancas
+WHERE status='pago' AND data_pagamento no mês
+  AND agreement.created_by = operador
+```
 
-## Entrega
+Tanto `payments_count` quanto `total_received` passam a refletir a soma dos dois canais. Demais regras (acordos criados, quitados, quebrados, conquistas, meta) permanecem como estão.
 
-- Tabela de auditoria (antes/depois/delta) por operador no chat.
-- Confirmação dos pesos vigentes utilizados.
-- Lista de divergências (idealmente vazia) entre o cálculo esperado e o gravado.
-- Caso encontre alguma anomalia na RPC, registro o ponto e proponho correção em migração separada (não incluída neste plano).
+### 2. Re-executar o recálculo de Abr/2026
+
+Chamar a RPC para os 4 operadores ativos. Com base nos novos valores, **três deles batem ou ultrapassam a meta** — o bônus de 250 pts entra:
+
+| Operador | Recebido | Meta | Atinge? | Pontos previstos |
+|---|---|---|---|---|
+| Vitor | R$ 37.885 | R$ 45.000 | ✗ | ~3.755 |
+| Gustavo | R$ 21.957 | R$ 45.000 | ✗ | ~2.330 |
+| Maria Eduarda | R$ 15.241 | R$ 40.000 | ✗ | ~1.555 |
+| Sabrina | R$ 8.470 | R$ 20.000 | ✗ | ~570 |
+
+(nenhum atinge meta ainda, mas os pontos sobem proporcionalmente ao valor real recebido)
+
+### 3. Auditar e exibir o novo ranking
+
+Mostrar a tabela final com os pontos recalculados e a verificação aritmética item a item.
+
+## Arquivos afetados
+
+- Nova migração: corrige a RPC `recalculate_operator_gamification_snapshot` para somar os dois canais.
+- Nenhum arquivo TS/UI precisa mudar — o Ranking lê direto de `operator_points`.
 
 ## Observação
 
-Esta operação só altera a tabela `operator_points` (snapshot do mês). Não mexe em acordos, pagamentos, conquistas ou Rivo Coins — Rivo Coins só são creditados na virada do mês conforme a nova lógica aprovada anteriormente.
+Esta mesma correção fará com que o **trigger em tempo real** (`useGamificationTrigger`) também precise ser auditado posteriormente para garantir que conta pagamentos Negociarie quando o webhook chega — mas isso fica para um próximo passo, fora deste plano.
