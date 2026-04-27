@@ -1494,11 +1494,11 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="text-lg font-semibold text-foreground truncate">Dashboard</h2>
           <RealtimeStatusBadge
-            status={useAtendimentoModalSafe().socketStatus}
-            lastEventAt={useAtendimentoModalSafe().socketLastEventAt}
-            lastEventName={useAtendimentoModalSafe().socketLastEventName}
-            errorMessage={useAtendimentoModalSafe().socketErrorMessage}
-            onReconnect={useAtendimentoModalSafe().socketReconnect}
+            status={atendimentoCtx.socketStatus}
+            lastEventAt={atendimentoCtx.socketLastEventAt}
+            lastEventName={atendimentoCtx.socketLastEventName}
+            errorMessage={atendimentoCtx.socketErrorMessage}
+            onReconnect={atendimentoCtx.socketReconnect}
           />
         </div>
         <Popover>
