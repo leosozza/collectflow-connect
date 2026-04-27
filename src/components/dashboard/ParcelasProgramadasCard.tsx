@@ -95,21 +95,22 @@ export default function ParcelasProgramadasCard({
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </div>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              {/* Quadradinho: Andamento */}
+              <div
+                className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-blue-500/15 text-blue-600 text-xs font-bold tabular-nums"
+                title={`${andamento} em andamento`}
+              >
+                {andamento}
+              </div>
 
-            {/* Quadradinho: Andamento */}
-            <div
-              className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-blue-500/15 text-blue-600 text-xs font-bold tabular-nums"
-              title={`${andamento} em andamento`}
-            >
-              {andamento}
-            </div>
-
-            {/* Quadradinho: Pagas */}
-            <div
-              className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-success text-success-foreground text-xs font-bold tabular-nums"
-              title={`${pagas} pagas`}
-            >
-              {pagas}
+              {/* Quadradinho: Pagas */}
+              <div
+                className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-success text-success-foreground text-xs font-bold tabular-nums"
+                title={`${pagas} pagas`}
+              >
+                {pagas}
+              </div>
             </div>
           </div>
         );
