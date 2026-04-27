@@ -57,7 +57,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     contact_center: [],
     telefonia: [],
     cadastros: [],
-    financeiro: ["view", "manage"],
+    financeiro: ["view", "view_all", "manage"],
     integracoes: [],
     configuracoes: [],
     central_empresa: [],
