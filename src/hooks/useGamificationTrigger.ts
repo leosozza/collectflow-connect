@@ -33,15 +33,17 @@ export const useGamificationTrigger = () => {
         .gte("data_quitacao", monthStart)
         .lt("data_quitacao", nextMonth);
 
-      const { data: receivedData } = await supabase
-        .from("clients")
-        .select("valor_pago")
-        .eq("tenant_id", tenantId)
-        .eq("operator_id", profileId)
-        .gte("data_quitacao", monthStart)
-        .lt("data_quitacao", nextMonth);
-
-      const totalReceived = (receivedData || []).reduce((sum, c) => sum + (c.valor_pago || 0), 0);
+      // SSoT: mesma fonte usada por Dashboard, Ranking e Campanhas
+      const _endIncl = new Date(nextMonth);
+      _endIncl.setDate(_endIncl.getDate() - 1);
+      const endInclusiveStr = _endIncl.toISOString().slice(0, 10);
+      const { data: totalReceivedData } = await supabase.rpc("get_operator_received_total", {
+        _operator_user_id: authUid,
+        _start_date: monthStart,
+        _end_date: endInclusiveStr,
+        _credor_names: null,
+      });
+      const totalReceived = Number(totalReceivedData || 0);
 
       const { count: agreementsCount } = await supabase
         .from("agreements")
