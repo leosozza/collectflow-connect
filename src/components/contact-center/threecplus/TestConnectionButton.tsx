@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import type { SocketStatus } from "@/hooks/useThreeCPlusSocket";
 
 interface Props {
+  domain: string;
+  apiToken: string;
   socketStatus: SocketStatus;
   socketLastEventAt: Date | null;
   socketReconnect: () => void;
@@ -27,6 +29,8 @@ interface TestResult {
 }
 
 export const TestConnectionButton = ({
+  domain,
+  apiToken,
   socketStatus,
   socketLastEventAt,
   socketReconnect,
@@ -44,8 +48,16 @@ export const TestConnectionButton = ({
     // REST test
     const restPromise = (async (): Promise<TestResult["rest"]> => {
       try {
+        if (!domain?.trim() || !apiToken?.trim()) {
+          return {
+            state: "warn",
+            message:
+              "Credenciais 3CPLUS não configuradas para este tenant. Configure domínio e API token em Configurações › Integrações › 3CPlus.",
+          };
+        }
+
         const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-          body: { action: "list_agents" },
+          body: { action: "list_agents", domain: domain.trim(), api_token: apiToken.trim() },
         });
 
         const combinedMsg = [error?.message, data?.error, data?.detail]
