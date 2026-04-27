@@ -98,9 +98,13 @@ const BaixasRealizadasPage = () => {
   const [operatorFilter, setOperatorFilter] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Quando o usuário não tem permissão de "Visualizar (Todos)" no Financeiro,
+  // forçamos o filtro server-side pelo próprio user.id — ele só vê suas baixas.
+  const lockedOperatorId = !canViewAll ? (user?.id ?? null) : null;
+
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["baixas-realizadas", tenant?.id, dateFrom?.toISOString(), dateTo?.toISOString(), credorFilter, localFilter, methodFilter],
-    enabled: !!tenant?.id,
+    queryKey: ["baixas-realizadas", tenant?.id, dateFrom?.toISOString(), dateTo?.toISOString(), credorFilter, localFilter, methodFilter, lockedOperatorId],
+    enabled: !!tenant?.id && (canViewAll || !!user?.id),
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_baixas_realizadas" as any, {
         _date_from: dateFrom ? format(dateFrom, "yyyy-MM-dd") : null,
@@ -108,6 +112,7 @@ const BaixasRealizadasPage = () => {
         _credor: credorFilter === "todos" ? null : credorFilter,
         _local: localFilter === "todos" ? null : localFilter,
         _payment_method: methodFilter === "todos" ? null : methodFilter,
+        _operator_id: lockedOperatorId,
       } as any);
       if (error) throw error;
       return (data ?? []) as unknown as BaixaRow[];
