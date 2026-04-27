@@ -2,355 +2,47 @@ import { useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
-import { useGamification } from "@/hooks/useGamification";
-import { fetchMyGoal, awardGoalIfReached } from "@/services/goalService";
 
+/**
+ * Trigger consolidado de gamificação.
+ *
+ * Toda a lógica (snapshot mensal, scores de campanhas ativas, premiação de meta
+ * mensal e concessão de conquistas) roda no servidor através da RPC
+ * `recalculate_my_full`, em uma única transação. Isso elimina 6+ queries
+ * client-side, garante consistência multi-tenant e usa a mesma SSoT do Ranking
+ * e do Dashboard.
+ *
+ * Em paralelo, a Edge Function `gamification-recalc-tick` (cron */30 min)
+ * recalcula automaticamente todos os operadores de tenants com gamificação
+ * habilitada — ou seja, o ranking se mantém correto mesmo para operadores que
+ * nunca abrem a tela.
+ */
 export const useGamificationTrigger = () => {
   const { user, profile } = useAuth();
   const { tenantUser } = useTenant();
-  const { checkAndGrantAchievements } = useGamification();
 
   const triggerGamificationUpdate = useCallback(async () => {
-    if (!profile?.id || !user?.id || !tenantUser?.tenant_id) return;
-
-    const authUid = user.id;
-    const profileId = profile.id;
-    const tenantId = tenantUser.tenant_id;
+    if (!profile?.id || !user?.id || !tenantUser?.tenant_id) return null;
 
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
-    const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-    const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
     try {
-      // Read source-of-truth metrics for achievements logic
-      const { count: paymentsCount } = await supabase
-        .from("clients")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("operator_id", profileId)
-        .gte("data_quitacao", monthStart)
-        .lt("data_quitacao", nextMonth);
-
-      // SSoT: mesma fonte usada por Dashboard, Ranking e Campanhas
-      const _endIncl = new Date(nextMonth);
-      _endIncl.setDate(_endIncl.getDate() - 1);
-      const endInclusiveStr = _endIncl.toISOString().slice(0, 10);
-      const { data: totalReceivedData } = await supabase.rpc("get_operator_received_total", {
-        _operator_user_id: authUid,
-        _start_date: monthStart,
-        _end_date: endInclusiveStr,
-        _credor_names: null,
-      });
-      const totalReceived = Number(totalReceivedData || 0);
-
-      const { count: agreementsCount } = await supabase
-        .from("agreements")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .neq("status", "rejected")
-        .neq("status", "cancelled")
-        .gte("created_at", monthStart)
-        .lt("created_at", nextMonth);
-
-      const { count: breaksCount } = await supabase
-        .from("agreements")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .eq("status", "cancelled")
-        .gte("updated_at", monthStart)
-        .lt("updated_at", nextMonth);
-
-      const goal = await fetchMyGoal(year, month);
-      const isGoalReached = goal ? totalReceived >= goal.target_amount : false;
-
-      // Premia automaticamente os pontos da meta (se batida e ainda não premiada)
-      if (isGoalReached) {
-        await awardGoalIfReached({
-          operator_id: profileId,
-          tenant_id: tenantId,
-          year,
-          month,
-          total_received: totalReceived,
-        });
-      }
-
-      // Grant achievements (achievements logic only — does NOT write to operator_points)
-      await checkAndGrantAchievements({
-        paymentsThisMonth: paymentsCount || 0,
-        agreementsThisMonth: agreementsCount || 0,
-        totalReceived,
-        breaksThisMonth: breaksCount || 0,
-        isGoalReached,
-      });
-
-      // Persist snapshot via SECURITY DEFINER RPC (works for operators too)
-      await supabase.rpc("recalculate_my_gamification_snapshot", {
+      const { data, error } = await supabase.rpc("recalculate_my_full", {
         _year: year,
         _month: month,
       });
-
-      // Update campaign scores for active campaigns
-      await updateCampaignScores({
-        tenantId,
-        profileId,
-        authUid,
-        monthStart,
-        nextMonth,
-      });
+      if (error) {
+        console.error("recalculate_my_full error:", error);
+        return null;
+      }
+      return data;
     } catch (err) {
       console.error("Gamification trigger error:", err);
+      return null;
     }
-  }, [user?.id, profile?.id, tenantUser?.tenant_id, checkAndGrantAchievements]);
+  }, [user?.id, profile?.id, tenantUser?.tenant_id]);
 
   return { triggerGamificationUpdate };
 };
-
-/**
- * Resolve razao_social names for creditors linked to a campaign.
- * Returns null if no creditors are linked (meaning "all creditors").
- */
-async function getCampaignCredorNames(campaignId: string, tenantId: string): Promise<string[] | null> {
-  const { data: campaignCredores } = await supabase
-    .from("campaign_credores")
-    .select("credor_id")
-    .eq("campaign_id", campaignId)
-    .eq("tenant_id", tenantId);
-
-  if (!campaignCredores || campaignCredores.length === 0) return null;
-
-  const credorIds = campaignCredores.map((cc: any) => cc.credor_id);
-  const { data: credores } = await supabase
-    .from("credores")
-    .select("razao_social")
-    .in("id", credorIds);
-
-  if (!credores || credores.length === 0) return null;
-  return credores.map((c: any) => c.razao_social);
-}
-
-async function updateCampaignScores(params: {
-  tenantId: string;
-  profileId: string;
-  authUid: string;
-  monthStart: string;
-  nextMonth: string;
-}) {
-  const { tenantId, profileId, authUid } = params;
-
-  const { data: participations } = await supabase
-    .from("campaign_participants")
-    .select("id, campaign_id, operator_id")
-    .eq("tenant_id", tenantId)
-    .eq("operator_id", profileId);
-
-  if (!participations || participations.length === 0) return;
-
-  const campaignIds = [...new Set(participations.map((p: any) => p.campaign_id))];
-  const { data: campaigns } = await supabase
-    .from("gamification_campaigns")
-    .select("id, metric, status, start_date, end_date")
-    .in("id", campaignIds)
-    .eq("tenant_id", tenantId)
-    .eq("status", "ativa");
-
-  if (!campaigns || campaigns.length === 0) return;
-
-  for (const campaign of campaigns as any[]) {
-    // Use the campaign's own [start_date, end_date] window — never the running month
-    const startDate = campaign.start_date as string;
-    const endDate = campaign.end_date as string;
-
-    const startTs = Date.parse(startDate);
-    const endTs = Date.parse(endDate);
-    if (
-      !startDate ||
-      !endDate ||
-      isNaN(startTs) ||
-      isNaN(endTs) ||
-      new Date(endTs).getFullYear() > 2100 ||
-      new Date(startTs).getFullYear() < 2000
-    ) {
-      console.warn(
-        `[gamification] Skipping campaign ${campaign.id}: invalid date window (${startDate} → ${endDate})`
-      );
-      continue;
-    }
-
-    const endExclusive = new Date(endDate + "T00:00:00");
-    endExclusive.setDate(endExclusive.getDate() + 1);
-    const endExclusiveStr = endExclusive.toISOString().split("T")[0];
-
-    const credorNames = await getCampaignCredorNames(campaign.id, tenantId);
-    const score = await calculateCampaignScore({
-      metric: campaign.metric,
-      tenantId,
-      profileId,
-      authUid,
-      monthStart: startDate,
-      nextMonth: endExclusiveStr,
-      credorNames,
-    });
-
-    await supabase
-      .from("campaign_participants")
-      .update({ score, updated_at: new Date().toISOString() } as any)
-      .eq("campaign_id", campaign.id)
-      .eq("operator_id", profileId);
-  }
-}
-
-async function calculateCampaignScore(params: {
-  metric: string;
-  tenantId: string;
-  profileId: string;
-  authUid: string;
-  monthStart: string;
-  nextMonth: string;
-  credorNames: string[] | null;
-}): Promise<number> {
-  const { metric, tenantId, profileId, authUid, monthStart, nextMonth, credorNames } = params;
-
-  // endExclusiveStr is the day AFTER the window. RPC uses inclusive end_date.
-  const _end = new Date(nextMonth);
-  _end.setDate(_end.getDate() - 1);
-  const endInclusiveStr = _end.toISOString().slice(0, 10);
-
-  switch (metric) {
-    case "maior_valor_recebido": {
-      // SSoT: única fonte unificada (mesma fórmula do Dashboard)
-      const { data, error } = await supabase.rpc("get_operator_received_total", {
-        _operator_user_id: authUid,
-        _start_date: monthStart,
-        _end_date: endInclusiveStr,
-        _credor_names: credorNames,
-      });
-      if (error) {
-        console.error("get_operator_received_total error:", error);
-        return 0;
-      }
-      return Number(data || 0);
-    }
-
-    case "negociado_e_recebido": {
-      let aq = supabase
-        .from("agreements")
-        .select("client_cpf, credor")
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .neq("status", "rejected")
-        .neq("status", "cancelled")
-        .gte("created_at", monthStart)
-        .lt("created_at", nextMonth);
-      if (credorNames) aq = aq.in("credor", credorNames);
-      const { data: ags } = await aq;
-      if (!ags || ags.length === 0) return 0;
-
-      const cpfs = [...new Set(ags.map((a: any) => a.client_cpf).filter(Boolean))];
-      const credors = [...new Set(ags.map((a: any) => a.credor).filter(Boolean))];
-      if (cpfs.length === 0) return 0;
-
-      let pq = supabase
-        .from("clients")
-        .select("valor_pago, cpf, credor")
-        .eq("tenant_id", tenantId)
-        .in("cpf", cpfs)
-        .gte("data_quitacao", monthStart)
-        .lt("data_quitacao", nextMonth);
-      if (credors.length > 0) pq = pq.in("credor", credors);
-      const { data: paid } = await pq;
-
-      const allowed = new Set(ags.map((a: any) => `${a.client_cpf}::${a.credor}`));
-      return (paid || [])
-        .filter((c: any) => allowed.has(`${c.cpf}::${c.credor}`))
-        .reduce((s, c: any) => s + Number(c.valor_pago || 0), 0);
-    }
-
-    case "maior_qtd_acordos": {
-      let query = supabase
-        .from("agreements")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .neq("status", "rejected")
-        .neq("status", "cancelled")
-        .gte("created_at", monthStart)
-        .lt("created_at", nextMonth);
-      if (credorNames) query = query.in("credor", credorNames);
-      const { count } = await query;
-      return count || 0;
-    }
-
-    case "menor_taxa_quebra": {
-      let totalQuery = supabase
-        .from("agreements")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .gte("created_at", monthStart)
-        .lt("created_at", nextMonth);
-      if (credorNames) totalQuery = totalQuery.in("credor", credorNames);
-      const { count: totalCount } = await totalQuery;
-
-      if (!totalCount || totalCount === 0) return 100;
-
-      let breakQuery = supabase
-        .from("agreements")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .eq("status", "cancelled")
-        .gte("updated_at", monthStart)
-        .lt("updated_at", nextMonth);
-      if (credorNames) breakQuery = breakQuery.in("credor", credorNames);
-      const { count: breakCount } = await breakQuery;
-
-      return Math.max(0, 100 - ((breakCount || 0) / totalCount) * 100);
-    }
-
-    case "menor_valor_quebra": {
-      let query = supabase
-        .from("agreements")
-        .select("proposed_total")
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .eq("status", "cancelled")
-        .gte("updated_at", monthStart)
-        .lt("updated_at", nextMonth);
-      if (credorNames) query = query.in("credor", credorNames);
-      const { data } = await query;
-      const breakValue = (data || []).reduce((sum, a) => sum + (a.proposed_total || 0), 0);
-      return Math.max(0, 1000000 - breakValue);
-    }
-
-    case "maior_valor_promessas": {
-      let query = supabase
-        .from("agreements")
-        .select("proposed_total")
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid)
-        .in("status", ["pending", "approved"])
-        .gte("created_at", monthStart)
-        .lt("created_at", nextMonth);
-      if (credorNames) query = query.in("credor", credorNames);
-      const { data } = await query;
-      return (data || []).reduce((sum, a) => sum + (a.proposed_total || 0), 0);
-    }
-
-    default: {
-      let query = supabase
-        .from("clients")
-        .select("valor_pago")
-        .eq("tenant_id", tenantId)
-        .eq("operator_id", profileId)
-        .gte("data_quitacao", monthStart)
-        .lt("data_quitacao", nextMonth);
-      if (credorNames) query = query.in("credor", credorNames);
-      const { data } = await query;
-      return (data || []).reduce((sum, c) => sum + (c.valor_pago || 0), 0);
-    }
-  }
-}
