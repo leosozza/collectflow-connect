@@ -1,28 +1,57 @@
-## Contexto
+## Objetivo
 
-Você sincronizou o GitHub e o código frontend já está alinhado:
+Garantir que, em `/financeiro` (Acordos / Baixas Realizadas), o operador só veja os registros que ele mesmo originou. Admins (e usuários a quem o admin conceder permissão explícita) continuam vendo tudo.
 
-- `ManualPaymentDialog.tsx` já tem inputs de Juros, Multa, Honorários e Descontos.
-- `manualPaymentService.ts` já expõe esses campos em `CreateManualPaymentData`.
-- `BaixasRealizadasPage.tsx` já usa `operator_id` e mantém o fallback visual "Sistema/Importação".
-- A migration `supabase/migrations/20260425184800_final_fix_baixas_realizadas.sql` está presente no repositório.
+## Situação atual
 
-O que **ainda não foi aplicado** é a função SQL no banco. Confirmei consultando `pg_proc`: a definição atual de `public.get_baixas_realizadas` no Supabase **não contém** `SELECT user_id FROM profiles WHERE id = mp.requested_by` — ou seja, está rodando uma versão anterior que devolve o `profile.id` em vez do `auth.user_id`. Por isso o operador continua aparecendo como "Sistema/Importação".
+- **`/acordos`**: já aplica o filtro corretamente. Quando o usuário não tem a permissão de aprovar acordos, a query força `created_by = user.id` (linha 69 de `AcordosPage.tsx`). Nada a fazer aqui.
+- **`/financeiro/aguardando-liberacao`**: já restrito a quem tem `canApproveAcordos`. Nada a fazer.
+- **`/financeiro/baixas` (Baixas Realizadas)**: hoje qualquer usuário com permissão `financeiro.view` enxerga **todas** as baixas do tenant. Este é o ponto que precisa de correção.
 
-## Mudança
+## O que vamos mudar
 
-Aplicar a migration `20260425184800_final_fix_baixas_realizadas.sql` via ferramenta de migration do Supabase. Ela faz:
+### 1. Nova permissão granular no módulo `financeiro`
 
-- `DROP FUNCTION IF EXISTS public.get_baixas_realizadas(date, date, text, text, text)`.
-- `CREATE OR REPLACE FUNCTION public.get_baixas_realizadas(...)` mantendo a mesma assinatura de parâmetros e o mesmo `RETURNS TABLE` (incluindo `operator_id uuid`).
-- Para a fonte **manual**: troca `mp.requested_by` direto por `COALESCE((SELECT user_id FROM profiles WHERE id = mp.requested_by LIMIT 1), a.created_by)`, resolvendo a divergência `profile.id` × `auth.user_id`.
-- Para **portal** e **negociarie**: usa `a.created_by` como `operator_id` (fallback consistente com o que o frontend já espera).
-- Mantém os filtros existentes (`_date_from`, `_date_to`, `_credor`, `_local`, `_payment_method`) aplicados sobre o `WITH unified` final.
+Em `usePermissions.ts`:
 
-Nenhuma alteração de schema de tabela, RLS, código frontend ou outras funções é necessária. A `SECURITY DEFINER` + `SET search_path = public` já estão presentes na migration.
+- Adicionar a ação `view_all` ao catálogo do módulo `financeiro` (junto às já existentes `view` e `manage`).
+- Defaults por papel:
+  - `super_admin`, `admin`, `gerente` → `["view", "manage", "view_all"]`
+  - `supervisor`, `operador` → mantém como está (sem `view_all`; só veem as próprias baixas se o admin liberar `financeiro.view`).
+- Expor `canViewAllFinanceiro = has("financeiro", "view_all")`.
 
-## Resultado esperado
+Isso permite que o admin, na tela de Permissões existente, marque/desmarque "Visualizar (Todos)" no módulo Financeiro para qualquer usuário, exatamente como já faz em Dashboard, Analytics, Agendados, etc.
 
-- Coluna **Operador** em `/financeiro/baixas` passa a exibir o nome real do usuário para baixas manuais (resolvido via `profiles.id → user_id → profiles.full_name` no frontend).
-- Para baixas Portal/Negociarie, exibe o criador do acordo (`a.created_by`) ou o fallback "Sistema/Importação" quando não houver match.
-- Encargos (juros/multa/honorários/desconto) cadastrados no novo `ManualPaymentDialog` aparecem corretamente, pois a RPC já lê `mp.interest_amount`, `mp.penalty_amount`, `mp.fees_amount`, `mp.discount_amount`.
+### 2. RPC `get_baixas_realizadas` — filtro por operador
+
+Atualizar a função (migration nova) para receber o filtro `_operator_id uuid` e aplicar no `WHERE` final:
+
+```sql
+AND (_operator_id IS NULL OR operator_id = _operator_id)
+```
+
+A função continua retornando o mesmo shape; apenas ganha um parâmetro opcional.
+
+### 3. Frontend — `BaixasRealizadasPage.tsx`
+
+- Resolver o filtro efetivo no carregamento:
+  - Se `canViewAllFinanceiro` → não envia `_operator_id` (vê tudo, e o seletor "Operador" continua disponível para filtrar manualmente).
+  - Caso contrário → envia `_operator_id = user.id` (server-side lock) e **esconde** o seletor de operador, evitando confusão.
+- Incluir `user.id` e a flag na `queryKey` para invalidar corretamente.
+
+## Resumo do comportamento final
+
+| Papel / permissão                              | /acordos        | /financeiro/baixas |
+|------------------------------------------------|-----------------|--------------------|
+| Admin / super_admin                            | Vê tudo         | Vê tudo            |
+| Gerente (default com `view_all` no financeiro) | Vê tudo         | Vê tudo            |
+| Operador / supervisor com `financeiro.view`    | Só os próprios  | Só os próprios     |
+| Usuário a quem admin marcar `view_all`         | (acordos.approve controla) | Vê tudo  |
+
+## Detalhes técnicos
+
+- Arquivo: `src/hooks/usePermissions.ts` — adicionar `view_all` em `MODULE_ACTIONS.financeiro`, atualizar `ROLE_DEFAULTS` e expor `canViewAllFinanceiro`.
+- Arquivo: `src/pages/financeiro/BaixasRealizadasPage.tsx` — passar `_operator_id` na chamada da RPC e ocultar o `Select` de operador quando o usuário não tem `view_all`.
+- Migration nova: `CREATE OR REPLACE FUNCTION public.get_baixas_realizadas(...)` adicionando `_operator_id uuid DEFAULT NULL` como último parâmetro e aplicando o filtro na query final. Mantém a resolução de `operator_id` já implementada (profile.id → auth user_id para baixas manuais; `a.created_by` para portal/negociarie).
+- Não há alteração no schema de tabelas, nem em RLS — apenas na RPC e no frontend.
+- Nenhum impacto em `/acordos`, `/financeiro/aguardando-liberacao` ou no `AgreementsList`.
