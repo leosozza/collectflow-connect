@@ -1,14 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
+import { supabase } from "@/integrations/supabase/client";
 import { fetchMyWallet, fetchMyTransactions, RivoCoinTransaction } from "@/services/rivocoinService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coins, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Coins, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft, Hourglass } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const WalletTab = () => {
   const { profile } = useAuth();
+  const { tenantUser } = useTenant();
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
 
   const { data: wallet, isLoading: loadingWallet } = useQuery({
     queryKey: ["rivocoin-wallet", profile?.id],
@@ -22,6 +28,23 @@ const WalletTab = () => {
     enabled: !!profile?.id,
   });
 
+  const { data: monthPoints } = useQuery({
+    queryKey: ["pending-month-points", profile?.id, year, month],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("operator_points")
+        .select("points, bonus_points")
+        .eq("tenant_id", tenantUser!.tenant_id)
+        .eq("operator_id", profile!.id)
+        .eq("year", year)
+        .eq("month", month)
+        .maybeSingle();
+      const row: any = data;
+      return (row?.points || 0) + (row?.bonus_points || 0);
+    },
+    enabled: !!profile?.id && !!tenantUser?.tenant_id,
+  });
+
   if (loadingWallet || loadingTx) {
     return <div className="text-center py-12 text-muted-foreground text-sm">Carregando carteira...</div>;
   }
@@ -32,6 +55,19 @@ const WalletTab = () => {
 
   return (
     <div className="space-y-6">
+      {/* Pending Points Banner */}
+      <Card className="border-amber-500/30 bg-amber-500/5">
+        <CardContent className="p-4 flex items-center gap-4">
+          <Hourglass className="w-8 h-8 text-amber-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-2xl font-bold text-foreground">{(monthPoints || 0).toLocaleString("pt-BR")} pontos</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Acumulados em {String(month).padStart(2, "0")}/{year} — serão convertidos em <strong>RivoCoins</strong> (1:1) na virada do mês
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Balance Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-primary/30 bg-primary/5">
