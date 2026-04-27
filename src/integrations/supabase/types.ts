@@ -6670,6 +6670,7 @@ export type Database = {
           _date_from?: string
           _date_to?: string
           _local?: string
+          _operator_id?: string
           _payment_method?: string
         }
         Returns: {
