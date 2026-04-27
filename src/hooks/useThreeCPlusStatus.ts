@@ -175,8 +175,12 @@ export function useThreeCPlusStatus(): ThreeCPlusAgentState {
     // Initial poll
     poll();
 
-    // Adaptive interval: 5s when on call (status 2), 10s otherwise
+    // Adaptive interval:
+    //  - socket connected → long fallback (60s) just to reconcile drift
+    //  - on call (status 2) → 5s
+    //  - otherwise → 10s
     const getInterval = () => {
+      if (_socketConnected) return 60000;
       return lastStatusRef.current === 2 ? 5000 : 10000;
     };
 
