@@ -203,16 +203,57 @@ async function calculateCampaignScore(params: {
 
   switch (metric) {
     case "maior_valor_recebido": {
+      // Source A: full quitações on clients
       let query = supabase
         .from("clients")
-        .select("valor_pago")
+        .select("cpf, credor, valor_pago")
         .eq("tenant_id", tenantId)
         .eq("operator_id", profileId)
         .gte("data_quitacao", monthStart)
         .lt("data_quitacao", nextMonth);
       if (credorNames) query = query.in("credor", credorNames);
-      const { data } = await query;
-      return (data || []).reduce((sum, c) => sum + (c.valor_pago || 0), 0);
+      const { data: quitacoes } = await query;
+
+      // Source B: installment payments via manual_payments confirmed in window
+      let aq = supabase
+        .from("agreements")
+        .select("id, client_cpf, credor")
+        .eq("tenant_id", tenantId)
+        .eq("created_by", authUid);
+      if (credorNames) aq = aq.in("credor", credorNames);
+      const { data: ags } = await aq;
+
+      let installmentsTotal = 0;
+      const paidPairs = new Set<string>();
+      if (ags && ags.length > 0) {
+        const agreementIdToPair = new Map<string, string>(
+          ags.map((a: any) => [a.id, `${a.client_cpf}::${a.credor}`])
+        );
+        const agIds = ags.map((a: any) => a.id);
+        const chunkSize = 500;
+        for (let i = 0; i < agIds.length; i += chunkSize) {
+          const slice = agIds.slice(i, i + chunkSize);
+          const { data: parcelas } = await supabase
+            .from("manual_payments")
+            .select("agreement_id, amount_paid")
+            .eq("tenant_id", tenantId)
+            .eq("status", "confirmed")
+            .gte("payment_date", monthStart)
+            .lt("payment_date", nextMonth)
+            .in("agreement_id", slice);
+          for (const row of (parcelas || []) as any[]) {
+            installmentsTotal += Number(row.amount_paid || 0);
+            const pair = agreementIdToPair.get(row.agreement_id);
+            if (pair) paidPairs.add(pair);
+          }
+        }
+      }
+
+      const quitTotal = (quitacoes || [])
+        .filter((c: any) => !paidPairs.has(`${c.cpf}::${c.credor}`))
+        .reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
+
+      return installmentsTotal + quitTotal;
     }
 
     case "negociado_e_recebido": {
