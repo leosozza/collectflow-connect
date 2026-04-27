@@ -191,7 +191,7 @@ const AchievementsManagementTab = () => {
                   <TableHead className="w-10"></TableHead>
                   <TableHead>Título</TableHead>
                   <TableHead>Critério</TableHead>
-                  <TableHead>Credor</TableHead>
+                  
                   <TableHead className="w-16">Pts</TableHead>
                   <TableHead className="w-16">Ativo</TableHead>
                   <TableHead className="w-20"></TableHead>
@@ -206,7 +206,7 @@ const AchievementsManagementTab = () => {
                       {CRITERIA_OPTIONS.find((c) => c.value === t.criteria_type)?.label || t.criteria_type}
                       {t.criteria_value > 0 && ` (${t.criteria_value})`}
                     </TableCell>
-                    <TableCell className="text-xs">{credorName(t.credor_id)}</TableCell>
+                    
                     <TableCell>{t.points_reward}</TableCell>
                     <TableCell>
                       <Badge variant={t.is_active ? "default" : "secondary"} className="text-[10px]">
@@ -312,40 +312,37 @@ const AchievementsManagementTab = () => {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Critério</Label>
-                <Select value={tCriteria} onValueChange={setTCriteria}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CRITERIA_OPTIONS.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Valor do Critério</Label>
-                <Input type="number" min={0} value={tCriteriaValue} onChange={(e) => setTCriteriaValue(Number(e.target.value))} />
-              </div>
+            <div>
+              <Label>Critério</Label>
+              <Select value={tCriteria} onValueChange={setTCriteria}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CRITERIA_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            {(tCriteria === "agreements_count" || tCriteria === "payments_count" || tCriteria === "total_received") && (
               <div>
-                <Label>Pontos</Label>
-                <Input type="number" min={0} value={tPoints} onChange={(e) => setTPoints(Number(e.target.value))} />
+                <Label>Meta</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={tCriteriaValue}
+                  onChange={(e) => setTCriteriaValue(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {tCriteria === "agreements_count" && "Acordos formalizados necessários para desbloquear"}
+                  {tCriteria === "payments_count" && "Pagamentos necessários para desbloquear"}
+                  {tCriteria === "total_received" && "Valor recebido necessário (R$) para desbloquear"}
+                </p>
               </div>
-              <div>
-                <Label>Credor</Label>
-                <Select value={tCredorId || "__global__"} onValueChange={(v) => setTCredorId(v === "__global__" ? "" : v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__global__">Global (todos)</SelectItem>
-                    {credores.map((c: any) => (
-                      <SelectItem key={c.id} value={c.id}>{c.razao_social}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            )}
+            <div>
+              <Label>Pontos</Label>
+              <Input type="number" min={0} value={tPoints} onChange={(e) => setTPoints(Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground mt-1">RivoCoins ganhos ao desbloquear</p>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setTemplateOpen(false)}>Cancelar</Button>
