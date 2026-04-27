@@ -57,7 +57,7 @@ const ThreeCPlusTab = () => {
       }
 
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "list_agents", domain: domain.trim(), api_token: apiToken.trim() },
+        body: { action: "agents_status", domain: domain.trim(), api_token: apiToken.trim() },
       });
 
       if (error) {
