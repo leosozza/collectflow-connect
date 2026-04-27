@@ -32,7 +32,7 @@ const GoalProgress = ({ year, month, totalRecebido }: Props) => {
       </div>
       <Progress value={pct} className="h-3" />
       <div className="flex justify-between mt-2">
-        <span className="text-xs text-muted-foreground">{pct.toFixed(1)}% atingido</span>
+        <span className="text-xs text-muted-foreground">{pct.toFixed(2).replace(".", ",")}% atingido</span>
         <span className="text-xs text-muted-foreground">Faltam {formatCurrency(remaining)}</span>
       </div>
     </div>

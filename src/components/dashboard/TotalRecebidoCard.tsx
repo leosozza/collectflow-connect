@@ -32,12 +32,13 @@ async function fetchDailyTotals(
   const endIso = format(end, "yyyy-MM-dd");
   const buckets: DailyMap = {};
 
+  // 1) manual_payments — alinhado com get_dashboard_stats: confirmed OU approved
   try {
     const { data: manual } = await supabase
       .from("manual_payments")
       .select("amount_paid, payment_date, status, tenant_id")
       .eq("tenant_id", tenantId)
-      .eq("status", "approved")
+      .in("status", ["confirmed", "approved"])
       .gte("payment_date", startIso)
       .lte("payment_date", endIso);
 
@@ -50,6 +51,7 @@ async function fetchDailyTotals(
     /* silent */
   }
 
+  // 2) portal_payments — pagos via portal do devedor
   try {
     const { data: portal } = await supabase
       .from("portal_payments")
@@ -62,6 +64,26 @@ async function fetchDailyTotals(
     (portal || []).forEach((row: any) => {
       const day = new Date(row.updated_at).getDate();
       buckets[day] = (buckets[day] || 0) + Number(row.amount || 0);
+    });
+  } catch {
+    /* silent */
+  }
+
+  // 3) negociarie_cobrancas — pagamentos confirmados pelo gateway Negociarie
+  try {
+    const { data: negociarie } = await supabase
+      .from("negociarie_cobrancas")
+      .select("valor_pago, data_pagamento, status, tenant_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "pago")
+      .gte("data_pagamento", startIso)
+      .lte("data_pagamento", endIso);
+
+    (negociarie || []).forEach((row: any) => {
+      if (!row.data_pagamento) return;
+      const d = new Date(String(row.data_pagamento) + "T00:00:00");
+      const day = d.getDate();
+      buckets[day] = (buckets[day] || 0) + Number(row.valor_pago || 0);
     });
   } catch {
     /* silent */
@@ -156,28 +178,39 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
       </div>
 
       <div className="px-4 pb-2">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-semibold">
-          Total Recebido
-        </p>
-        <div className="flex items-baseline gap-2 flex-wrap mt-0.5">
+        <div className="flex items-baseline gap-2 flex-wrap">
           <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
             {formatCurrency(totalRecebido)}
           </p>
-          {diffPct !== null ? (
-            <span
-              className={`inline-flex items-center gap-1 text-xs font-semibold ${
-                isPositive ? "text-emerald-600" : "text-red-600"
-              }`}
-            >
-              {isPositive ? (
-                <TrendingUp className="w-3 h-3" />
-              ) : (
-                <TrendingDown className="w-3 h-3" />
-              )}
-              {`${isPositive ? "+" : ""}${diffPct.toFixed(0)}%`}
-              <span className="text-muted-foreground font-normal">vs mês anterior</span>
-            </span>
-          ) : (
+          {diffPct !== null ? (() => {
+            const abs = Math.abs(diffPct);
+            const sign = isPositive ? "+" : "-";
+            let label: string;
+            if (abs >= 1000) {
+              label = `${sign}999%+`;
+            } else if (abs >= 100) {
+              label = `${sign}${Math.round(abs)}%`;
+            } else {
+              label = `${sign}${abs.toFixed(2).replace(".", ",")}%`;
+            }
+            const tooltip = `Variação real: ${diffPct.toFixed(2).replace(".", ",")}% • Mês anterior: ${formatCurrency(prevMonthTotal)}`;
+            return (
+              <span
+                title={tooltip}
+                className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                  isPositive ? "text-emerald-600" : "text-red-600"
+                }`}
+              >
+                {isPositive ? (
+                  <TrendingUp className="w-3 h-3" />
+                ) : (
+                  <TrendingDown className="w-3 h-3" />
+                )}
+                {label}
+                <span className="text-muted-foreground font-normal">vs mês anterior</span>
+              </span>
+            );
+          })() : (
             <span className="text-xs text-muted-foreground">— vs mês anterior</span>
           )}
         </div>
