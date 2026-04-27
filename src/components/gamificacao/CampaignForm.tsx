@@ -38,6 +38,9 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
   const [endDate, setEndDate] = useState(campaign?.end_date || "");
   const [prize, setPrize] = useState(campaign?.prize_description || "");
   const [status, setStatus] = useState(campaign?.status || "ativa");
+  const [pointsFirst, setPointsFirst] = useState<number>(campaign?.points_first ?? 0);
+  const [pointsSecond, setPointsSecond] = useState<number>(campaign?.points_second ?? 0);
+  const [pointsThird, setPointsThird] = useState<number>(campaign?.points_third ?? 0);
 
   const [selectedCredores, setSelectedCredores] = useState<string[]>([]);
   const [participantMode, setParticipantMode] = useState<"equipe" | "individual">("individual");
@@ -177,6 +180,9 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
         end_date: endDate,
         prize_description: prize || null,
         status,
+        points_first: pointsFirst,
+        points_second: pointsSecond,
+        points_third: pointsThird,
       },
       selectedCredores,
       participants
@@ -314,6 +320,24 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
           <div>
             <Label>Prêmio</Label>
             <Textarea value={prize} onChange={(e) => setPrize(e.target.value)} rows={2} placeholder="Descreva o prêmio..." />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Pontos por posição (viram Rivo Coins na virada do mês)</Label>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">🥇 1º lugar</Label>
+                <Input type="number" min={0} value={pointsFirst} onChange={(e) => setPointsFirst(Number(e.target.value) || 0)} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">🥈 2º lugar</Label>
+                <Input type="number" min={0} value={pointsSecond} onChange={(e) => setPointsSecond(Number(e.target.value) || 0)} />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">🥉 3º lugar</Label>
+                <Input type="number" min={0} value={pointsThird} onChange={(e) => setPointsThird(Number(e.target.value) || 0)} />
+              </div>
+            </div>
           </div>
           <div>
             <Label>Status</Label>

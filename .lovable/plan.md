@@ -1,70 +1,67 @@
-## Objetivo
+## Nova Lógica: Pontos → Rivo Coins (conversão mensal)
 
-Unificar a fonte de "valor recebido" em **Dashboard, Ranking e Campanhas Mensais** para que o operador VITOR (e todos os outros) mostrem o **mesmo número** em todas as telas.
+### Conceito
 
----
-
-## Diagnóstico (resumo dos 3 valores divergentes do VITOR em abril)
-
-| Tela | Valor | Fonte atual | Problema |
-|------|-------|-------------|----------|
-| Dashboard | R$ 37.445,38 | `manual_payments` (confirmed+approved) + `portal_payments` (paid) + `negociarie_cobrancas` (pago), filtrado por `agreements.created_by` | ✅ Fonte mais completa |
-| Ranking | R$ 43.994,09 | `client_events` (metadata.valor_pago/amount_paid) | ❌ Conta eventos duplicados ou eventos sem pagamento real conciliado |
-| Campanha Mensal | R$ 28.049,04 | `manual_payments` (apenas confirmed) + `clients.valor_pago`, filtrado por credor TESS MODELS | ❌ Ignora "approved", ignora portal/negociarie, limita a 1 credor |
+- **Pontos** = moeda **temporária e mensal**, acumulada durante o mês corrente.
+- Pontos vêm de **3 fontes** (todas geram pontos, não Rivo Coins direto):
+  1. **Bater meta** (`operator_goals`) — pontos definidos por configuração.
+  2. **Ganhar campanha** (`gamification_campaigns`) — pontos por posição final (1º, 2º, 3º…).
+  3. **Atingir conquistas** (`achievement_templates.points_reward`) — pontos da conquista.
+- Ao **virar o mês**, todos os pontos do mês fechado são **convertidos automaticamente em Rivo Coins** (1 ponto = 1 Rivo Coin) e creditados na carteira.
+- **Rivo Coins** = saldo permanente, gasto na Loja.
 
 ---
 
-## Solução: Fonte Única de Verdade (SSoT)
+### O que muda em relação a hoje
 
-Criar **1 RPC SQL** chamada `get_operator_received_total(operator_id, start_date, end_date, credor_id?)` que retorna o valor recebido por operador no período, usando a fórmula do Dashboard:
-
-```
-SUM(manual_payments.amount WHERE status IN ('confirmed','approved'))
-+ SUM(portal_payments.amount WHERE status = 'paid')
-+ SUM(negociarie_cobrancas.valor WHERE status = 'pago')
-WHERE agreements.created_by = operator_id
-  AND payment_date BETWEEN start_date AND end_date
-  AND (credor_id IS NULL OR agreements.credor_id = credor_id)
-```
-
-Essa RPC vira a **única fonte** consumida por:
-1. Dashboard (já usa essa lógica — apenas migra para a RPC)
-2. Ranking de operadores (Gamificação)
-3. Campanhas mensais (Gamificação) — com filtro opcional por credor
+| Comportamento | Hoje | Depois |
+|---|---|---|
+| Conquistas | Creditam Rivo Coins **diretamente** ao desbloquear | Creditam **Pontos** no mês corrente |
+| Metas batidas | Sem recompensa formal (só flag) | Geram **Pontos** configuráveis |
+| Vencer campanha | Sem recompensa em moeda | Top N posições recebem **Pontos** configuráveis |
+| Pontos do ranking | Calculados por regras (pagamentos, valor recebido, etc.) e usados só para posição | Continuam, **somam ao saldo de pontos do mês**, e viram Rivo Coins na virada |
+| Rivo Coins | Crédito imediato a cada conquista | Crédito **único na virada do mês**, consolidando tudo |
+| Carteira de Rivo Coins | Inalterada (segue gasto na loja) | Inalterada |
 
 ---
 
-## Mudanças por arquivo
+### Mudanças técnicas
 
-### 1. SQL (migration)
-- Criar RPC `get_operator_received_total(p_operator_id uuid, p_start date, p_end date, p_credor_id uuid default null)` — `SECURITY DEFINER`, filtrada por `tenant_id` via `get_my_tenant_id()`.
-- Criar RPC `get_operators_received_ranking(p_start date, p_end date, p_credor_id uuid default null)` — retorna lista `[{operator_id, operator_name, total_received}]` ordenada — usada por ranking e campanhas em lote.
+**1. SQL — novas colunas**
+- `gamification_campaigns`: adicionar `points_first int default 0`, `points_second int default 0`, `points_third int default 0` (ou JSONB `position_rewards`).
+- `operator_goals`: adicionar `points_reward int default 0`.
+- `operator_points`: adicionar `bonus_points int default 0` (acumula pontos extras de meta/campanha/conquista, separado dos pontos calculados por regras) e `converted_to_coins boolean default false`.
 
-### 2. `src/services/campaignService.ts`
-- Substituir o cálculo atual (manual_payments confirmed + clients.valor_pago) pela chamada à RPC `get_operators_received_ranking`.
-- Remover filtro hard-coded por credor TESS MODELS — usar `campaign.credor_id` (opcional, null = todos credores).
+**2. SQL — RPC de conversão mensal**
+- Nova RPC `convert_monthly_points_to_rivocoins(_year int, _month int)`:
+  - Busca todas as linhas `operator_points` do mês alvo onde `converted_to_coins = false`.
+  - Para cada operador: `total = points + bonus_points` → credita em `rivocoin_wallets` e insere `rivocoin_transactions` (type='earn', reference_type='monthly_conversion').
+  - Marca `converted_to_coins = true`.
+- Cron job (`pg_cron`) rodando dia 1 de cada mês às 00:05 → converte mês anterior.
+- RPC manual `convert_my_pending_points()` para admin disparar reprocessamento.
 
-### 3. `src/hooks/useGamificationTrigger.ts` (ou serviço de ranking)
-- Substituir leitura de `client_events` pela RPC `get_operators_received_ranking`.
+**3. SQL — RPC de fechamento de campanha**
+- `close_campaign_and_award_points(_campaign_id uuid)`:
+  - Lê `campaign_participants` ordenado por `score`.
+  - Credita `bonus_points` em `operator_points` para top 3 conforme configuração da campanha.
+  - Atualiza `campaigns.status='completed'`.
 
-### 4. Dashboard (`src/pages/Dashboard.tsx` ou hook correspondente)
-- Migrar para a mesma RPC, garantindo que o número permaneça idêntico ao atual (R$ 37.445,38 para VITOR).
+**4. Código (frontend/services)**
+- `src/hooks/useGamification.ts`: trocar `creditRivoCoins(...)` por incremento em `operator_points.bonus_points` quando conquista é desbloqueada.
+- `src/services/goalService.ts`: ao detectar meta batida, somar `points_reward` em `operator_points.bonus_points`.
+- `src/services/campaignService.ts`: novo botão/ação "Encerrar campanha" chamando `close_campaign_and_award_points`.
+- `src/components/gamificacao/AchievementsManagementTab.tsx`: rótulo "Recompensa" continua em pontos (sem mudança de UI, só semântica).
+- Nova UI em **Campanhas**: campos de pontos por posição (1º/2º/3º).
+- Nova UI em **Metas**: campo "Pontos ao bater a meta".
+- Tab **Wallet** / **Ranking**: mostrar "Pontos do mês (vão virar Rivo Coins em DD/MM)" e histórico de conversões.
+
+**5. Migração de dados existentes**
+- Não retroagir: Rivo Coins já creditadas permanecem. Nova lógica vale a partir do mês corrente.
 
 ---
 
-## Resultado esperado
+### Resultado esperado
 
-VITOR — abril/2026:
-- Dashboard: **R$ 37.445,38**
-- Ranking: **R$ 37.445,38**
-- Campanha mensal (todos credores): **R$ 37.445,38**
-- Campanha mensal (filtrada TESS MODELS): valor parcial correspondente apenas a esse credor
-
----
-
-## Validação pós-deploy
-
-1. Abrir Dashboard → anotar valor do VITOR.
-2. Abrir Gamificação → Ranking → confirmar mesmo valor.
-3. Abrir Campanha Mensal (sem filtro de credor) → confirmar mesmo valor.
-4. Abrir Campanha Mensal (filtro TESS MODELS) → confirmar valor ≤ total.
+- Operador acompanha **pontos crescendo no mês** (ranking + bônus de meta/campanha/conquista).
+- No dia 1 do mês seguinte, recebe notificação: "Você converteu X pontos em X Rivo Coins!".
+- Loja continua funcionando normalmente com saldo de Rivo Coins.

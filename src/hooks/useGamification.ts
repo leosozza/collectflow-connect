@@ -7,7 +7,7 @@ import {
   grantAchievement,
   fetchMyAchievements,
 } from "@/services/gamificationService";
-import { creditRivoCoins } from "@/services/rivocoinService";
+
 
 interface AchievementContext {
   paymentsThisMonth: number;
@@ -86,20 +86,24 @@ export const useGamification = () => {
         }
       }
 
-      // Notify user + credit RivoCoins
+      // Notify user + credit Pontos no mês corrente (serão convertidos em Rivo Coins na virada do mês)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+
       for (const achievement of newlyUnlocked) {
         toast.success(`${achievement.icon} Conquista desbloqueada!`, {
-          description: achievement.title,
+          description: `${achievement.title}${achievement.points_reward > 0 ? ` — +${achievement.points_reward} pontos` : ""}`,
           duration: 5000,
         });
 
         if (achievement.points_reward > 0) {
-          await creditRivoCoins({
-            tenant_id: tenantId,
-            profile_id: profileId,
-            amount: achievement.points_reward,
-            description: `Conquista: ${achievement.title}`,
-            reference_type: "achievement",
+          await supabase.rpc("add_operator_bonus_points", {
+            _tenant_id: tenantId,
+            _operator_id: profileId,
+            _year: currentYear,
+            _month: currentMonth,
+            _amount: achievement.points_reward,
           });
         }
       }

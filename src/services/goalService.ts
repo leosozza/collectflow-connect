@@ -8,6 +8,8 @@ export interface OperatorGoal {
   month: number;
   target_amount: number;
   credor_id: string | null;
+  points_reward: number;
+  points_awarded: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -76,10 +78,10 @@ export const upsertGoal = async (params: {
   tenant_id: string;
   created_by: string;
   credor_id?: string | null;
+  points_reward?: number;
 }): Promise<void> => {
   const credorId = params.credor_id || null;
 
-  // Find existing goal
   let query = supabase
     .from("operator_goals")
     .select("id")
@@ -87,32 +89,64 @@ export const upsertGoal = async (params: {
     .eq("year", params.year)
     .eq("month", params.month);
 
-  if (credorId) {
-    query = query.eq("credor_id", credorId);
-  } else {
-    query = query.is("credor_id", null);
-  }
+  if (credorId) query = query.eq("credor_id", credorId);
+  else query = query.is("credor_id", null);
 
   const { data: existing } = await query.maybeSingle();
 
+  const payload: any = { target_amount: params.target_amount };
+  if (params.points_reward !== undefined) payload.points_reward = params.points_reward;
+
   if (existing) {
-    const { error } = await supabase
-      .from("operator_goals")
-      .update({ target_amount: params.target_amount } as any)
-      .eq("id", existing.id);
+    const { error } = await supabase.from("operator_goals").update(payload).eq("id", existing.id);
     if (error) throw error;
   } else {
-    const { error } = await supabase
-      .from("operator_goals")
-      .insert({
-        operator_id: params.operator_id,
-        year: params.year,
-        month: params.month,
-        target_amount: params.target_amount,
-        tenant_id: params.tenant_id,
-        created_by: params.created_by,
-        credor_id: credorId,
-      } as any);
+    const { error } = await supabase.from("operator_goals").insert({
+      operator_id: params.operator_id,
+      year: params.year,
+      month: params.month,
+      target_amount: params.target_amount,
+      tenant_id: params.tenant_id,
+      created_by: params.created_by,
+      credor_id: credorId,
+      points_reward: params.points_reward ?? 0,
+    } as any);
     if (error) throw error;
   }
+};
+
+/** Credita pontos no operator_points.bonus_points se a meta foi batida e ainda não premiada. */
+export const awardGoalIfReached = async (params: {
+  operator_id: string;
+  tenant_id: string;
+  year: number;
+  month: number;
+  total_received: number;
+}): Promise<boolean> => {
+  const { data } = await supabase
+    .from("operator_goals")
+    .select("id, target_amount, points_reward, points_awarded")
+    .eq("tenant_id", params.tenant_id)
+    .eq("operator_id", params.operator_id)
+    .eq("year", params.year)
+    .eq("month", params.month)
+    .is("credor_id", null)
+    .maybeSingle();
+
+  const g: any = data;
+  if (!g) return false;
+  if (g.points_awarded) return false;
+  if (!g.points_reward || g.points_reward <= 0) return false;
+  if (params.total_received < (g.target_amount || 0)) return false;
+
+  await supabase.rpc("add_operator_bonus_points", {
+    _tenant_id: params.tenant_id,
+    _operator_id: params.operator_id,
+    _year: params.year,
+    _month: params.month,
+    _amount: g.points_reward,
+  });
+
+  await supabase.from("operator_goals").update({ points_awarded: true } as any).eq("id", g.id);
+  return true;
 };

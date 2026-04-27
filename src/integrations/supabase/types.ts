@@ -3269,6 +3269,9 @@ export type Database = {
           id: string
           metric: string
           period: string
+          points_first: number
+          points_second: number
+          points_third: number
           prize_description: string | null
           start_date: string
           status: string
@@ -3284,6 +3287,9 @@ export type Database = {
           id?: string
           metric: string
           period: string
+          points_first?: number
+          points_second?: number
+          points_third?: number
           prize_description?: string | null
           start_date: string
           status?: string
@@ -3299,6 +3305,9 @@ export type Database = {
           id?: string
           metric?: string
           period?: string
+          points_first?: number
+          points_second?: number
+          points_third?: number
           prize_description?: string | null
           start_date?: string
           status?: string
@@ -3947,6 +3956,8 @@ export type Database = {
           id: string
           month: number
           operator_id: string
+          points_awarded: boolean
+          points_reward: number
           target_amount: number
           tenant_id: string
           updated_at: string
@@ -3959,6 +3970,8 @@ export type Database = {
           id?: string
           month: number
           operator_id: string
+          points_awarded?: boolean
+          points_reward?: number
           target_amount?: number
           tenant_id: string
           updated_at?: string
@@ -3971,6 +3984,8 @@ export type Database = {
           id?: string
           month?: number
           operator_id?: string
+          points_awarded?: boolean
+          points_reward?: number
           target_amount?: number
           tenant_id?: string
           updated_at?: string
@@ -4034,7 +4049,10 @@ export type Database = {
       }
       operator_points: {
         Row: {
+          bonus_points: number
           breaks_count: number
+          converted_at: string | null
+          converted_to_coins: boolean
           id: string
           month: number
           operator_id: string
@@ -4046,7 +4064,10 @@ export type Database = {
           year: number
         }
         Insert: {
+          bonus_points?: number
           breaks_count?: number
+          converted_at?: string | null
+          converted_to_coins?: boolean
           id?: string
           month: number
           operator_id: string
@@ -4058,7 +4079,10 @@ export type Database = {
           year: number
         }
         Update: {
+          bonus_points?: number
           breaks_count?: number
+          converted_at?: string | null
+          converted_to_coins?: boolean
           id?: string
           month?: number
           operator_id?: string
@@ -6571,6 +6595,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_operator_bonus_points: {
+        Args: {
+          _amount: number
+          _month: number
+          _operator_id: string
+          _tenant_id: string
+          _year: number
+        }
+        Returns: undefined
+      }
       add_tokens: {
         Args: {
           p_amount: number
@@ -6634,6 +6668,10 @@ export type Database = {
         }
       }
       cleanup_expired_locks: { Args: never; Returns: undefined }
+      close_campaign_and_award_points: {
+        Args: { _campaign_id: string }
+        Returns: Json
+      }
       consume_tokens: {
         Args: {
           p_amount: number
@@ -6650,6 +6688,10 @@ export type Database = {
           success: boolean
           transaction_id: string
         }[]
+      }
+      convert_monthly_points_to_rivocoins: {
+        Args: { _month: number; _year: number }
+        Returns: Json
       }
       create_notification: {
         Args: {
