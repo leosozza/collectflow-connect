@@ -37,6 +37,10 @@ export default function ParcelasProgramadasCard({
   const totalRecebido = vencimentos
     .filter((v) => v.effective_status === "paid")
     .reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);
+  const qtdPagas = vencimentos.filter((v) => v.effective_status === "paid").length;
+  const qtdAndamento = vencimentos.filter(
+    (v) => v.effective_status !== "paid" && v.effective_status !== "overdue",
+  ).length;
 
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full flex flex-col">
@@ -47,87 +51,73 @@ export default function ParcelasProgramadasCard({
           <h2 className="text-sm font-semibold text-foreground truncate">Parcelas Programadas</h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="flex flex-col items-end leading-tight rounded-md px-2 py-1 bg-blue-500/10">
-            <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
-              A receber
+          {/* A receber */}
+          <div className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-blue-500/10">
+            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded bg-blue-600 text-white text-[10px] font-bold tabular-nums">
+              {qtdAndamento}
             </span>
-            <span className="text-xs font-bold text-blue-700 tabular-nums">
-              {formatCurrency(totalDia)}
-            </span>
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
+                A receber
+              </span>
+              <span className="text-xs font-bold text-blue-700 tabular-nums">
+                {formatCurrency(totalDia)}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col items-end leading-tight rounded-md px-2 py-1 bg-success/15">
-            <span className="text-[9px] font-semibold uppercase tracking-wide text-success">
-              Recebido
+          {/* Recebido */}
+          <div className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-success/15">
+            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded bg-success text-success-foreground text-[10px] font-bold tabular-nums">
+              {qtdPagas}
             </span>
-            <span className="text-xs font-bold text-success tabular-nums">
-              {formatCurrency(totalRecebido)}
-            </span>
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-success">
+                Recebido
+              </span>
+              <span className="text-xs font-bold text-success tabular-nums">
+                {formatCurrency(totalRecebido)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Banner data + contadores */}
-      {(() => {
-        const pagas = vencimentos.filter((v) => v.effective_status === "paid").length;
-        const andamento = vencimentos.filter(
-          (v) => v.effective_status !== "paid" && v.effective_status !== "overdue"
-        ).length;
-        return (
-          <div className="px-3 pb-3 shrink-0 flex items-center gap-2 relative">
-            <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-md px-0.5 py-0.5 gap-0">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
-                onClick={() => onNavigateDate(-1)}
-              >
-                <ChevronLeft className="w-3 h-3" />
-              </Button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="text-[10px] font-bold text-white tracking-wide text-center px-1.5 py-0 cursor-pointer min-w-[68px]">
-                    {isToday ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-auto p-0 border-0 bg-transparent shadow-none z-50"
-                  align="center"
-                  side="bottom"
-                  sideOffset={8}
-                >
-                  <GlassCalendar selectedDate={browseDate} onDateSelect={onPickDate} />
-                </PopoverContent>
-              </Popover>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
-                onClick={() => onNavigateDate(1)}
-              >
-                <ChevronRight className="w-3 h-3" />
-              </Button>
-            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              {/* Quadradinho: Andamento */}
-              <div
-                className="flex items-center justify-center h-7 min-w-[28px] px-2 rounded-md bg-blue-500/15 text-blue-600 text-xs font-bold tabular-nums"
-                title={`${andamento} em andamento`}
-              >
-                {andamento}
-              </div>
-
-              {/* Quadradinho: Pagas */}
-              <div
-                className="flex items-center justify-center h-7 min-w-[28px] px-2 rounded-md bg-success text-success-foreground text-xs font-bold tabular-nums"
-                title={`${pagas} pagas`}
-              >
-                {pagas}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Banner data centralizado */}
+      <div className="px-3 pb-3 shrink-0 flex items-center justify-center">
+        <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-md px-0.5 py-0.5 gap-0">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
+            onClick={() => onNavigateDate(-1)}
+          >
+            <ChevronLeft className="w-3 h-3" />
+          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="text-[10px] font-bold text-white tracking-wide text-center px-1.5 py-0 cursor-pointer min-w-[68px]">
+                {isToday ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-auto p-0 border-0 bg-transparent shadow-none z-50"
+              align="center"
+              side="bottom"
+              sideOffset={8}
+            >
+              <GlassCalendar selectedDate={browseDate} onDateSelect={onPickDate} />
+            </PopoverContent>
+          </Popover>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
+            onClick={() => onNavigateDate(1)}
+          >
+            <ChevronRight className="w-3 h-3" />
+          </Button>
+        </div>
+      </div>
 
       {vencimentos.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-5 py-10 text-muted-foreground">
