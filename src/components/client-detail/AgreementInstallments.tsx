@@ -854,9 +854,21 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
                       {isPaid && tenantId && profile && (() => {
                         const hasConfirmedManual = manualPayments.some(
-                          (mp: any) => mp.installment_number === inst.number && mp.status === "confirmed"
+                          (mp: any) => (
+                            (mp.installment_key && mp.installment_key === inst.customKey) ||
+                            (!mp.installment_key && mp.installment_number === inst.number)
+                          ) && mp.status === "confirmed"
                         );
-                        return hasConfirmedManual ? (
+                        const isCobrancaPaga = inst.cobranca?.status === "pago";
+                        const showButton = hasConfirmedManual || isCobrancaPaga;
+                        if (!showButton) return null;
+                        const tooltipLabel = hasConfirmedManual
+                          ? "Desconfirmar Pagamento"
+                          : "Estornar Pagamento";
+                        const handler = hasConfirmedManual
+                          ? () => handleUnconfirmPayment(inst, idx)
+                          : () => handleRefundCobranca(inst, idx);
+                        return (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -864,7 +876,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                                 size="sm"
                                 className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
                                 disabled={unconfirmingIdx === idx}
-                                onClick={() => handleUnconfirmPayment(inst, idx)}
+                                onClick={handler}
                               >
                                 {unconfirmingIdx === idx ? (
                                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -873,9 +885,9 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                                 )}
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent side="top"><p>Desconfirmar Pagamento</p></TooltipContent>
+                            <TooltipContent side="top"><p>{tooltipLabel}</p></TooltipContent>
                           </Tooltip>
-                        ) : null;
+                        );
                       })()}
 
                       {/* Baixar recibo */}
