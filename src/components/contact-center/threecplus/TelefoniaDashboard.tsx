@@ -24,6 +24,7 @@ import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
+import RealtimeStatusBadge from "./RealtimeStatusBadge";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 
@@ -588,7 +589,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     }
   };
 
-  const { setAgentStatus, setOnFinishDisposition } = useAtendimentoModalSafe();
+  const atendimentoCtx = useAtendimentoModalSafe();
+  const { setAgentStatus, setOnFinishDisposition } = atendimentoCtx;
 
   // Load campaign qualifications — prioritize qualification_list_id from tenant settings
   const loadCampaignQualifications = useCallback(async (campaignId: number) => {
@@ -1492,6 +1494,13 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <h2 className="text-lg font-semibold text-foreground truncate">Dashboard</h2>
+          <RealtimeStatusBadge
+            status={atendimentoCtx.socketStatus}
+            lastEventAt={atendimentoCtx.socketLastEventAt}
+            lastEventName={atendimentoCtx.socketLastEventName}
+            errorMessage={atendimentoCtx.socketErrorMessage}
+            onReconnect={atendimentoCtx.socketReconnect}
+          />
         </div>
         <Popover>
           <PopoverTrigger asChild>

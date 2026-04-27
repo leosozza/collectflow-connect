@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
+import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -73,6 +75,9 @@ const onlyDigits = (v: string) => v.replace(/\D/g, "");
 
 const BaixasRealizadasPage = () => {
   const { tenant } = useTenant();
+  const { user } = useAuth();
+  const permissions = usePermissions();
+  const canViewAll = permissions.canViewAllFinanceiro;
   const today = new Date();
 
   const [dateFrom, setDateFrom] = useState<Date | undefined>(startOfMonth(today));
@@ -83,9 +88,13 @@ const BaixasRealizadasPage = () => {
   const [operatorFilter, setOperatorFilter] = useState<string>("todos");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Quando o usuário não tem permissão de "Visualizar (Todos)" no Financeiro,
+  // forçamos o filtro server-side pelo próprio user.id — ele só vê suas baixas.
+  const lockedOperatorId = !canViewAll ? (user?.id ?? null) : null;
+
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["baixas-realizadas", tenant?.id, dateFrom?.toISOString(), dateTo?.toISOString(), credorFilter, localFilter, methodFilter],
-    enabled: !!tenant?.id,
+    queryKey: ["baixas-realizadas", tenant?.id, dateFrom?.toISOString(), dateTo?.toISOString(), credorFilter, localFilter, methodFilter, lockedOperatorId],
+    enabled: !!tenant?.id && (canViewAll || !!user?.id),
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_baixas_realizadas" as any, {
         _date_from: dateFrom ? format(dateFrom, "yyyy-MM-dd") : null,
@@ -93,6 +102,7 @@ const BaixasRealizadasPage = () => {
         _credor: credorFilter === "todos" ? null : credorFilter,
         _local: localFilter === "todos" ? null : localFilter,
         _payment_method: methodFilter === "todos" ? null : methodFilter,
+        _operator_id: lockedOperatorId,
       } as any);
       if (error) throw error;
       return (data ?? []) as unknown as BaixaRow[];
@@ -272,19 +282,21 @@ const BaixasRealizadasPage = () => {
             </SelectContent>
           </Select>
 
-          <Select value={operatorFilter} onValueChange={setOperatorFilter}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="Operador" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos operadores</SelectItem>
-              {tenantOperators.map(op => (
-                <SelectItem key={op.user_id} value={op.user_id}>
-                  {op.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {canViewAll && (
+            <Select value={operatorFilter} onValueChange={setOperatorFilter}>
+              <SelectTrigger className="h-9 w-40">
+                <SelectValue placeholder="Operador" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos operadores</SelectItem>
+                {tenantOperators.map(op => (
+                  <SelectItem key={op.user_id} value={op.user_id}>
+                    {op.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Select value={localFilter} onValueChange={setLocalFilter}>
             <SelectTrigger className="h-9 w-32">

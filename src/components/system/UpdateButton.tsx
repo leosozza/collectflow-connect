@@ -121,6 +121,7 @@ const UpdateButton = () => {
     toast("Nova versão disponível", {
       description: "Clique para atualizar agora",
       duration: Infinity,
+      closeButton: true,
       action: {
         label: "Atualizar",
         onClick: () => { void handleClick(); },

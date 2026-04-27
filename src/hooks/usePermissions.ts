@@ -17,7 +17,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     contact_center: ["view", "manage_admin"],
     telefonia: ["view"],
     cadastros: ["view", "manage"],
-    financeiro: ["view", "manage"],
+    financeiro: ["view", "view_all", "manage"],
     integracoes: ["view", "manage"],
     configuracoes: ["view", "manage"],
     central_empresa: ["view", "manage"],
@@ -37,7 +37,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     contact_center: ["view", "manage_admin"],
     telefonia: ["view"],
     cadastros: ["view", "manage"],
-    financeiro: ["view", "manage"],
+    financeiro: ["view", "view_all", "manage"],
     integracoes: ["view", "manage"],
     configuracoes: ["view", "manage"],
     central_empresa: ["view", "manage"],
@@ -57,7 +57,7 @@ const ROLE_DEFAULTS: Record<TenantRole, Record<string, string[]>> = {
     contact_center: [],
     telefonia: [],
     cadastros: [],
-    financeiro: ["view", "manage"],
+    financeiro: ["view", "view_all", "manage"],
     integracoes: [],
     configuracoes: [],
     central_empresa: [],
@@ -208,6 +208,7 @@ export function usePermissions() {
 
     // Financeiro
     canViewFinanceiro: hasAny("financeiro"),
+    canViewAllFinanceiro: has("financeiro", "view_all"),
 
     // Integrações
     canViewIntegracoes: hasAny("integracoes"),
@@ -300,7 +301,7 @@ export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   contact_center: ["view", "manage_admin"],
   telefonia: ["view"],
   cadastros: ["view", "manage"],
-  financeiro: ["view", "manage"],
+  financeiro: ["view", "view_all", "manage"],
   integracoes: ["view", "manage"],
   configuracoes: ["view", "manage"],
   central_empresa: ["view", "manage"],
