@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
-import { useThreeCPlusStatus, type ThreeCPlusAgentState, dismissCallId } from "./useThreeCPlusStatus";
+import { useThreeCPlusStatus, type ThreeCPlusAgentState, dismissCallId, setRealtimeSocketConnected } from "./useThreeCPlusStatus";
 import { useThreeCPlusSocket, THREECPLUS_EVENTS, type SocketStatus } from "./useThreeCPlusSocket";
 import { useTenant } from "./useTenant";
 import { useAuth } from "./useAuth";
