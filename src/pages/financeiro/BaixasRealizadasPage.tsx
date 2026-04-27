@@ -439,13 +439,3 @@ const BaixasRealizadasPage = () => {
 };
 
 export default BaixasRealizadasPage;
-              </Table >
-            </Card >
-          );
-        })
-      )}
-    </div >
-  );
-};
-
-export default BaixasRealizadasPage;
