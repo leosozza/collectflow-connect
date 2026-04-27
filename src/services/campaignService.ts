@@ -315,62 +315,25 @@ async function computeCampaignScore(params: {
 }): Promise<number> {
   const { metric, tenantId, profileId, authUid, startDate, endExclusiveStr, credorNames } = params;
 
+  // endExclusiveStr is YYYY-MM-DD (next day after window). RPC uses inclusive end_date.
+  const endInclusive = new Date(endExclusiveStr);
+  endInclusive.setDate(endInclusive.getDate() - 1);
+  const endInclusiveStr = endInclusive.toISOString().slice(0, 10);
+
   switch (metric) {
     case "maior_valor_recebido": {
-      // Source A: full quitações on clients (assigned to operator profile)
-      let q = supabase
-        .from("clients")
-        .select("cpf, credor, valor_pago")
-        .eq("tenant_id", tenantId)
-        .eq("operator_id", profileId)
-        .gte("data_quitacao", startDate)
-        .lt("data_quitacao", endExclusiveStr);
-      if (credorNames) q = q.in("credor", credorNames);
-      const { data: quitacoes } = await q;
-
-      // Source B: installment payments via manual_payments confirmed in window,
-      // attributed to the operator who created the agreement (auth.uid)
-      let aq = supabase
-        .from("agreements")
-        .select("id, client_cpf, credor")
-        .eq("tenant_id", tenantId)
-        .eq("created_by", authUid);
-      if (credorNames) aq = aq.in("credor", credorNames);
-      const { data: ags } = await aq;
-
-      let installmentsTotal = 0;
-      const paidPairs = new Set<string>(); // "cpf::credor" with installments in window
-      if (ags && ags.length > 0) {
-        const agreementIdToPair = new Map<string, string>(
-          ags.map((a: any) => [a.id, `${a.client_cpf}::${a.credor}`])
-        );
-        const agIds = ags.map((a: any) => a.id);
-        // Chunk to avoid IN limits
-        const chunkSize = 500;
-        for (let i = 0; i < agIds.length; i += chunkSize) {
-          const slice = agIds.slice(i, i + chunkSize);
-          const { data: parcelas } = await supabase
-            .from("manual_payments")
-            .select("agreement_id, amount_paid")
-            .eq("tenant_id", tenantId)
-            .eq("status", "confirmed")
-            .gte("payment_date", startDate)
-            .lt("payment_date", endExclusiveStr)
-            .in("agreement_id", slice);
-          for (const row of (parcelas || []) as any[]) {
-            installmentsTotal += Number(row.amount_paid || 0);
-            const pair = agreementIdToPair.get(row.agreement_id);
-            if (pair) paidPairs.add(pair);
-          }
-        }
+      // SSoT: única fonte unificada (mesma fórmula do Dashboard)
+      const { data, error } = await supabase.rpc("get_operator_received_total", {
+        _operator_user_id: authUid,
+        _start_date: startDate,
+        _end_date: endInclusiveStr,
+        _credor_names: credorNames,
+      });
+      if (error) {
+        console.error("get_operator_received_total error:", error);
+        return 0;
       }
-
-      // Avoid double counting: skip quitações for (cpf, credor) already counted via parcelas
-      const quitTotal = (quitacoes || [])
-        .filter((c: any) => !paidPairs.has(`${c.cpf}::${c.credor}`))
-        .reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
-
-      return installmentsTotal + quitTotal;
+      return Number(data || 0);
     }
     case "negociado_e_recebido": {
       // 1) Acordos criados pelo operador dentro da janela
