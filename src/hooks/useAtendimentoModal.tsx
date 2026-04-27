@@ -86,6 +86,13 @@ export const AtendimentoModalProvider = ({ children }: { children: React.ReactNo
 
   // Mirror socket-derived agent state on top of the polling-derived one
   const [socketAgentOverride, setSocketAgentOverride] = useState<Partial<ThreeCPlusAgentState>>({});
+
+  // Toggle the polling backoff flag based on socket connectivity
+  useEffect(() => {
+    setRealtimeSocketConnected(socket.status === "connected");
+    return () => setRealtimeSocketConnected(false);
+  }, [socket.status]);
+
   const mergedLiveAgentState: ThreeCPlusAgentState = {
     ...liveAgentState,
     ...socketAgentOverride,
