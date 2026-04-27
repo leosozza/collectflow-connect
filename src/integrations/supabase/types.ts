@@ -5652,6 +5652,54 @@ export type Database = {
           },
         ]
       }
+      threecplus_socket_events: {
+        Row: {
+          error_message: string | null
+          event_name: string
+          external_agent_id: string | null
+          external_call_id: string | null
+          external_campaign_id: string | null
+          external_company_id: string | null
+          id: string
+          payload: Json
+          phone: string | null
+          processed_at: string | null
+          processing_status: string
+          received_at: string
+          tenant_id: string
+        }
+        Insert: {
+          error_message?: string | null
+          event_name: string
+          external_agent_id?: string | null
+          external_call_id?: string | null
+          external_campaign_id?: string | null
+          external_company_id?: string | null
+          id?: string
+          payload?: Json
+          phone?: string | null
+          processed_at?: string | null
+          processing_status?: string
+          received_at?: string
+          tenant_id: string
+        }
+        Update: {
+          error_message?: string | null
+          event_name?: string
+          external_agent_id?: string | null
+          external_call_id?: string | null
+          external_campaign_id?: string | null
+          external_company_id?: string | null
+          id?: string
+          payload?: Json
+          phone?: string | null
+          processed_at?: string | null
+          processing_status?: string
+          received_at?: string
+          tenant_id?: string
+        }
+        Relationships: []
+      }
       tipos_devedor: {
         Row: {
           created_at: string
