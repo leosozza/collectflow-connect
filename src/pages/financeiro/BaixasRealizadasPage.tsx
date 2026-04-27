@@ -85,6 +85,9 @@ const onlyDigits = (v: string) => v.replace(/\D/g, "");
 
 const BaixasRealizadasPage = () => {
   const { tenant } = useTenant();
+  const { user } = useAuth();
+  const permissions = usePermissions();
+  const canViewAll = permissions.canViewAllFinanceiro;
   const today = new Date();
 
   const [dateFrom, setDateFrom] = useState<Date | undefined>(startOfMonth(today));
