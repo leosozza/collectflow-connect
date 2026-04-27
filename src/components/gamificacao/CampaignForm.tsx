@@ -231,11 +231,25 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Data Início *</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                min="2000-01-01"
+                max={MAX_DATE}
+                required
+              />
             </div>
             <div>
               <Label>Data Fim *</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate || "2000-01-01"}
+                max={MAX_DATE}
+                required
+              />
             </div>
           </div>
 
