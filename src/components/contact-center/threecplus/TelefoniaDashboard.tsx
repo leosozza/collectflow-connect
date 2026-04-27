@@ -24,6 +24,7 @@ import AgentDetailSheet from "./AgentDetailSheet";
 import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
+import RealtimeStatusBadge from "./RealtimeStatusBadge";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 
