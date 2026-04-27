@@ -8,6 +8,8 @@ export interface OperatorGoal {
   month: number;
   target_amount: number;
   credor_id: string | null;
+  points_reward: number;
+  points_awarded: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
