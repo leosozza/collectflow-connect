@@ -300,7 +300,7 @@ export const MODULE_AVAILABLE_ACTIONS: Record<string, string[]> = {
   contact_center: ["view", "manage_admin"],
   telefonia: ["view"],
   cadastros: ["view", "manage"],
-  financeiro: ["view", "manage"],
+  financeiro: ["view", "view_all", "manage"],
   integracoes: ["view", "manage"],
   configuracoes: ["view", "manage"],
   central_empresa: ["view", "manage"],
