@@ -638,7 +638,7 @@ const ClientDetailPage = () => {
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </Button>
                             )}
-                            {agreement.status === "cancelled" && !hasActiveAgreement && (
+                            {["cancelled", "completed"].includes(agreement.status) && !hasActiveAgreement && (
                               <Button
                                 size="sm"
                                 variant="outline"
