@@ -638,7 +638,7 @@ const ClientDetailPage = () => {
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </Button>
                             )}
-                            {agreement.status === "cancelled" && !hasActiveAgreement && (
+                            {["cancelled", "completed"].includes(agreement.status) && !hasActiveAgreement && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -799,7 +799,7 @@ const ClientDetailPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Reabrir Acordo</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja reabrir este acordo? O acordo voltará ao status Vigente e os títulos serão marcados como "em acordo".
+              Tem certeza que deseja reabrir este acordo? Ele voltará ao status Vigente e os títulos serão marcados como "em acordo". Parcelas já pagas permanecem pagas — se precisar estornar pagamentos, use a opção de reabrir parcela individualmente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
