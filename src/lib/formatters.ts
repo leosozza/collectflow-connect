@@ -22,6 +22,11 @@ export const formatDate = (date: string): string => {
   return new Date(date + "T00:00:00").toLocaleDateString("pt-BR");
 };
 
+export const formatCredorName = (name?: string | null): string => {
+  if (!name) return "—";
+  return String(name).trim() || "—";
+};
+
 export const statusColors: Record<string, string> = {
   pendente: "bg-warning/10 text-warning border-warning/30",
   pago: "bg-success/10 text-success border-success/30",

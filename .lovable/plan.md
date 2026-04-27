@@ -1,28 +1,53 @@
-## Problema
+## Problema encontrado
 
-No card "Total Recebido" aparece `+744911,83%` vs mês anterior. Isso **não é** problema de casas decimais (já está em 2 casas). É uma variação percentual real e gigantesca, causada porque o mês anterior teve um valor recebido muito baixo (próximo de zero), tornando o cálculo `(atual - anterior) / anterior * 100` um número absurdo.
+A página não está abrindo por erros de build no frontend. Encontrei dois problemas objetivos:
 
-Quando a base de comparação é minúscula, qualquer crescimento vira milhares de %.
-
-## Solução proposta
-
-Aplicar formatação inteligente no badge de variação percentual em `src/components/dashboard/TotalRecebidoCard.tsx`:
-
-1. **Limite de exibição**: quando `|diffPct| >= 999`, exibir `+999%+` (ou `-999%+`) em vez do número absurdo, evitando poluir o card.
-2. **Compactar números grandes**: entre 100% e 999%, exibir sem casas decimais (ex.: `+450%`).
-3. **Manter 2 casas decimais** apenas para variações abaixo de 100% (ex.: `+12,34%`), que é o caso útil de comparação.
-4. **Tooltip opcional**: ao passar o mouse no badge, mostrar o valor real completo + o total do mês anterior, para o usuário entender a base de comparação.
-
-### Regra de formatação
+1. `src/pages/financeiro/BaixasRealizadasPage.tsx` tem JSX duplicado após o `export default`, nas linhas finais. Isso gera erro de sintaxe:
 
 ```text
-|pct| < 100   → "+12,34%"
-100 ≤ |pct| < 1000 → "+450%"
-|pct| ≥ 1000  → "+999%+"  (com tooltip mostrando real)
+Expression expected
+Unterminated regexp literal
+File: src/pages/financeiro/BaixasRealizadasPage.tsx
 ```
 
-## Arquivo afetado
+2. `src/lib/formatters.ts` não exporta `formatCredorName`, mas essa função é importada por:
 
-- `src/components/dashboard/TotalRecebidoCard.tsx` — apenas o trecho de renderização do `diffPct`.
+```text
+src/components/acordos/AgreementsList.tsx
+src/pages/ClientDetailPage.tsx
+```
 
-Nenhuma mudança em queries, RPCs ou banco.
+Isso gera o erro:
+
+```text
+The requested module '/src/lib/formatters.ts' does not provide an export named 'formatCredorName'
+```
+
+## Correção proposta
+
+1. Remover o bloco duplicado no final de `BaixasRealizadasPage.tsx`, deixando apenas um fechamento correto do componente e um único:
+
+```ts
+export default BaixasRealizadasPage;
+```
+
+2. Adicionar em `src/lib/formatters.ts` a função exportada que já é esperada pelo restante do app:
+
+```ts
+export const formatCredorName = (name?: string | null): string => {
+  if (!name) return "—";
+  return String(name).trim() || "—";
+};
+```
+
+3. Após isso, rodar uma verificação de build/TypeScript para confirmar se não há outro erro bloqueando a abertura.
+
+## O que não será alterado
+
+- Não vou alterar regras de negócio.
+- Não vou alterar dados, banco, filtros, dashboard ou permissões.
+- Não vou mexer no layout dos KPIs agora; primeiro vamos recuperar a abertura do sistema.
+
+## Resultado esperado
+
+O app volta a carregar normalmente. Depois de estabilizar a abertura da página, seguimos com o ajuste visual do Dashboard.
