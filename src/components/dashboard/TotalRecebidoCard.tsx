@@ -196,7 +196,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
               ) : (
                 <TrendingDown className="w-3 h-3" />
               )}
-              {`${isPositive ? "+" : ""}${diffPct.toFixed(0)}%`}
+              {`${isPositive ? "+" : ""}${diffPct.toFixed(2).replace(".", ",")}%`}
               <span className="text-muted-foreground font-normal">vs mês anterior</span>
             </span>
           ) : (
