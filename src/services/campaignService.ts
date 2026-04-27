@@ -269,15 +269,25 @@ export const recalculateCampaignScores = async (
 
   if (!participants || participants.length === 0) return { updated: 0 };
 
+  // Resolve auth.uid for each operator (profiles.id != auth.uid in many tenants)
+  const operatorIds = (participants as any[]).map((p) => p.operator_id);
+  const { data: profilesData } = await supabase
+    .from("profiles")
+    .select("id, user_id")
+    .in("id", operatorIds);
+  const authUidMap = new Map<string, string>(
+    (profilesData || []).map((p: any) => [p.id, p.user_id || p.id])
+  );
+
   let updated = 0;
   for (const p of participants as any[]) {
     const operatorId = p.operator_id as string;
+    const authUid = authUidMap.get(operatorId) || operatorId;
     const score = await computeCampaignScore({
       metric,
       tenantId,
       profileId: operatorId,
-      // In this project profile.id == auth.uid for operators
-      authUid: operatorId,
+      authUid,
       startDate,
       endExclusiveStr,
       credorNames,
@@ -307,16 +317,60 @@ async function computeCampaignScore(params: {
 
   switch (metric) {
     case "maior_valor_recebido": {
+      // Source A: full quitações on clients (assigned to operator profile)
       let q = supabase
         .from("clients")
-        .select("valor_pago")
+        .select("cpf, credor, valor_pago")
         .eq("tenant_id", tenantId)
         .eq("operator_id", profileId)
         .gte("data_quitacao", startDate)
         .lt("data_quitacao", endExclusiveStr);
       if (credorNames) q = q.in("credor", credorNames);
-      const { data } = await q;
-      return (data || []).reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
+      const { data: quitacoes } = await q;
+
+      // Source B: installment payments via manual_payments confirmed in window,
+      // attributed to the operator who created the agreement (auth.uid)
+      let aq = supabase
+        .from("agreements")
+        .select("id, client_cpf, credor")
+        .eq("tenant_id", tenantId)
+        .eq("created_by", authUid);
+      if (credorNames) aq = aq.in("credor", credorNames);
+      const { data: ags } = await aq;
+
+      let installmentsTotal = 0;
+      const paidPairs = new Set<string>(); // "cpf::credor" with installments in window
+      if (ags && ags.length > 0) {
+        const agreementIdToPair = new Map<string, string>(
+          ags.map((a: any) => [a.id, `${a.client_cpf}::${a.credor}`])
+        );
+        const agIds = ags.map((a: any) => a.id);
+        // Chunk to avoid IN limits
+        const chunkSize = 500;
+        for (let i = 0; i < agIds.length; i += chunkSize) {
+          const slice = agIds.slice(i, i + chunkSize);
+          const { data: parcelas } = await supabase
+            .from("manual_payments")
+            .select("agreement_id, amount_paid")
+            .eq("tenant_id", tenantId)
+            .eq("status", "confirmed")
+            .gte("payment_date", startDate)
+            .lt("payment_date", endExclusiveStr)
+            .in("agreement_id", slice);
+          for (const row of (parcelas || []) as any[]) {
+            installmentsTotal += Number(row.amount_paid || 0);
+            const pair = agreementIdToPair.get(row.agreement_id);
+            if (pair) paidPairs.add(pair);
+          }
+        }
+      }
+
+      // Avoid double counting: skip quitações for (cpf, credor) already counted via parcelas
+      const quitTotal = (quitacoes || [])
+        .filter((c: any) => !paidPairs.has(`${c.cpf}::${c.credor}`))
+        .reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
+
+      return installmentsTotal + quitTotal;
     }
     case "negociado_e_recebido": {
       // 1) Acordos criados pelo operador dentro da janela
