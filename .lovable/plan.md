@@ -1,47 +1,28 @@
-## Objetivo
+## Problema
 
-Fazer as **linhas do card "Total Recebido"** aparecerem (mês atual em área azul + mês anterior pontilhada cinza), batendo com o número grande do KPI.
+No card "Total Recebido" aparece `+744911,83%` vs mês anterior. Isso **não é** problema de casas decimais (já está em 2 casas). É uma variação percentual real e gigantesca, causada porque o mês anterior teve um valor recebido muito baixo (próximo de zero), tornando o cálculo `(atual - anterior) / anterior * 100` um número absurdo.
 
-## Causa-raiz confirmada
+Quando a base de comparação é minúscula, qualquer crescimento vira milhares de %.
 
-O componente `TotalRecebidoCard.tsx` consulta apenas 2 fontes:
-- `manual_payments` com status **`approved`** (deveria ser `confirmed` OU `approved`)
-- `portal_payments` com status `paid`
+## Solução proposta
 
-A RPC oficial `get_dashboard_stats` (que produz o KPI grande) usa **3 fontes**, incluindo **`negociarie_cobrancas`** com status `pago` — que o card ignora.
+Aplicar formatação inteligente no badge de variação percentual em `src/components/dashboard/TotalRecebidoCard.tsx`:
 
-Validação no banco confirmou:
-- `manual_payments approved` no mês atual + anterior: **0 registros**
-- `portal_payments paid`: **0 registros**
-- `negociarie_cobrancas pago` (ignorada pelo card): **74 pagamentos = R$ 17.410,05** ← toda a receita
+1. **Limite de exibição**: quando `|diffPct| >= 999`, exibir `+999%+` (ou `-999%+`) em vez do número absurdo, evitando poluir o card.
+2. **Compactar números grandes**: entre 100% e 999%, exibir sem casas decimais (ex.: `+450%`).
+3. **Manter 2 casas decimais** apenas para variações abaixo de 100% (ex.: `+12,34%`), que é o caso útil de comparação.
+4. **Tooltip opcional**: ao passar o mouse no badge, mostrar o valor real completo + o total do mês anterior, para o usuário entender a base de comparação.
 
-Por isso o KPI mostra valor mas as linhas ficam zeradas.
+### Regra de formatação
 
-## Mudanças
+```text
+|pct| < 100   → "+12,34%"
+100 ≤ |pct| < 1000 → "+450%"
+|pct| ≥ 1000  → "+999%+"  (com tooltip mostrando real)
+```
 
-### 1. `src/components/dashboard/TotalRecebidoCard.tsx`
+## Arquivo afetado
 
-Refatorar a função `fetchDailyTotals` para incluir as 3 fontes alinhadas com a RPC oficial:
+- `src/components/dashboard/TotalRecebidoCard.tsx` — apenas o trecho de renderização do `diffPct`.
 
-- Trocar `.eq("status", "approved")` por `.in("status", ["confirmed", "approved"])` em `manual_payments`.
-- Manter a query atual de `portal_payments`.
-- **Adicionar nova query** em `negociarie_cobrancas`:
-  - `select("valor_pago, data_pagamento, status, tenant_id")`
-  - `.eq("tenant_id", tenantId)` + `.eq("status", "pago")`
-  - intervalo via `data_pagamento` (mesma janela do mês)
-  - somar `valor_pago` no bucket do dia (`new Date(data_pagamento).getDate()`)
-
-Resultado: o gráfico passa a refletir exatamente as mesmas fontes do KPI, e os 74 pagamentos da Negociarie aparecem distribuídos por dia.
-
-### 2. RPC `get_dashboard_recebido_diario` (próxima etapa)
-
-A versão definitiva ideal seria criar uma RPC SQL que faz a mesma união em backend (igual ao padrão de `get_dashboard_stats`), retornando `[{period, day, total}]` para mês atual e anterior. Isso garante consistência permanente e respeita filtro de operador.
-
-**Status:** A ferramenta de migration de banco não está disponível neste turno. A correção client-side (item 1) já resolve 100% do sintoma visual e usa exatamente as mesmas tabelas/filtros da RPC oficial. Quando você quiser, abrimos um turno separado só para criar a RPC e migrar o card para chamada única.
-
-## Resultado esperado
-
-Após o ajuste, no preview/dashboard você verá:
-- Linha azul (mês atual) com pontos nos dias 25, 27 etc., onde houve recebimento.
-- Linha cinza pontilhada (mês anterior) com a distribuição diária de março.
-- O comparativo "+X% vs mês anterior" passa a calcular corretamente.
+Nenhuma mudança em queries, RPCs ou banco.

@@ -185,21 +185,35 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
           <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
             {formatCurrency(totalRecebido)}
           </p>
-          {diffPct !== null ? (
-            <span
-              className={`inline-flex items-center gap-1 text-xs font-semibold ${
-                isPositive ? "text-emerald-600" : "text-red-600"
-              }`}
-            >
-              {isPositive ? (
-                <TrendingUp className="w-3 h-3" />
-              ) : (
-                <TrendingDown className="w-3 h-3" />
-              )}
-              {`${isPositive ? "+" : ""}${diffPct.toFixed(2).replace(".", ",")}%`}
-              <span className="text-muted-foreground font-normal">vs mês anterior</span>
-            </span>
-          ) : (
+          {diffPct !== null ? (() => {
+            const abs = Math.abs(diffPct);
+            const sign = isPositive ? "+" : "-";
+            let label: string;
+            if (abs >= 1000) {
+              label = `${sign}999%+`;
+            } else if (abs >= 100) {
+              label = `${sign}${Math.round(abs)}%`;
+            } else {
+              label = `${sign}${abs.toFixed(2).replace(".", ",")}%`;
+            }
+            const tooltip = `Variação real: ${diffPct.toFixed(2).replace(".", ",")}% • Mês anterior: ${formatCurrency(prevMonthTotal)}`;
+            return (
+              <span
+                title={tooltip}
+                className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                  isPositive ? "text-emerald-600" : "text-red-600"
+                }`}
+              >
+                {isPositive ? (
+                  <TrendingUp className="w-3 h-3" />
+                ) : (
+                  <TrendingDown className="w-3 h-3" />
+                )}
+                {label}
+                <span className="text-muted-foreground font-normal">vs mês anterior</span>
+              </span>
+            );
+          })() : (
             <span className="text-xs text-muted-foreground">— vs mês anterior</span>
           )}
         </div>
