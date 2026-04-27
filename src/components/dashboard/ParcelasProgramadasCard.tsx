@@ -33,41 +33,69 @@ export default function ParcelasProgramadasCard({
 }: Props) {
   const isToday = format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
+  const totalDia = vencimentos.reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);
+  const totalRecebido = vencimentos
+    .filter((v) => v.effective_status === "paid")
+    .reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);
+  const qtdPagas = vencimentos.filter((v) => v.effective_status === "paid").length;
+  const qtdAndamento = vencimentos.filter(
+    (v) => v.effective_status !== "paid" && v.effective_status !== "overdue",
+  ).length;
+
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <CalendarClock className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Parcelas Programadas</h2>
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Visão geral das parcelas do dia
-          </p>
+      <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <CalendarClock className="w-4 h-4 text-primary shrink-0" />
+          <h2 className="text-sm font-semibold text-foreground truncate">Parcelas Programadas</h2>
         </div>
-        <Link
-          to="/acordos"
-          className="text-xs font-medium text-primary hover:underline"
-        >
-          Ver todas
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* A receber */}
+          <div className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-blue-500/10">
+            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded bg-blue-600 text-white text-[10px] font-bold tabular-nums">
+              {qtdAndamento}
+            </span>
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
+                A receber
+              </span>
+              <span className="text-xs font-bold text-blue-700 tabular-nums">
+                {formatCurrency(totalDia)}
+              </span>
+            </div>
+          </div>
+          {/* Recebido */}
+          <div className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-success/15">
+            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded bg-success text-success-foreground text-[10px] font-bold tabular-nums">
+              {qtdPagas}
+            </span>
+            <div className="flex flex-col items-start leading-tight">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-success">
+                Recebido
+              </span>
+              <span className="text-xs font-bold text-success tabular-nums">
+                {formatCurrency(totalRecebido)}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Banner azul HOJE */}
-      <div className="px-3 pb-3 shrink-0">
-        <div className="flex items-center justify-between bg-blue-600 hover:bg-blue-700 transition-colors rounded-xl px-2 py-1.5">
+      {/* Banner data centralizado */}
+      <div className="px-3 pb-3 shrink-0 flex items-center justify-center">
+        <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-md px-0.5 py-0.5 gap-0">
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-white hover:bg-white/20 hover:text-white"
+            className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(-1)}
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3 h-3" />
           </Button>
           <Popover>
             <PopoverTrigger asChild>
-              <button className="flex-1 text-sm font-bold text-white tracking-wide text-center py-1 transition-colors cursor-pointer">
+              <button className="text-[10px] font-bold text-white tracking-wide text-center px-1.5 py-0 cursor-pointer min-w-[68px]">
                 {isToday ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
               </button>
             </PopoverTrigger>
@@ -83,10 +111,10 @@ export default function ParcelasProgramadasCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-white hover:bg-white/20 hover:text-white"
+            className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(1)}
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3 h-3" />
           </Button>
         </div>
       </div>

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { extractList } from "@/lib/threecplusUtils";
 import { toast } from "sonner";
+import { useTenant } from "@/hooks/useTenant";
 
 type SyncMatched = { name: string; email: string; extension: string; previous: string | null };
 type SyncResult = {
@@ -18,6 +19,10 @@ type SyncResult = {
 };
 
 const ThreeCPlusTab = () => {
+  const { tenant } = useTenant();
+  const settings = (tenant?.settings as Record<string, any>) || {};
+  const domain = settings.threecplus_domain || "";
+  const apiToken = settings.threecplus_api_token || "";
   const [webhookActive, setWebhookActive] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
@@ -46,8 +51,13 @@ const ThreeCPlusTab = () => {
     addLog("info", "3CPlus usa credenciais por tenant (domínio + token)");
 
     try {
+      if (!domain?.trim() || !apiToken?.trim()) {
+        addLog("error", "Credenciais 3CPLUS não configuradas para este tenant");
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "list_agents" },
+        body: { action: "agents_status", domain: domain.trim(), api_token: apiToken.trim() },
       });
 
       if (error) {
@@ -77,8 +87,15 @@ const ThreeCPlusTab = () => {
   const handleSyncUsers = async () => {
     setSyncing(true);
     try {
+      if (!domain?.trim() || !apiToken?.trim()) {
+        toast.error("Credenciais 3CPLUS não configuradas", {
+          description: "Configure domínio e token antes de sincronizar usuários.",
+        });
+        return;
+      }
+
       const { data: tcResp, error: tcErr } = await supabase.functions.invoke("threecplus-proxy", {
-        body: { action: "list_users" },
+        body: { action: "list_users", domain: domain.trim(), api_token: apiToken.trim() },
       });
       if (tcErr) {
         toast.error("Falha ao buscar usuários da 3CPlus", { description: tcErr.message });

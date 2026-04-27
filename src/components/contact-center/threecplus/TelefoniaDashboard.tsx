@@ -25,6 +25,7 @@ import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
 import RealtimeStatusBadge from "./RealtimeStatusBadge";
+import TestConnectionButton from "./TestConnectionButton";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 
@@ -386,8 +387,12 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
   }, [profileMappings, todayDispositions, todayAgreements, cpcKeySet]);
 
   const invoke = useCallback(async (action: string, extra: Record<string, any> = {}) => {
+    if (!domain?.trim() || !apiToken?.trim()) {
+      throw new Error("Credenciais 3CPLUS não configuradas para este tenant");
+    }
+
     const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-      body: { action, domain, api_token: apiToken, ...extra },
+      body: { action, domain: domain.trim(), api_token: apiToken.trim(), ...extra },
     });
     if (error) throw error;
     // CORRECTION 7: Check success flag from proxy to detect masked 3CPlus errors
@@ -399,6 +404,15 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
 
   const fetchAll = useCallback(async () => {
     try {
+      if (!domain?.trim() || !apiToken?.trim()) {
+        setAgents([]);
+        setCampaigns([]);
+        setAgentCampaigns([]);
+        setCompanyCalls(null);
+        setLastUpdate(null);
+        return;
+      }
+
       const promises: Promise<any>[] = [
         invoke("agents_status").catch(() => []),
         invoke("company_calls").catch(() => null),
@@ -475,7 +489,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
     } finally {
       setLoading(false);
     }
-  }, [invoke, operatorAgentId, isOperatorView]);
+  }, [domain, apiToken, invoke, operatorAgentId, isOperatorView]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -1502,6 +1516,14 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             onReconnect={atendimentoCtx.socketReconnect}
           />
         </div>
+        <div className="flex items-center gap-2">
+          <TestConnectionButton
+            domain={domain}
+            apiToken={apiToken}
+            socketStatus={atendimentoCtx.socketStatus}
+            socketLastEventAt={atendimentoCtx.socketLastEventAt}
+            socketReconnect={atendimentoCtx.socketReconnect}
+          />
         <Popover>
           <PopoverTrigger asChild>
             <button className="inline-flex items-center gap-1.5 cursor-pointer">
@@ -1550,6 +1572,7 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             </Button>
           </PopoverContent>
         </Popover>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
