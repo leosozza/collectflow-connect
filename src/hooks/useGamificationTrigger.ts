@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
  * client-side, garante consistência multi-tenant e usa a mesma SSoT do Ranking
  * e do Dashboard.
  *
- * Em paralelo, a Edge Function `gamification-recalc-tick` (cron */30 min)
+ * Em paralelo, a Edge Function `gamification-recalc-tick` (cron a cada 30 min)
  * recalcula automaticamente todos os operadores de tenants com gamificação
  * habilitada — ou seja, o ranking se mantém correto mesmo para operadores que
  * nunca abrem a tela.
