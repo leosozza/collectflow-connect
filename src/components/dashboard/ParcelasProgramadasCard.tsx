@@ -42,9 +42,6 @@ export default function ParcelasProgramadasCard({
             <CalendarClock className="w-4 h-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Parcelas Programadas</h2>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Visão geral das parcelas do dia
-          </p>
         </div>
       </div>
 
