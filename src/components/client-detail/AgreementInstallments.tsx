@@ -406,6 +406,65 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     }
   };
 
+  const handleRefundCobranca = async (inst: any, idx: number) => {
+    if (!inst.cobranca?.id) return;
+    const ok = window.confirm(
+      "Tem certeza que deseja estornar este pagamento?\n\nO valor sairá das métricas do operador e do dashboard. Esta ação ficará registrada na timeline do cliente."
+    );
+    if (!ok) return;
+    setUnconfirmingIdx(idx);
+    try {
+      const { error } = await supabase
+        .from("negociarie_cobrancas" as any)
+        .update({
+          status: "estornado",
+          valor_pago: 0,
+          data_pagamento: null,
+        })
+        .eq("id", inst.cobranca.id);
+      if (error) throw error;
+
+      // Audit event in client timeline
+      try {
+        await supabase.from("client_events").insert({
+          tenant_id: tenantId,
+          client_cpf: cpf,
+          event_source: "operator",
+          event_type: "payment_refunded",
+          metadata: {
+            agreement_id: agreementId,
+            cobranca_id: inst.cobranca.id,
+            installment_key: inst.customKey,
+            valor_estornado: Number(inst.cobranca.valor_pago || inst.cobranca.valor || 0),
+            refunded_by: profile?.id,
+          },
+        } as any);
+      } catch (e) {
+        // non-blocking
+      }
+
+      try {
+        await logAction({
+          action: "refund_payment",
+          entity_type: "agreement",
+          entity_id: agreementId,
+          details: { cobranca_id: inst.cobranca.id, installment_key: inst.customKey },
+        });
+      } catch {}
+
+      toast({ title: "Pagamento estornado com sucesso." });
+      queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
+      refetchCobrancas();
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao estornar pagamento", description: err.message, variant: "destructive" });
+    } finally {
+      setUnconfirmingIdx(null);
+    }
+  };
+
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
