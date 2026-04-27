@@ -6904,6 +6904,15 @@ export type Database = {
       }
       get_my_tenant_id: { Args: never; Returns: string }
       get_my_tenant_role: { Args: never; Returns: string }
+      get_operator_negotiated_and_received: {
+        Args: {
+          _credor_names?: string[]
+          _end_date: string
+          _operator_user_id: string
+          _start_date: string
+        }
+        Returns: number
+      }
       get_operator_received_total: {
         Args: {
           _credor_names?: string[]
@@ -7213,6 +7222,10 @@ export type Database = {
           phone_e164: string
           priority: number
         }[]
+      }
+      seed_default_achievement_templates: {
+        Args: { _tenant_id: string }
+        Returns: undefined
       }
       seed_default_permission_profiles: {
         Args: { _tenant_id: string }
