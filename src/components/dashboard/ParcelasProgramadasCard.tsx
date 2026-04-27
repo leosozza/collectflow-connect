@@ -66,30 +66,26 @@ export default function ParcelasProgramadasCard({
         </div>
       </div>
 
-      {/* Banner data + total + contadores */}
+      {/* Banner data + contadores */}
       {(() => {
         const pagas = vencimentos.filter((v) => v.effective_status === "paid").length;
         const andamento = vencimentos.filter(
           (v) => v.effective_status !== "paid" && v.effective_status !== "overdue"
         ).length;
-        const totalDia = vencimentos.reduce(
-          (acc, v) => acc + Number(v.valor_parcela || 0),
-          0,
-        );
         return (
           <div className="px-3 pb-3 shrink-0 flex items-center gap-2 relative">
-            <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
+            <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-md px-0.5 py-0.5 gap-0">
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-6 w-6 text-white hover:bg-white/20 hover:text-white"
+                className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
                 onClick={() => onNavigateDate(-1)}
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-3 h-3" />
               </Button>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="text-xs font-bold text-white tracking-wide text-center px-2 py-0.5 cursor-pointer min-w-[88px]">
+                  <button className="text-[10px] font-bold text-white tracking-wide text-center px-1.5 py-0 cursor-pointer min-w-[68px]">
                     {isToday ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
                   </button>
                 </PopoverTrigger>
@@ -105,26 +101,17 @@ export default function ParcelasProgramadasCard({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-6 w-6 text-white hover:bg-white/20 hover:text-white"
+                className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
                 onClick={() => onNavigateDate(1)}
               >
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-3 h-3" />
               </Button>
             </div>
 
-            {/* Valor total a receber no dia */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex flex-col items-center leading-tight pointer-events-none">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                A receber
-              </span>
-              <span className="text-sm font-bold text-foreground tabular-nums">
-                {formatCurrency(totalDia)}
-              </span>
-            </div>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
               {/* Quadradinho: Andamento */}
               <div
-                className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-blue-500/15 text-blue-600 text-xs font-bold tabular-nums"
+                className="flex items-center justify-center h-7 min-w-[28px] px-2 rounded-md bg-blue-500/15 text-blue-600 text-xs font-bold tabular-nums"
                 title={`${andamento} em andamento`}
               >
                 {andamento}
@@ -132,7 +119,7 @@ export default function ParcelasProgramadasCard({
 
               {/* Quadradinho: Pagas */}
               <div
-                className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-success text-success-foreground text-xs font-bold tabular-nums"
+                className="flex items-center justify-center h-7 min-w-[28px] px-2 rounded-md bg-success text-success-foreground text-xs font-bold tabular-nums"
                 title={`${pagas} pagas`}
               >
                 {pagas}
