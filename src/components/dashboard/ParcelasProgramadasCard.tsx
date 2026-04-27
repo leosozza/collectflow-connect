@@ -33,14 +33,35 @@ export default function ParcelasProgramadasCard({
 }: Props) {
   const isToday = format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
+  const totalDia = vencimentos.reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);
+  const totalRecebido = vencimentos
+    .filter((v) => v.effective_status === "paid")
+    .reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);
+
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <CalendarClock className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Parcelas Programadas</h2>
+      <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <CalendarClock className="w-4 h-4 text-primary shrink-0" />
+          <h2 className="text-sm font-semibold text-foreground truncate">Parcelas Programadas</h2>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-col items-end leading-tight rounded-md px-2 py-1 bg-blue-500/10">
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
+              A receber
+            </span>
+            <span className="text-xs font-bold text-blue-700 tabular-nums">
+              {formatCurrency(totalDia)}
+            </span>
+          </div>
+          <div className="flex flex-col items-end leading-tight rounded-md px-2 py-1 bg-success/15">
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-success">
+              Recebido
+            </span>
+            <span className="text-xs font-bold text-success tabular-nums">
+              {formatCurrency(totalRecebido)}
+            </span>
           </div>
         </div>
       </div>
