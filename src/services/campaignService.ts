@@ -425,16 +425,18 @@ async function computeCampaignScore(params: {
       return (data || []).reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
     }
     default: {
-      let q = supabase
-        .from("clients")
-        .select("valor_pago")
-        .eq("tenant_id", tenantId)
-        .eq("operator_id", profileId)
-        .gte("data_quitacao", startDate)
-        .lt("data_quitacao", endExclusiveStr);
-      if (credorNames) q = q.in("credor", credorNames);
-      const { data } = await q;
-      return (data || []).reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
+      // SSoT unificada: mesma fórmula do Dashboard / Ranking
+      const { data, error } = await supabase.rpc("get_operator_received_total", {
+        _operator_user_id: authUid,
+        _start_date: startDate,
+        _end_date: endInclusiveStr,
+        _credor_names: credorNames,
+      });
+      if (error) {
+        console.error("get_operator_received_total (default) error:", error);
+        return 0;
+      }
+      return Number(data || 0);
     }
   }
 }
