@@ -25,6 +25,7 @@ import CampaignOverview from "./CampaignOverview";
 import ScriptPanel from "./ScriptPanel";
 import OperatorCallHistory from "./OperatorCallHistory";
 import RealtimeStatusBadge from "./RealtimeStatusBadge";
+import TestConnectionButton from "./TestConnectionButton";
 import { useClientByPhone } from "@/hooks/useClientByPhone";
 
 
