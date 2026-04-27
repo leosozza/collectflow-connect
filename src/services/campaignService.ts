@@ -11,11 +11,22 @@ export interface Campaign {
   end_date: string;
   prize_description: string | null;
   status: string;
+  points_first?: number;
+  points_second?: number;
+  points_third?: number;
   created_by: string;
   created_at: string;
   updated_at: string;
   credores?: { credor_id: string; razao_social?: string }[];
 }
+
+export const closeCampaignAndAward = async (campaignId: string) => {
+  const { data, error } = await supabase.rpc("close_campaign_and_award_points", {
+    _campaign_id: campaignId,
+  });
+  if (error) throw error;
+  return data;
+};
 
 export interface CampaignParticipant {
   id: string;

@@ -38,6 +38,9 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
   const [endDate, setEndDate] = useState(campaign?.end_date || "");
   const [prize, setPrize] = useState(campaign?.prize_description || "");
   const [status, setStatus] = useState(campaign?.status || "ativa");
+  const [pointsFirst, setPointsFirst] = useState<number>(campaign?.points_first ?? 0);
+  const [pointsSecond, setPointsSecond] = useState<number>(campaign?.points_second ?? 0);
+  const [pointsThird, setPointsThird] = useState<number>(campaign?.points_third ?? 0);
 
   const [selectedCredores, setSelectedCredores] = useState<string[]>([]);
   const [participantMode, setParticipantMode] = useState<"equipe" | "individual">("individual");
@@ -177,6 +180,9 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
         end_date: endDate,
         prize_description: prize || null,
         status,
+        points_first: pointsFirst,
+        points_second: pointsSecond,
+        points_third: pointsThird,
       },
       selectedCredores,
       participants
