@@ -1518,6 +1518,8 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
         </div>
         <div className="flex items-center gap-2">
           <TestConnectionButton
+            domain={domain}
+            apiToken={apiToken}
             socketStatus={atendimentoCtx.socketStatus}
             socketLastEventAt={atendimentoCtx.socketLastEventAt}
             socketReconnect={atendimentoCtx.socketReconnect}
