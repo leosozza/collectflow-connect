@@ -1,6 +1,6 @@
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { useEffect } from "react";
-import { Target, TrendingUp } from "lucide-react";
+import { Target } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 
 interface MetaGaugeCardProps {
