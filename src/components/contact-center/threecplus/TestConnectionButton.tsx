@@ -47,13 +47,27 @@ export const TestConnectionButton = ({
         const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
           body: { action: "list_agents" },
         });
+
+        const combinedMsg = [error?.message, data?.error, data?.detail]
+          .filter(Boolean)
+          .join(" — ");
+
+        // Missing credentials → tratar como aviso de configuração, não como erro
+        if (combinedMsg && /domain and api_token are required/i.test(combinedMsg)) {
+          return {
+            state: "warn",
+            message:
+              "Credenciais 3CPLUS não configuradas para este tenant. Configure domínio e API token em Configurações › Integrações › 3CPlus.",
+          };
+        }
+
         if (error) {
           return { state: "error", message: `Falha REST: ${error.message}` };
         }
         if (data?.error) {
           return {
             state: "warn",
-            message: `Edge function acessível, mas API retornou: ${String(data.error).slice(0, 160)}`,
+            message: `Edge function acessível, mas API retornou: ${String(data.error).slice(0, 200)}`,
           };
         }
         return { state: "ok", message: "Edge function threecplus-proxy respondeu com sucesso." };
