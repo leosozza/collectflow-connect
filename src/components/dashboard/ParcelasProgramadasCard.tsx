@@ -90,6 +90,16 @@ export default function ParcelasProgramadasCard({
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </div>
+
+            {/* Valor total a receber no dia */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 flex flex-col items-center leading-tight pointer-events-none">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                A receber
+              </span>
+              <span className="text-sm font-bold text-foreground tabular-nums">
+                {formatCurrency(totalDia)}
+              </span>
+            </div>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
               {/* Quadradinho: Andamento */}
               <div
