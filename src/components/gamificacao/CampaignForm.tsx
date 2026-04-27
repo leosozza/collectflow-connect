@@ -120,6 +120,25 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate dates: parseable, sane year range, end >= start
+    const startTs = Date.parse(startDate);
+    const endTs = Date.parse(endDate);
+    if (
+      isNaN(startTs) ||
+      isNaN(endTs) ||
+      new Date(startTs).getFullYear() < 2000 ||
+      new Date(startTs).getFullYear() > 2100 ||
+      new Date(endTs).getFullYear() < 2000 ||
+      new Date(endTs).getFullYear() > 2100
+    ) {
+      toast.error("Data inválida. Use uma data entre 2000 e 2100.");
+      return;
+    }
+    if (endTs < startTs) {
+      toast.error("A data de fim deve ser igual ou posterior à data de início.");
+      return;
+    }
+
     let participants: { operator_id: string; source_type: string; source_id: string | null }[] = [];
 
     if (participantMode === "equipe" && selectedEquipes.length > 0) {
