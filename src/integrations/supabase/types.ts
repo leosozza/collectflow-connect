@@ -6862,6 +6862,15 @@ export type Database = {
       }
       get_my_tenant_id: { Args: never; Returns: string }
       get_my_tenant_role: { Args: never; Returns: string }
+      get_operator_received_total: {
+        Args: {
+          _credor_names?: string[]
+          _end_date: string
+          _operator_user_id: string
+          _start_date: string
+        }
+        Returns: number
+      }
       get_other_active_conversations: {
         Args: {
           _client_id: string
