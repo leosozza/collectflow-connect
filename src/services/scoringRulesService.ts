@@ -70,7 +70,7 @@ export const fetchScoringRules = async (): Promise<ScoringRule[]> => {
 
 export const updateScoringRule = async (
   id: string,
-  patch: Partial<Pick<ScoringRule, "label" | "points" | "unit_size" | "enabled">>,
+  patch: Partial<Pick<ScoringRule, "points" | "unit_size" | "enabled">>,
 ): Promise<void> => {
   const { error } = await supabase
     .from("gamification_scoring_rules")
