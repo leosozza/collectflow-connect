@@ -823,7 +823,7 @@ export const reopenAgreement = async (
 
     const { error } = await supabase
       .from("agreements")
-      .update({ status: "pending", cancellation_type: null } as any)
+      .update({ status: "approved", cancellation_type: null } as any)
       .eq("id", id);
     if (error) throw error;
 
