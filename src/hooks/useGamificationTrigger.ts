@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { useGamification } from "@/hooks/useGamification";
-import { fetchMyGoal } from "@/services/goalService";
+import { fetchMyGoal, awardGoalIfReached } from "@/services/goalService";
 
 export const useGamificationTrigger = () => {
   const { user, profile } = useAuth();
@@ -66,6 +66,17 @@ export const useGamificationTrigger = () => {
 
       const goal = await fetchMyGoal(year, month);
       const isGoalReached = goal ? totalReceived >= goal.target_amount : false;
+
+      // Premia automaticamente os pontos da meta (se batida e ainda não premiada)
+      if (isGoalReached) {
+        await awardGoalIfReached({
+          operator_id: profileId,
+          tenant_id: tenantId,
+          year,
+          month,
+          total_received: totalReceived,
+        });
+      }
 
       // Grant achievements (achievements logic only — does NOT write to operator_points)
       await checkAndGrantAchievements({
