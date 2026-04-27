@@ -34,6 +34,7 @@ export const METRIC_OPTIONS = [
   { value: "menor_taxa_quebra", label: "Menor taxa de quebra" },
   { value: "menor_valor_quebra", label: "Menor valor de quebra" },
   { value: "maior_valor_recebido", label: "Maior valor recebido" },
+  { value: "negociado_e_recebido", label: "Negociado e recebido na janela" },
   { value: "maior_valor_promessas", label: "Maior valor de promessas" },
   { value: "maior_qtd_acordos", label: "Maior quantidade de acordos" },
 ];
