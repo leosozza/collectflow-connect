@@ -193,7 +193,7 @@ const MetaGaugeCard = ({
         </div>
       </div>
 
-      {/* Meta / Realizado */}
+      {/* Meta */}
       <div className="flex-1 flex flex-col gap-2 min-w-0">
         <div className="rounded-lg border border-primary/20 bg-muted/30 px-3 py-2">
           <div className="flex items-center gap-1.5 mb-0.5">
@@ -204,18 +204,6 @@ const MetaGaugeCard = ({
           </div>
           <p className="text-sm font-bold text-foreground tabular-nums truncate">
             {formatCurrency(goal)}
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-success/20 bg-muted/30 px-3 py-2">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <TrendingUp className="w-3 h-3 text-success" />
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
-              Realizado
-            </p>
-          </div>
-          <p className="text-sm font-bold text-success tabular-nums truncate">
-            {formatCurrency(received)}
           </p>
         </div>
 
