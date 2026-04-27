@@ -94,6 +94,19 @@ const CampaignsManagementTab = () => {
               <div key={c.id} className="relative group">
                 <CampaignCard campaign={c} currentUserId={profile?.id} />
                 <div className="absolute top-2 right-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 text-amber-500"
+                    title="Encerrar e premiar vencedores"
+                    onClick={() => {
+                      if (confirm("Encerrar a campanha e premiar o top 3 com pontos?")) {
+                        closeMut.mutate(c.id);
+                      }
+                    }}
+                  >
+                    <Trophy className="w-3 h-3" />
+                  </Button>
                   <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditing(c); setFormOpen(true); }}>
                     <Pencil className="w-3 h-3" />
                   </Button>
