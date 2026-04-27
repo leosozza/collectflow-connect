@@ -61,8 +61,8 @@ export default function ParcelasProgramadasCard({
           (v) => v.effective_status !== "paid" && v.effective_status !== "overdue"
         ).length;
         return (
-          <div className="px-3 pb-3 shrink-0 flex items-center justify-center gap-2">
-            <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
+          <div className="px-3 pb-3 shrink-0 flex items-center gap-2 relative">
+            <div className="mx-auto inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-lg px-1 py-1 gap-0.5">
               <Button
                 size="icon"
                 variant="ghost"
@@ -95,21 +95,22 @@ export default function ParcelasProgramadasCard({
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </div>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              {/* Quadradinho: Andamento */}
+              <div
+                className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-blue-500/15 text-blue-600 text-xs font-bold tabular-nums"
+                title={`${andamento} em andamento`}
+              >
+                {andamento}
+              </div>
 
-            {/* Quadradinho: Andamento */}
-            <div
-              className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-blue-500/15 text-blue-600 text-xs font-bold tabular-nums"
-              title={`${andamento} em andamento`}
-            >
-              {andamento}
-            </div>
-
-            {/* Quadradinho: Pagas */}
-            <div
-              className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-success text-success-foreground text-xs font-bold tabular-nums"
-              title={`${pagas} pagas`}
-            >
-              {pagas}
+              {/* Quadradinho: Pagas */}
+              <div
+                className="flex items-center justify-center h-8 min-w-[32px] px-2 rounded-md bg-success text-success-foreground text-xs font-bold tabular-nums"
+                title={`${pagas} pagas`}
+              >
+                {pagas}
+              </div>
             </div>
           </div>
         );
