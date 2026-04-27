@@ -34,6 +34,7 @@ export const METRIC_OPTIONS = [
   { value: "menor_taxa_quebra", label: "Menor taxa de quebra" },
   { value: "menor_valor_quebra", label: "Menor valor de quebra" },
   { value: "maior_valor_recebido", label: "Maior valor recebido" },
+  { value: "negociado_e_recebido", label: "Negociado e recebido na janela" },
   { value: "maior_valor_promessas", label: "Maior valor de promessas" },
   { value: "maior_qtd_acordos", label: "Maior quantidade de acordos" },
 ];
@@ -316,6 +317,42 @@ async function computeCampaignScore(params: {
       if (credorNames) q = q.in("credor", credorNames);
       const { data } = await q;
       return (data || []).reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
+    }
+    case "negociado_e_recebido": {
+      // 1) Acordos criados pelo operador dentro da janela
+      let aq = supabase
+        .from("agreements")
+        .select("client_cpf, credor")
+        .eq("tenant_id", tenantId)
+        .eq("created_by", authUid)
+        .neq("status", "rejected")
+        .neq("status", "cancelled")
+        .gte("created_at", startDate)
+        .lt("created_at", endExclusiveStr);
+      if (credorNames) aq = aq.in("credor", credorNames);
+      const { data: ags } = await aq;
+      if (!ags || ags.length === 0) return 0;
+
+      const cpfs = [...new Set(ags.map((a: any) => a.client_cpf).filter(Boolean))];
+      const credors = [...new Set(ags.map((a: any) => a.credor).filter(Boolean))];
+      if (cpfs.length === 0) return 0;
+
+      // 2) Pagamentos confirmados na mesma janela para esses CPFs/credores
+      let pq = supabase
+        .from("clients")
+        .select("valor_pago, cpf, credor")
+        .eq("tenant_id", tenantId)
+        .in("cpf", cpfs)
+        .gte("data_quitacao", startDate)
+        .lt("data_quitacao", endExclusiveStr);
+      if (credors.length > 0) pq = pq.in("credor", credors);
+      const { data: paid } = await pq;
+
+      // 3) Filtra apenas tuplas (cpf, credor) que têm acordo desta janela
+      const allowed = new Set(ags.map((a: any) => `${a.client_cpf}::${a.credor}`));
+      return (paid || [])
+        .filter((c: any) => allowed.has(`${c.cpf}::${c.credor}`))
+        .reduce((s: number, c: any) => s + Number(c.valor_pago || 0), 0);
     }
     case "maior_qtd_acordos": {
       let q = supabase

@@ -1,68 +1,63 @@
-## Diagnóstico
+## Objetivo
 
-A campanha "Recebidos" tem **dois problemas** combinados:
+Adicionar uma nova métrica de campanha: **"Negociado e Recebido na janela"** (`negociado_e_recebido`).
 
-### 1. Data de término inválida (`end_date = "42026-02-24"`)
-Foi salva com 5 dígitos no ano (provável digitação acidental no input de data). Isso quebra o frontend:
+Diferente de `maior_valor_recebido` (que conta qualquer pagamento na semana, mesmo de acordos antigos), essa nova métrica só pontua o operador quando o **acordo foi criado E quitado dentro da janela da campanha**, e credita quem **fechou o acordo** (`agreements.created_by`), não o dono da carteira.
+
+## Como funciona
+
+Para cada operador participante:
+1. Buscar `agreements` com `created_by = operador`, `created_at` dentro da janela `[start_date, end_date+1)` da campanha, filtro opcional por credor.
+2. Para cada acordo, somar pagamentos efetivamente recebidos (`agreement_installments.status = 'paid'` com `paid_at` também dentro da mesma janela).
+3. Score = soma dos valores pagos.
+
+Resultado: só conta dinheiro de acordos **negociados na semana E pagos na semana** pelo mesmo operador.
+
+## Mudanças
+
+### 1. UI — adicionar opção no seletor de métrica
+`src/services/campaignService.ts` → `METRIC_OPTIONS`:
+- Adicionar `{ value: "negociado_e_recebido", label: "Negociado e recebido na janela" }`
+
+### 2. Cálculo de score (2 lugares — mesma lógica)
+`src/services/campaignService.ts` → função `computeCampaignScore` (usada no botão "Recalcular Ranking")
+`src/hooks/useGamificationTrigger.ts` → função `calculateCampaignScore` (usada em tempo real após confirmação de pagamento)
+
+Adicionar novo `case "negociado_e_recebido"`:
 ```ts
-const daysLeft = differenceInDays(parseISO("42026-02-24"), new Date());
-// → daysLeft = NaN → isActive = false → badge "Encerrada"
+// 1. Acordos criados pelo operador na janela
+let aq = supabase
+  .from("agreements")
+  .select("id")
+  .eq("tenant_id", tenantId)
+  .eq("created_by", authUid)
+  .neq("status", "rejected")
+  .neq("status", "cancelled")
+  .gte("created_at", startDate)
+  .lt("created_at", endExclusiveStr);
+if (credorNames) aq = aq.in("credor", credorNames);
+const { data: ags } = await aq;
+if (!ags?.length) return 0;
+
+// 2. Parcelas pagas desses acordos dentro da mesma janela
+const ids = ags.map(a => a.id);
+const { data: paid } = await supabase
+  .from("agreement_installments")
+  .select("amount, paid_at")
+  .in("agreement_id", ids)
+  .eq("status", "paid")
+  .gte("paid_at", startDate)
+  .lt("paid_at", endExclusiveStr);
+
+return (paid || []).reduce((s, i) => s + Number(i.amount || 0), 0);
 ```
 
-### 2. Cálculo do score ignora o período da campanha
-Em `src/hooks/useGamificationTrigger.ts` (`updateCampaignScores`), a janela usada é sempre o **mês corrente** (`monthStart`/`nextMonth`), não a janela da campanha (`start_date` → `end_date`). Pior: o trigger só roda quando o operador logado faz alguma ação no front. Se um pagamento entrou via webhook (Negociarie/portal) e ninguém abriu o app depois, o score nunca é atualizado.
+(Se a coluna for `paid_amount` em vez de `amount`, ajustar — verificar no momento da implementação.)
 
-Por isso os 4 operadores aparecem com 0.
+## Notas
 
----
-
-## O que vou implementar
-
-### A) Corrigir a data da campanha "Recebidos"
-Como não há ferramenta de migration disponível agora, vou resolver isso pela própria UI: depois dos fixes abaixo, você abre a campanha em **Editar** e troca a data para `26/04/2026` (domingo). O form passará a validar e bloquear datas absurdas.
-
-### B) Validar a data no `CampaignForm.tsx`
-- Adicionar `min` (hoje) e `max` (hoje + 5 anos) no `<input type="date">` de início e fim.
-- Validação JS no submit: se `Date.parse()` for NaN ou ano > 2100, abortar com toast "Data inválida".
-- Garantir que `end_date >= start_date`.
-
-### C) Corrigir cálculo do score para respeitar a janela da campanha
-Em `src/hooks/useGamificationTrigger.ts`, dentro de `updateCampaignScores`:
-- Buscar `start_date` e `end_date` da campanha junto com `metric` e `status`.
-- Passar essa janela para `calculateCampaignScore` no lugar de `monthStart`/`nextMonth`.
-- Validar a janela; se inválida, pular a campanha (sem quebrar).
-
-### D) Botão "Recalcular Ranking" no `CampaignCard.tsx`
-- Visível para usuários com permissão de admin (mesma usada no `CampaignsManagementTab`).
-- Ao clicar, chama nova função `recalculateCampaignScores(campaignId)` em `campaignService.ts` que:
-  1. Lê a campanha (metric + janela + tenant).
-  2. Lê credores vinculados.
-  3. Para cada participante, calcula o score usando a janela `[start_date, end_date]` da campanha.
-  4. Faz `UPDATE` em `campaign_participants`.
-  5. Retorna quantos foram atualizados; toast de sucesso.
-- Após executar, invalida a query `["campaign-participants", campaignId]` para recarregar.
-
-### E) Detecção defensiva de data inválida no `CampaignCard.tsx`
-- Antes de chamar `differenceInDays`, validar que `end_date` é parseável.
-- Se não for, mostrar badge "Configuração inválida" (vermelho) em vez de "Encerrada", e logar um aviso visível para o admin "Edite a campanha para corrigir as datas".
-
----
-
-## Fluxo final que você terá
-
-1. Abre **Gamificação → Campanhas → Editar "Recebidos"**.
-2. Corrige a data de fim para **26/04/2026**. Salva. (Validação impede datas absurdas no futuro.)
-3. Badge volta para **"Ativa"**.
-4. Clica em **"Recalcular Ranking"** no card. Os valores reais da semana entram no ranking.
-5. Próximas campanhas calculam corretamente em tempo real, respeitando o `period`.
-
----
-
-## Arquivos a editar
-
-- `src/services/campaignService.ts` — adicionar `recalculateCampaignScores(campaignId)`.
-- `src/hooks/useGamificationTrigger.ts` — usar janela da campanha em `updateCampaignScores`.
-- `src/components/gamificacao/CampaignForm.tsx` — validação de data + `min`/`max`.
-- `src/components/gamificacao/CampaignCard.tsx` — botão "Recalcular Ranking" + badge defensivo.
-
-Confirma para implementar?
+- Métrica complementa `maior_valor_recebido` (esta continua existindo, sem mudança).
+- Credita o **operador que fechou o acordo** (`agreements.created_by`), conforme a regra que você descreveu.
+- Filtro de credor já é respeitado via `credorNames`.
+- Botão "Recalcular Ranking" já existente funcionará automaticamente com a nova métrica.
+- Nenhuma migração de banco é necessária — `metric` é coluna texto livre.
