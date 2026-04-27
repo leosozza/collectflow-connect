@@ -1502,6 +1502,12 @@ const TelefoniaDashboard = ({ menuButton, isOperatorView }: TelefoniaDashboardPr
             onReconnect={atendimentoCtx.socketReconnect}
           />
         </div>
+        <div className="flex items-center gap-2">
+          <TestConnectionButton
+            socketStatus={atendimentoCtx.socketStatus}
+            socketLastEventAt={atendimentoCtx.socketLastEventAt}
+            socketReconnect={atendimentoCtx.socketReconnect}
+          />
         <Popover>
           <PopoverTrigger asChild>
             <button className="inline-flex items-center gap-1.5 cursor-pointer">
