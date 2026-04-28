@@ -52,10 +52,10 @@ async function authenticate(req: Request): Promise<
   if (keyRow.credor_id) {
     const { data: credor } = await supabaseAdmin
       .from("credores")
-      .select("nome")
+      .select("razao_social, nome_fantasia")
       .eq("id", keyRow.credor_id)
       .maybeSingle();
-    credorNome = credor?.nome ?? null;
+    credorNome = credor ? (credor.nome_fantasia || credor.razao_social) : null;
   }
 
   return {

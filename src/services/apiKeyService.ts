@@ -26,14 +26,14 @@ async function sha256(text: string): Promise<string> {
 export async function fetchApiKeys(tenantId: string): Promise<ApiKey[]> {
   const { data, error } = await supabase
     .from("api_keys")
-    .select("*, credores(nome)")
+    .select("*, credores(razao_social, nome_fantasia)")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
   return ((data ?? []) as any[]).map((k) => ({
     ...k,
-    credor_nome: k.credores?.nome ?? null,
+    credor_nome: k.credores ? (k.credores.nome_fantasia || k.credores.razao_social) : null,
   })) as ApiKey[];
 }
 

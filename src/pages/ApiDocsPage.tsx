@@ -147,8 +147,8 @@ export default function ApiDocsPage() {
   useEffect(() => {
     if (tenant?.id) {
       loadKeys();
-      supabase.from("credores").select("id, nome").eq("tenant_id", tenant.id).eq("status", "ativo").order("nome")
-        .then(({ data }) => setCredores((data ?? []) as { id: string; nome: string }[]));
+      supabase.from("credores").select("id, razao_social, nome_fantasia").eq("tenant_id", tenant.id).eq("status", "ativo").order("razao_social")
+        .then(({ data }) => setCredores(((data ?? []) as any[]).map(c => ({ id: c.id, nome: c.nome_fantasia || c.razao_social }))));
     }
   }, [tenant?.id]);
 
