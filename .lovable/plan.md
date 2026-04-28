@@ -1,74 +1,106 @@
-# Correção: erro PGRST203 na Carteira + análise dos filtros
+## Objetivo
 
-## 1. Causa do erro `PGRST203` (Carteira não carrega)
+Na página **Carteira**, permitir que o operador acumule a seleção de clientes ao navegar entre páginas (ex.: 1000 da página 1 + 1000 da página 2 + ...) para conseguir disparar discador/WhatsApp para 5000+ clientes. Também adicionar a opção de **20 itens por página** ao seletor de paginação.
 
-A migração anterior criou a nova versão de `get_carteira_grouped` com **22 parâmetros** (incluindo `_primeira_parcela_de` e `_primeira_parcela_ate`), mas a versão antiga de **20 parâmetros** continuou existindo no banco. Como os 20 primeiros parâmetros são idênticos, o PostgREST não consegue decidir qual chamar e retorna:
+## Diagnóstico atual (`src/pages/CarteiraPage.tsx`)
 
+1. **Seleção é zerada implicitamente entre páginas** — embora o `setSelectedIds` não seja chamado diretamente ao mudar `currentPage`, dois comportamentos quebram a acumulação:
+   - **Checkbox do cabeçalho da tabela (`toggleSelectAll`, linhas 482-490)**: quando o usuário muda de página com 1000 já selecionados e clica no checkbox "selecionar todos" da nova página, o código faz `setSelectedIds(new Set(allClientIds))` — **substituindo** a seleção anterior em vez de **somar** os novos IDs.
+   - **Estado `checked` do checkbox header (linha 801)**: usa `selectedIds.size === allClientIds.length`, que dá falso positivo entre páginas com mesmo tamanho.
+2. **Banner "Selecionar todos os filtrados"** (linha 698) só aparece quando `selectedIds.size === allClientIds.length`. Após acumular entre páginas isso não bate mais e o banner some.
+3. **Seletor de "Itens por página"** (linhas 740 e 910) tem apenas `[50, 100, 200, 500, 1000]` — falta o **20**.
+4. **Reset ao trocar `pageSize`** (linhas 497-506) chama `setSelectedIds(new Set())` — correto manter, pois muda o universo da página.
+
+## Mudanças propostas
+
+### 1. Acumular seleção entre páginas (`src/pages/CarteiraPage.tsx`)
+
+**`toggleSelectAll` (linhas 482-490)** — passar a operar **apenas sobre os IDs da página atual**, somando/removendo do conjunto existente, sem descartar seleções de outras páginas:
+
+```ts
+const allCurrentPageSelected =
+  allClientIds.length > 0 &&
+  allClientIds.every((id) => selectedIds.has(id));
+
+const toggleSelectAll = () => {
+  const next = new Set(selectedIds);
+  if (allCurrentPageSelected) {
+    // Desmarca apenas os desta página, preserva páginas anteriores
+    allClientIds.forEach((id) => next.delete(id));
+  } else {
+    allClientIds.forEach((id) => next.add(id));
+  }
+  setSelectedIds(next);
+  setSelectAllFiltered(false);
+};
 ```
-Could not choose the best candidate function between:
-public.get_carteira_grouped(... 20 args)
-public.get_carteira_grouped(... 22 args)
+
+**Checkbox do header (linha 801)** — usar `allCurrentPageSelected` em vez de comparar tamanhos:
+
+```tsx
+<Checkbox
+  checked={allCurrentPageSelected}
+  onCheckedChange={toggleSelectAll}
+/>
 ```
 
-Isso bloqueia toda a Carteira (qualquer filtro retorna erro). É por isso que apareceu **"Nenhum cliente encontrado"** mesmo com Score = "Bom" selecionado.
+**Banner "Selecionar todos os filtrados" (linha 698)** — exibir sempre que houver seleção parcial relevante e ainda existirem mais registros que o selecionado:
 
-## 2. Correção (migração)
-
-```sql
-DROP FUNCTION IF EXISTS public.get_carteira_grouped(
-  uuid, integer, integer, text, text, date, date,
-  uuid[], uuid[], uuid[], integer, integer, text[],
-  text, text, uuid, boolean, date, date, boolean
-);
+```tsx
+{selectedIds.size > 0 && totalCount > selectedIds.size && !selectAllFiltered && (
+  <div className="...">
+    {selectedIds.size.toLocaleString("pt-BR")} cliente(s) selecionado(s)
+    {" "}(acumulando entre páginas).{" "}
+    <Button onClick={handleSelectAllFiltered} ...>
+      Selecionar todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados
+    </Button>
+    {" · "}
+    <Button variant="link" onClick={() => setSelectedIds(new Set())}>
+      Limpar seleção
+    </Button>
+  </div>
+)}
 ```
 
-Mantém apenas a versão nova (22 args). Não há outros consumidores chamando a versão antiga — todos os caminhos do frontend já usam a nova assinatura.
+**Garantir que NÃO há reset de `selectedIds` ao mudar `currentPage`** — confirmar que o effect das linhas 492-495 só zera `selectAllFiltered` (já está correto) e que o effect do `rpcFiltersKey` (283-289) continua zerando seleção apenas em mudança de filtro (já está correto).
 
-## 3. Análise do filtro de Score
+### 2. Adicionar opção de 20 itens por página
 
-Verifiquei diretamente no banco:
+Atualizar os dois seletores (linhas 740 e 910) para incluir `20`:
 
-| Faixa | Parcelas |
-|---|---|
-| Bom (≥75) | **49** |
-| Médio (50–74) | 96 |
-| Ruim (<50) | 12.771 |
-| Sem score (NULL) | 421.582 |
-| **Total** | 434.498 |
+```tsx
+{[20, 50, 100, 200, 500, 1000].map((size) => (
+  <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+))}
+```
 
-- A lógica em `clientService.ts` (linhas 502–511) está **correta** para "Bom" sozinho: `min=75, max=100`.
-- A RPC aplica `COALESCE(propensity_score, 0) BETWEEN 75 AND 100`, ou seja, clientes sem score (NULL → 0) ficam de fora — comportamento esperado.
-- Como existem apenas 49 parcelas com score "Bom" no banco inteiro (e elas podem estar agrupadas em poucos CPFs/credores ou pertencerem a outro tenant), é **plausível** que o seu tenant de fato não tenha nenhum cliente na faixa "Bom". Vou confirmar isso após a correção do erro PGRST203 — sem a função ambígua, o filtro pode até estar funcionando e retornando 0 legitimamente.
-- Se realmente quiser ver os "Bom" do seu tenant: rodar **"Calcular Scores"** (botão no topo da Carteira) primeiro para popular `propensity_score` nos 421k registros sem score.
+### 3. Considerações sobre dialogs em massa (Discador / WhatsApp)
 
-## 4. Demais filtros — análise por leitura de código
+O fluxo atual em `fetchBulkIfNeeded` (linhas 535-548) usa `displayClients.filter((c) => selectedIds.has(c.id))` quando `selectAllFiltered` é falso. Isso só retorna clientes da **página atualmente carregada** — não funciona para uma seleção acumulada entre páginas.
 
-Todos repassam os parâmetros corretamente para a RPC e a RPC trata cada um:
+Solução: quando `selectedIds` contém IDs que não estão em `displayClients` (caso da seleção acumulada), buscar os GroupedClients correspondentes via uma chamada de hidratação no service. Adicionar em `src/services/clientService.ts` uma função `fetchCarteiraClientsByIds(tenantId, ids: string[]): Promise<GroupedClient[]>` que faz `SELECT` em chunks de 500 IDs e reagrupa pelo mesmo formato `GroupedClient` esperado pelos dialogs (mantendo o padrão dos demais bulks já existentes na página).
 
-| Filtro | Status |
-|---|---|
-| Buscar (nome/CPF/telefone/email) | OK — busca tokenizada accent-insensitive |
-| Status de Carteira | OK — array UUID |
-| Credor | OK |
-| Perfil do Devedor | OK — array text |
-| Tipo de Dívida | OK — array UUID |
-| Faixa de Score | OK (ver item 3) |
-| Vencimento De/Até | OK — em qualquer parcela |
-| Cadastro De/Até | OK — `created_at::date` |
-| Primeira Parcela De/Até (novo) | OK — `HAVING MIN(data_vencimento)` |
-| Valor Aberto De/Até | **Não enviado à RPC** (filtrado no client) — é o comportamento atual, não foi alterado |
-| Nunca formalizou acordo | OK |
-| Sem disparo de WhatsApp | OK |
-| Higienizados / Sem contato / Em dia / Quitados | Filtros UI que afetam apenas exibição local — não foram alterados |
+Atualizar `fetchBulkIfNeeded` para:
+- Se `selectAllFiltered` → usa `fetchAllCarteiraClients` (atual).
+- Senão, se todos `selectedIds` estão em `displayClients` → filtro local (atual).
+- Senão → chama `fetchCarteiraClientsByIds(tenant.id, Array.from(selectedIds))` e cacheia em `bulkClients`.
 
-## 5. Próximos passos após aprovação
+### 4. Atualização do contador `selectedCount` (linhas 551-553)
 
-1. Aplicar a migração `DROP FUNCTION` acima.
-2. Recarregar a Carteira — o erro PGRST203 deve sumir.
-3. Validar Score "Bom": se ainda voltar 0, recomendo rodar "Calcular Scores".
-4. Validar visualmente o novo filtro "Primeira Parcela De/Até".
+Manter o cálculo por CPF único, mas considerando o conjunto acumulado. Para UX clara, no botão de ações em massa exibir tanto a contagem de **registros** (`selectedIds.size`) quanto de **CPFs únicos**, sem mudança de comportamento.
 
 ## Arquivos afetados
 
-- Nova migração SQL (1 statement DROP).
-- Nenhuma alteração de código frontend.
+- `src/pages/CarteiraPage.tsx` — `toggleSelectAll`, banner, checkbox header, opções de pageSize (2 lugares), `fetchBulkIfNeeded`.
+- `src/services/clientService.ts` — nova função `fetchCarteiraClientsByIds` (chunked por 500 IDs respeitando o limite de 1000 do PostgREST).
+
+## Fora de escopo
+
+- Não alterar a página `Clientes` (`src/pages/ClientsPage.tsx`) — esse fluxo de seleção em massa é exclusivo da Carteira.
+- Não mexer no Kanban — paginação ali já é desabilitada.
+- Não mexer na RPC `get_carteira_grouped`.
+
+## Resultado esperado
+
+- Operador seleciona 1000 da página 1 → clica "Próxima" → seleção dos 1000 anteriores é **mantida** → seleciona 1000 da página 2 → contador mostra 2000 → repete até atingir 5000+ → clica em "Disparar discador" e o sistema envia para todos os 5000 selecionados (não apenas os da página atual).
+- Seletor de itens por página passa a oferecer **20, 50, 100, 200, 500, 1000**.
