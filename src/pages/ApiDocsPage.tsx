@@ -168,11 +168,14 @@ export default function ApiDocsPage() {
     if (!tenant?.id || !profile?.id) return;
     try {
       setGenerating(true);
-      const { rawToken, record } = await generateApiKey(tenant.id, profile.id, newKeyLabel || "Nova Chave");
+      const credorId = newKeyCredorId === "__all__" ? null : newKeyCredorId;
+      const { rawToken, record } = await generateApiKey(tenant.id, profile.id, newKeyLabel || "Nova Chave", credorId);
+      const credorNome = credorId ? (credores.find(c => c.id === credorId)?.nome ?? null) : null;
       setNewKeyToken(rawToken);
-      setApiKeys((prev) => [record, ...prev]);
+      setApiKeys((prev) => [{ ...record, credor_nome: credorNome }, ...prev]);
       setShowGenerateDialog(false);
       setNewKeyLabel("Chave Padrão");
+      setNewKeyCredorId("__all__");
     } catch (e: any) {
       toast.error("Erro ao gerar chave: " + e.message);
     } finally {
