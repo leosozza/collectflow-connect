@@ -419,26 +419,12 @@ Fluxo: operador offline vê dropdown de campanhas ativas → seleciona → chama
   // IN PROGRESS
   {
     id: "serasa",
-    title: "Negativação Serasa",
-    description: "Estrutura criada. Falta: configuração real da API, testes de envio e cancelamento de registros.",
-    status: "in_progress",
-    progress: 25,
+    title: "Negativação Serasa & CENPROT",
+    description: "Negativação Serasa e protesto via CENPROT operacionais, com envio, cancelamento e remoção automática por triggers.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Finalizar a integração com Serasa para negativação de devedores.
-
-O que já existe:
-- Estrutura de componentes em src/components/integracao/serasa/
-- SerasaConfigCard, SerasaRecordForm, SerasaRecordsList, SerasaLogsCard, SerasaBatchDialog
-- Serviço em src/services/serasaService.ts
-
-O que falta:
-1. Criar edge function supabase/functions/serasa-proxy/ para chamar a API real da Serasa
-2. Configurar autenticação com a API Serasa (credenciais no vault)
-3. Implementar endpoints: envio de negativação, cancelamento e consulta de status
-4. Adicionar tab "Serasa" na IntegracaoPage com os componentes existentes
-5. Testar fluxo completo de envio e cancelamento
-
-Referência: seguir o mesmo padrão do módulo de Protesto (src/components/integracao/protesto/).`,
+    lovablePrompt: "Negativação Serasa + Protesto CENPROT implementados. Componentes em src/components/integracao/serasa/ e protesto/. Serviços: src/services/serasaService.ts e protestoService.ts. Edge functions de proxy ativas. Auto-remoção via triggers ao quitar.",
   },
   {
     id: "export-relatorios",
