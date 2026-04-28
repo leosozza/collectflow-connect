@@ -26,6 +26,8 @@ import {
   ExternalLink,
   ShieldAlert,
   Info,
+  Copy,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -42,6 +44,7 @@ const AsaasPlatformTab = () => {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showProdConfirm, setShowProdConfirm] = useState(false);
+  const [copiedField, setCopiedField] = useState<"url" | "token" | null>(null);
 
   // form state
   const [label, setLabel] = useState("");
@@ -70,6 +73,15 @@ const AsaasPlatformTab = () => {
   }, []);
 
   const isProduction = account?.environment === "production";
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+  const webhookUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/asaas-webhook` : "";
+
+  const copyField = (field: "url" | "token", value: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedField(field);
+    toast.success("Copiado");
+    setTimeout(() => setCopiedField(null), 1800);
+  };
 
   const switchEnv = async (toProd: boolean) => {
     if (!account) return;
@@ -236,6 +248,36 @@ const AsaasPlatformTab = () => {
             >
               Documentação Asaas <ExternalLink className="w-3 h-3" />
             </a>
+          </div>
+
+          <div className="p-3 rounded-md border border-border bg-muted/30 text-xs space-y-2">
+            <p className="font-medium">Webhook de cobranças</p>
+            <div className="flex items-center gap-2">
+              <Input value={webhookUrl} readOnly className="h-8 font-mono text-xs" />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={!webhookUrl}
+                onClick={() => copyField("url", webhookUrl)}
+              >
+                {copiedField === "url" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input value={account?.webhook_token || ""} readOnly className="h-8 font-mono text-xs" />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                disabled={!account?.webhook_token}
+                onClick={() => account?.webhook_token && copyField("token", account.webhook_token)}
+              >
+                {copiedField === "token" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
           </div>
 
           {/* Status do último teste */}
