@@ -203,7 +203,7 @@ export default function ApiDocsPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">API REST — Documentação Completa</h1>
-          <p className="text-sm text-muted-foreground">Integre sistemas externos com toda a plataforma CollectFlow</p>
+          <p className="text-sm text-muted-foreground">Integre sistemas externos com toda a plataforma RIVO CONNECT</p>
         </div>
       </div>
 
