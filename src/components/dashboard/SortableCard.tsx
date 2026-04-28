@@ -44,20 +44,20 @@ export default function SortableCard({
         isDragging && "z-50 opacity-80"
       )}
     >
-      {/* Drag handle — visible on hover */}
+      {/* Drag handle — visible on hover, placed on the left to avoid header action overlap */}
       <button
         type="button"
         aria-label="Arrastar card"
         className={cn(
-          "absolute top-2 right-2 z-20 p-1 rounded-md bg-background/80 backdrop-blur-sm",
-          "border border-border/60 text-muted-foreground hover:text-foreground hover:bg-background",
+          "absolute top-1/2 -translate-y-1/2 left-1 z-30 p-1 rounded-md bg-background/60 backdrop-blur-sm",
+          "border border-border/40 text-muted-foreground/80 hover:text-foreground hover:bg-background",
           "opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing",
           "shadow-sm"
         )}
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="w-3.5 h-3.5" />
+        <GripVertical className="w-3 h-3" />
       </button>
       {children}
     </div>

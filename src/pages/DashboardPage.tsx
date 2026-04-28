@@ -232,12 +232,12 @@ const DashboardPage = () => {
     setLayout({ ...layout, order: arrayMove(layout.order, oldIndex, newIndex) });
   };
 
-  const trendAcionados = pctDelta(acionadosHoje, stats?.acionados_ontem ?? 0);
-  const trendAcordosDia = pctDelta(stats?.acordos_dia ?? 0, stats?.acordos_dia_anterior ?? 0);
-  const trendAcordosMes = pctDelta(stats?.acordos_mes ?? 0, stats?.acordos_mes_anterior ?? 0);
-  const trendNegociadoMes = pctDelta(stats?.total_negociado_mes ?? 0, stats?.total_negociado_mes_anterior ?? 0);
-  const trendQuebra = pctDelta(stats?.total_quebra ?? 0, stats?.total_quebra_mes_anterior ?? 0, true);
-  const trendPendentes = pctDelta(stats?.total_pendente ?? 0, stats?.total_pendente_mes_anterior ?? 0, true);
+  const trendAcionados = stats ? pctDelta(acionadosHoje, stats.acionados_ontem ?? 0) : null;
+  const trendAcordosDia = stats ? pctDelta(stats.acordos_dia ?? 0, stats.acordos_dia_anterior ?? 0) : null;
+  const trendAcordosMes = stats ? pctDelta(stats.acordos_mes ?? 0, stats.acordos_mes_anterior ?? 0) : null;
+  const trendNegociadoMes = stats ? pctDelta(stats.total_negociado_mes ?? 0, stats.total_negociado_mes_anterior ?? 0) : null;
+  const trendQuebra = stats ? pctDelta(stats.total_quebra ?? 0, stats.total_quebra_mes_anterior ?? 0, true) : null;
+  const trendPendentes = stats ? pctDelta(stats.total_pendente ?? 0, stats.total_pendente_mes_anterior ?? 0, true) : null;
 
   const kpis = [
     {
@@ -295,7 +295,7 @@ const DashboardPage = () => {
     switch (id) {
       case "kpisTop":
         return (
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
             {kpis.map((item) => {
               const ItemIcon = item.Icon;
               const isMoney = item.value.startsWith("R$");
