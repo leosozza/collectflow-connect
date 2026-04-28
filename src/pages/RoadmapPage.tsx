@@ -695,40 +695,12 @@ Implementação:
   // ──────────────────────────────────────────────────
   {
     id: "politicas-desconto-dinamico",
-    title: "Políticas de Desconto Dinâmico",
-    description: "Tabela de margem de desconto por credor com regras automáticas aplicadas durante negociação.",
-    status: "planned",
-    progress: 5,
-    category: "IA",
-    lovablePrompt: `Implementar o módulo de Políticas de Desconto Dinâmico para o Agente IA de Negociação.
-
-Objetivo: Criar uma tabela de regras de desconto por credor que o agente IA consulta automaticamente antes de fazer uma proposta.
-
-Passos:
-1. Criar migração SQL com a tabela discount_policies:
-   - credor_id (FK credores.id)
-   - tenant_id
-   - min_days_overdue (dias mínimos de atraso para aplicar)
-   - max_days_overdue (dias máximos)
-   - max_discount_percent (desconto máximo permitido)
-   - installments_allowed (boolean)
-   - max_installments (número máximo de parcelas)
-   - is_active (boolean)
-
-2. Criar CRUD no CredorForm (src/components/cadastros/CredorForm.tsx) — nova aba "Políticas de Desconto"
-
-3. Criar serviço src/services/discountPolicyService.ts com:
-   - fetchPoliciesByCredor(credorId)
-   - getApplicablePolicy(credorId, daysOverdue) — retorna a política mais adequada
-
-4. Integrar no AgreementCalculator (src/components/client-detail/AgreementCalculator.tsx):
-   - Ao abrir o calculador, buscar a política vigente do credor
-   - Limitar o campo de desconto ao max_discount_percent automaticamente
-   - Exibir badge "Política: X% máx" no formulário
-
-5. RLS: tenant_id deve estar presente em todas as queries.
-
-Tabelas relacionadas: credores, agreements, clients`,
+    title: "Políticas de Desconto por Credor & Aprovação",
+    description: "Tabela de descontos por aging configurável por credor + fluxo de aprovação para descontos acima do limite.",
+    status: "done",
+    progress: 100,
+    category: "Acordos",
+    lovablePrompt: "Políticas de desconto implementadas via aging por credor (CredorForm.tsx aba Acordos). Limites aplicados no AgreementCalculator com checklist de validação e fluxo de aprovação para descontos acima do permitido. Veja memória logic/agreements/billing-validation-flow.",
   },
   {
     id: "agente-ia-autonomo",
