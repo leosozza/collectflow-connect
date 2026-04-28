@@ -26,19 +26,29 @@ interface Props {
 }
 
 const LABELS: Record<DashboardBlockId, string> = {
-  kpisTop: "KPIs (cards superiores)",
-  parcelas: "Parcelas Programadas",
+  metas: "Meta do Mês",
   totalRecebido: "Total Recebido",
-  metas: "Metas",
+  acionadosHoje: "Acionados Hoje",
   agendamentos: "Agendamentos para Hoje",
+  acordosDia: "Acordos do Dia",
+  parcelas: "Parcelas Programadas",
+  acordosMes: "Acordos do Mês",
+  totalQuebra: "Total de Quebra",
+  pendentes: "Pendentes",
+  colchaoAcordos: "Colchão de Acordos",
 };
 
 const DESCRIPTIONS: Record<DashboardBlockId, string> = {
-  kpisTop: "Grade de indicadores rápidos",
-  parcelas: "Vencimentos do dia",
-  totalRecebido: "Gráfico de recebimentos",
   metas: "Progresso da meta mensal",
+  totalRecebido: "Gráfico de recebimentos",
+  acionadosHoje: "Quantidade de clientes acionados hoje",
   agendamentos: "Callbacks agendados para hoje",
+  acordosDia: "Acordos fechados no dia",
+  parcelas: "Vencimentos do dia",
+  acordosMes: "Acordos fechados no mês",
+  totalQuebra: "Valor total de quebra de acordos",
+  pendentes: "Valor pendente de pagamento",
+  colchaoAcordos: "Total projetado em acordos",
 };
 
 export default function CustomizeDashboardDialog({
