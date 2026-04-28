@@ -98,7 +98,9 @@ function estimateTimeMinutes(totalRecipients: number): number {
 
 const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDialogProps) => {
   const { tenant } = useTenant();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { role } = usePermissions();
+  const isAdmin = role === "admin" || role === "gestor";
   const [step, setStep] = useState<Step>(1);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [customMessage, setCustomMessage] = useState("");
