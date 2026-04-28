@@ -81,7 +81,7 @@ const navGroups: NavGroup[] = [
     groupIcon: Zap,
     items: [
       { label: "Serviços e Tokens", icon: Package, path: "/admin/servicos", moduleSlug: "servicos_tokens" },
-      { label: "Integrações", icon: Settings, path: "/admin/configuracoes", moduleSlug: "integracoes" },
+      { label: "Configurações", icon: Settings, path: "/admin/configuracoes", moduleSlug: "integracoes" },
     ],
   },
   {
@@ -131,7 +131,7 @@ const pageTitles: Record<string, string> = {
   "/admin/financeiro": "Gestão Financeira",
   "/admin/tenants": "Gestão de Clientes",
   "/admin/treinamentos": "Treinamentos e Reuniões",
-  "/admin/configuracoes": "Integrações",
+  "/admin/configuracoes": "Configurações",
   "/admin/servicos": "Serviços e Tokens",
   "/admin/roadmap": "Roadmap",
   "/admin/usuarios": "Usuários",

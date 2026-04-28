@@ -4286,6 +4286,54 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_billing_accounts: {
+        Row: {
+          account_label: string
+          created_at: string
+          environment: string
+          id: string
+          is_active: boolean
+          last_test_at: string | null
+          last_test_message: string | null
+          last_test_status: string | null
+          notes: string | null
+          provider: string
+          updated_at: string
+          wallet_id: string | null
+          webhook_token: string | null
+        }
+        Insert: {
+          account_label?: string
+          created_at?: string
+          environment?: string
+          id?: string
+          is_active?: boolean
+          last_test_at?: string | null
+          last_test_message?: string | null
+          last_test_status?: string | null
+          notes?: string | null
+          provider?: string
+          updated_at?: string
+          wallet_id?: string | null
+          webhook_token?: string | null
+        }
+        Update: {
+          account_label?: string
+          created_at?: string
+          environment?: string
+          id?: string
+          is_active?: boolean
+          last_test_at?: string | null
+          last_test_message?: string | null
+          last_test_status?: string | null
+          notes?: string | null
+          provider?: string
+          updated_at?: string
+          wallet_id?: string | null
+          webhook_token?: string | null
+        }
+        Relationships: []
+      }
       portal_payments: {
         Row: {
           agreement_id: string
