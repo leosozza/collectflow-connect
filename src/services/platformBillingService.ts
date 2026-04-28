@@ -111,8 +111,9 @@ export async function upsertPlatformAccount(
       .limit(1)
       .maybeSingle();
 
-    if (existing?.id) {
-      account.id = existing.id as string;
+    const existingId = (existing as any)?.id;
+    if (existingId) {
+      account.id = existingId as string;
     }
   }
 
