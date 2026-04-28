@@ -739,8 +739,10 @@ Deno.serve(async (req: Request) => {
   if (segments[0] === "portal" && segments[1] === "lookup" && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
     if (!body.cpf) return json({ error: "cpf obrigatório" }, 422);
-    const { data, error } = await supabaseAdmin.from("clients").select("*")
+    let q = supabaseAdmin.from("clients").select("*")
       .eq("tenant_id", tenantId).eq("cpf", String(body.cpf).trim()).eq("status", "pendente");
+    if (credorNome) q = q.eq("credor", credorNome);
+    const { data, error } = await q;
     if (error) return json({ error: error.message }, 500);
     return json({ data, total: data?.length ?? 0 });
   }
@@ -748,6 +750,8 @@ Deno.serve(async (req: Request) => {
   // POST /portal/agreement
   if (segments[0] === "portal" && segments[1] === "agreement" && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
     const required = ["client_cpf", "client_name", "credor", "original_total", "proposed_total", "new_installments", "new_installment_value", "first_due_date"];
     const missing = required.filter(f => !body[f]);
     if (missing.length > 0) return json({ error: `Campos obrigatórios faltando: ${missing.join(", ")}` }, 422);
