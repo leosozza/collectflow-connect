@@ -783,7 +783,7 @@ const CarteiraPage = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[50, 100, 200, 500, 1000].map((size) => (
+                {[20, 50, 100, 200, 500, 1000].map((size) => (
                   <SelectItem key={size} value={String(size)}>{size}</SelectItem>
                 ))}
               </SelectContent>
@@ -844,7 +844,7 @@ const CarteiraPage = () => {
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.size === allClientIds.length && allClientIds.length > 0}
+                        checked={allCurrentPageSelected}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
@@ -953,7 +953,7 @@ const CarteiraPage = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {[50, 100, 200, 500, 1000].map((size) => (
+                    {[20, 50, 100, 200, 500, 1000].map((size) => (
                       <SelectItem key={size} value={String(size)}>{size}</SelectItem>
                     ))}
                   </SelectContent>
