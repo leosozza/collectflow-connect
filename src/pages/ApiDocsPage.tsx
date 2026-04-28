@@ -370,20 +370,31 @@ export default function ApiDocsPage() {
 
         {/* ── Pagamentos ── */}
         <TabsContent value="payments" className="space-y-4 mt-4">
-          <Card><CardHeader><CardTitle>Endpoints de Pagamentos</CardTitle><CardDescription>Listar cobranças, verificar status, gerar PIX e cobranças via cartão</CardDescription></CardHeader>
+          <Card><CardHeader><CardTitle>Endpoints de Pagamentos</CardTitle><CardDescription>Listar cobranças, verificar status, listar meios disponíveis e gerar cobranças via PIX, Cartão de Crédito ou Boleto</CardDescription></CardHeader>
             <CardContent className="space-y-2">
               <EndpointCard method="GET" path="/payments" description="Listar pagamentos (paginado)">
-                <p className="text-sm text-muted-foreground">Filtros: <code>status</code>, <code>client_id</code></p>
-                <CodeBlock code={`curl "${BASE_URL}/payments?status=pendente" -H "X-API-Key: cf_..."`} lang="cURL" />
+                <p className="text-sm text-muted-foreground">Filtros: <code>status</code>, <code>client_id</code>, <code>tipo</code> (pix, cartao, boleto)</p>
+                <CodeBlock code={`curl "${BASE_URL}/payments?status=pendente&tipo=pix" -H "X-API-Key: cf_..."`} lang="cURL" />
               </EndpointCard>
               <EndpointCard method="GET" path="/payments/:id" description="Status de um pagamento">
                 <CodeBlock code={`curl "${BASE_URL}/payments/uuid" -H "X-API-Key: cf_..."`} lang="cURL" />
                 <p className="text-sm text-muted-foreground mt-2">Retorna: valor, status, tipo (pix/cartao/boleto), pix_copia_cola, link_boleto, link_cartao</p>
               </EndpointCard>
+              <EndpointCard method="GET" path="/payments/methods" description="Listar meios de pagamento disponíveis">
+                <p className="text-sm text-muted-foreground mb-2">Retorna meios nativos (PIX, Cartão de Crédito, Boleto Bancário) + meios customizados cadastrados pelo tenant. Filtro opcional: <code>credor_id</code> para meios específicos por credor.</p>
+                <CodeBlock code={`curl "${BASE_URL}/payments/methods" -H "X-API-Key: cf_..."`} lang="cURL" />
+              </EndpointCard>
+              <EndpointCard method="POST" path="/payments" description="Gerar cobrança (meio definido via campo tipo)">
+                <p className="text-sm text-muted-foreground mb-2">Endpoint genérico — escolha o meio no body via campo <code>tipo</code>.</p>
+                <CodeBlock code={`{\n  "tipo": "pix",  // pix | cartao | boleto\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
+              </EndpointCard>
               <EndpointCard method="POST" path="/payments/pix" description="Gerar cobrança PIX">
                 <CodeBlock code={`{\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
               </EndpointCard>
-              <EndpointCard method="POST" path="/payments/cartao" description="Gerar cobrança Cartão">
+              <EndpointCard method="POST" path="/payments/cartao" description="Gerar cobrança Cartão de Crédito">
+                <CodeBlock code={`{\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
+              </EndpointCard>
+              <EndpointCard method="POST" path="/payments/boleto" description="Gerar cobrança Boleto Bancário">
                 <CodeBlock code={`{\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
               </EndpointCard>
             </CardContent>
