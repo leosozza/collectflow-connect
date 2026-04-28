@@ -12,6 +12,7 @@ function jsonResponse(body: any, status = 200) {
   });
 }
 
+// v2: ensure create_tenant_subscription action is deployed
 const BILLING_TYPES = new Set(["BOLETO", "PIX", "CREDIT_CARD", "UNDEFINED"]);
 const CYCLES = new Set(["WEEKLY", "BIWEEKLY", "MONTHLY", "BIMONTHLY", "QUARTERLY", "SEMIANNUALLY", "YEARLY"]);
 
