@@ -82,6 +82,8 @@ const ClientsPage = () => {
     semWhatsapp: false,
     scoreRange: urlScoreRange,
     debtorProfile: urlDebtorProfile,
+    primeiraParcelaDe: "",
+    primeiraParcelaAte: "",
   }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlScoreRange, urlDebtorProfile]);
 
   const setFilters = useMemo(() => {
