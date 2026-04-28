@@ -110,6 +110,8 @@ const CarteiraPage = () => {
   const [urlSemWhatsapp, setUrlSemWhatsapp] = useUrlState("semWhatsapp", false);
   const [urlScoreRange, setUrlScoreRange] = useUrlState("scoreRange", "");
   const [urlDebtorProfile, setUrlDebtorProfile] = useUrlState("debtorProfile", "");
+  const [urlPrimeiraParcelaDe, setUrlPrimeiraParcelaDe] = useUrlState("primeiraParcelaDe", "");
+  const [urlPrimeiraParcelaAte, setUrlPrimeiraParcelaAte] = useUrlState("primeiraParcelaAte", "");
   const [viewMode, setViewMode] = useUrlState("view", "list") as ["list" | "kanban", (val: string) => void];
   const [sortField, setSortField] = useUrlState("sort", "created_at");
   const [sortDir, setSortDir] = useUrlState("dir", "desc") as ["asc" | "desc", (val: string) => void];
@@ -135,7 +137,9 @@ const CarteiraPage = () => {
     semWhatsapp: urlSemWhatsapp,
     scoreRange: urlScoreRange,
     debtorProfile: urlDebtorProfile,
-  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlSemWhatsapp, urlScoreRange, urlDebtorProfile]);
+    primeiraParcelaDe: urlPrimeiraParcelaDe,
+    primeiraParcelaAte: urlPrimeiraParcelaAte,
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlSemWhatsapp, urlScoreRange, urlDebtorProfile, urlPrimeiraParcelaDe, urlPrimeiraParcelaAte]);
 
   const hasActiveFilters = useMemo(() => {
     return (
@@ -158,7 +162,9 @@ const CarteiraPage = () => {
       filters.higienizados === true ||
       filters.semWhatsapp === true ||
       filters.scoreRange !== "" ||
-      filters.debtorProfile !== ""
+      filters.debtorProfile !== "" ||
+      filters.primeiraParcelaDe !== "" ||
+      filters.primeiraParcelaAte !== ""
     );
   }, [filters]);
 
@@ -170,6 +176,7 @@ const CarteiraPage = () => {
     cadastroDe: "", cadastroAte: "", quitados: false, valorAbertoDe: 0,
     valorAbertoAte: 0, semContato: false, emDia: false, higienizados: false,
     semWhatsapp: false, scoreRange: "", debtorProfile: "",
+    primeiraParcelaDe: "", primeiraParcelaAte: "",
   }), []);
 
   const setFilters = useCallback(
@@ -267,6 +274,8 @@ const CarteiraPage = () => {
     semWhatsapp: filters.semWhatsapp || undefined,
     cadastroDe: filters.cadastroDe || undefined,
     cadastroAte: filters.cadastroAte || undefined,
+    primeiraParcelaDe: filters.primeiraParcelaDe || undefined,
+    primeiraParcelaAte: filters.primeiraParcelaAte || undefined,
   }), [filters, permissions.canViewFullData, profileId]);
 
   // Reset pagination when filters change

@@ -486,6 +486,8 @@ export interface CarteiraFilters {
   cadastroDe?: string;
   cadastroAte?: string;
   semWhatsapp?: boolean;
+  primeiraParcelaDe?: string;
+  primeiraParcelaAte?: string;
 }
 
 export const fetchAllCarteiraIds = async (
@@ -536,6 +538,8 @@ export const fetchAllCarteiraIds = async (
       if (filters.cadastroDe) params._cadastro_de = filters.cadastroDe;
       if (filters.cadastroAte) params._cadastro_ate = filters.cadastroAte;
       if (filters.semWhatsapp) params._sem_whatsapp = true;
+      if (filters.primeiraParcelaDe) params._primeira_parcela_de = filters.primeiraParcelaDe;
+      if (filters.primeiraParcelaAte) params._primeira_parcela_ate = filters.primeiraParcelaAte;
       if (scoreMin !== null) params._score_min = scoreMin;
       if (scoreMax !== null) params._score_max = scoreMax;
 
@@ -611,6 +615,8 @@ export const fetchAllCarteiraClients = async (
       if (filters.cadastroDe) params._cadastro_de = filters.cadastroDe;
       if (filters.cadastroAte) params._cadastro_ate = filters.cadastroAte;
       if (filters.semWhatsapp) params._sem_whatsapp = true;
+      if (filters.primeiraParcelaDe) params._primeira_parcela_de = filters.primeiraParcelaDe;
+      if (filters.primeiraParcelaAte) params._primeira_parcela_ate = filters.primeiraParcelaAte;
       if (scoreMin !== null) params._score_min = scoreMin;
       if (scoreMax !== null) params._score_max = scoreMax;
 
@@ -686,6 +692,8 @@ export const fetchCarteiraGrouped = async (
     if (filters.cadastroDe) params._cadastro_de = filters.cadastroDe;
     if (filters.cadastroAte) params._cadastro_ate = filters.cadastroAte;
     if (filters.semWhatsapp) params._sem_whatsapp = true;
+    if (filters.primeiraParcelaDe) params._primeira_parcela_de = filters.primeiraParcelaDe;
+    if (filters.primeiraParcelaAte) params._primeira_parcela_ate = filters.primeiraParcelaAte;
     if (scoreMin !== null) params._score_min = scoreMin;
     if (scoreMax !== null) params._score_max = scoreMax;
 
