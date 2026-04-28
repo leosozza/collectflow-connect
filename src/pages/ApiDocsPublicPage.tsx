@@ -26,19 +26,19 @@ function CodeBlock({ code, lang = "bash" }: { code: string; lang?: string }) {
 function EndpointRow({ method, path, description, children }: { method: string; path: string; description: string; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const colors: Record<string, string> = {
-    GET: "bg-blue-500/10 text-blue-600 border-blue-500/30",
-    POST: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
-    PUT: "bg-amber-500/10 text-amber-600 border-amber-500/30",
-    DELETE: "bg-red-500/10 text-red-600 border-red-500/30",
+    GET: "bg-primary/10 text-primary border-primary/30",
+    POST: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:text-emerald-400",
+    PUT: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400",
+    DELETE: "bg-destructive/10 text-destructive border-destructive/30",
   };
   return (
-    <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
-      <button className="w-full flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors text-left" onClick={() => setOpen(!open)}>
+    <div className="border border-border rounded-lg overflow-hidden">
+      <button className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/50 transition-colors text-left" onClick={() => setOpen(!open)}>
         <Badge variant="outline" className={`font-mono text-xs font-bold ${colors[method]}`}>{method}</Badge>
-        <code className="text-sm font-mono text-zinc-900 dark:text-zinc-100 flex-1">{path}</code>
-        <span className="text-sm text-zinc-500 hidden sm:block">{description}</span>
+        <code className="text-sm font-mono text-foreground flex-1">{path}</code>
+        <span className="text-sm text-muted-foreground hidden sm:block">{description}</span>
       </button>
-      {open && children && <div className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 p-4 space-y-3">{children}</div>}
+      {open && children && <div className="border-t border-border bg-muted/30 p-4 space-y-3">{children}</div>}
     </div>
   );
 }
@@ -46,37 +46,40 @@ function EndpointRow({ method, path, description, children }: { method: string; 
 function SectionHeader({ icon: Icon, title }: { icon: any; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-4 mt-8 first:mt-0">
-      <Icon className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
-      <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
+      <Icon className="w-5 h-5 text-muted-foreground" />
+      <h2 className="text-xl font-bold text-foreground">{title}</h2>
     </div>
   );
 }
 
 export default function ApiDocsPublicPage() {
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 sticky top-0 z-10">
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border bg-background sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center"><Code2 className="w-5 h-5 text-white" /></div>
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center"><Code2 className="w-5 h-5 text-primary-foreground" /></div>
             <div>
-              <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">CollectFlow API</h1>
-              <p className="text-xs text-zinc-500">REST API completa para gestão de cobranças</p>
+              <h1 className="text-lg font-bold text-foreground">RIVO CONNECT API</h1>
+              <p className="text-xs text-muted-foreground">REST API completa para gestão de cobranças e omnichannel</p>
             </div>
           </div>
-          <Badge className="bg-blue-600/10 text-blue-600 border-blue-600/30 hover:bg-blue-600/10">v2.0</Badge>
+          <Badge className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/10">v2.0</Badge>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-2">
         {/* URL Base */}
-        <Card className="border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20">
+        <Card className="border-primary/20 bg-primary/5">
           <CardContent className="pt-6">
-            <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">URL Base da API</p>
+            <p className="text-sm font-medium text-foreground mb-2">URL Base da API</p>
             <CodeBlock code={BASE_URL} lang="URL" />
-            <p className="text-xs text-zinc-500 mt-3 flex items-center gap-1.5">
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5" />
-              Todas as requisições requerem <code className="bg-zinc-200 dark:bg-zinc-800 px-1 rounded text-xs">X-API-Key</code>
+              Todas as requisições requerem o header <code className="bg-muted px-1 rounded text-xs">X-API-Key</code> (prefixo <code className="bg-muted px-1 rounded text-xs">cf_</code>) vinculado a um tenant.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Documentação pública oficial: <code className="bg-muted px-1 rounded text-xs">https://rivoconnect.com/api-docs/public</code>
             </p>
           </CardContent>
         </Card>
@@ -266,10 +269,10 @@ export default function ApiDocsPublicPage() {
                     ["CEP / cep", "string", "—", "CEP"],
                   ].map(([field, type, req, desc]) => (
                     <TableRow key={field}>
-                      <TableCell><code className="text-xs font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{field}</code></TableCell>
-                      <TableCell className="text-sm text-zinc-500">{type}</TableCell>
+                      <TableCell><code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded">{field}</code></TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{type}</TableCell>
                       <TableCell className="text-sm">{req}</TableCell>
-                      <TableCell className="text-sm text-zinc-500">{desc}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{desc}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -426,17 +429,17 @@ curl -X POST "${BASE_URL}/webhooks/configure" -H "X-API-Key: cf_..." -H "Content
                   ["500", "Erro interno", "Tente novamente. Se persistir, contate suporte"],
                 ].map(([code, meaning, action]) => (
                   <TableRow key={code}>
-                    <TableCell><Badge variant="outline" className={`font-mono ${code === "200" || code === "201" ? "text-emerald-600" : code.startsWith("4") ? "text-amber-600" : "text-red-600"}`}>{code}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className={`font-mono ${code === "200" || code === "201" ? "text-emerald-600" : code.startsWith("4") ? "text-amber-600" : "text-destructive"}`}>{code}</Badge></TableCell>
                     <TableCell className="text-sm">{meaning}</TableCell>
-                    <TableCell className="text-sm text-zinc-500">{action}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{action}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
 
-            <div className="mt-6 p-4 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
-              <h4 className="text-sm font-semibold mb-2">Rate Limits</h4>
-              <ul className="text-sm text-zinc-600 dark:text-zinc-400 space-y-1">
+            <div className="mt-6 p-4 bg-muted rounded-lg">
+              <h4 className="text-sm font-semibold mb-2 text-foreground">Rate Limits</h4>
+              <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• <strong>Geral:</strong> 100 requisições/minuto por API Key</li>
                 <li>• <strong>Bulk:</strong> 500 registros/chamada, recomendado delay de 200-500ms entre lotes</li>
                 <li>• <strong>WhatsApp Bulk:</strong> 200 mensagens/chamada</li>
@@ -450,7 +453,7 @@ curl -X POST "${BASE_URL}/webhooks/configure" -H "X-API-Key: cf_..." -H "Content
         <Card className="mt-4">
           <CardHeader><CardTitle className="text-base">Boas práticas</CardTitle></CardHeader>
           <CardContent>
-            <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <ul className="space-y-2 text-sm text-muted-foreground">
               {[
                 "Use external_id para garantir idempotência — reenvios não criam duplicatas",
                 "Sempre use upsert: true no /bulk para reenvios seguros",
@@ -470,10 +473,15 @@ curl -X POST "${BASE_URL}/webhooks/configure" -H "X-API-Key: cf_..." -H "Content
         </Card>
       </main>
 
-      <footer className="border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 py-6 mt-8">
+      <footer className="border-t border-border bg-muted/30 py-6 mt-8">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center space-y-2">
-          <p className="text-sm text-zinc-500">Para obter sua chave de API, solicite ao administrador do sistema CollectFlow.</p>
-          <p className="text-xs text-zinc-400">Esta documentação é pública e não expõe dados sensíveis.</p>
+          <p className="text-sm text-muted-foreground">
+            RIVO CONNECT • Para obter sua chave de API, solicite ao administrador do seu tenant em
+            {" "}<code className="bg-muted px-1 rounded text-xs">Configurações → API REST</code>.
+          </p>
+          <p className="text-xs text-muted-foreground/70">
+            Esta documentação é pública e não expõe dados sensíveis. © RIVO CONNECT
+          </p>
         </div>
       </footer>
     </div>
