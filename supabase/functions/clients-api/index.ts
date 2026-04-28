@@ -333,7 +333,9 @@ Deno.serve(async (req: Request) => {
 
   // GET /clients/:id
   if (segments[0] === "clients" && segments[1] && !segments[2] && method === "GET") {
-    const { data, error } = await supabaseAdmin.from("clients").select("*").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
+    let q = supabaseAdmin.from("clients").select("*").eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) q = q.eq("credor", credorNome);
+    const { data, error } = await q.maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Cliente não encontrado" }, 404);
     return json({ data });
@@ -343,6 +345,8 @@ Deno.serve(async (req: Request) => {
   if (segments[0] === "clients" && !segments[1] && method === "POST") {
     const rawBody = await req.json() as Record<string, unknown>;
     const body = normalizeRecord(rawBody);
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
     const { valid, errors } = validateClientRecord(body);
     if (!valid) return json({ error: "Validação falhou", errors }, 422);
 
