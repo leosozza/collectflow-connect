@@ -92,6 +92,7 @@ function calculateScore(
         break;
       }
       case "whatsapp_outbound": {
+        whatsappOutboundCount++;
         totalOutreach++;
         break;
       }
