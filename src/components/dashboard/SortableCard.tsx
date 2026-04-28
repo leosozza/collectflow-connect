@@ -17,7 +17,7 @@ interface SortableCardProps {
  */
 export default function SortableCard({
   id,
-  spanClassName = "col-span-1 lg:col-span-12",
+  spanClassName = "col-span-1",
   children,
 }: SortableCardProps) {
   const {
@@ -39,7 +39,7 @@ export default function SortableCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative group min-w-0",
+        "relative group min-w-0 h-full [&>*]:h-full",
         spanClassName,
         isDragging && "z-50 opacity-80"
       )}

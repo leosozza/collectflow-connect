@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
 export type DashboardBlockId =
-  | "kpisTop"
-  | "parcelas"
-  | "totalRecebido"
   | "metas"
-  | "agendamentos";
+  | "totalRecebido"
+  | "acionadosHoje"
+  | "agendamentos"
+  | "acordosDia"
+  | "parcelas"
+  | "acordosMes"
+  | "totalQuebra"
+  | "pendentes"
+  | "colchaoAcordos";
 
 export interface DashboardLayout {
   visible: Record<DashboardBlockId, boolean>;
@@ -15,27 +20,51 @@ export interface DashboardLayout {
 }
 
 export const ALL_DASHBOARD_BLOCKS: DashboardBlockId[] = [
-  "kpisTop",
   "metas",
-  "agendamentos",
   "totalRecebido",
+  "acionadosHoje",
+  "agendamentos",
+  "acordosDia",
   "parcelas",
+  "acordosMes",
+  "totalQuebra",
+  "pendentes",
+  "colchaoAcordos",
 ];
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
-    kpisTop: true,
-    parcelas: true,
-    totalRecebido: true,
     metas: true,
+    totalRecebido: true,
+    acionadosHoje: true,
     agendamentos: true,
+    acordosDia: true,
+    parcelas: true,
+    acordosMes: true,
+    totalQuebra: true,
+    pendentes: true,
+    colchaoAcordos: true,
   },
-  // Approximates the previous 3-column visual: meta+agendamentos on left,
-  // totalRecebido+parcelas in the center, KPIs on the right.
-  order: ["metas", "totalRecebido", "kpisTop", "agendamentos", "parcelas"],
+  // Ordem linear do grid 3-col (com gridAutoFlow:dense respeitando spans):
+  // Linha 1: Meta | TotalRecebido(rs2) | AcionadosHoje
+  // Linha 2: Agendamentos | (TotalRecebido) | AcordosDia
+  // Linha 3: Parcelas(cs2)              | AcordosMes
+  // Linha 4+: TotalQuebra, Pendentes, Colchão
+  order: [
+    "metas",
+    "totalRecebido",
+    "acionadosHoje",
+    "agendamentos",
+    "acordosDia",
+    "parcelas",
+    "acordosMes",
+    "totalQuebra",
+    "pendentes",
+    "colchaoAcordos",
+  ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v2";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v3";
 
 function sanitize(raw: any): DashboardLayout {
   try {
@@ -44,7 +73,6 @@ function sanitize(raw: any): DashboardLayout {
     const incoming: DashboardBlockId[] = Array.isArray(raw.order)
       ? raw.order.filter((id: any) => ALL_DASHBOARD_BLOCKS.includes(id))
       : [];
-    // Ensure all known ids are present (append missing at end)
     const order = [
       ...incoming,
       ...ALL_DASHBOARD_BLOCKS.filter((id) => !incoming.includes(id)),
