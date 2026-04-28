@@ -1,62 +1,135 @@
-# Atualização da Documentação API — RIVO CONNECT
+# MCP Server — RIVO CONNECT
 
-A documentação atual (`/api-docs/public` e a aba "API REST" em Configurações) ainda está marcada como **"CollectFlow API"** com cor azul hard-coded e referencia a URL antiga. Os endpoints em si estão corretos e batem com a edge function `clients-api`. As mudanças são de **branding, URL pública e tokens semânticos**.
+Criar um servidor **MCP (Model Context Protocol)** hospedado como Edge Function que expõe as funcionalidades da API REST do RIVO CONNECT como **tools**, permitindo que CRMs externos (HubSpot, Pipedrive, Salesforce, etc.) e agentes de IA (Claude, ChatGPT, n8n, Zapier AI) consultem e operem dados do RIVO de forma padronizada.
 
-## O que será alterado
+## Por que MCP
 
-### 1. `src/pages/ApiDocsPublicPage.tsx` (página pública — `/api-docs/public`)
+A API REST atual (`/clients-api`) já cobre clientes, acordos, pagamentos, portal e WhatsApp. Um servidor MCP **encapsula esses endpoints como tools auto-descritivas**, eliminando a necessidade de cada CRM implementar um cliente HTTP customizado — basta apontar o MCP URL + API Key.
 
-**Branding:**
-- "CollectFlow API" → **"RIVO CONNECT API"** (header).
-- Subtítulo: "REST API completa para gestão de cobranças" → "REST API completa para gestão de cobranças e omnichannel".
-- Rodapé: remover menção a "CollectFlow", trocar por "RIVO CONNECT • Para obter sua chave de API, solicite ao administrador do seu tenant em **Configurações → API REST**".
-- Adicionar `© RIVO CONNECT` no rodapé.
+## Arquitetura
 
-**URL pública canônica:**
-- Adicionar no card "URL Base" uma linha exibindo a URL pública oficial: `https://rivoconnect.com/api-docs/public`.
+```text
+CRM Externo / Agente IA
+        │
+        │ MCP Streamable HTTP
+        │ Header: X-API-Key: rivo_xxx
+        ▼
+Edge Function: mcp-server
+        │ (mcp-lite + Hono)
+        │
+        ├── Autentica via api_keys (SHA-256, mesmo schema atual)
+        ├── Resolve tenant_id
+        └── Invoca clients-api internamente OU consulta DB direto
+                │
+                ▼
+        Supabase (RLS por tenant_id)
+```
 
-**Cores (semantic tokens em vez de azul hard-coded):**
-- `bg-blue-600` → `bg-primary` (laranja da marca)
-- `text-blue-600`, `border-blue-500/30`, `bg-blue-50/50 dark:bg-blue-950/20` → tokens `primary`/`primary/10`/`primary/20`
-- `bg-white dark:bg-zinc-950` → `bg-background`
-- `text-zinc-900 dark:text-zinc-100` → `text-foreground`
-- `text-zinc-500`, `text-zinc-400` → `text-muted-foreground`
-- `border-zinc-200 dark:border-zinc-800` → `border-border`
-- `bg-zinc-50 dark:bg-zinc-900` (rodapé) → `bg-muted/30`
-- Badges de método HTTP no `EndpointRow`: substituir `text-blue-600` (GET) por `text-primary`, manter green/amber/red para POST/PUT/DELETE mas usando tokens (`text-emerald-600`, `text-amber-600`, `text-destructive`).
+## Componentes
 
-**Conteúdo dos endpoints:** mantido (já validado contra `supabase/functions/clients-api/index.ts` linhas 251–780 — Health, Clients CRUD + bulk, Agreements, Payments, Portal, Cadastros, WhatsApp, Webhooks, Propensity, Status types, Credores).
+### 1. Nova Edge Function `supabase/functions/mcp-server/index.ts`
+- Usa **mcp-lite** (npm:mcp-lite@^0.10.0) + **Hono** + `StreamableHttpTransport`
+- `verify_jwt = false` em `supabase/config.toml` (auth via X-API-Key)
+- Reaproveita a mesma tabela `api_keys` (SHA-256) — nenhum schema novo necessário
+- Endpoint público: `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/mcp-server`
 
-**Pequenos ajustes textuais:**
-- Trocar `bg-zinc-100 dark:bg-zinc-800` (chips de campo na tabela "Campos aceitos") por `bg-muted`.
-- Bloco "Rate Limits" no fim: trocar `bg-zinc-100 dark:bg-zinc-800` por `bg-muted`.
+### 2. Tools expostas (mapeadas 1:1 com a API REST)
 
-### 2. `src/pages/ApiDocsPage.tsx` (área autenticada — `Configurações → API REST`)
+**Clientes / Carteira**
+- `list_clients` — filtros: status, credor, cpf, limit, offset
+- `get_client` — por id ou cpf
+- `create_client` — payload completo (nome, cpf, credor, dívida)
+- `update_client_status` — muda status (INADIMPLENTE → EM DIA, etc.)
+- `bulk_import_clients` — array de até 1000 registros
 
-**Branding:**
-- "Integre sistemas externos com toda a plataforma **CollectFlow**" → "Integre sistemas externos com toda a plataforma **RIVO CONNECT**".
+**Acordos**
+- `list_agreements` — filtros: status, cpf, credor
+- `get_agreement` — por id
+- `create_agreement` — valor, parcelas, data
+- `approve_agreement` / `reject_agreement`
 
-**URL pública:**
-- A variável `publicUrl` continua sendo `${window.location.origin}/api-docs/public` (já correto após o fix anterior). Adicionar um helper visual mostrando a URL canônica de produção `https://rivoconnect.com/api-docs/public` quando o `window.location.origin` for um preview/sandbox, para o admin compartilhar o link "oficial".
+**Pagamentos**
+- `list_payments` — por agreement_id ou período
+- `generate_pix` / `generate_boleto` — para uma parcela
+- `confirm_manual_payment` — admin
 
-### 3. `index.html`
+**Portal do Devedor**
+- `lookup_debtor` — por CPF (gera link checkout)
+- `create_portal_agreement` — proposta self-service
 
-- Atualizar `<title>` e meta `description` se ainda mencionarem "CollectFlow" ou textos antigos relacionados à API. Verificar e ajustar para refletir RIVO CONNECT.
+**Comunicação**
+- `send_whatsapp` — mensagem unitária
+- `send_whatsapp_bulk` — campanha
+- `register_webhook` — CRM externo recebe eventos (acordo criado, pagamento confirmado)
 
-### 4. (Opcional) `docs/EDGE_FUNCTIONS.md` e `mem://integrations/api/rest-specification`
+**Metadados**
+- `list_credores`
+- `list_status_types`
+- `calculate_propensity` — score de propensão por CPF
 
-- Adicionar nota com a URL pública oficial: `https://rivoconnect.com/api-docs/public`.
-- Confirmar lista de endpoints documentados (já está sincronizada com a edge function).
+### 3. Documentação
+- Nova aba **"MCP Server"** em `src/pages/ApiDocsPublicPage.tsx` e `ApiDocsPage.tsx` com:
+  - URL do servidor MCP
+  - Como gerar API Key (link p/ Configurações → API REST — reaproveita fluxo existente)
+  - Snippets de configuração para: **Claude Desktop**, **Cursor**, **n8n MCP node**, **VS Code (Continue)**, **ChatGPT custom GPT**
+  - Lista completa das tools com input schema
 
-## O que NÃO muda
+### 4. Atualização do menu Configurações
+- `src/pages/ConfiguracoesPage.tsx` — card "Servidor MCP" ao lado de "API REST"
+- Rota `/configuracoes/mcp` reutilizando `ApiDocsPage` com tab inicial `mcp`
 
-- A `BASE_URL` da edge function (`https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`) — continua sendo o endpoint real chamado pelos clientes.
-- Os exemplos de request/response (cURL, Python, Node.js) — já estão corretos.
-- Autenticação `X-API-Key` com prefixo `cf_` — mantida (já documentada na memória `integrations/api/rest-specification`).
-- Lista de endpoints (todos batem 1:1 com `supabase/functions/clients-api/index.ts`).
+## Detalhes técnicos
 
-## Resultado esperado
+**Auth pattern (idêntico ao clients-api)**
+```ts
+const apiKey = req.headers.get("x-api-key");
+const hash = await sha256(apiKey);
+const { data } = await supabase.from("api_keys")
+  .select("tenant_id").eq("key_hash", hash).eq("is_active", true).single();
+```
 
-- `https://rivoconnect.com/api-docs/public` exibe a doc com identidade visual RIVO CONNECT (laranja, semantic tokens, modo claro/escuro coerentes).
-- Toda menção a "CollectFlow" removida.
-- Admin em Configurações → API REST vê e copia a URL pública oficial de produção.
+**Tool handler pattern (mcp-lite)**
+```ts
+mcpServer.tool({
+  name: "list_clients",
+  description: "Lista clientes/devedores do tenant. Use para sincronizar com CRM externo.",
+  inputSchema: { type: "object", properties: {
+    status: { type: "string", enum: ["INADIMPLENTE","EM DIA","ACORDO VIGENTE","QUITADO"] },
+    credor: { type: "string" },
+    limit: { type: "number", default: 100, maximum: 1000 }
+  }},
+  handler: async (input, ctx) => {
+    const tenantId = ctx.auth.tenantId; // injetado no transport
+    const { data } = await supabase.from("clients")
+      .select("*").eq("tenant_id", tenantId)
+      .eq("status", input.status).limit(input.limit);
+    return { content: [{ type: "text", text: JSON.stringify(data) }] };
+  }
+});
+```
+
+**Tenant isolation**: cada tool obrigatoriamente injeta `.eq('tenant_id', tenantId)` — segue regra Core de RLS.
+
+**Rate limiting**: contagem in-memory por `key_hash` (60 req/min) para evitar abuso. Documentar na página pública.
+
+**Logging**: cada chamada MCP grava em `webhook_logs` com `source='mcp'`, `tool_name`, `tenant_id` para auditoria.
+
+## Arquivos a criar/editar
+
+**Criar**
+- `supabase/functions/mcp-server/index.ts` — servidor MCP completo
+- `supabase/functions/mcp-server/deno.json` — import map com `mcp-lite`
+- `src/components/api-docs/McpServerTab.tsx` — UI da documentação MCP
+
+**Editar**
+- `supabase/config.toml` — adicionar bloco `[functions.mcp-server]` com `verify_jwt = false`
+- `src/pages/ApiDocsPublicPage.tsx` — adicionar tab "MCP Server"
+- `src/pages/ApiDocsPage.tsx` — adicionar tab "MCP Server"
+- `src/pages/ConfiguracoesPage.tsx` — card MCP
+- `src/App.tsx` — rota `/configuracoes/mcp` (e `/api-docs/public` já existente passa a ter anchor `#mcp`)
+
+## Não escopo (fica para depois)
+- Implementar MCP **client** dentro do RIVO (consumir CRMs externos via MCP) — este plano só expõe o RIVO **como servidor**.
+- Tools de escrita destrutiva em massa (delete bulk) — mantidas só na API REST por segurança.
+
+Confirmar para implementar?
