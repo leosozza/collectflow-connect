@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 export interface ApiKey {
   id: string;
   tenant_id: string;
+  credor_id: string | null;
+  credor_nome?: string | null;
   key_prefix: string;
   label: string;
   is_active: boolean;
