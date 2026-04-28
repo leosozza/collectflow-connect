@@ -136,7 +136,7 @@ function calculateScore(
     else contactScore = 10;
   }
 
-  // DIM 2: Engajamento (0 to +30)
+  // DIM 2: Engajamento (-5 to +30)
   let engagementScore = 0;
   engagementScore += Math.min(whatsappInbound * 5, 10);
   if (lastContactDays >= 0) engagementScore += 5;
@@ -145,6 +145,9 @@ function calculateScore(
   if (partialPayment) engagementScore += 5;
   if (paymentConfirmed) engagementScore += 10;
   engagementScore = Math.min(engagementScore, 30);
+  // Penalidade: WhatsApp enviado sem nenhuma resposta do cliente (aplica uma única vez)
+  const whatsappSentNoReply = whatsappOutboundCount > 0 && whatsappInbound === 0;
+  if (whatsappSentNoReply) engagementScore -= 5;
 
   // DIM 3: Histórico de pagamento (-20 to +25)
   let paymentScore = 0;
@@ -154,28 +157,18 @@ function calculateScore(
   else if (agreementsCancelled > 0 && !paymentConfirmed) paymentScore = -20;
   else if (agreementsCreated > 0 && agreementsSigned === 0 && !paymentConfirmed) paymentScore = -5;
 
-  // DIM 4: Perfil do devedor (-25 to +20)
+  // DIM 4: Perfil do devedor (-10 to +20)
   let profileScore = 0;
   const profile = clientData.debtor_profile;
   if (profile === "ocasional") profileScore = 20;
   else if (profile === "recorrente") profileScore = 5;
   else if (profile === "insatisfeito") profileScore = -10;
-  else if (profile === "resistente") profileScore = -25;
+  else if (profile === "resistente") profileScore = -10;
 
-  // DIM 5: Tempo de atraso (-20 to +10)
-  let delayScore = 0;
-  if (clientData.data_vencimento) {
-    const venc = new Date(clientData.data_vencimento);
-    const delayDays = daysBetween(venc, now);
-    if (delayDays <= 0) delayScore = 10;
-    else if (delayDays <= 30) delayScore = 10;
-    else if (delayDays <= 90) delayScore = 0;
-    else if (delayDays <= 180) delayScore = -10;
-    else delayScore = -20;
-  }
+  // DIM 5 (Tempo de atraso) removida — não pontua mais.
 
   // Final score (sum, clamp 0-100)
-  const rawScore = contactScore + engagementScore + paymentScore + profileScore + delayScore;
+  const rawScore = contactScore + engagementScore + paymentScore + profileScore;
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   // preferred_channel
