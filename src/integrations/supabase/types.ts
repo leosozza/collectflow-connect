@@ -4345,6 +4345,167 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_billing_customers: {
+        Row: {
+          asaas_customer_id: string
+          cpf_cnpj: string
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          platform_account_id: string
+          raw_response: Json
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          asaas_customer_id: string
+          cpf_cnpj: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          platform_account_id: string
+          raw_response?: Json
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          asaas_customer_id?: string
+          cpf_cnpj?: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          platform_account_id?: string
+          raw_response?: Json
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_billing_customers_platform_account_id_fkey"
+            columns: ["platform_account_id"]
+            isOneToOne: false
+            referencedRelation: "platform_billing_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_billing_customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_billing_subscriptions: {
+        Row: {
+          asaas_subscription_id: string
+          billing_type: string
+          created_at: string
+          created_by: string | null
+          cycle: string
+          description: string | null
+          external_reference: string | null
+          id: string
+          last_payment_at: string | null
+          last_payment_due_date: string | null
+          last_payment_id: string | null
+          last_payment_status: string | null
+          next_due_date: string
+          plan_id: string | null
+          platform_account_id: string
+          platform_customer_id: string
+          raw_response: Json
+          status: string
+          tenant_id: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          asaas_subscription_id: string
+          billing_type: string
+          created_at?: string
+          created_by?: string | null
+          cycle?: string
+          description?: string | null
+          external_reference?: string | null
+          id?: string
+          last_payment_at?: string | null
+          last_payment_due_date?: string | null
+          last_payment_id?: string | null
+          last_payment_status?: string | null
+          next_due_date: string
+          plan_id?: string | null
+          platform_account_id: string
+          platform_customer_id: string
+          raw_response?: Json
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          asaas_subscription_id?: string
+          billing_type?: string
+          created_at?: string
+          created_by?: string | null
+          cycle?: string
+          description?: string | null
+          external_reference?: string | null
+          id?: string
+          last_payment_at?: string | null
+          last_payment_due_date?: string | null
+          last_payment_id?: string | null
+          last_payment_status?: string | null
+          next_due_date?: string
+          plan_id?: string | null
+          platform_account_id?: string
+          platform_customer_id?: string
+          raw_response?: Json
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_billing_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_billing_subscriptions_platform_account_id_fkey"
+            columns: ["platform_account_id"]
+            isOneToOne: false
+            referencedRelation: "platform_billing_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_billing_subscriptions_platform_customer_id_fkey"
+            columns: ["platform_customer_id"]
+            isOneToOne: false
+            referencedRelation: "platform_billing_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_billing_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portal_payments: {
         Row: {
           agreement_id: string
