@@ -209,7 +209,7 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
               </div>
             </div>
 
-            {/* Linha 3: Valor em aberto */}
+            {/* Linha 3: Valor em aberto + Primeira parcela */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Valor Aberto De</Label>
@@ -218,6 +218,14 @@ const ClientFilters = ({ filters, onChange, onSearch, showAdvancedFilters = true
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Valor Aberto Até</Label>
                 <CurrencyInput value={filters.valorAbertoAte || 0} onValueChange={(v) => update("valorAbertoAte", v)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Primeira Parcela De</Label>
+                <Input type="date" value={filters.primeiraParcelaDe || ""} onChange={(e) => update("primeiraParcelaDe", e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Primeira Parcela Até</Label>
+                <Input type="date" value={filters.primeiraParcelaAte || ""} onChange={(e) => update("primeiraParcelaAte", e.target.value)} />
               </div>
             </div>
 
