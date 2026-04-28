@@ -290,11 +290,16 @@ export default function ApiDocsPage() {
                 <div className="text-center py-8 text-muted-foreground"><Key className="w-8 h-8 mx-auto mb-2 opacity-40" /><p className="text-sm">Nenhuma chave gerada ainda</p></div>
               ) : (
                 <Table>
-                  <TableHeader><TableRow><TableHead>Label</TableHead><TableHead>Prefixo</TableHead><TableHead>Status</TableHead><TableHead>Último uso</TableHead><TableHead>Criado em</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Label</TableHead><TableHead>Credor</TableHead><TableHead>Prefixo</TableHead><TableHead>Status</TableHead><TableHead>Último uso</TableHead><TableHead>Criado em</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
                     {apiKeys.map((key) => (
                       <TableRow key={key.id}>
                         <TableCell className="font-medium">{key.label}</TableCell>
+                        <TableCell>{key.credor_id ? (
+                          <Badge variant="outline" className="text-xs text-primary border-primary/30 bg-primary/10">{key.credor_nome || "—"}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">Todos os credores</Badge>
+                        )}</TableCell>
                         <TableCell><code className="text-xs bg-muted px-2 py-0.5 rounded font-mono">{key.key_prefix}••••</code></TableCell>
                         <TableCell>{key.is_active ? <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10"><CheckCircle2 className="w-3 h-3 mr-1" />Ativa</Badge> : <Badge variant="outline" className="text-muted-foreground"><ShieldX className="w-3 h-3 mr-1" />Revogada</Badge>}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{key.last_used_at ? new Date(key.last_used_at).toLocaleString("pt-BR") : "—"}</TableCell>
