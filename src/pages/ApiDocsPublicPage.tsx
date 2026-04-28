@@ -480,6 +480,12 @@ curl -X POST "${BASE_URL}/webhooks/configure" -H "X-API-Key: cf_..." -H "Content
             </ul>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="mcp">
+            <McpServerTab publicView />
+          </TabsContent>
+        </Tabs>
       </main>
 
       <footer className="border-t border-border bg-muted/30 py-6 mt-8">
