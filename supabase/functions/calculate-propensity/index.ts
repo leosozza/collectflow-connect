@@ -203,7 +203,7 @@ function calculateScore(
   if (paymentScore <= -20) reasons.push("Quebra de acordo");
   if (paymentScore === -5) reasons.push("Acordo criado sem formalização");
   if (profileScore <= -10) reasons.push(`Perfil: ${profile}`);
-  if (delayScore <= -10) reasons.push("Atraso prolongado");
+  if (whatsappSentNoReply) reasons.push("WhatsApp sem resposta");
   const score_reason = reasons.length > 0 ? reasons.slice(0, 3).join("; ") : "Score calculado com base no histórico";
 
   // score_confidence
