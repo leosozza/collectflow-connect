@@ -14,6 +14,7 @@ import {
   fetchCarteiraGrouped,
   fetchAllCarteiraIds,
   fetchAllCarteiraClients,
+  fetchCarteiraClientsByIds,
   createClient,
   updateClient,
   bulkCreateClients,
@@ -479,22 +480,34 @@ const CarteiraPage = () => {
     return ids;
   }, [displayClients]);
 
+  // Todos os IDs da página atual já estão na seleção?
+  const allCurrentPageSelected = useMemo(() => {
+    if (allClientIds.length === 0) return false;
+    return allClientIds.every((id) => selectedIds.has(id));
+  }, [allClientIds, selectedIds]);
+
+  // Acumula/Desfaz seleção apenas para os IDs da página atual,
+  // preservando seleções feitas em outras páginas.
   const toggleSelectAll = () => {
-    if (selectedIds.size === allClientIds.length && allClientIds.length > 0) {
-      setSelectedIds(new Set());
-      setSelectAllFiltered(false);
+    const next = new Set(selectedIds);
+    if (allCurrentPageSelected) {
+      allClientIds.forEach((id) => next.delete(id));
     } else {
-      setSelectedIds(new Set(allClientIds));
-      setSelectAllFiltered(false);
+      allClientIds.forEach((id) => next.add(id));
     }
+    setSelectedIds(next);
+    setSelectAllFiltered(false);
+    setBulkClients(null);
   };
 
-  // Reset selectAllFiltered when filters or page change
+  // Reset selectAllFiltered quando filtros ou página mudam.
+  // IMPORTANTE: não zeramos `selectedIds` ao trocar de página —
+  // assim o operador acumula seleções entre páginas.
   useEffect(() => {
     setSelectAllFiltered(false);
   }, [rpcFilters, currentPage]);
 
-  // Reset page and selection when pageSize changes
+  // Reset page e seleção quando pageSize muda (universo da página muda)
   const prevPageSizeRef = useRef(pageSize);
   useEffect(() => {
     if (prevPageSizeRef.current !== pageSize) {
@@ -502,6 +515,7 @@ const CarteiraPage = () => {
       setUrlPage(1);
       setSelectedIds(new Set());
       setSelectAllFiltered(false);
+      setBulkClients(null);
     }
   }, [pageSize]);
 
@@ -512,6 +526,7 @@ const CarteiraPage = () => {
       const allFilteredIds = await fetchAllCarteiraIds(tenant.id, rpcFilters, sortField, sortDir);
       setSelectedIds(new Set(allFilteredIds));
       setSelectAllFiltered(true);
+      setBulkClients(null);
     } catch (err: any) {
       toast.error("Erro ao buscar todos os IDs filtrados");
     } finally {
@@ -529,19 +544,40 @@ const CarteiraPage = () => {
       ids.forEach((id: string) => next.add(id));
     }
     setSelectedIds(next);
+    setBulkClients(null);
   };
 
-  // When selectAllFiltered, fetch ALL clients from DB for bulk actions
+  // Resolve os GroupedClients para ações em massa.
+  // - selectAllFiltered: busca tudo via RPC paginada
+  // - seleção contida na página atual: filtra local
+  // - seleção acumulada entre páginas: hidrata via fetchCarteiraClientsByIds
   const fetchBulkIfNeeded = async (): Promise<GroupedClient[]> => {
-    if (!selectAllFiltered) {
-      return displayClients.filter((c) => selectedIds.has(c.id));
+    if (selectAllFiltered) {
+      if (bulkClients) return bulkClients;
+      setLoadingBulkClients(true);
+      try {
+        const all = await fetchAllCarteiraClients(tenant!.id, rpcFilters, sortField, sortDir);
+        setBulkClients(all);
+        return all;
+      } finally {
+        setLoadingBulkClients(false);
+      }
     }
+
+    const idsArr = Array.from(selectedIds);
+    const allInPage = idsArr.every((id) => allClientIds.includes(id));
+    if (allInPage) {
+      return displayClients.filter((c) =>
+        (c.allIds || [c.id]).some((id: string) => selectedIds.has(id))
+      );
+    }
+
     if (bulkClients) return bulkClients;
     setLoadingBulkClients(true);
     try {
-      const all = await fetchAllCarteiraClients(tenant!.id, rpcFilters, sortField, sortDir);
-      setBulkClients(all);
-      return all;
+      const hydrated = await fetchCarteiraClientsByIds(tenant!.id, idsArr);
+      setBulkClients(hydrated);
+      return hydrated;
     } finally {
       setLoadingBulkClients(false);
     }
@@ -694,10 +730,11 @@ const CarteiraPage = () => {
 
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
-      {/* Banner: selecionar todos os filtrados */}
-      {selectedIds.size > 0 && selectedIds.size === allClientIds.length && allClientIds.length > 0 && totalCount > allClientIds.length && !selectAllFiltered && (
+      {/* Banner: seleção acumulada entre páginas + opção de selecionar tudo */}
+      {selectedIds.size > 0 && totalCount > selectedIds.size && !selectAllFiltered && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
-          {selectedIds.size} clientes desta página selecionados.{" "}
+          <span className="font-medium">{selectedIds.size.toLocaleString("pt-BR")}</span>{" "}
+          registro(s) selecionado(s) (a seleção é mantida ao trocar de página).{" "}
           <Button
             variant="link"
             size="sm"
@@ -711,6 +748,15 @@ const CarteiraPage = () => {
               <>Selecionar todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados</>
             )}
           </Button>
+          {" · "}
+          <Button
+            variant="link"
+            size="sm"
+            className="text-muted-foreground font-medium px-1 h-auto"
+            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
+          >
+            Limpar seleção
+          </Button>
         </div>
       )}
       {selectAllFiltered && (
@@ -720,7 +766,7 @@ const CarteiraPage = () => {
             variant="link"
             size="sm"
             className="text-primary font-semibold px-1 h-auto"
-            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); }}
+            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
           >
             Limpar seleção
           </Button>
@@ -737,7 +783,7 @@ const CarteiraPage = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[50, 100, 200, 500, 1000].map((size) => (
+                {[20, 50, 100, 200, 500, 1000].map((size) => (
                   <SelectItem key={size} value={String(size)}>{size}</SelectItem>
                 ))}
               </SelectContent>
@@ -798,7 +844,7 @@ const CarteiraPage = () => {
                   <TableRow className="bg-muted/50">
                     <TableHead className="w-10">
                       <Checkbox
-                        checked={selectedIds.size === allClientIds.length && allClientIds.length > 0}
+                        checked={allCurrentPageSelected}
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
@@ -907,7 +953,7 @@ const CarteiraPage = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {[50, 100, 200, 500, 1000].map((size) => (
+                    {[20, 50, 100, 200, 500, 1000].map((size) => (
                       <SelectItem key={size} value={String(size)}>{size}</SelectItem>
                     ))}
                   </SelectContent>
