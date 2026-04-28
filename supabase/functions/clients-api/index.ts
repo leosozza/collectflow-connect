@@ -528,6 +528,30 @@ Deno.serve(async (req: Request) => {
   // PAYMENTS ROUTES
   // ══════════════════════════════════════════════════════════════════════════
 
+  // GET /payments/methods — Listar meios de pagamento disponíveis
+  if (segments[0] === "payments" && segments[1] === "methods" && method === "GET") {
+    const credorId = url.searchParams.get("credor_id");
+    const builtIn = [
+      { code: "pix", label: "PIX", category: "instantaneo", credor_id: null },
+      { code: "cartao", label: "Cartão de Crédito", category: "cartao", credor_id: null },
+      { code: "boleto", label: "Boleto Bancário", category: "boleto", credor_id: null },
+    ];
+    let customQuery = supabaseAdmin.from("meios_pagamento").select("id, nome, descricao, credor_id").eq("tenant_id", tenantId);
+    if (credorId) {
+      customQuery = customQuery.or(`credor_id.is.null,credor_id.eq.${credorId}`);
+    }
+    const { data: customMethods, error: customErr } = await customQuery.order("nome");
+    if (customErr) return json({ error: customErr.message }, 500);
+    const customMapped = (customMethods ?? []).map((m: any) => ({
+      code: m.id,
+      label: m.nome,
+      category: "custom",
+      description: m.descricao,
+      credor_id: m.credor_id,
+    }));
+    return json({ data: [...builtIn, ...customMapped], total: builtIn.length + customMapped.length });
+  }
+
   // GET /payments
   if (segments[0] === "payments" && !segments[1] && method === "GET") {
     const page = parseInt(url.searchParams.get("page") ?? "1");
@@ -535,10 +559,12 @@ Deno.serve(async (req: Request) => {
     const offset = (page - 1) * limit;
     const status = url.searchParams.get("status");
     const clientId = url.searchParams.get("client_id");
+    const tipo = url.searchParams.get("tipo");
 
     let query = supabaseAdmin.from("negociarie_cobrancas").select("*", { count: "exact" }).eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
     if (status) query = query.eq("status", status);
     if (clientId) query = query.eq("client_id", clientId);
+    if (tipo) query = query.eq("tipo", tipo);
 
     const { data, error, count } = await query;
     if (error) return json({ error: error.message }, 500);
@@ -553,43 +579,52 @@ Deno.serve(async (req: Request) => {
     return json({ data });
   }
 
-  // POST /payments/pix
-  if (segments[0] === "payments" && segments[1] === "pix" && method === "POST") {
-    const body = await req.json() as Record<string, unknown>;
+  // Helper: cria cobrança em negociarie_cobrancas
+  const createPayment = async (body: Record<string, unknown>, tipo: string, prefix: string) => {
     if (!body.client_id || !body.valor || !body.data_vencimento) {
       return json({ error: "Campos obrigatórios: client_id, valor, data_vencimento" }, 422);
     }
-    // Create a local record — actual PIX generation would call Negociarie
     const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").insert({
       tenant_id: tenantId,
       client_id: body.client_id,
       valor: body.valor,
       data_vencimento: body.data_vencimento,
-      tipo: "pix",
-      id_geral: `API-PIX-${Date.now()}`,
+      tipo,
+      id_geral: `${prefix}-${Date.now()}`,
       status: "pendente",
     }).select().single();
     if (error) return json({ error: error.message }, 500);
     return json({ success: true, data }, 201);
+  };
+
+  // POST /payments — endpoint genérico (tipo no body)
+  if (segments[0] === "payments" && !segments[1] && method === "POST") {
+    const body = await req.json() as Record<string, unknown>;
+    const tipo = String(body.tipo ?? "").toLowerCase();
+    const allowed = ["pix", "cartao", "boleto"];
+    if (!allowed.includes(tipo)) {
+      return json({ error: `Campo "tipo" obrigatório. Valores aceitos: ${allowed.join(", ")}` }, 422);
+    }
+    const prefixMap: Record<string, string> = { pix: "API-PIX", cartao: "API-CARD", boleto: "API-BOL" };
+    return createPayment(body, tipo, prefixMap[tipo]);
+  }
+
+  // POST /payments/pix
+  if (segments[0] === "payments" && segments[1] === "pix" && method === "POST") {
+    const body = await req.json() as Record<string, unknown>;
+    return createPayment(body, "pix", "API-PIX");
   }
 
   // POST /payments/cartao
   if (segments[0] === "payments" && segments[1] === "cartao" && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
-    if (!body.client_id || !body.valor || !body.data_vencimento) {
-      return json({ error: "Campos obrigatórios: client_id, valor, data_vencimento" }, 422);
-    }
-    const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").insert({
-      tenant_id: tenantId,
-      client_id: body.client_id,
-      valor: body.valor,
-      data_vencimento: body.data_vencimento,
-      tipo: "cartao",
-      id_geral: `API-CARD-${Date.now()}`,
-      status: "pendente",
-    }).select().single();
-    if (error) return json({ error: error.message }, 500);
-    return json({ success: true, data }, 201);
+    return createPayment(body, "cartao", "API-CARD");
+  }
+
+  // POST /payments/boleto
+  if (segments[0] === "payments" && segments[1] === "boleto" && method === "POST") {
+    const body = await req.json() as Record<string, unknown>;
+    return createPayment(body, "boleto", "API-BOL");
   }
 
   // ══════════════════════════════════════════════════════════════════════════

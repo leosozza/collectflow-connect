@@ -1,63 +1,60 @@
-# Recalibração do Score Operacional
+# Expandir API de Pagamentos com Todos os Meios do Rivo
 
-Ajustes solicitados na edge function `calculate-propensity` (motor único do score).
+A API pública (`/clients-api`) hoje expõe apenas **PIX** e **Cartão**, mas o Rivo opera com mais meios reais via Asaas: **PIX, Cartão de Crédito, Boleto** (e meios configuráveis por credor em `meios_pagamento`). O plano alinha a API e a documentação com a realidade da plataforma.
 
-## 1. Perfil "Resistente": -25 → -10
+## Meios de Pagamento Suportados
 
-Na **Dimensão 4 (Perfil do Devedor)**, a penalidade do perfil `resistente` cai de **-25 para -10**, alinhando-se ao perfil `insatisfeito`.
-
-| Perfil | Antes | Depois |
+| Meio | Código API | Status atual |
 |---|---|---|
-| ocasional | +20 | +20 |
-| recorrente | +5 | +5 |
-| insatisfeito | -10 | -10 |
-| **resistente** | **-25** | **-10** |
+| PIX | `pix` | ✅ já existe |
+| Cartão de Crédito | `cartao` | ✅ já existe |
+| Boleto Bancário | `boleto` | ❌ adicionar |
+| Listar meios disponíveis | — | ❌ adicionar |
 
-## 2. Remover Dimensão "Tempo de Atraso"
+> Demais meios customizados (cadastrados em `meios_pagamento` por tenant/credor) serão expostos via novo endpoint de listagem, sem precisar de rota dedicada por meio.
 
-A **Dimensão 5** deixa de existir. Nenhum cliente recebe mais pontos (positivos ou negativos) com base em `data_vencimento`.
+## Mudanças na Edge Function `clients-api`
 
-- Remover bloco `delayScore` (linhas 163-173).
-- Remover `delayScore` da soma `rawScore`.
-- Remover a razão "Atraso prolongado" do `score_reason`.
+### 1. Novo endpoint: `GET /payments/methods`
+Retorna todos os meios de pagamento disponíveis para o tenant (globais + por credor, opcional via `?credor_id=`).
 
-**Impacto esperado:** carteiras antigas (>180d) deixam de ser penalizadas em -20, o que deve elevar muitos CPFs hoje classificados como "Ruim" para faixas melhores.
-
-## 3. WhatsApp enviado sem resposta: -5
-
-Nova lógica na **Dimensão 2 (Engajamento)**: se o cliente recebeu mensagens WhatsApp (`whatsapp_outbound` ou `message_sent` de canal whatsapp) e **não respondeu nenhuma** (`whatsapp_inbound = 0`), aplica-se **-5 pontos**.
-
-- Penalidade aplicada **uma única vez**, não por mensagem (evita acumular -50 por campanhas).
-- Só penaliza se houver pelo menos 1 envio WhatsApp registrado.
-- Adicionar razão "WhatsApp sem resposta" no `score_reason` quando aplicável.
-
-## Faixas Finais (continuam iguais)
-
-| Faixa | Score | Significado |
-|---|---|---|
-| Bom | 75-100 | Alta propensão |
-| Médio | 50-74 | Propensão média |
-| Ruim | 1-49 | Baixa propensão |
-| Zero | 0 | Sem sinais positivos |
-
-Novo intervalo teórico do `rawScore`:
-```text
-Mín: 0 (contato) + -5 (wpp s/ resposta) + -20 (quebra acordo) + -10 (resistente) = -35  → clamp 0
-Máx: 30 + 30 + 25 + 20 = 105 → clamp 100
+```json
+{
+  "data": [
+    { "code": "pix", "label": "PIX", "category": "instantaneo" },
+    { "code": "cartao", "label": "Cartão de Crédito", "category": "cartao" },
+    { "code": "boleto", "label": "Boleto Bancário", "category": "boleto" },
+    { "code": "<uuid>", "label": "<custom>", "category": "custom", "credor_id": "..." }
+  ]
+}
 ```
 
-## Recálculo da Base
+### 2. Novo endpoint: `POST /payments/boleto`
+Mesmo contrato dos endpoints existentes (`client_id`, `valor`, `data_vencimento`), grava em `negociarie_cobrancas` com `tipo = "boleto"`.
 
-Após o deploy, executar **recálculo em massa** de todos os CPFs com eventos para que a nova distribuição reflita os ajustes (a função `calculate-propensity` já suporta processamento em lote da base inteira do tenant).
+### 3. Endpoint genérico: `POST /payments`
+Permite escolher o meio via campo `tipo` no body (`pix`, `cartao`, `boleto`), simplificando integrações futuras. Mantém os endpoints específicos por compatibilidade.
+
+### 4. Filtro extra em `GET /payments`
+Adicionar suporte ao query param `?tipo=pix|cartao|boleto` para filtrar por meio.
+
+## Mudanças na Documentação (`ApiDocsPage.tsx` + `ApiDocsPublicPage.tsx`)
+
+Atualizar a seção **"4. Pagamentos"** para listar:
+- `GET  /payments` — Listar pagamentos (com filtros `status`, `client_id`, `tipo`)
+- `GET  /payments/:id` — Status de um pagamento
+- `GET  /payments/methods` — **NOVO** — Listar meios disponíveis
+- `POST /payments` — **NOVO** — Gerar cobrança (meio definido via `tipo`)
+- `POST /payments/pix` — Gerar cobrança PIX
+- `POST /payments/cartao` — Gerar cobrança Cartão
+- `POST /payments/boleto` — **NOVO** — Gerar cobrança Boleto
+
+Atualizar exemplos cURL/Python/JS para incluir Boleto e o endpoint de listagem de meios.
 
 ## Arquivos Alterados
 
-- `supabase/functions/calculate-propensity/index.ts` — único arquivo modificado.
-- Sem mudanças de schema, sem migrations.
-- Frontend (PropensityBadge, filtros) **não muda**: faixas e campo `propensity_score` permanecem.
+- `supabase/functions/clients-api/index.ts` — adicionar 3 rotas, ampliar filtro
+- `src/pages/ApiDocsPage.tsx` — atualizar seção Pagamentos (admin/interno)
+- `src/pages/ApiDocsPublicPage.tsx` — atualizar seção Pagamentos (público)
 
-## Validação Pós-Deploy
-
-1. Rodar o recálculo da base.
-2. Validar nova contagem de CPFs por faixa (Bom / Médio / Ruim / Zero).
-3. Conferir alguns CPFs específicos para auditar `score_reason`.
+Sem migrations. Sem mudanças no schema. Compatível com integrações existentes (rotas antigas continuam funcionando).
