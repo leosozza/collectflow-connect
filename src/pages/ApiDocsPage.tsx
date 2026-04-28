@@ -498,9 +498,28 @@ export default function ApiDocsPage() {
             <DialogTitle>Gerar Nova API Key</DialogTitle>
             <DialogDescription>O token será exibido apenas uma vez. Guarde-o com segurança.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="label">Label da chave</Label>
-            <Input id="label" value={newKeyLabel} onChange={(e) => setNewKeyLabel(e.target.value)} placeholder="Ex: Sistema de CRM, ERP Interno..." />
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="label">Label da chave</Label>
+              <Input id="label" value={newKeyLabel} onChange={(e) => setNewKeyLabel(e.target.value)} placeholder="Ex: Sistema de CRM, ERP Interno..." />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="credor">Credor</Label>
+              <Select value={newKeyCredorId} onValueChange={setNewKeyCredorId}>
+                <SelectTrigger id="credor">
+                  <SelectValue placeholder="Selecione o credor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Todos os credores (chave do tenant)</SelectItem>
+                  {credores.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Chaves vinculadas a um credor só acessam dados daquele credor. Tentativas em outros credores retornam 403.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>Cancelar</Button>
