@@ -29,8 +29,24 @@ import ParcelasProgramadasCard, {
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
-import { useDashboardLayout } from "@/hooks/useDashboardLayout";
+import SortableCard from "@/components/dashboard/SortableCard";
+import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -193,12 +209,28 @@ const DashboardPage = () => {
     });
   };
 
-  // Visibility flags from saved layout (positions are now fixed in 3-column grid)
-  const showKpis = layout.visible.kpisTop;
-  const showParcelas = layout.visible.parcelas;
-  const showTotalRecebido = layout.visible.totalRecebido;
-  const showMetas = layout.visible.metas;
-  const showAgendamentos = layout.visible.agendamentos;
+  // Span (Tailwind classes) per block — defines its preferred width on lg+ screens.
+  const SPAN_CLASS: Record<DashboardBlockId, string> = {
+    kpisTop: "col-span-1 lg:col-span-3",
+    metas: "col-span-1 lg:col-span-3",
+    agendamentos: "col-span-1 lg:col-span-3",
+    totalRecebido: "col-span-1 lg:col-span-6",
+    parcelas: "col-span-1 lg:col-span-6",
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = layout.order.indexOf(active.id as DashboardBlockId);
+    const newIndex = layout.order.indexOf(over.id as DashboardBlockId);
+    if (oldIndex < 0 || newIndex < 0) return;
+    setLayout({ ...layout, order: arrayMove(layout.order, oldIndex, newIndex) });
+  };
 
   const trendAcionados = pctDelta(acionadosHoje, stats?.acionados_ontem ?? 0);
   const trendAcordosDia = pctDelta(stats?.acordos_dia ?? 0, stats?.acordos_dia_anterior ?? 0);
@@ -257,6 +289,99 @@ const DashboardPage = () => {
       trend: undefined as { value: string; text: string; isPositive: boolean } | undefined,
     },
   ];
+
+  // Renders the inner content for each block id.
+  const renderBlock = (id: DashboardBlockId) => {
+    switch (id) {
+      case "kpisTop":
+        return (
+          <div className="grid grid-cols-2 gap-2.5">
+            {kpis.map((item) => {
+              const ItemIcon = item.Icon;
+              const isMoney = item.value.startsWith("R$");
+              return (
+                <div
+                  key={item.label}
+                  className="bg-card rounded-xl border border-border shadow-sm px-3 py-2.5 flex flex-col justify-between min-w-0"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
+                        <ItemIcon className={cn("w-3.5 h-3.5", item.iconColor)} />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground font-medium leading-tight mb-1 break-words">
+                      {item.label}
+                    </p>
+                    <p
+                      className={cn(
+                        "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
+                        isMoney ? "text-sm" : "text-lg"
+                      )}
+                    >
+                      {item.value}
+                    </p>
+                  </div>
+                  {item.trend && (
+                    <div className="mt-1.5 text-[9.5px] flex items-center gap-1 flex-wrap leading-tight">
+                      <span
+                        className={cn(
+                          "font-bold tracking-tight",
+                          item.trend.isPositive ? "text-success" : "text-destructive"
+                        )}
+                      >
+                        {item.trend.value}
+                      </span>
+                      <span className="text-muted-foreground font-medium truncate">
+                        {item.trend.text}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      case "metas":
+        return (
+          <DashboardMetaCard
+            year={filterYear ?? now.getFullYear()}
+            month={filterMonth ?? now.getMonth() + 1}
+            monthLabel={new Date(
+              filterYear ?? now.getFullYear(),
+              (filterMonth ?? now.getMonth() + 1) - 1,
+              1
+            ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+            selectedOperatorUserId={
+              selectedOperators.length === 1 ? selectedOperators[0] : null
+            }
+            received={stats?.total_recebido ?? 0}
+          />
+        );
+      case "agendamentos":
+        return (
+          <AgendamentosHojeCard
+            callbacks={callbacks}
+            showOperator={canViewAllAgendados}
+          />
+        );
+      case "totalRecebido":
+        return <TotalRecebidoCard totalRecebido={stats?.total_recebido ?? 0} />;
+      case "parcelas":
+        return (
+          <ParcelasProgramadasCard
+            vencimentos={vencimentos}
+            browseDate={browseDate}
+            onNavigateDate={navigateDate}
+            onPickDate={setBrowseDate}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const visibleOrder = layout.order.filter((id) => layout.visible[id]);
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in h-full min-h-0">
@@ -327,102 +452,25 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Main area: 3 columns layout (left compact / center wide / right KPIs+meta) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* COLUMN 1 — left (3/12) */}
-        <div className="lg:col-span-3 flex flex-col gap-3">
-          {showMetas && (
-            <DashboardMetaCard
-              year={filterYear ?? now.getFullYear()}
-              month={filterMonth ?? now.getMonth() + 1}
-              monthLabel={new Date(
-                filterYear ?? now.getFullYear(),
-                (filterMonth ?? now.getMonth() + 1) - 1,
-                1
-              ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
-              selectedOperatorUserId={
-                selectedOperators.length === 1 ? selectedOperators[0] : null
-              }
-              received={stats?.total_recebido ?? 0}
-            />
-          )}
-
-          {showAgendamentos && (
-            <AgendamentosHojeCard
-              callbacks={callbacks}
-              showOperator={canViewAllAgendados}
-            />
-          )}
-        </div>
-
-        {/* COLUMN 2 — center (6/12) */}
-        <div className="lg:col-span-6 flex flex-col gap-3">
-          {showTotalRecebido && (
-            <TotalRecebidoCard totalRecebido={stats?.total_recebido ?? 0} />
-          )}
-          {showParcelas && (
-            <ParcelasProgramadasCard
-              vencimentos={vencimentos}
-              browseDate={browseDate}
-              onNavigateDate={navigateDate}
-              onPickDate={setBrowseDate}
-            />
-          )}
-        </div>
-
-        {/* COLUMN 3 — right (3/12): compact KPIs + Meta gauge */}
-        <div className="lg:col-span-3 flex flex-col gap-3">
-          {showKpis && (
-            <div className="grid grid-cols-2 gap-2.5">
-              {kpis.map((item) => {
-                const ItemIcon = item.Icon;
-                const isMoney = item.value.startsWith("R$");
-                return (
-                  <div
-                    key={item.label}
-                    className="bg-card rounded-xl border border-border shadow-sm px-3 py-2.5 flex flex-col justify-between min-w-0"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
-                          <ItemIcon className={cn("w-3.5 h-3.5", item.iconColor)} />
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground font-medium leading-tight mb-1 break-words">
-                        {item.label}
-                      </p>
-                      <p
-                        className={cn(
-                          "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
-                          isMoney ? "text-sm" : "text-lg"
-                        )}
-                      >
-                        {item.value}
-                      </p>
-                    </div>
-                    {item.trend && (
-                      <div className="mt-1.5 text-[9.5px] flex items-center gap-1 flex-wrap leading-tight">
-                        <span
-                          className={cn(
-                            "font-bold tracking-tight",
-                            item.trend.isPositive ? "text-success" : "text-destructive"
-                          )}
-                        >
-                          {item.trend.value}
-                        </span>
-                        <span className="text-muted-foreground font-medium truncate">
-                          {item.trend.text}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-        </div>
-      </div>
+      {/* Drag-and-drop grid: cards reorder freely; layout persists per user */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
+          <div
+            className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start"
+            style={{ gridAutoFlow: "dense" }}
+          >
+            {visibleOrder.map((id) => (
+              <SortableCard key={id} id={id} spanClassName={SPAN_CLASS[id]}>
+                {renderBlock(id)}
+              </SortableCard>
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       <CustomizeDashboardDialog
         open={customizeOpen}

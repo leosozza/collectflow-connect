@@ -1,72 +1,86 @@
-# Plano — Atualização Manual do Roadmap
+## Objetivo
 
-Arquivo único alvo: `src/pages/RoadmapPage.tsx` (array `roadmapData`).
-Sem mudanças de banco, RPC, Edge ou outras telas. Apenas sincronização de status/progresso e inclusão dos módulos novos que já estão em produção.
+Transformar a personalização do Dashboard em duas coisas distintas:
 
-## 1. Mover de "in_progress / planned" → "done" (já concluídos)
+1. **Diálogo "Personalizar"** → apenas toggles de visibilidade (mostrar/ocultar cards). Sem reordenação.
+2. **Reordenação dos cards** → feita diretamente no Dashboard, **arrastando e soltando** cada card para qualquer posição livre na grade.
 
-| ID | Status atual | Novo | Justificativa |
-|---|---|---|---|
-| `serasa` | in_progress 25% | **done 100%** | Negativação Serasa + CENPROT operacionais (memória `features/negativation-and-protest`). |
-| `resend-email` | in_progress 50% | **done 100%** | Domínio validado, `send-quitados-report` ativa (memória `integrations/email/resend-infrastructure`). |
-| `agente-ia-autonomo` | in_progress 15% | **in_progress 40%** | Sugestões IA + transcrição de áudio + chat-ai-suggest ativos, mas modo autônomo ainda não. Apenas atualizar progresso. |
-| `whatsapp-meta` | planned 10% | **done 100%** | Provider oficial Meta/Gupshup já roteado (`provider_category`, bulk routing). |
-| `politicas-desconto-dinamico` | planned 5% | **done 100%** | Já implementado via aging por credor + fluxo de aprovação (memória `logic/agreements/billing-validation-flow`). |
+---
 
-## 2. Atualizar progresso (sem mudar status)
+## Como vai funcionar (visão do usuário)
 
-- `export-relatorios` (planned 10%) → **planned 40%** — Excel via xlsx já presente em vários módulos; PDF ainda parcial.
-- `pix-qrcode-dinamico` (planned 0%) → **planned 20%** — Pix via Asaas/Negociarie já roda; falta apenas Pix nativo direto.
-- `webhook-baixa-automatica` (planned 0%) → **done 100%** — `negociarie-callback`, Asaas webhooks e `manual-payment-confirmation` já fazem baixa automática.
+- Cada card do Dashboard ganha um **handle de arrastar** (ícone de "grip" no canto, visível ao passar o mouse).
+- O usuário clica no handle e **arrasta o card para qualquer posição** entre os outros cards. Ao soltar, os demais se reorganizam.
+- A nova ordem é **salva automaticamente** no navegador (por usuário), igual ao layout atual.
+- Botão **"Personalizar"** abre um diálogo enxuto com 5 switches:
+  - KPIs superiores
+  - Parcelas Programadas
+  - Total Recebido
+  - Metas
+  - Agendamentos para Hoje
+- Botão **"Restaurar padrão"** continua existindo dentro do diálogo (volta visibilidade + ordem ao default).
 
-## 3. Adicionar novos itens (que já existem mas não estão listados)
+---
 
-Inserir antes do bloco "── NOVOS ITENS ──" (linha ~1203):
+## Mudanças técnicas
 
-1. **Score Operacional V1** — `done 100%` / categoria IA
-   - Motor heurístico 4 dimensões + recência + perfis de devedor (memória `logic/operational-score`).
-2. **Sistema de Perfis de Devedor (4 categorias)** — `done 100%` / Core
-   - Ocasional/Recorrente/Resistente/Insatisfeito (memória `features/debtor-profile-system`).
-3. **Timeline Omnichannel Unificada (`client_events` + `session_id`)** — `done 100%` / Core
-   - SSoT histórico unificado (memórias `architecture/client-events-timeline` + `logic/history/unified-session-timeline`).
-4. **Hub Omnichannel de Atendimento** — `done 100%` / Contact Center
-   - Página `/atendimento` unificada multi-canal (memória `features/atendimento/unified-omnichannel-hub-ui`).
-5. **Anti-Ban Backend Lock (Disparos em Lote)** — `done 100%` / Contact Center
-   - Throttling 8-15s + pausa de lote no servidor (memória `features/communication/bulk-campaign-resilience`).
-6. **Gestão de Campanhas WhatsApp** — `done 100%` / Contact Center
-   - `origin_type` + estado restritivo Anti-Ban (memória `features/whatsapp/campaign-management-module`).
-7. **Catálogo de Serviços & Tokens (Faturamento SaaS)** — `done 100%` / Core
-   - Provisionamento por catálogo + consumo atômico (memórias `features/tenant-service-provisioning` + `features/tokens/architecture`).
-8. **Onboarding Multi-Tenant com CNPJ + 50 tokens cortesia** — `done 100%` / Core
-   - RPC `onboard_tenant` (memória `logic/tenant-provisioning-and-onboarding`).
-9. **Gateway Asaas (Mensalidade + Tokens)** — `done 100%` / Integrações
-   - Cartão/PIX/Boleto + webhooks (memória `integrations/asaas/payment-gateway-architecture`).
-10. **Gamificação V2 (Snapshot RPC + Cron)** — `done 100%` / Core
-    - SSoT financeiro consolidado + tick a cada 30 min (memória `features/gamification/logic-and-persistence`).
-11. **API Pública REST de Clientes (X-API-Key SHA-256)** — `done 100%` / Integrações
-    - Endpoint `/clients-api` (memória `integrations/api/rest-specification`).
-12. **Transcrição Automática de Áudios (Gemini)** — `done 100%` / IA
-    - Edge `transcribe-audio` (memória `features/whatsapp/audio-transcription`).
-13. **Documentos com Resolução em 3 Níveis** — `done 100%` / Core
-    - Credor > Tenant > Padrão (memória `features/documentos/architecture-and-logic`).
-14. **Reconciliação Granular de Pagamentos (Manual + Portal + Negociarie)** — `done 100%` / Financeiro
-    - `get_agreement_financials` (memória `logic/acordos/reconciliacao-pagamentos`).
-15. **Dashboard via RPC SQL agregada** — `done 100%` / Core
-    - `get_dashboard_stats` + `get_dashboard_vencimentos` (memória `tech/dashboard-aggregation-strategy`).
+### 1. Layout em lista única arrastável
 
-Cada item segue o mesmo schema (`id`, `title`, `description`, `status`, `progress`, `category`, `lovablePrompt`) com `lovablePrompt` curto descrevendo o que já está implementado e onde (arquivo/serviço/edge), no mesmo padrão dos itens "done" existentes.
+Hoje os cards estão presos em 3 colunas fixas (`lg:col-span-3 / 6 / 3`) com posições rígidas. Para permitir drag-and-drop livre, vamos mudar para uma **grade única de 12 colunas** onde cada card declara sua largura preferida (`colSpan`):
 
-## 4. Não mexer
+| Card             | colSpan padrão |
+| ---------------- | -------------- |
+| KPIs             | 3              |
+| Metas            | 3              |
+| Agendamentos     | 3              |
+| Total Recebido   | 6              |
+| Parcelas         | 6              |
 
-Mantidos como estão (representam realmente o futuro): `mobile`, `gateway` (alternativa nativa), `ia-acordo`, `ocr`, `score-credito`, `erp`, `mediacao`, `analise-sentimento-devedor`, `grupos-whatsapp-mutirao`, `transicao-canal-inteligente`, `split-pagamento`, `dashboard-roi-ia-vs-humano`, `regua-inversa-lead-scoring`.
+A ordem dos cards passa a ser **uma lista linear** (`order: DashboardBlockId[]` com os 5 ids, incluindo `kpisTop`), e o CSS Grid com `auto-flow: dense` posiciona cada card na próxima vaga disponível respeitando seu `colSpan`. Isso dá a sensação de "encaixe livre" sem precisar de coordenadas X/Y manuais.
 
-## Detalhe técnico
+### 2. Biblioteca de drag-and-drop
 
-- Edição única em `src/pages/RoadmapPage.tsx`, dentro do array `roadmapData` (linhas 23–1240).
-- Sem alteração de tipos, helpers, filtros ou UI — apenas dados.
-- Você revisará depois e excluirá o que não fizer sentido manter.
+Usar **`@dnd-kit/core` + `@dnd-kit/sortable`** (já é o padrão de DnD no ecossistema React/shadcn, leve, acessível, suporta teclado). Adicionar como dependência.
 
-## Resultado esperado
+- `DndContext` envolve a grade.
+- `SortableContext` recebe `layout.order`.
+- Cada card é um `useSortable` com handle dedicado (ícone `GripVertical` do lucide).
+- `onDragEnd` reordena o array e chama `setLayout({...layout, order: newOrder})`.
 
-- Roadmap reflete o estado real: ~31 itens "done", 1 "in_progress" (`agente-ia-autonomo`), planejados/futuros enxutos.
-- Nenhum impacto em backend, RLS, Edge Functions ou outras páginas.
+### 3. Atualização de `useDashboardLayout`
+
+- Incluir `kpisTop` no array `order` (hoje só tem os 4 da coluna direita).
+- `DEFAULT_DASHBOARD_LAYOUT.order` = `["kpisTop", "metas", "agendamentos", "totalRecebido", "parcelas"]` (reproduz o layout visual atual aproximadamente).
+- Bumpar a chave de storage para `rivo:dashboard-layout:v2` para evitar conflito com o formato antigo (usuários atuais começam com o default novo).
+- Função `sanitize` passa a aceitar os 5 ids.
+
+### 4. Simplificação de `CustomizeDashboardDialog`
+
+Remover toda a UI de setas ↑/↓ e ordenação. Manter apenas:
+- 5 linhas com label + Switch (uma para cada bloco).
+- Botões: Restaurar padrão / Cancelar / Salvar.
+
+### 5. Refatoração de `DashboardPage.tsx`
+
+- Substituir o grid de 3 colunas por **uma única grade** `grid-cols-12` que renderiza `layout.order.filter(id => layout.visible[id]).map(...)`.
+- Cada item vira um wrapper `<SortableCard id={id} colSpan={...}>` que renderiza o componente correspondente.
+- O handle de arrastar fica num pequeno botão flutuante no canto superior direito de cada card (visível em hover, com `cursor-grab`).
+
+### 6. Responsividade
+
+- Em telas `< lg`, força `colSpan = 12` para todos (uma coluna empilhada). Drag-and-drop continua funcionando para reordenar a pilha.
+
+---
+
+## Arquivos afetados
+
+- `src/hooks/useDashboardLayout.ts` — incluir `kpisTop` em `order`, novo default, bump de versão da chave de storage.
+- `src/components/dashboard/CustomizeDashboardDialog.tsx` — simplificar para apenas toggles.
+- `src/pages/DashboardPage.tsx` — nova grade única + DnD.
+- `package.json` — adicionar `@dnd-kit/core` e `@dnd-kit/sortable`.
+
+Nenhuma mudança de banco, RPC ou regra de negócio. Persistência continua em `localStorage` por usuário.
+
+---
+
+Posso prosseguir?
