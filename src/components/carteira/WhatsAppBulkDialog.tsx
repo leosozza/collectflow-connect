@@ -543,7 +543,11 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       {instances.length === 0 ? (
         <div className="text-center py-6 text-muted-foreground text-sm">
           <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-500" />
-          Nenhuma instância habilitada para disparo em lote. Verifique se há instâncias com status operacional em <strong>Integrações &gt; WhatsApp</strong>.
+          {isAdmin ? (
+            <>Nenhuma instância habilitada para disparo em lote. Verifique se há instâncias com status operacional em <strong>Integrações &gt; WhatsApp</strong>.</>
+          ) : (
+            <>Você não possui instâncias de WhatsApp atribuídas. Solicite a um administrador para liberar o acesso.</>
+          )}
         </div>
       ) : (
         <div className="space-y-2 max-h-48 overflow-y-auto">
