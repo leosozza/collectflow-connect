@@ -682,24 +682,12 @@ Implementação:
   },
   {
     id: "whatsapp-meta",
-    title: "WhatsApp Fase 2 — API Oficial Meta + IA",
-    description: "Integração direta com a API oficial do Meta para envio de templates aprovados, webhooks de status e agente IA com handoff automático. Base estrutural (provider_category, templates dedicados) já implementada na Fase 1.",
-    status: "planned",
-    progress: 10,
+    title: "WhatsApp — Provedor Oficial (Meta/Gupshup)",
+    description: "Roteamento automático entre instâncias oficiais (Meta/Gupshup) e não-oficiais (Evolution/WuzAPI/Baylers) via provider_category. Templates aprovados e bulk routing operacionais.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Implementar a Fase 2 do WhatsApp: API oficial Meta + agente IA.
-
-Base já pronta (Fase 1):
-- provider_category official/unofficial nas instâncias
-- Tabela whatsapp_templates com categorias e variáveis
-- Round-robin e campanhas persistidas
-
-O que falta:
-1. Criar edge function supabase/functions/meta-whatsapp-proxy/ para envio via API oficial
-2. Webhook: supabase/functions/meta-whatsapp-webhook/ para status de entrega
-3. Secrets: META_WHATSAPP_TOKEN, META_PHONE_NUMBER_ID, META_VERIFY_TOKEN
-4. Agente IA autônomo com handoff para operador humano
-5. Relatório de mensagens entregues/lidas/respondidas`,
+    lovablePrompt: "WhatsApp multi-provider implementado: provider_category (official_meta/official_gupshup/unofficial), instance-proxy unificado, templates por categoria, round-robin e bulk routing. Veja src/services/whatsappInstanceService.ts e supabase/functions/instance-proxy/.",
   },
 
   // ──────────────────────────────────────────────────
