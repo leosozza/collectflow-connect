@@ -507,15 +507,15 @@ const CarteiraPage = () => {
     setSelectAllFiltered(false);
   }, [rpcFilters, currentPage]);
 
-  // Reset page e seleção quando pageSize muda (universo da página muda)
+  // Reset apenas a página ao trocar pageSize. NÃO zeramos `selectedIds` —
+  // o operador deve poder mudar o tamanho da página sem perder a seleção
+  // que vinha acumulando entre páginas.
   const prevPageSizeRef = useRef(pageSize);
   useEffect(() => {
     if (prevPageSizeRef.current !== pageSize) {
       prevPageSizeRef.current = pageSize;
       setUrlPage(1);
-      setSelectedIds(new Set());
       setSelectAllFiltered(false);
-      setBulkClients(null);
     }
   }, [pageSize]);
 
@@ -583,10 +583,24 @@ const CarteiraPage = () => {
     }
   };
 
-  const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
+  // Clientes selecionados visíveis na página atual (para diálogos imediatos).
+  const selectedClients = displayClients.filter((c) =>
+    (c.allIds || [c.id]).some((id: string) => selectedIds.has(id))
+  );
+  // Contagem exibida nos botões de ação:
+  // - selectAllFiltered → total filtrado no servidor
+  // - Toda a seleção está na página atual → CPFs únicos da página
+  // - Há seleção acumulada de outras páginas → total real de IDs selecionados
+  const allSelectedAreOnCurrentPage =
+    selectedClients.reduce((sum, c) => {
+      const ids = (c.allIds || [c.id]) as string[];
+      return sum + ids.filter((id) => selectedIds.has(id)).length;
+    }, 0) === selectedIds.size;
   const selectedCount = selectAllFiltered
     ? totalCount
-    : new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
+    : allSelectedAreOnCurrentPage
+      ? new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size
+      : selectedIds.size;
 
   // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
   const uniqueSelectedClients = useMemo(() => {
