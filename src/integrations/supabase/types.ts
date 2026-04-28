@@ -6833,97 +6833,52 @@ export type Database = {
           valor_pago: number
         }[]
       }
-      get_carteira_grouped:
-        | {
-            Args: {
-              _cadastro_ate?: string
-              _cadastro_de?: string
-              _credor?: string
-              _date_from?: string
-              _date_to?: string
-              _debtor_profiles?: string[]
-              _operator_id?: string
-              _page?: number
-              _page_size?: number
-              _score_max?: number
-              _score_min?: number
-              _search?: string
-              _sem_acordo?: boolean
-              _sem_whatsapp?: boolean
-              _sort_dir?: string
-              _sort_field?: string
-              _status_cobranca_ids?: string[]
-              _tenant_id: string
-              _tipo_devedor_ids?: string[]
-              _tipo_divida_ids?: string[]
-            }
-            Returns: {
-              all_ids: string[]
-              cpf: string
-              credor: string
-              data_vencimento: string
-              debtor_profile: string
-              email: string
-              external_id: string
-              nome_completo: string
-              operator_id: string
-              parcelas_count: number
-              phone: string
-              propensity_score: number
-              representative_id: string
-              status: string
-              status_cobranca_id: string
-              total_count: number
-              valor_pago_total: number
-              valor_total: number
-            }[]
-          }
-        | {
-            Args: {
-              _cadastro_ate?: string
-              _cadastro_de?: string
-              _credor?: string
-              _date_from?: string
-              _date_to?: string
-              _debtor_profiles?: string[]
-              _operator_id?: string
-              _page?: number
-              _page_size?: number
-              _primeira_parcela_ate?: string
-              _primeira_parcela_de?: string
-              _score_max?: number
-              _score_min?: number
-              _search?: string
-              _sem_acordo?: boolean
-              _sem_whatsapp?: boolean
-              _sort_dir?: string
-              _sort_field?: string
-              _status_cobranca_ids?: string[]
-              _tenant_id: string
-              _tipo_devedor_ids?: string[]
-              _tipo_divida_ids?: string[]
-            }
-            Returns: {
-              all_ids: string[]
-              cpf: string
-              credor: string
-              data_vencimento: string
-              debtor_profile: string
-              email: string
-              external_id: string
-              nome_completo: string
-              operator_id: string
-              parcelas_count: number
-              phone: string
-              propensity_score: number
-              representative_id: string
-              status: string
-              status_cobranca_id: string
-              total_count: number
-              valor_pago_total: number
-              valor_total: number
-            }[]
-          }
+      get_carteira_grouped: {
+        Args: {
+          _cadastro_ate?: string
+          _cadastro_de?: string
+          _credor?: string
+          _date_from?: string
+          _date_to?: string
+          _debtor_profiles?: string[]
+          _operator_id?: string
+          _page?: number
+          _page_size?: number
+          _primeira_parcela_ate?: string
+          _primeira_parcela_de?: string
+          _score_max?: number
+          _score_min?: number
+          _search?: string
+          _sem_acordo?: boolean
+          _sem_whatsapp?: boolean
+          _sort_dir?: string
+          _sort_field?: string
+          _status_cobranca_ids?: string[]
+          _tenant_id: string
+          _tipo_devedor_ids?: string[]
+          _tipo_divida_ids?: string[]
+        }
+        Returns: {
+          all_ids: string[]
+          cpf: string
+          credor: string
+          data_vencimento: string
+          debtor_profile: string
+          email: string
+          external_id: string
+          nome_completo: string
+          operator_id: string
+          parcelas_count: number
+          phone: string
+          propensity_score: number
+          representative_id: string
+          status: string
+          status_cobranca_id: string
+          total_count: number
+          valor_pago_total: number
+          valor_total: number
+        }[]
+      }
       get_dashboard_stats: {
         Args: {
           _month?: number

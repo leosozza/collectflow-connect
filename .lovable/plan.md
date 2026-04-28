@@ -1,68 +1,74 @@
-# Filtro "Primeira Parcela" na Carteira
+# Correção: erro PGRST203 na Carteira + análise dos filtros
 
-## Objetivo
+## 1. Causa do erro `PGRST203` (Carteira não carrega)
 
-Adicionar um novo intervalo de datas no painel de filtros da Carteira chamado **"Primeira Parcela De / Até"**, ao lado de "Valor Aberto Até". Diferente do filtro atual "Vencimento De/Até" (que filtra qualquer parcela individual), este novo filtro considera apenas o **vencimento da primeira parcela do cliente** (ou seja, o `MIN(data_vencimento)` agrupado por CPF + credor).
+A migração anterior criou a nova versão de `get_carteira_grouped` com **22 parâmetros** (incluindo `_primeira_parcela_de` e `_primeira_parcela_ate`), mas a versão antiga de **20 parâmetros** continuou existindo no banco. Como os 20 primeiros parâmetros são idênticos, o PostgREST não consegue decidir qual chamar e retorna:
 
-Isso resolve o caso descrito: filtrar apenas clientes cuja **primeira parcela** venceu em jan/2025, sem retornar clientes que apenas têm uma parcela qualquer dentro do período.
+```
+Could not choose the best candidate function between:
+public.get_carteira_grouped(... 20 args)
+public.get_carteira_grouped(... 22 args)
+```
 
-## Comportamento
+Isso bloqueia toda a Carteira (qualquer filtro retorna erro). É por isso que apareceu **"Nenhum cliente encontrado"** mesmo com Score = "Bom" selecionado.
 
-- O filtro atual "Vencimento De/Até" continua funcionando como hoje (filtra parcelas individuais).
-- O novo filtro "Primeira Parcela De/Até" é **independente** e pode ser combinado.
-- Quando preenchido, retorna apenas grupos (CPF+credor) cuja **menor data de vencimento** dentro do grupo cai no intervalo informado.
-- Aplica-se sobre o mesmo conjunto de parcelas já filtrado pelos demais critérios (credor, status, etc.), para coerência (ex.: se o usuário filtrar por credor X, a "primeira parcela" considera apenas as parcelas daquele credor).
-
-## Mudanças
-
-### 1. RPC `get_carteira_grouped` (nova migração SQL)
-
-Adicionar dois parâmetros opcionais: `_primeira_parcela_de date`, `_primeira_parcela_ate date`. Aplicar o filtro **após o agrupamento** via `HAVING` em cima do `MIN(f.data_vencimento)`:
+## 2. Correção (migração)
 
 ```sql
-HAVING (_primeira_parcela_de IS NULL OR MIN(f.data_vencimento) >= _primeira_parcela_de)
-   AND (_primeira_parcela_ate IS NULL OR MIN(f.data_vencimento) <= _primeira_parcela_ate)
+DROP FUNCTION IF EXISTS public.get_carteira_grouped(
+  uuid, integer, integer, text, text, date, date,
+  uuid[], uuid[], uuid[], integer, integer, text[],
+  text, text, uuid, boolean, date, date, boolean
+);
 ```
 
-Manter a assinatura retrocompatível (parâmetros com `DEFAULT NULL` ao final).
+Mantém apenas a versão nova (22 args). Não há outros consumidores chamando a versão antiga — todos os caminhos do frontend já usam a nova assinatura.
 
-### 2. `src/services/clientService.ts`
+## 3. Análise do filtro de Score
 
-- Estender a interface `CarteiraFilters` com `primeiraParcelaDe?: string; primeiraParcelaAte?: string`.
-- Em `fetchCarteiraGrouped`, `fetchAllCarteiraIds` e `fetchAllCarteiraClients`, repassar `_primeira_parcela_de` / `_primeira_parcela_ate` quando preenchidos.
+Verifiquei diretamente no banco:
 
-### 3. `src/components/clients/ClientFilters.tsx`
+| Faixa | Parcelas |
+|---|---|
+| Bom (≥75) | **49** |
+| Médio (50–74) | 96 |
+| Ruim (<50) | 12.771 |
+| Sem score (NULL) | 421.582 |
+| **Total** | 434.498 |
 
-- Adicionar `primeiraParcelaDe: string` e `primeiraParcelaAte: string` à interface `Filters`.
-- Renderizar dois novos inputs `type="date"` na **Linha 3 (Valor em aberto)**, ao lado direito de "Valor Aberto Até", com labels "Primeira Parcela De" e "Primeira Parcela Até". Ajustar a grid para `sm:grid-cols-4` para acomodar os 4 campos lado a lado, mantendo o padrão visual atual.
+- A lógica em `clientService.ts` (linhas 502–511) está **correta** para "Bom" sozinho: `min=75, max=100`.
+- A RPC aplica `COALESCE(propensity_score, 0) BETWEEN 75 AND 100`, ou seja, clientes sem score (NULL → 0) ficam de fora — comportamento esperado.
+- Como existem apenas 49 parcelas com score "Bom" no banco inteiro (e elas podem estar agrupadas em poucos CPFs/credores ou pertencerem a outro tenant), é **plausível** que o seu tenant de fato não tenha nenhum cliente na faixa "Bom". Vou confirmar isso após a correção do erro PGRST203 — sem a função ambígua, o filtro pode até estar funcionando e retornando 0 legitimamente.
+- Se realmente quiser ver os "Bom" do seu tenant: rodar **"Calcular Scores"** (botão no topo da Carteira) primeiro para popular `propensity_score` nos 421k registros sem score.
 
-### 4. `src/pages/CarteiraPage.tsx`
+## 4. Demais filtros — análise por leitura de código
 
-- Criar dois novos `useUrlState` (`primeiraParcelaDe`, `primeiraParcelaAte`) com default `""`.
-- Incluir nos objetos `filters`, `FILTER_DEFAULTS`, `hasActiveFilters` e `rpcFilters` (mapeando para `primeiraParcelaDe`/`primeiraParcelaAte` no payload).
-- Replicar o padrão usado em `cadastroDe`/`cadastroAte`.
+Todos repassam os parâmetros corretamente para a RPC e a RPC trata cada um:
 
-## Diagrama de fluxo
+| Filtro | Status |
+|---|---|
+| Buscar (nome/CPF/telefone/email) | OK — busca tokenizada accent-insensitive |
+| Status de Carteira | OK — array UUID |
+| Credor | OK |
+| Perfil do Devedor | OK — array text |
+| Tipo de Dívida | OK — array UUID |
+| Faixa de Score | OK (ver item 3) |
+| Vencimento De/Até | OK — em qualquer parcela |
+| Cadastro De/Até | OK — `created_at::date` |
+| Primeira Parcela De/Até (novo) | OK — `HAVING MIN(data_vencimento)` |
+| Valor Aberto De/Até | **Não enviado à RPC** (filtrado no client) — é o comportamento atual, não foi alterado |
+| Nunca formalizou acordo | OK |
+| Sem disparo de WhatsApp | OK |
+| Higienizados / Sem contato / Em dia / Quitados | Filtros UI que afetam apenas exibição local — não foram alterados |
 
-```text
-UI (ClientFilters)
-   └─ primeiraParcelaDe / primeiraParcelaAte
-        └─ URL state (CarteiraPage)
-             └─ rpcFilters
-                  └─ fetchCarteiraGrouped
-                       └─ RPC get_carteira_grouped
-                            └─ HAVING MIN(data_vencimento) BETWEEN _de AND _ate
-```
+## 5. Próximos passos após aprovação
+
+1. Aplicar a migração `DROP FUNCTION` acima.
+2. Recarregar a Carteira — o erro PGRST203 deve sumir.
+3. Validar Score "Bom": se ainda voltar 0, recomendo rodar "Calcular Scores".
+4. Validar visualmente o novo filtro "Primeira Parcela De/Até".
 
 ## Arquivos afetados
 
-- `supabase/migrations/<novo>.sql` — recriar `get_carteira_grouped` com os 2 novos parâmetros + `HAVING`.
-- `src/services/clientService.ts`
-- `src/components/clients/ClientFilters.tsx`
-- `src/pages/CarteiraPage.tsx`
-
-## Não altera
-
-- Lógica do filtro "Vencimento De/Até" existente.
-- Demais consumidores da RPC (parâmetros novos são opcionais).
-- Permissões / RLS / mascaramento de dados.
+- Nova migração SQL (1 statement DROP).
+- Nenhuma alteração de código frontend.
