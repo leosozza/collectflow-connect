@@ -137,7 +137,9 @@ const CarteiraPage = () => {
     semWhatsapp: urlSemWhatsapp,
     scoreRange: urlScoreRange,
     debtorProfile: urlDebtorProfile,
-  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlSemWhatsapp, urlScoreRange, urlDebtorProfile]);
+    primeiraParcelaDe: urlPrimeiraParcelaDe,
+    primeiraParcelaAte: urlPrimeiraParcelaAte,
+  }), [urlStatus, urlCredor, urlDateFrom, urlDateTo, urlSearch, urlTipoDevedorId, urlTipoDividaId, urlStatusCobrancaId, urlSemAcordo, urlCadastroDe, urlCadastroAte, urlQuitados, urlValorAbertoDe, urlValorAbertoAte, urlSemContato, urlEmDia, urlHigienizados, urlSemWhatsapp, urlScoreRange, urlDebtorProfile, urlPrimeiraParcelaDe, urlPrimeiraParcelaAte]);
 
   const hasActiveFilters = useMemo(() => {
     return (
