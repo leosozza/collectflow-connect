@@ -931,67 +931,21 @@ Tabelas: message_logs, clients, whatsapp_instances, workflow_executions`,
   // ──────────────────────────────────────────────────
   {
     id: "pix-qrcode-dinamico",
-    title: "Pix QR Code Dinâmico com Juros em Tempo Real",
-    description: "Geração de Pix Copia e Cola / QR Code calculando juros e multa em tempo real na Edge Function.",
+    title: "Pix QR Code Dinâmico (nativo, sem gateway)",
+    description: "Geração de Pix Copia e Cola/QR Code calculando juros e multa em tempo real direto na Edge Function, independente de Asaas/Negociarie.",
     status: "planned",
-    progress: 0,
+    progress: 20,
     category: "Integrações",
-    lovablePrompt: `Implementar geração de Pix QR Code Dinâmico com cálculo de juros em tempo real, sem depender da Negociarie.
-
-Contexto do sistema:
-- Credores já possuem: juros_mes, multa, pix_chave (tabela credores)
-- Acordos existem na tabela agreements com: original_total, proposed_total, first_due_date
-
-Edge Function supabase/functions/generate-pix/:
-1. Receber: { agreement_id, tenant_id, payment_date (opcional, default: hoje) }
-2. Buscar dados do credor e do acordo
-3. Calcular juros diários: valor_base * (juros_mes/100/30) * dias_atraso
-4. Calcular multa: valor_base * (multa/100) — aplicar apenas uma vez se já vencido
-5. Montar payload EMV (padrão Pix Banco Central) com a chave pix do credor
-6. Retornar: { pix_copia_cola: string, valor_final: number, juros_aplicados: number, qrcode_base64?: string }
-
-Para QR Code visual: usar biblioteca qrcode (instalar: bun add qrcode)
-
-Integrar em:
-- PortalCheckout (src/components/portal/PortalCheckout.tsx) — botão "Gerar Pix Atualizado"
-- NegotiationPanel (src/components/atendimento/NegotiationPanel.tsx) — para o operador copiar e enviar
-- AgreementCalculator (src/components/client-detail/AgreementCalculator.tsx)
-
-Exibir: valor atualizado, data de validade (24h), campo de cópia do Pix Copia e Cola com botão
-
-Tabelas: agreements, credores, portal_payments`,
+    lovablePrompt: "Atualmente Pix é gerado via Asaas e Negociarie. Falta criar edge function generate-pix nativa montando payload EMV (BACEN) com chave Pix do credor, com cálculo de juros/multa em tempo real para uso no Portal e NegotiationPanel.",
   },
   {
     id: "webhook-baixa-automatica",
-    title: "Webhook de Baixa Automática",
-    description: "Recebe confirmação de pagamento via webhook e baixa automaticamente o acordo, atualiza status do cliente.",
-    status: "planned",
-    progress: 0,
+    title: "Baixa Automática de Pagamentos",
+    description: "Webhooks de Asaas e Negociarie + confirmação manual com aprovação realizam baixa automática de acordos, atualização de status e gamificação.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Implementar Webhook de Baixa Automática para receber confirmações de pagamento Pix e atualizar o sistema.
-
-O que já existe:
-- supabase/functions/negociarie-callback/ — já faz baixa para pagamentos via Negociarie
-- tabela portal_payments — registra pagamentos do portal
-- tabela agreements — status de acordo (pending, approved, paid)
-
-Nova Edge Function supabase/functions/payment-webhook/:
-1. Receber POST com payload do gateway (Pix direto, Negociarie, futuro Stripe)
-2. Verificar assinatura/token do webhook para segurança
-3. Identificar o pagamento: por negociarie_id_geral ou agreement_id
-4. Executar baixa:
-   a. Atualizar agreements.status = 'paid'
-   b. Atualizar clients.status = 'pago' e clients.valor_pago
-   c. Inserir em portal_payments com status = 'paid'
-   d. Criar notificação interna (usar função create_notification do banco)
-   e. Registrar em audit_logs
-5. Disparar gamificação: chamar lógica de pontos do operador responsável
-
-Configuração:
-- Adicionar secret PAYMENT_WEBHOOK_SECRET para verificação de assinatura
-- Exibir URL do webhook em IntegracaoPage para o cliente configurar no gateway
-
-Tabelas: agreements, clients, portal_payments, audit_logs, notifications, operator_points`,
+    lovablePrompt: "Implementado via supabase/functions/negociarie-callback, asaas-webhook e fluxo manual-payment-confirmation. Atualiza agreements.status, clients.status, portal_payments, dispara notificação e gamificação. Veja memória logic/acordos/reconciliacao-pagamentos.",
   },
 
   // ──────────────────────────────────────────────────
