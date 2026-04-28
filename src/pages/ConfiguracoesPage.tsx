@@ -1,33 +1,50 @@
-import { useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
-import { useUrlState } from "@/hooks/useUrlState";
-import IntegracaoPage from "@/pages/IntegracaoPage";
-import ApiDocsPage from "@/pages/ApiDocsPage";
-import MaxListPage from "@/pages/MaxListPage";
-import AuditoriaPage from "@/pages/AuditoriaPage";
+import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 
+const LEGACY_TAB_MAP: Record<string, string> = {
+  integracao: "/configuracoes/integracao",
+  auditoria: "/configuracoes/auditoria",
+  api_docs: "/configuracoes/api",
+  maxlist: "/configuracoes/maxlist",
+};
+
 const ConfiguracoesPage = () => {
-  const [active, setActive] = useUrlState("tab", "integracao");
-  const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { isTenantAdmin, tenant } = useTenant();
   const permissions = usePermissions();
-  const [visited, setVisited] = useState<Set<string>>(() => new Set(["integracao", active]));
 
-  const isMaxList = ((tenant as any)?.settings as any)?.maxlist_enabled === true || tenant?.slug === "ybrasil";
+  const isMaxList =
+    ((tenant as any)?.settings as any)?.maxlist_enabled === true || tenant?.slug === "ybrasil";
 
-  const items = [
-    { key: "integracao", label: "Integração", icon: Cloud },
-    ...(permissions.canViewAuditoria ? [{ key: "auditoria", label: "Auditoria", icon: Activity }] : []),
-    ...(isTenantAdmin ? [{ key: "api_docs", label: "API REST", icon: Code2 }] : []),
-    ...(isMaxList ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet }] : []),
-  ];
+  // Backward compatibility: /configuracoes?tab=api_docs → /configuracoes/api
+  useEffect(() => {
+    const legacyTab = searchParams.get("tab");
+    if (legacyTab && LEGACY_TAB_MAP[legacyTab]) {
+      navigate(LEGACY_TAB_MAP[legacyTab], { replace: true });
+    }
+  }, [searchParams, navigate]);
 
-  const handleTabChange = (key: string) => {
-    setVisited((prev) => new Set(prev).add(key));
-    setActive(key);
-  };
+  const items = useMemo(
+    () => [
+      { key: "integracao", label: "Integração", icon: Cloud, to: "/configuracoes/integracao" },
+      ...(permissions.canViewAuditoria
+        ? [{ key: "auditoria", label: "Auditoria", icon: Activity, to: "/configuracoes/auditoria" }]
+        : []),
+      ...(isTenantAdmin
+        ? [{ key: "api", label: "API REST", icon: Code2, to: "/configuracoes/api" }]
+        : []),
+      ...(isMaxList
+        ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet, to: "/configuracoes/maxlist" }]
+        : []),
+    ],
+    [permissions.canViewAuditoria, isTenantAdmin, isMaxList]
+  );
 
   return (
     <div className="animate-fade-in space-y-4">
@@ -38,11 +55,13 @@ const ConfiguracoesPage = () => {
 
       <nav className="flex items-center gap-1 border-b border-border">
         {items.map((item) => {
-          const isActive = active === item.key;
+          const isActive =
+            location.pathname === item.to ||
+            (item.key === "integracao" && location.pathname === "/configuracoes");
           return (
-            <button
+            <Link
               key={item.key}
-              onClick={() => handleTabChange(item.key)}
+              to={item.to}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all duration-200 border-b-2 -mb-px",
                 isActive
@@ -52,30 +71,13 @@ const ConfiguracoesPage = () => {
             >
               <item.icon className="w-4 h-4 shrink-0" />
               {item.label}
-            </button>
+            </Link>
           );
         })}
       </nav>
 
       <div>
-        <div style={{ display: active === "integracao" ? "block" : "none" }}>
-          <IntegracaoPage />
-        </div>
-        {visited.has("auditoria") && (
-          <div style={{ display: active === "auditoria" ? "block" : "none" }}>
-            <AuditoriaPage />
-          </div>
-        )}
-        {visited.has("api_docs") && (
-          <div style={{ display: active === "api_docs" ? "block" : "none" }}>
-            <ApiDocsPage />
-          </div>
-        )}
-        {isMaxList && visited.has("maxlist") && (
-          <div style={{ display: active === "maxlist" ? "block" : "none" }}>
-            <MaxListPage />
-          </div>
-        )}
+        <Outlet />
       </div>
     </div>
   );

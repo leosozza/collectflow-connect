@@ -113,7 +113,13 @@ const App = () => (
               <Route path="cadastro" element={<CadastroPage />} />
               <Route path="cadastros/:tab?" element={<CadastrosPage />} />
               <Route path="usuarios" element={<UsersPage />} />
-              <Route path="configuracoes" element={<ConfiguracoesPage />} />
+              <Route path="configuracoes" element={<ConfiguracoesPage />}>
+                <Route index element={<Navigate to="integracao" replace />} />
+                <Route path="integracao" element={<IntegracaoPage />} />
+                <Route path="auditoria" element={<AuditoriaPage />} />
+                <Route path="api" element={<ApiDocsPage />} />
+                <Route path="maxlist" element={<MaxListPage />} />
+              </Route>
               <Route path="contact-center/telefonia" element={<ModuleGuard module="telefonia"><ContactCenterPage channel="telefonia" /></ModuleGuard>} />
               <Route path="contact-center/whatsapp" element={<ModuleGuard module="whatsapp"><ContactCenterPage channel="whatsapp" /></ModuleGuard>} />
               <Route path="central-empresa" element={<TenantSettingsPage />} />
