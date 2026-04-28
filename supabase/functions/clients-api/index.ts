@@ -277,7 +277,20 @@ Deno.serve(async (req: Request) => {
   if (!auth) {
     return json({ error: "Unauthorized: X-API-Key inválida ou ausente" }, 401);
   }
-  const { tenantId } = auth;
+  const { tenantId, credorNome } = auth;
+
+  // Helper: valida que o body de escrita respeita o credor da chave (quando escopada)
+  const enforceCredor = (body: Record<string, unknown>): { ok: true } | { ok: false; resp: Response } => {
+    if (!credorNome) return { ok: true };
+    if (body.credor && String(body.credor).trim() !== credorNome) {
+      return {
+        ok: false,
+        resp: json({ error: `Esta chave está restrita ao credor "${credorNome}". Não é permitido operar sobre o credor "${body.credor}".` }, 403),
+      };
+    }
+    body.credor = credorNome; // força o credor da chave
+    return { ok: true };
+  };
 
   // ══════════════════════════════════════════════════════════════════════════
   // CLIENTS ROUTES
