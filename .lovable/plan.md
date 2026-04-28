@@ -1,135 +1,39 @@
-# MCP Server — RIVO CONNECT
+# Rebranding "CollectFlow" → "Rivo Connect" + MCP na doc pública
 
-Criar um servidor **MCP (Model Context Protocol)** hospedado como Edge Function que expõe as funcionalidades da API REST do RIVO CONNECT como **tools**, permitindo que CRMs externos (HubSpot, Pipedrive, Salesforce, etc.) e agentes de IA (Claude, ChatGPT, n8n, Zapier AI) consultem e operem dados do RIVO de forma padronizada.
+## 1. Substituir "CollectFlow" remanescente por "Rivo Connect"
 
-## Por que MCP
+Ocorrências encontradas no código (fora de migrations já aplicadas):
 
-A API REST atual (`/clients-api`) já cobre clientes, acordos, pagamentos, portal e WhatsApp. Um servidor MCP **encapsula esses endpoints como tools auto-descritivas**, eliminando a necessidade de cada CRM implementar um cliente HTTP customizado — basta apontar o MCP URL + API Key.
+- `src/pages/TenantSettingsPage.tsx` (linhas 27 e 30) — texto do contrato:
+  - "CollectFlow Connect - Plataforma SaaS..." → "Rivo Connect - Plataforma SaaS..."
+  - "software CollectFlow Connect, plataforma SaaS..." → "software Rivo Connect, plataforma SaaS..."
+- `src/components/contact-center/threecplus/AgentDetailSheet.tsx` (linha 386):
+  - "...corresponder ao nome completo do perfil no CollectFlow." → "...no Rivo Connect."
+- `supabase/functions/threecplus-proxy/index.ts` (linha 126) — nome default de campanha 3CPlus:
+  - `` `CollectFlow ${data}` `` → `` `Rivo Connect ${data}` ``
 
-## Arquitetura
+Não alterar:
+- `supabase/migrations/20260211145726_*.sql` — migration histórica já aplicada (nome de seed). Renomear via nova migration UPDATE no registro `'CollectFlow Default'` em `payment_gateways` (ou tabela equivalente) caso ainda exista no banco — confirmar e aplicar UPDATE pontual.
 
-```text
-CRM Externo / Agente IA
-        │
-        │ MCP Streamable HTTP
-        │ Header: X-API-Key: rivo_xxx
-        ▼
-Edge Function: mcp-server
-        │ (mcp-lite + Hono)
-        │
-        ├── Autentica via api_keys (SHA-256, mesmo schema atual)
-        ├── Resolve tenant_id
-        └── Invoca clients-api internamente OU consulta DB direto
-                │
-                ▼
-        Supabase (RLS por tenant_id)
-```
+## 2. Incluir o MCP na documentação pública (`/api-docs/public`)
 
-## Componentes
+Hoje `ApiDocsPublicPage.tsx` é uma página única (REST). O componente `McpServerTab` já existe e aceita `publicView`.
 
-### 1. Nova Edge Function `supabase/functions/mcp-server/index.ts`
-- Usa **mcp-lite** (npm:mcp-lite@^0.10.0) + **Hono** + `StreamableHttpTransport`
-- `verify_jwt = false` em `supabase/config.toml` (auth via X-API-Key)
-- Reaproveita a mesma tabela `api_keys` (SHA-256) — nenhum schema novo necessário
-- Endpoint público: `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/mcp-server`
+Mudanças em `src/pages/ApiDocsPublicPage.tsx`:
+- Envolver o conteúdo principal em `<Tabs defaultValue="rest">` com duas abas:
+  - **REST API** (conteúdo atual)
+  - **MCP Server** → renderiza `<McpServerTab publicView />`
+- TabsList logo abaixo do header, dentro do `<main>`, sticky-friendly.
+- Header continua "RIVO CONNECT API" — adicionar subtítulo "REST + MCP".
 
-### 2. Tools expostas (mapeadas 1:1 com a API REST)
+Mudanças em `src/pages/ApiDocsPage.tsx` (interna): garantir mesma estrutura de abas se ainda não tiver MCP visível (verificar e alinhar — tela interna `/configuracoes/api` já tem aba separada `/configuracoes/mcp`, então manter como está).
 
-**Clientes / Carteira**
-- `list_clients` — filtros: status, credor, cpf, limit, offset
-- `get_client` — por id ou cpf
-- `create_client` — payload completo (nome, cpf, credor, dívida)
-- `update_client_status` — muda status (INADIMPLENTE → EM DIA, etc.)
-- `bulk_import_clients` — array de até 1000 registros
+## Arquivos editados
 
-**Acordos**
-- `list_agreements` — filtros: status, cpf, credor
-- `get_agreement` — por id
-- `create_agreement` — valor, parcelas, data
-- `approve_agreement` / `reject_agreement`
+- `src/pages/ApiDocsPublicPage.tsx` — adicionar Tabs com REST + MCP
+- `src/pages/TenantSettingsPage.tsx` — texto do contrato
+- `src/components/contact-center/threecplus/AgentDetailSheet.tsx` — hint do agente
+- `supabase/functions/threecplus-proxy/index.ts` — nome default de campanha
+- Nova migration SQL para UPDATE de `'CollectFlow Default'` → `'Rivo Connect Default'` (se o registro ainda existir)
 
-**Pagamentos**
-- `list_payments` — por agreement_id ou período
-- `generate_pix` / `generate_boleto` — para uma parcela
-- `confirm_manual_payment` — admin
-
-**Portal do Devedor**
-- `lookup_debtor` — por CPF (gera link checkout)
-- `create_portal_agreement` — proposta self-service
-
-**Comunicação**
-- `send_whatsapp` — mensagem unitária
-- `send_whatsapp_bulk` — campanha
-- `register_webhook` — CRM externo recebe eventos (acordo criado, pagamento confirmado)
-
-**Metadados**
-- `list_credores`
-- `list_status_types`
-- `calculate_propensity` — score de propensão por CPF
-
-### 3. Documentação
-- Nova aba **"MCP Server"** em `src/pages/ApiDocsPublicPage.tsx` e `ApiDocsPage.tsx` com:
-  - URL do servidor MCP
-  - Como gerar API Key (link p/ Configurações → API REST — reaproveita fluxo existente)
-  - Snippets de configuração para: **Claude Desktop**, **Cursor**, **n8n MCP node**, **VS Code (Continue)**, **ChatGPT custom GPT**
-  - Lista completa das tools com input schema
-
-### 4. Atualização do menu Configurações
-- `src/pages/ConfiguracoesPage.tsx` — card "Servidor MCP" ao lado de "API REST"
-- Rota `/configuracoes/mcp` reutilizando `ApiDocsPage` com tab inicial `mcp`
-
-## Detalhes técnicos
-
-**Auth pattern (idêntico ao clients-api)**
-```ts
-const apiKey = req.headers.get("x-api-key");
-const hash = await sha256(apiKey);
-const { data } = await supabase.from("api_keys")
-  .select("tenant_id").eq("key_hash", hash).eq("is_active", true).single();
-```
-
-**Tool handler pattern (mcp-lite)**
-```ts
-mcpServer.tool({
-  name: "list_clients",
-  description: "Lista clientes/devedores do tenant. Use para sincronizar com CRM externo.",
-  inputSchema: { type: "object", properties: {
-    status: { type: "string", enum: ["INADIMPLENTE","EM DIA","ACORDO VIGENTE","QUITADO"] },
-    credor: { type: "string" },
-    limit: { type: "number", default: 100, maximum: 1000 }
-  }},
-  handler: async (input, ctx) => {
-    const tenantId = ctx.auth.tenantId; // injetado no transport
-    const { data } = await supabase.from("clients")
-      .select("*").eq("tenant_id", tenantId)
-      .eq("status", input.status).limit(input.limit);
-    return { content: [{ type: "text", text: JSON.stringify(data) }] };
-  }
-});
-```
-
-**Tenant isolation**: cada tool obrigatoriamente injeta `.eq('tenant_id', tenantId)` — segue regra Core de RLS.
-
-**Rate limiting**: contagem in-memory por `key_hash` (60 req/min) para evitar abuso. Documentar na página pública.
-
-**Logging**: cada chamada MCP grava em `webhook_logs` com `source='mcp'`, `tool_name`, `tenant_id` para auditoria.
-
-## Arquivos a criar/editar
-
-**Criar**
-- `supabase/functions/mcp-server/index.ts` — servidor MCP completo
-- `supabase/functions/mcp-server/deno.json` — import map com `mcp-lite`
-- `src/components/api-docs/McpServerTab.tsx` — UI da documentação MCP
-
-**Editar**
-- `supabase/config.toml` — adicionar bloco `[functions.mcp-server]` com `verify_jwt = false`
-- `src/pages/ApiDocsPublicPage.tsx` — adicionar tab "MCP Server"
-- `src/pages/ApiDocsPage.tsx` — adicionar tab "MCP Server"
-- `src/pages/ConfiguracoesPage.tsx` — card MCP
-- `src/App.tsx` — rota `/configuracoes/mcp` (e `/api-docs/public` já existente passa a ter anchor `#mcp`)
-
-## Não escopo (fica para depois)
-- Implementar MCP **client** dentro do RIVO (consumir CRMs externos via MCP) — este plano só expõe o RIVO **como servidor**.
-- Tools de escrita destrutiva em massa (delete bulk) — mantidas só na API REST por segurança.
-
-Confirmar para implementar?
+Sem mudanças em schema, RLS, edge auth ou `McpServerTab.tsx` (já está pronto para `publicView`).

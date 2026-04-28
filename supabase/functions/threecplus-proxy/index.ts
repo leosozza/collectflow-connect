@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
         if (err) return err;
         url = buildUrl(baseUrl, `campaigns/${body.campaign_id}/lists`, authParam);
         method = 'POST';
-        reqBody = JSON.stringify({ name: `CollectFlow ${new Date().toLocaleDateString('pt-BR')}` });
+        reqBody = JSON.stringify({ name: `Rivo Connect ${new Date().toLocaleDateString('pt-BR')}` });
         break;
       }
 

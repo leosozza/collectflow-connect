@@ -24,10 +24,10 @@ import type { ServiceCatalogItem, TenantService, TenantTokens, TokenPackage, Tok
 const CONTRATO_PADRAO = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE SOFTWARE
 
 CONTRATANTE: A empresa identificada nos dados cadastrais deste sistema.
-CONTRATADA: CollectFlow Connect - Plataforma SaaS de Gestão de Cobrança.
+CONTRATADA: Rivo Connect - Plataforma SaaS de Gestão de Cobrança.
 
 CLÁUSULA 1ª - DO OBJETO
-O presente contrato tem por objeto a prestação de serviços de licenciamento de uso do software CollectFlow Connect, plataforma SaaS (Software as a Service) para gestão de cobrança, incluindo funcionalidades de CRM, automação, contact center, geração de acordos, portal do devedor e integrações com serviços terceiros.
+O presente contrato tem por objeto a prestação de serviços de licenciamento de uso do software Rivo Connect, plataforma SaaS (Software as a Service) para gestão de cobrança, incluindo funcionalidades de CRM, automação, contact center, geração de acordos, portal do devedor e integrações com serviços terceiros.
 
 CLÁUSULA 2ª - DA VIGÊNCIA
 Este contrato tem vigência indeterminada, iniciando-se na data de ativação da conta, podendo ser rescindido por qualquer das partes mediante aviso prévio de 30 (trinta) dias.
