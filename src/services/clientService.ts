@@ -645,6 +645,82 @@ export const fetchAllCarteiraClients = async (
   }
 };
 
+/**
+ * Hidrata GroupedClients a partir de uma lista de IDs (de qualquer página).
+ * Usado quando o usuário acumula seleções entre páginas e precisamos dos
+ * dados completos para disparos em massa (discador / WhatsApp).
+ * Busca em chunks de 500 ids para respeitar limites do PostgREST.
+ */
+export const fetchCarteiraClientsByIds = async (
+  tenantId: string,
+  ids: string[]
+): Promise<GroupedClient[]> => {
+  try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+    if (!ids || ids.length === 0) return [];
+
+    const CHUNK = 500;
+    const rows: any[] = [];
+
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK);
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, cpf, nome_completo, credor, phone, email, data_vencimento, valor_parcela, valor_pago, valor_saldo, propensity_score, status_cobranca_id, status, debtor_profile, operator_id, external_id")
+        .eq("tenant_id", tenantId)
+        .in("id", slice);
+      if (error) throw error;
+      if (data) rows.push(...data);
+    }
+
+    // Agrupa por CPF + credor (mesmo critério do get_carteira_grouped)
+    const groups = new Map<string, any[]>();
+    for (const r of rows) {
+      const key = `${(r.cpf || "").replace(/\D/g, "")}::${r.credor || ""}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
+    }
+
+    const grouped: GroupedClient[] = [];
+    for (const [, items] of groups) {
+      const earliest = items.reduce((min, c) => (c.data_vencimento < min.data_vencimento ? c : min), items[0]);
+      const valorTotal = items.reduce((sum, c) => sum + (Number(c.valor_parcela) || Number(c.valor_saldo) || 0), 0);
+      const valorPagoTotal = items.reduce((sum, c) => sum + (Number(c.valor_pago) || 0), 0);
+      const maxScore = items.reduce((max, c) => Math.max(max, c.propensity_score ?? 0), 0);
+      const allIds = items.map((c) => c.id);
+      grouped.push({
+        representative_id: earliest.id,
+        cpf: earliest.cpf,
+        nome_completo: earliest.nome_completo,
+        credor: earliest.credor,
+        phone: earliest.phone,
+        email: earliest.email,
+        data_vencimento: earliest.data_vencimento,
+        valor_total: valorTotal,
+        valor_pago_total: valorPagoTotal,
+        parcelas_count: items.length,
+        propensity_score: maxScore || null,
+        status_cobranca_id: earliest.status_cobranca_id,
+        status: earliest.status,
+        debtor_profile: earliest.debtor_profile,
+        operator_id: earliest.operator_id,
+        external_id: earliest.external_id,
+        all_ids: allIds,
+        total_count: items.length,
+        id: earliest.id,
+        valor_parcela: valorTotal,
+        allIds,
+      });
+    }
+
+    logger.info(MODULE, "fetchCarteiraClientsByIds", { ids: ids.length, groups: grouped.length });
+    return grouped;
+  } catch (error) {
+    handleServiceError(error, MODULE);
+    return [];
+  }
+};
+
 export const fetchCarteiraGrouped = async (
   tenantId: string,
   filters: CarteiraFilters = {},
