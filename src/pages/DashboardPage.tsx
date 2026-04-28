@@ -209,13 +209,21 @@ const DashboardPage = () => {
     });
   };
 
-  // Span (Tailwind classes) per block — defines its preferred width on lg+ screens.
+  // Span (Tailwind classes) per block — col & row spans for the 3-column grid.
+  // Mobile (default): 1 col, 1 row stacking.
+  // Tablet (md, 2 cols): parcelas spans 2 cols.
+  // Desktop (lg, 3 cols): full spec applies.
   const SPAN_CLASS: Record<DashboardBlockId, string> = {
-    kpisTop: "col-span-1 lg:col-span-3",
-    metas: "col-span-1 lg:col-span-3",
-    agendamentos: "col-span-1 lg:col-span-3",
-    totalRecebido: "col-span-1 lg:col-span-6",
-    parcelas: "col-span-1 lg:col-span-6",
+    metas: "col-span-1 row-span-1",
+    totalRecebido: "col-span-1 row-span-1 lg:row-span-2",
+    acionadosHoje: "col-span-1 row-span-1",
+    agendamentos: "col-span-1 row-span-1",
+    acordosDia: "col-span-1 row-span-1",
+    parcelas: "col-span-1 md:col-span-2 row-span-1",
+    acordosMes: "col-span-1 row-span-1",
+    totalQuebra: "col-span-1 row-span-1",
+    pendentes: "col-span-1 row-span-1",
+    colchaoAcordos: "col-span-1 row-span-1",
   };
 
   const sensors = useSensors(
