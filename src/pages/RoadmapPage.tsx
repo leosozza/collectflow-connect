@@ -428,26 +428,12 @@ Fluxo: operador offline vê dropdown de campanhas ativas → seleciona → chama
   },
   {
     id: "export-relatorios",
-    title: "Relatórios Exportáveis",
-    description: "Exportação completa em PDF e Excel para todos os relatórios e módulos do sistema.",
-    status: "planned",
-    progress: 10,
+    title: "Relatórios Exportáveis (PDF + Excel)",
+    description: "Exportação Excel já presente em vários módulos (xlsx). Falta padronização de PDF para todos os relatórios.",
+    status: "in_progress",
+    progress: 40,
     category: "Core",
-    lovablePrompt: `Implementar exportação de relatórios em PDF e Excel para os principais módulos.
-
-Módulos prioritários:
-1. Relatório de Aging (src/components/relatorios/AgingReport.tsx) → Excel com dados por faixa
-2. Ranking de Operadores (OperatorRanking.tsx) → PDF com formatação de tabela
-3. Carteira de Clientes (CarteiraTable.tsx) → Excel com todos os campos visíveis
-4. Acordos (AcordosPage) → Excel com status e valores
-
-Implementação:
-- Usar a lib xlsx já instalada para Excel
-- Para PDF, usar window.print() com CSS específico ou instalar @react-pdf/renderer
-- Adicionar botão "Exportar" em cada componente de relatório
-- Considerar filtros aplicados no momento da exportação
-
-Dependências já instaladas: xlsx@0.18.5`,
+    lovablePrompt: "Excel via xlsx já implementado em Carteira, Acordos e Relatórios. Falta padronizar exportação PDF (avaliar @react-pdf/renderer ou window.print + CSS print) para Aging, Ranking e Prestação de Contas.",
   },
   {
     id: "mobile",
