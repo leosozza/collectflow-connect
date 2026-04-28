@@ -209,12 +209,28 @@ const DashboardPage = () => {
     });
   };
 
-  // Visibility flags from saved layout (positions are now fixed in 3-column grid)
-  const showKpis = layout.visible.kpisTop;
-  const showParcelas = layout.visible.parcelas;
-  const showTotalRecebido = layout.visible.totalRecebido;
-  const showMetas = layout.visible.metas;
-  const showAgendamentos = layout.visible.agendamentos;
+  // Span (Tailwind classes) per block — defines its preferred width on lg+ screens.
+  const SPAN_CLASS: Record<DashboardBlockId, string> = {
+    kpisTop: "col-span-1 lg:col-span-3",
+    metas: "col-span-1 lg:col-span-3",
+    agendamentos: "col-span-1 lg:col-span-3",
+    totalRecebido: "col-span-1 lg:col-span-6",
+    parcelas: "col-span-1 lg:col-span-6",
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = layout.order.indexOf(active.id as DashboardBlockId);
+    const newIndex = layout.order.indexOf(over.id as DashboardBlockId);
+    if (oldIndex < 0 || newIndex < 0) return;
+    setLayout({ ...layout, order: arrayMove(layout.order, oldIndex, newIndex) });
+  };
 
   const trendAcionados = pctDelta(acionadosHoje, stats?.acionados_ontem ?? 0);
   const trendAcordosDia = pctDelta(stats?.acordos_dia ?? 0, stats?.acordos_dia_anterior ?? 0);
