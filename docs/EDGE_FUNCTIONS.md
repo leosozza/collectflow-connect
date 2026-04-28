@@ -78,7 +78,7 @@ const supabase = createClient(
 |------|-------|
 | **Método HTTP** | POST |
 | **Autenticação** | Bearer Token (JWT do usuário) |
-| **Secrets** | `ASAAS_API_KEY_PRODUCTION`, `SUPABASE_ANON_KEY` |
+| **Secrets** | `ASAAS_API_KEY_SANDBOX`, `ASAAS_API_KEY_PRODUCTION`, `SUPABASE_ANON_KEY` |
 
 **Ações disponíveis** (campo `action` no body):
 - `create_customer` — Cria cliente no Asaas (nome, email, CPF, telefone)
@@ -92,6 +92,26 @@ const supabase = createClient(
 3. Seleciona API key e base URL correspondente
 4. Encaminha requisição para a API Asaas
 5. Retorna resposta da API
+
+---
+
+### `asaas-platform-proxy`
+
+**Descrição**: Proxy Super Admin para a conta Asaas da plataforma, usada para cobrar mensalidades dos tenants.
+
+| Item | Valor |
+|------|-------|
+| **Método HTTP** | POST |
+| **Autenticação** | Bearer Token (JWT de Super Admin) |
+| **Secrets** | `ASAAS_PLATFORM_API_KEY_SANDBOX`, `ASAAS_PLATFORM_API_KEY_PRODUCTION`, `SUPABASE_ANON_KEY` |
+
+**Ações disponíveis**:
+- `ping` — Valida a credencial ativa da plataforma
+- `create_customer` — Cria cliente na conta Asaas da plataforma
+- `create_payment` — Cria cobrança avulsa
+- `create_subscription` — Cria assinatura Asaas
+- `create_tenant_subscription` — Cria/atualiza cliente Asaas do tenant, gera assinatura e salva o vínculo em `platform_billing_subscriptions`
+- `get_subscription_payments` — Lista cobranças geradas por uma assinatura
 
 ---
 
@@ -289,7 +309,8 @@ const supabase = createClient(
 1. Recebe payload com `event` e `payment`
 2. Mapeia status Asaas → status interno (`CONFIRMED` → `completed`, `OVERDUE` → `overdue`, etc.)
 3. Busca `payment_records` pelo `asaas_payment_id`
-4. Atualiza status e `paid_at` se confirmado
+4. Se a cobrança veio de uma assinatura da plataforma, vincula pelo campo `payment.subscription`
+5. Atualiza status e `paid_at` se confirmado
 5. Se é compra de tokens e foi paga → credita tokens via RPC `add_tokens`
 
 ---
@@ -874,7 +895,10 @@ const supabase = createClient(
 | `EVOLUTION_API_KEY` | `evolution-proxy`, `send-bulk-whatsapp` | Chave da Evolution API |
 | `NEGOCIARIE_CLIENT_ID` | `negociarie-proxy`, `portal-checkout` | Client ID OAuth2 Negociarie |
 | `NEGOCIARIE_CLIENT_SECRET` | `negociarie-proxy`, `portal-checkout` | Client Secret OAuth2 Negociarie |
-| `ASAAS_API_KEY_PRODUCTION` | `asaas-proxy` | Chave API Asaas (produção) |
+| `ASAAS_API_KEY_SANDBOX` | `asaas-proxy` | Chave API Asaas do tenant (sandbox) |
+| `ASAAS_API_KEY_PRODUCTION` | `asaas-proxy` | Chave API Asaas do tenant (produção) |
+| `ASAAS_PLATFORM_API_KEY_SANDBOX` | `asaas-platform-proxy` | Chave API Asaas da plataforma (sandbox) |
+| `ASAAS_PLATFORM_API_KEY_PRODUCTION` | `asaas-platform-proxy` | Chave API Asaas da plataforma (produção) |
 | `TARGETDATA_API_KEY` | `targetdata-enrich` | Chave API Target Data |
 | `TARGETDATA_API_SECRET` | `targetdata-enrich` | Secret API Target Data |
 | `TARGETDATA_WEBHOOK_SECRET` | `targetdata-webhook` | Secret para validar webhooks Target Data |

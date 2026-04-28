@@ -5,6 +5,14 @@ import BulkModulesDialog from "@/components/admin/BulkModulesDialog";
 import { Blocks } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchAllTenants, updateTenant } from "@/services/tenantService";
+import {
+  createTenantPlatformSubscription,
+  getLatestTenantPlatformSubscription,
+  getTenantPlatformBillingCustomer,
+  type PlatformBillingCycle,
+  type PlatformBillingSubscription,
+  type PlatformBillingType,
+} from "@/services/platformBillingService";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +35,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import {
   Building2, CheckCircle, Ban, Trash2, RotateCcw, Copy, Check,
-  DollarSign, Search, Settings2, Archive, Plus, Minus,
+  DollarSign, Search, Settings2, Archive, Plus, Minus, CreditCard, Loader2, Receipt,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -54,6 +62,31 @@ interface PlanOption {
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
+const defaultDueDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  return d.toISOString().split("T")[0];
+};
+
+const onlyDigits = (value: string) => value.replace(/\D/g, "");
+
+const billingTypeLabels: Record<PlatformBillingType, string> = {
+  BOLETO: "Boleto",
+  PIX: "PIX",
+  CREDIT_CARD: "Cartão",
+  UNDEFINED: "Cliente escolhe",
+};
+
+const cycleLabels: Record<PlatformBillingCycle, string> = {
+  WEEKLY: "Semanal",
+  BIWEEKLY: "Quinzenal",
+  MONTHLY: "Mensal",
+  BIMONTHLY: "Bimestral",
+  QUARTERLY: "Trimestral",
+  SEMIANNUALLY: "Semestral",
+  YEARLY: "Anual",
+};
+
 const SuperAdminPage = () => {
   const { isSuperAdmin } = useTenant();
   const { toast } = useToast();
@@ -64,6 +97,15 @@ const SuperAdminPage = () => {
   const [editCnpj, setEditCnpj] = useState("");
   const [editSlug, setEditSlug] = useState("");
   const [extraInstances, setExtraInstances] = useState(0);
+  const [billingSubscription, setBillingSubscription] = useState<PlatformBillingSubscription | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [creatingSubscription, setCreatingSubscription] = useState(false);
+  const [billingType, setBillingType] = useState<PlatformBillingType>("BOLETO");
+  const [billingCycle, setBillingCycle] = useState<PlatformBillingCycle>("MONTHLY");
+  const [billingValue, setBillingValue] = useState("");
+  const [billingNextDueDate, setBillingNextDueDate] = useState(defaultDueDate());
+  const [billingEmail, setBillingEmail] = useState("");
+  const [billingPhone, setBillingPhone] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TenantRow | null>(null);
   const [searchActive, setSearchActive] = useState("");
   const [searchDeleted, setSearchDeleted] = useState("");
@@ -80,6 +122,7 @@ const SuperAdminPage = () => {
   const [selectedModuleTenant, setSelectedModuleTenant] = useState<TenantRow | null>(null);
 
   const [tenantServiceCounts, setTenantServiceCounts] = useState<Record<string, { activeServices: number; whatsappInstances: number }>>({});
+  const hasActiveBillingSubscription = billingSubscription?.status === "ACTIVE";
 
   const loadTenants = async () => {
     try {
@@ -243,6 +286,43 @@ const SuperAdminPage = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const getPlanValue = (planId: string) => {
+    const plan = availablePlans.find(p => p.id === planId);
+    return plan?.price_monthly ? String(plan.price_monthly) : "";
+  };
+
+  const loadTenantBilling = async (tenantId: string, planId: string) => {
+    setBillingLoading(true);
+    try {
+      const [subscription, customer] = await Promise.all([
+        getLatestTenantPlatformSubscription(tenantId),
+        getTenantPlatformBillingCustomer(tenantId),
+      ]);
+
+      setBillingSubscription(subscription);
+      if (subscription) {
+        setBillingType(subscription.billing_type);
+        setBillingCycle(subscription.cycle);
+        setBillingValue(String(subscription.value));
+        setBillingNextDueDate(subscription.next_due_date);
+      } else {
+        setBillingType("BOLETO");
+        setBillingCycle("MONTHLY");
+        setBillingValue(getPlanValue(planId));
+        setBillingNextDueDate(defaultDueDate());
+      }
+
+      const billingCustomer = subscription?.platform_billing_customers || customer;
+      setBillingEmail(billingCustomer?.email || "");
+      setBillingPhone(billingCustomer?.phone || "");
+    } catch (err: any) {
+      console.error("Erro ao carregar assinatura Asaas da plataforma:", err);
+      setBillingSubscription(null);
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
   const openManageSheet = (tenant: TenantRow) => {
     setEditName(tenant.name);
     setEditCnpj(tenant.cnpj || "");
@@ -252,7 +332,13 @@ const SuperAdminPage = () => {
     // Find plan_id for tenant
     const tenantFull = tenants.find(t => t.id === tenant.id) as any;
     setEditPlanId(tenantFull?.plan_id || "");
+    setBillingSubscription(null);
+    setBillingEmail("");
+    setBillingPhone("");
+    setBillingValue(getPlanValue(tenantFull?.plan_id || ""));
+    setBillingNextDueDate(defaultDueDate());
     setManageSheet(tenant);
+    loadTenantBilling(tenant.id, tenantFull?.plan_id || "");
   };
 
   const saveEdit = async () => {
@@ -267,6 +353,52 @@ const SuperAdminPage = () => {
       loadTenants();
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleCreateSubscription = async () => {
+    if (!manageSheet) return;
+    if (hasActiveBillingSubscription) {
+      toast({ title: "Assinatura já ativa", variant: "destructive" });
+      return;
+    }
+
+    const cpfCnpj = onlyDigits(editCnpj);
+    const value = Number(String(billingValue).replace(",", "."));
+
+    if (![11, 14].includes(cpfCnpj.length)) {
+      toast({ title: "CPF/CNPJ inválido", description: "Informe um documento válido para o cliente Asaas.", variant: "destructive" });
+      return;
+    }
+    if (!Number.isFinite(value) || value <= 0) {
+      toast({ title: "Valor inválido", description: "Informe um valor maior que zero.", variant: "destructive" });
+      return;
+    }
+    if (!billingNextDueDate) {
+      toast({ title: "Vencimento obrigatório", variant: "destructive" });
+      return;
+    }
+
+    setCreatingSubscription(true);
+    try {
+      await createTenantPlatformSubscription({
+        tenantId: manageSheet.id,
+        planId: editPlanId || null,
+        customerName: editName || manageSheet.name,
+        cpfCnpj,
+        email: billingEmail || null,
+        phone: billingPhone || null,
+        billingType,
+        value,
+        nextDueDate: billingNextDueDate,
+        cycle: billingCycle,
+      });
+      toast({ title: "Assinatura Asaas gerada", description: "A cobrança recorrente foi criada para este tenant." });
+      await loadTenantBilling(manageSheet.id, editPlanId);
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar assinatura", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingSubscription(false);
     }
   };
 
@@ -698,6 +830,7 @@ const SuperAdminPage = () => {
                   const { error } = await supabase.from("tenants").update({ plan_id: v } as any).eq("id", manageSheet!.id);
                   if (error) throw error;
                   setEditPlanId(v);
+                  if (!hasActiveBillingSubscription) setBillingValue(getPlanValue(v));
                   toast({ title: "Plano atualizado!" });
                   loadTenants();
                 } catch (err: any) {
@@ -713,6 +846,133 @@ const SuperAdminPage = () => {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <Separator />
+
+            {/* COBRANÇA ASAAS */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-primary" />
+                  Cobrança Asaas
+                </h3>
+                {billingLoading ? (
+                  <Badge variant="outline" className="gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Carregando
+                  </Badge>
+                ) : billingSubscription ? (
+                  <Badge variant={billingSubscription.status === "ACTIVE" ? "default" : "secondary"}>
+                    {billingSubscription.status === "ACTIVE" ? "Ativa" : billingSubscription.status}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">Sem assinatura</Badge>
+                )}
+              </div>
+
+              {billingSubscription && (
+                <div className="rounded-md border border-border p-3 text-xs space-y-2 bg-muted/20">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Assinatura</span>
+                    <span className="font-mono">{billingSubscription.asaas_subscription_id}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Valor</span>
+                    <span className="font-medium">{formatCurrency(Number(billingSubscription.value))}/{cycleLabels[billingSubscription.cycle].toLowerCase()}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Próximo vencimento</span>
+                    <span>{new Date(`${billingSubscription.next_due_date}T00:00:00`).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                  {billingSubscription.last_payment_id && (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Última cobrança</span>
+                      <span className="font-mono">{billingSubscription.last_payment_id}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Forma</Label>
+                  <Select value={billingType} onValueChange={(v) => setBillingType(v as PlatformBillingType)} disabled={hasActiveBillingSubscription}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BOLETO">{billingTypeLabels.BOLETO}</SelectItem>
+                      <SelectItem value="PIX">{billingTypeLabels.PIX}</SelectItem>
+                      <SelectItem value="UNDEFINED">{billingTypeLabels.UNDEFINED}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Ciclo</Label>
+                  <Select value={billingCycle} onValueChange={(v) => setBillingCycle(v as PlatformBillingCycle)} disabled={hasActiveBillingSubscription}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MONTHLY">{cycleLabels.MONTHLY}</SelectItem>
+                      <SelectItem value="QUARTERLY">{cycleLabels.QUARTERLY}</SelectItem>
+                      <SelectItem value="SEMIANNUALLY">{cycleLabels.SEMIANNUALLY}</SelectItem>
+                      <SelectItem value="YEARLY">{cycleLabels.YEARLY}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Valor</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={billingValue}
+                    onChange={e => setBillingValue(e.target.value)}
+                    disabled={hasActiveBillingSubscription}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Primeiro vencimento</Label>
+                  <Input
+                    type="date"
+                    value={billingNextDueDate}
+                    onChange={e => setBillingNextDueDate(e.target.value)}
+                    disabled={hasActiveBillingSubscription}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>E-mail de cobrança</Label>
+                  <Input
+                    type="email"
+                    value={billingEmail}
+                    onChange={e => setBillingEmail(e.target.value)}
+                    placeholder="financeiro@empresa.com"
+                    disabled={hasActiveBillingSubscription}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telefone</Label>
+                  <Input
+                    value={billingPhone}
+                    onChange={e => setBillingPhone(e.target.value)}
+                    placeholder="11999999999"
+                    disabled={hasActiveBillingSubscription}
+                  />
+                </div>
+              </div>
+
+              <Button
+                onClick={handleCreateSubscription}
+                size="sm"
+                className="w-full gap-1.5"
+                disabled={billingLoading || creatingSubscription || hasActiveBillingSubscription}
+              >
+                {creatingSubscription ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
+                {hasActiveBillingSubscription ? "Assinatura já gerada" : creatingSubscription ? "Gerando assinatura..." : "Gerar assinatura"}
+              </Button>
             </div>
 
             <Separator />
