@@ -517,6 +517,7 @@ Deno.serve(async (req: Request) => {
     const credor = url.searchParams.get("credor");
 
     let query = supabaseAdmin.from("agreements").select("*", { count: "exact" }).eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    if (credorNome) query = query.eq("credor", credorNome);
     if (status) query = query.eq("status", status);
     if (cpf) query = query.eq("client_cpf", cpf);
     if (credor) query = query.ilike("credor", `%${credor}%`);
@@ -528,7 +529,9 @@ Deno.serve(async (req: Request) => {
 
   // GET /agreements/:id
   if (segments[0] === "agreements" && segments[1] && !segments[2] && method === "GET") {
-    const { data, error } = await supabaseAdmin.from("agreements").select("*").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
+    let q = supabaseAdmin.from("agreements").select("*").eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) q = q.eq("credor", credorNome);
+    const { data, error } = await q.maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Acordo não encontrado" }, 404);
     return json({ data });
@@ -537,6 +540,8 @@ Deno.serve(async (req: Request) => {
   // POST /agreements
   if (segments[0] === "agreements" && !segments[1] && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
     const required = ["client_cpf", "client_name", "credor", "original_total", "proposed_total", "new_installments", "new_installment_value", "first_due_date"];
     const missing = required.filter(f => !body[f]);
     if (missing.length > 0) return json({ error: `Campos obrigatórios faltando: ${missing.join(", ")}` }, 422);
@@ -563,9 +568,11 @@ Deno.serve(async (req: Request) => {
 
   // PUT /agreements/:id/approve
   if (segments[0] === "agreements" && segments[1] && segments[2] === "approve" && method === "PUT") {
-    const { data, error } = await supabaseAdmin.from("agreements")
+    let upd = supabaseAdmin.from("agreements")
       .update({ status: "approved", updated_at: new Date().toISOString() })
-      .eq("id", segments[1]).eq("tenant_id", tenantId).select().single();
+      .eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { data, error } = await upd.select().single();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Acordo não encontrado" }, 404);
     return json({ success: true, data });
@@ -574,9 +581,11 @@ Deno.serve(async (req: Request) => {
   // PUT /agreements/:id/reject
   if (segments[0] === "agreements" && segments[1] && segments[2] === "reject" && method === "PUT") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const { data, error } = await supabaseAdmin.from("agreements")
+    let upd = supabaseAdmin.from("agreements")
       .update({ status: "rejected", notes: body.reason ?? null, updated_at: new Date().toISOString() })
-      .eq("id", segments[1]).eq("tenant_id", tenantId).select().single();
+      .eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { data, error } = await upd.select().single();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Acordo não encontrado" }, 404);
     return json({ success: true, data });
