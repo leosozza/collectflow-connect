@@ -102,100 +102,51 @@ export async function fetchConversations(
   filters: ConversationFilters = {},
   isAdmin = false
 ): Promise<{ data: Conversation[]; count: number }> {
-  // Operadores não-admin: usar RPC server-side com regra de visibilidade robusta (Fase 1)
-  if (!isAdmin) {
-    const { data, error } = await supabase.rpc("get_visible_conversations" as any, {
-      _tenant_id: tenantId,
-      _page: page,
-      _page_size: pageSize,
-      _status_filter: filters.statusFilter && filters.statusFilter !== "all" ? filters.statusFilter : null,
-      _instance_filter: filters.instanceFilter && filters.instanceFilter !== "all" ? filters.instanceFilter : null,
-      _operator_filter: filters.operatorFilter && filters.operatorFilter !== "all" ? filters.operatorFilter : null,
-      _unread_only: !!filters.unreadOnly,
-      _handler_filter: null,
-      _search: filters.search && filters.search.trim() ? filters.search.trim() : null,
-      _disposition_filter: filters.dispositionFilter && filters.dispositionFilter !== "all" ? filters.dispositionFilter : null,
-    });
-    if (error) {
-      console.error("[conversationService] get_visible_conversations RPC error:", error);
-      throw error;
-    }
-
-    const rows = (data || []) as any[];
-    const total = rows.length > 0 ? Number(rows[0].total_count) || 0 : 0;
-    const mapped = rows.map((row: any) => ({
-      id: row.id,
-      tenant_id: row.tenant_id,
-      instance_id: row.instance_id,
-      remote_phone: row.remote_phone,
-      remote_name: row.remote_name,
-      remote_avatar_url: row.remote_avatar_url ?? null,
-      remote_avatar_fetched_at: row.remote_avatar_fetched_at ?? null,
-      status: row.status,
-      assigned_to: row.assigned_to,
-      last_message_at: row.last_message_at,
-      unread_count: row.unread_count,
-      client_id: row.client_id,
-      client_name: row.client_name ?? undefined,
-      last_message_content: row.last_message_content ?? undefined,
-      last_message_type: row.last_message_type ?? undefined,
-      last_message_direction: row.last_message_direction ?? undefined,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      ...(row.sla_deadline_at !== undefined ? { sla_deadline_at: row.sla_deadline_at } : {}),
-    })) as Conversation[];
-
-    return { data: mapped, count: total };
+  // Tanto operadores quanto admins usam a RPC: ela já trata visibilidade
+  // internamente conforme o papel do usuário no tenant e aplica a busca
+  // multi-token sobre remote_name + remote_phone + clients.nome_completo.
+  const { data, error } = await supabase.rpc("get_visible_conversations" as any, {
+    _tenant_id: tenantId,
+    _page: page,
+    _page_size: pageSize,
+    _status_filter: filters.statusFilter && filters.statusFilter !== "all" ? filters.statusFilter : null,
+    _instance_filter: filters.instanceFilter && filters.instanceFilter !== "all" ? filters.instanceFilter : null,
+    _operator_filter: filters.operatorFilter && filters.operatorFilter !== "all" ? filters.operatorFilter : null,
+    _unread_only: !!filters.unreadOnly,
+    _handler_filter: null,
+    _search: filters.search && filters.search.trim() ? filters.search.trim() : null,
+    _disposition_filter: filters.dispositionFilter && filters.dispositionFilter !== "all" ? filters.dispositionFilter : null,
+  });
+  if (error) {
+    console.error("[conversationService] get_visible_conversations RPC error:", error);
+    throw error;
   }
 
-  // Admins: query direta (mantém comportamento atual)
-  let query = supabase
-    .from("conversations" as any)
-    .select("*, clients(nome_completo)", { count: "exact" })
-    .eq("tenant_id", tenantId)
-    .order("last_message_at", { ascending: false });
-
-  if (filters.statusFilter && filters.statusFilter !== "all") {
-    query = query.eq("status", filters.statusFilter);
-  }
-  if (filters.instanceFilter && filters.instanceFilter !== "all") {
-    query = query.eq("instance_id", filters.instanceFilter);
-  }
-  if (filters.operatorFilter && filters.operatorFilter !== "all") {
-    query = query.eq("assigned_to", filters.operatorFilter);
-  }
-  if (filters.unreadOnly) {
-    query = query.gt("unread_count", 0);
-  }
-  if (filters.dispositionFilter && filters.dispositionFilter !== "all") {
-    const { data: ids } = await supabase
-      .from("conversation_disposition_assignments" as any)
-      .select("conversation_id")
-      .eq("disposition_type_id", filters.dispositionFilter);
-    const convIds = ((ids || []) as any[]).map((r: any) => r.conversation_id);
-    if (convIds.length === 0) return { data: [], count: 0 };
-    query = query.in("id", convIds);
-  }
-  if (filters.search && filters.search.trim()) {
-    const s = filters.search.trim();
-    query = query.or(`remote_name.ilike.%${s}%,remote_phone.ilike.%${s}%`);
-  }
-
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
-  const { data, count, error } = await query.range(from, to);
-  if (error) throw error;
-
-  const mapped = ((data || []) as any[]).map((row: any) => ({
-    ...row,
-    client_name: row.clients?.nome_completo ?? undefined,
-    clients: undefined,
+  const rows = (data || []) as any[];
+  const total = rows.length > 0 ? Number(rows[0].total_count) || 0 : 0;
+  const mapped = rows.map((row: any) => ({
+    id: row.id,
+    tenant_id: row.tenant_id,
+    instance_id: row.instance_id,
+    remote_phone: row.remote_phone,
+    remote_name: row.remote_name,
+    remote_avatar_url: row.remote_avatar_url ?? null,
+    remote_avatar_fetched_at: row.remote_avatar_fetched_at ?? null,
+    status: row.status,
+    assigned_to: row.assigned_to,
+    last_message_at: row.last_message_at,
+    unread_count: row.unread_count,
+    client_id: row.client_id,
+    client_name: row.client_name ?? undefined,
     last_message_content: row.last_message_content ?? undefined,
     last_message_type: row.last_message_type ?? undefined,
     last_message_direction: row.last_message_direction ?? undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    ...(row.sla_deadline_at !== undefined ? { sla_deadline_at: row.sla_deadline_at } : {}),
   })) as Conversation[];
 
-  return { data: mapped, count: count || 0 };
+  return { data: mapped, count: total };
 }
 
 export async function fetchConversationCounts(
