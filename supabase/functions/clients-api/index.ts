@@ -23,7 +23,12 @@ async function sha256(text: string): Promise<string> {
 }
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
-async function authenticate(req: Request): Promise<{ tenantId: string; keyId: string } | null> {
+// Quando a chave tem credor_id preenchido, ela fica escopada àquele credor.
+// Resolvemos também o NOME do credor, pois clients/agreements/negociarie_cobrancas
+// usam a coluna `credor` (texto), não FK.
+async function authenticate(req: Request): Promise<
+  { tenantId: string; keyId: string; credorId: string | null; credorNome: string | null } | null
+> {
   const apiKey = req.headers.get("x-api-key") || req.headers.get("X-API-Key");
   if (!apiKey) return null;
 
@@ -31,7 +36,7 @@ async function authenticate(req: Request): Promise<{ tenantId: string; keyId: st
 
   const { data: keyRow } = await supabaseAdmin
     .from("api_keys")
-    .select("id, tenant_id, is_active")
+    .select("id, tenant_id, credor_id, is_active")
     .eq("key_hash", hash)
     .eq("is_active", true)
     .maybeSingle();
@@ -43,7 +48,22 @@ async function authenticate(req: Request): Promise<{ tenantId: string; keyId: st
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", keyRow.id);
 
-  return { tenantId: keyRow.tenant_id, keyId: keyRow.id };
+  let credorNome: string | null = null;
+  if (keyRow.credor_id) {
+    const { data: credor } = await supabaseAdmin
+      .from("credores")
+      .select("nome")
+      .eq("id", keyRow.credor_id)
+      .maybeSingle();
+    credorNome = credor?.nome ?? null;
+  }
+
+  return {
+    tenantId: keyRow.tenant_id,
+    keyId: keyRow.id,
+    credorId: keyRow.credor_id ?? null,
+    credorNome,
+  };
 }
 
 // ── Field name normalization (accepts mailing format) ──────────────────────────
