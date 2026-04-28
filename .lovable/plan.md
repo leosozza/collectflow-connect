@@ -1,90 +1,63 @@
-## Problema observado (print)
+# Recalibração do Score Operacional
 
-- Banner: **"197 registro(s) selecionado(s)"** ✅ correto (acumulado entre páginas).
-- Botões no topo: **"WhatsApp (50)"**, **"Discador (50)"**, **"Higienizar (50)"** ❌ mostram só os da página atual.
-- Quando o operador trocava `pageSize` de 50 para 20, **toda a seleção acumulada era perdida** (effect zerava `selectedIds`).
+Ajustes solicitados na edge function `calculate-propensity` (motor único do score).
 
-## Causas identificadas em `src/pages/CarteiraPage.tsx`
+## 1. Perfil "Resistente": -25 → -10
 
-### Bug 1 — Contador dos botões ignora seleções de páginas anteriores
+Na **Dimensão 4 (Perfil do Devedor)**, a penalidade do perfil `resistente` cai de **-25 para -10**, alinhando-se ao perfil `insatisfeito`.
 
-Linhas 586-589:
-```ts
-const selectedClients = displayClients.filter((c) => selectedIds.has(c.id));
-const selectedCount = selectAllFiltered
-  ? totalCount
-  : new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size;
-```
-`displayClients` contém apenas a página atual. Os IDs que ficaram em `selectedIds` vindos de outras páginas são descartados pelo `.filter`, então `selectedCount` exibe apenas a contagem da página visível (50), em vez do total real (197).
+| Perfil | Antes | Depois |
+|---|---|---|
+| ocasional | +20 | +20 |
+| recorrente | +5 | +5 |
+| insatisfeito | -10 | -10 |
+| **resistente** | **-25** | **-10** |
 
-### Bug 2 — Trocar `pageSize` apaga a seleção acumulada
+## 2. Remover Dimensão "Tempo de Atraso"
 
-Linhas 510-520 (effect de `pageSize`):
-```ts
-useEffect(() => {
-  if (prevPageSizeRef.current !== pageSize) {
-    prevPageSizeRef.current = pageSize;
-    setUrlPage(1);
-    setSelectedIds(new Set());          // ← apaga 197 seleções
-    setSelectAllFiltered(false);
-    setBulkClients(null);
-  }
-}, [pageSize]);
-```
-UX ruim: o operador só queria visualizar menos itens por página, não perder o trabalho de seleção. Coerente com a regra "seleção é mantida ao trocar de página", trocar o tamanho da página também não deve descartar a seleção.
+A **Dimensão 5** deixa de existir. Nenhum cliente recebe mais pontos (positivos ou negativos) com base em `data_vencimento`.
 
-## Correções propostas
+- Remover bloco `delayScore` (linhas 163-173).
+- Remover `delayScore` da soma `rawScore`.
+- Remover a razão "Atraso prolongado" do `score_reason`.
 
-### 1. `selectedCount` reflete o total acumulado real
+**Impacto esperado:** carteiras antigas (>180d) deixam de ser penalizadas em -20, o que deve elevar muitos CPFs hoje classificados como "Ruim" para faixas melhores.
 
-Substituir o cálculo (linhas 586-589) por uma lógica que prioriza o total acumulado em `selectedIds`, e só usa a contagem por CPF único quando toda a seleção está contida na página visível (caso em que o agrupamento por CPF faz sentido):
+## 3. WhatsApp enviado sem resposta: -5
 
-```ts
-const selectedClients = displayClients.filter((c) =>
-  (c.allIds || [c.id]).some((id: string) => selectedIds.has(id))
-);
+Nova lógica na **Dimensão 2 (Engajamento)**: se o cliente recebeu mensagens WhatsApp (`whatsapp_outbound` ou `message_sent` de canal whatsapp) e **não respondeu nenhuma** (`whatsapp_inbound = 0`), aplica-se **-5 pontos**.
 
-const selectedCount = selectAllFiltered
-  ? totalCount
-  : selectedClients.length === new Set(Array.from(selectedIds)).size
-    ? new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size
-    : selectedIds.size;
+- Penalidade aplicada **uma única vez**, não por mensagem (evita acumular -50 por campanhas).
+- Só penaliza se houver pelo menos 1 envio WhatsApp registrado.
+- Adicionar razão "WhatsApp sem resposta" no `score_reason` quando aplicável.
+
+## Faixas Finais (continuam iguais)
+
+| Faixa | Score | Significado |
+|---|---|---|
+| Bom | 75-100 | Alta propensão |
+| Médio | 50-74 | Propensão média |
+| Ruim | 1-49 | Baixa propensão |
+| Zero | 0 | Sem sinais positivos |
+
+Novo intervalo teórico do `rawScore`:
+```text
+Mín: 0 (contato) + -5 (wpp s/ resposta) + -20 (quebra acordo) + -10 (resistente) = -35  → clamp 0
+Máx: 30 + 30 + 25 + 20 = 105 → clamp 100
 ```
 
-Na prática:
-- **50 selecionados, todos da página atual** → mostra "50" (CPFs únicos da página).
-- **197 acumulados de várias páginas** → mostra "197" (total real, igual ao banner).
-- **Selecionar todos os filtrados** → mostra `totalCount` (já estava correto).
+## Recálculo da Base
 
-Também substitui o `.filter` original (`selectedIds.has(c.id)`) pela versão que considera `c.allIds` — corrige um pequeno desalinhamento com o agrupamento usado no checkbox de cada linha (`toggleSelect` opera sobre `allIds`).
+Após o deploy, executar **recálculo em massa** de todos os CPFs com eventos para que a nova distribuição reflita os ajustes (a função `calculate-propensity` já suporta processamento em lote da base inteira do tenant).
 
-### 2. Preservar `selectedIds` ao trocar `pageSize`
+## Arquivos Alterados
 
-Reescrever o effect das linhas 510-520 para apenas resetar a página e o flag `selectAllFiltered`, preservando a seleção acumulada:
+- `supabase/functions/calculate-propensity/index.ts` — único arquivo modificado.
+- Sem mudanças de schema, sem migrations.
+- Frontend (PropensityBadge, filtros) **não muda**: faixas e campo `propensity_score` permanecem.
 
-```ts
-const prevPageSizeRef = useRef(pageSize);
-useEffect(() => {
-  if (prevPageSizeRef.current !== pageSize) {
-    prevPageSizeRef.current = pageSize;
-    setUrlPage(1);
-    setSelectAllFiltered(false);
-  }
-}, [pageSize]);
-```
+## Validação Pós-Deploy
 
-`bulkClients` também não precisa mais ser invalidado aqui — ele é invalidado em qualquer mudança de seleção (`toggleSelect`, `toggleSelectAll`, "Limpar seleção") e em mudança de filtros. O `pageSize` em si não muda quem está selecionado.
-
-## Resultado esperado
-
-- Selecionar 50 + navegar páginas + acumular 197 → banner e botões mostram **197** consistentemente.
-- Trocar de 50 → 20 itens por página → seleção de **197 é preservada**, página volta para 1.
-- Disparo (WhatsApp/Discador/Higienizar) envia para todos os 197 (já garantido pelo `fetchBulkIfNeeded` que hidrata via `fetchCarteiraClientsByIds` quando há IDs fora da página atual).
-
-## Arquivos afetados
-
-- `src/pages/CarteiraPage.tsx` — apenas duas pequenas alterações (effect do `pageSize` + cálculo de `selectedCount`/`selectedClients`).
-
-## Fora de escopo
-
-- Nenhuma alteração em service, RPC ou outras páginas.
+1. Rodar o recálculo da base.
+2. Validar nova contagem de CPFs por faixa (Bom / Médio / Ruim / Zero).
+3. Conferir alguns CPFs específicos para auditar `score_reason`.
