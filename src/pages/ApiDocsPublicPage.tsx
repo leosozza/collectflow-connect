@@ -166,17 +166,27 @@ export default function ApiDocsPublicPage() {
         <SectionHeader icon={CreditCard} title="4. Pagamentos" />
         <div className="space-y-2">
           <EndpointRow method="GET" path="/payments" description="Listar pagamentos (paginado)">
-            <p className="text-sm text-zinc-500">Filtros: <code>status</code>, <code>client_id</code></p>
-            <CodeBlock code={`curl "${BASE_URL}/payments?status=pendente" -H "X-API-Key: cf_..."`} lang="cURL" />
+            <p className="text-sm text-zinc-500">Filtros: <code>status</code>, <code>client_id</code>, <code>tipo</code> (pix, cartao, boleto)</p>
+            <CodeBlock code={`curl "${BASE_URL}/payments?status=pendente&tipo=pix" -H "X-API-Key: cf_..."`} lang="cURL" />
           </EndpointRow>
           <EndpointRow method="GET" path="/payments/:id" description="Status de um pagamento">
             <p className="text-sm text-zinc-500 mb-2">Retorna: valor, status, tipo, pix_copia_cola, link_boleto, link_cartao</p>
             <CodeBlock code={`curl "${BASE_URL}/payments/uuid" -H "X-API-Key: cf_..."`} lang="cURL" />
           </EndpointRow>
+          <EndpointRow method="GET" path="/payments/methods" description="Listar meios de pagamento disponíveis">
+            <p className="text-sm text-zinc-500 mb-2">Retorna meios nativos (PIX, Cartão, Boleto) + meios customizados do tenant. Filtro opcional: <code>credor_id</code>.</p>
+            <CodeBlock code={`curl "${BASE_URL}/payments/methods" -H "X-API-Key: cf_..."`} lang="cURL" />
+          </EndpointRow>
+          <EndpointRow method="POST" path="/payments" description="Gerar cobrança (meio definido via tipo)">
+            <CodeBlock code={`{\n  "tipo": "pix",  // pix | cartao | boleto\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
+          </EndpointRow>
           <EndpointRow method="POST" path="/payments/pix" description="Gerar cobrança PIX">
             <CodeBlock code={`{\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
           </EndpointRow>
-          <EndpointRow method="POST" path="/payments/cartao" description="Gerar cobrança Cartão">
+          <EndpointRow method="POST" path="/payments/cartao" description="Gerar cobrança Cartão de Crédito">
+            <CodeBlock code={`{\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
+          </EndpointRow>
+          <EndpointRow method="POST" path="/payments/boleto" description="Gerar cobrança Boleto Bancário">
             <CodeBlock code={`{\n  "client_id": "uuid-do-cliente",\n  "valor": 350.00,\n  "data_vencimento": "2026-04-01"\n}`} lang="JSON" />
           </EndpointRow>
         </div>
