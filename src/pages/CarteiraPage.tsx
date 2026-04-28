@@ -176,6 +176,7 @@ const CarteiraPage = () => {
     cadastroDe: "", cadastroAte: "", quitados: false, valorAbertoDe: 0,
     valorAbertoAte: 0, semContato: false, emDia: false, higienizados: false,
     semWhatsapp: false, scoreRange: "", debtorProfile: "",
+    primeiraParcelaDe: "", primeiraParcelaAte: "",
   }), []);
 
   const setFilters = useCallback(
