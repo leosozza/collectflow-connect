@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 export interface ApiKey {
   id: string;
   tenant_id: string;
+  credor_id: string | null;
+  credor_nome?: string | null;
   key_prefix: string;
   label: string;
   is_active: boolean;
@@ -24,12 +26,15 @@ async function sha256(text: string): Promise<string> {
 export async function fetchApiKeys(tenantId: string): Promise<ApiKey[]> {
   const { data, error } = await supabase
     .from("api_keys")
-    .select("*")
+    .select("*, credores(nome)")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []) as ApiKey[];
+  return ((data ?? []) as any[]).map((k) => ({
+    ...k,
+    credor_nome: k.credores?.nome ?? null,
+  })) as ApiKey[];
 }
 
 export interface GeneratedKey {
@@ -40,9 +45,9 @@ export interface GeneratedKey {
 export async function generateApiKey(
   tenantId: string,
   createdBy: string,
-  label = "Nova Chave"
+  label = "Nova Chave",
+  credorId: string | null = null,
 ): Promise<GeneratedKey> {
-  // Generate a cryptographically random token
   const rawBytes = new Uint8Array(32);
   crypto.getRandomValues(rawBytes);
   const rawToken =
@@ -52,7 +57,7 @@ export async function generateApiKey(
       .join("");
 
   const keyHash = await sha256(rawToken);
-  const keyPrefix = rawToken.slice(0, 11); // "cf_" + 8 hex chars
+  const keyPrefix = rawToken.slice(0, 11);
 
   const { data, error } = await supabase
     .from("api_keys")
@@ -62,6 +67,7 @@ export async function generateApiKey(
       key_prefix: keyPrefix,
       label,
       created_by: createdBy,
+      credor_id: credorId,
     })
     .select()
     .single();

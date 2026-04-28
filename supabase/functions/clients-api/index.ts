@@ -23,7 +23,12 @@ async function sha256(text: string): Promise<string> {
 }
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
-async function authenticate(req: Request): Promise<{ tenantId: string; keyId: string } | null> {
+// Quando a chave tem credor_id preenchido, ela fica escopada àquele credor.
+// Resolvemos também o NOME do credor, pois clients/agreements/negociarie_cobrancas
+// usam a coluna `credor` (texto), não FK.
+async function authenticate(req: Request): Promise<
+  { tenantId: string; keyId: string; credorId: string | null; credorNome: string | null } | null
+> {
   const apiKey = req.headers.get("x-api-key") || req.headers.get("X-API-Key");
   if (!apiKey) return null;
 
@@ -31,7 +36,7 @@ async function authenticate(req: Request): Promise<{ tenantId: string; keyId: st
 
   const { data: keyRow } = await supabaseAdmin
     .from("api_keys")
-    .select("id, tenant_id, is_active")
+    .select("id, tenant_id, credor_id, is_active")
     .eq("key_hash", hash)
     .eq("is_active", true)
     .maybeSingle();
@@ -43,7 +48,22 @@ async function authenticate(req: Request): Promise<{ tenantId: string; keyId: st
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", keyRow.id);
 
-  return { tenantId: keyRow.tenant_id, keyId: keyRow.id };
+  let credorNome: string | null = null;
+  if (keyRow.credor_id) {
+    const { data: credor } = await supabaseAdmin
+      .from("credores")
+      .select("nome")
+      .eq("id", keyRow.credor_id)
+      .maybeSingle();
+    credorNome = credor?.nome ?? null;
+  }
+
+  return {
+    tenantId: keyRow.tenant_id,
+    keyId: keyRow.id,
+    credorId: keyRow.credor_id ?? null,
+    credorNome,
+  };
 }
 
 // ── Field name normalization (accepts mailing format) ──────────────────────────
@@ -257,7 +277,20 @@ Deno.serve(async (req: Request) => {
   if (!auth) {
     return json({ error: "Unauthorized: X-API-Key inválida ou ausente" }, 401);
   }
-  const { tenantId } = auth;
+  const { tenantId, credorNome } = auth;
+
+  // Helper: valida que o body de escrita respeita o credor da chave (quando escopada)
+  const enforceCredor = (body: Record<string, unknown>): { ok: true } | { ok: false; resp: Response } => {
+    if (!credorNome) return { ok: true };
+    if (body.credor && String(body.credor).trim() !== credorNome) {
+      return {
+        ok: false,
+        resp: json({ error: `Esta chave está restrita ao credor "${credorNome}". Não é permitido operar sobre o credor "${body.credor}".` }, 403),
+      };
+    }
+    body.credor = credorNome; // força o credor da chave
+    return { ok: true };
+  };
 
   // ══════════════════════════════════════════════════════════════════════════
   // CLIENTS ROUTES
@@ -273,6 +306,7 @@ Deno.serve(async (req: Request) => {
     const cpf = url.searchParams.get("cpf");
 
     let query = supabaseAdmin.from("clients").select("*", { count: "exact" }).eq("tenant_id", tenantId).range(offset, offset + limit - 1);
+    if (credorNome) query = query.eq("credor", credorNome);
     if (status) query = query.eq("status", status);
     if (credor) query = query.ilike("credor", `%${credor}%`);
     if (cpf) query = query.eq("cpf", cpf);
@@ -286,18 +320,22 @@ Deno.serve(async (req: Request) => {
   if (segments[0] === "clients" && segments[1] && segments[2] === "status" && method === "PUT") {
     const body = await req.json() as Record<string, unknown>;
     if (!body.status_cobranca_id) return json({ error: "status_cobranca_id obrigatório" }, 422);
-    const { error } = await supabaseAdmin
+    let upd = supabaseAdmin
       .from("clients")
       .update({ status_cobranca_id: body.status_cobranca_id, updated_at: new Date().toISOString() })
       .eq("id", segments[1])
       .eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { error } = await upd;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
 
   // GET /clients/:id
   if (segments[0] === "clients" && segments[1] && !segments[2] && method === "GET") {
-    const { data, error } = await supabaseAdmin.from("clients").select("*").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
+    let q = supabaseAdmin.from("clients").select("*").eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) q = q.eq("credor", credorNome);
+    const { data, error } = await q.maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Cliente não encontrado" }, 404);
     return json({ data });
@@ -307,6 +345,8 @@ Deno.serve(async (req: Request) => {
   if (segments[0] === "clients" && !segments[1] && method === "POST") {
     const rawBody = await req.json() as Record<string, unknown>;
     const body = normalizeRecord(rawBody);
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
     const { valid, errors } = validateClientRecord(body);
     if (!valid) return json({ error: "Validação falhou", errors }, 422);
 
@@ -374,6 +414,12 @@ Deno.serve(async (req: Request) => {
         recordToNormalize = remapped;
       }
       const record = normalizeRecord(recordToNormalize);
+      const enf = enforceCredor(record);
+      if (!enf.ok) {
+        errorList.push({ index: i, external_id: record.external_id as string, cpf: record.cpf as string, error: `Credor não permitido para esta chave (escopo: ${credorNome})` });
+        skipped++;
+        return;
+      }
       const { valid, errors } = validateClientRecord(record);
       if (!valid) {
         errorList.push({ index: i, external_id: record.external_id as string, cpf: record.cpf as string, error: errors.join("; ") });
@@ -410,11 +456,15 @@ Deno.serve(async (req: Request) => {
   // PUT /clients/:id
   if (segments[0] === "clients" && segments[1] && !segments[2] && method === "PUT") {
     const body = await req.json() as Record<string, unknown>;
-    const { error } = await supabaseAdmin
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
+    let upd = supabaseAdmin
       .from("clients")
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq("id", segments[1])
       .eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { error } = await upd;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
@@ -422,25 +472,33 @@ Deno.serve(async (req: Request) => {
   // PUT /clients/by-external/:external_id
   if (segments[0] === "clients" && segments[1] === "by-external" && segments[2] && method === "PUT") {
     const body = await req.json() as Record<string, unknown>;
-    const { error } = await supabaseAdmin
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
+    let upd = supabaseAdmin
       .from("clients")
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq("external_id", segments[2])
       .eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { error } = await upd;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
 
   // DELETE /clients/:id
   if (segments[0] === "clients" && segments[1] && !segments[2] && method === "DELETE") {
-    const { error } = await supabaseAdmin.from("clients").delete().eq("id", segments[1]).eq("tenant_id", tenantId);
+    let del = supabaseAdmin.from("clients").delete().eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) del = del.eq("credor", credorNome);
+    const { error } = await del;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
 
   // DELETE /clients/by-cpf/:cpf
   if (segments[0] === "clients" && segments[1] === "by-cpf" && segments[2] && method === "DELETE") {
-    const { error } = await supabaseAdmin.from("clients").delete().eq("cpf", segments[2]).eq("tenant_id", tenantId);
+    let del = supabaseAdmin.from("clients").delete().eq("cpf", segments[2]).eq("tenant_id", tenantId);
+    if (credorNome) del = del.eq("credor", credorNome);
+    const { error } = await del;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
@@ -459,6 +517,7 @@ Deno.serve(async (req: Request) => {
     const credor = url.searchParams.get("credor");
 
     let query = supabaseAdmin.from("agreements").select("*", { count: "exact" }).eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    if (credorNome) query = query.eq("credor", credorNome);
     if (status) query = query.eq("status", status);
     if (cpf) query = query.eq("client_cpf", cpf);
     if (credor) query = query.ilike("credor", `%${credor}%`);
@@ -470,7 +529,9 @@ Deno.serve(async (req: Request) => {
 
   // GET /agreements/:id
   if (segments[0] === "agreements" && segments[1] && !segments[2] && method === "GET") {
-    const { data, error } = await supabaseAdmin.from("agreements").select("*").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
+    let q = supabaseAdmin.from("agreements").select("*").eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) q = q.eq("credor", credorNome);
+    const { data, error } = await q.maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Acordo não encontrado" }, 404);
     return json({ data });
@@ -479,6 +540,8 @@ Deno.serve(async (req: Request) => {
   // POST /agreements
   if (segments[0] === "agreements" && !segments[1] && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
     const required = ["client_cpf", "client_name", "credor", "original_total", "proposed_total", "new_installments", "new_installment_value", "first_due_date"];
     const missing = required.filter(f => !body[f]);
     if (missing.length > 0) return json({ error: `Campos obrigatórios faltando: ${missing.join(", ")}` }, 422);
@@ -505,9 +568,11 @@ Deno.serve(async (req: Request) => {
 
   // PUT /agreements/:id/approve
   if (segments[0] === "agreements" && segments[1] && segments[2] === "approve" && method === "PUT") {
-    const { data, error } = await supabaseAdmin.from("agreements")
+    let upd = supabaseAdmin.from("agreements")
       .update({ status: "approved", updated_at: new Date().toISOString() })
-      .eq("id", segments[1]).eq("tenant_id", tenantId).select().single();
+      .eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { data, error } = await upd.select().single();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Acordo não encontrado" }, 404);
     return json({ success: true, data });
@@ -516,9 +581,11 @@ Deno.serve(async (req: Request) => {
   // PUT /agreements/:id/reject
   if (segments[0] === "agreements" && segments[1] && segments[2] === "reject" && method === "PUT") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const { data, error } = await supabaseAdmin.from("agreements")
+    let upd = supabaseAdmin.from("agreements")
       .update({ status: "rejected", notes: body.reason ?? null, updated_at: new Date().toISOString() })
-      .eq("id", segments[1]).eq("tenant_id", tenantId).select().single();
+      .eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { data, error } = await upd.select().single();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Acordo não encontrado" }, 404);
     return json({ success: true, data });
@@ -528,17 +595,33 @@ Deno.serve(async (req: Request) => {
   // PAYMENTS ROUTES
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Helper: valida que um client_id pertence ao credor da chave (quando escopada)
+  const validateClientBelongsToCredor = async (clientId: string): Promise<{ ok: true } | { ok: false; resp: Response }> => {
+    if (!credorNome) return { ok: true };
+    const { data: c } = await supabaseAdmin
+      .from("clients")
+      .select("id, credor")
+      .eq("id", clientId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (!c || c.credor !== credorNome) {
+      return { ok: false, resp: json({ error: `Cliente não pertence ao credor desta chave (${credorNome}).` }, 403) };
+    }
+    return { ok: true };
+  };
+
   // GET /payments/methods — Listar meios de pagamento disponíveis
   if (segments[0] === "payments" && segments[1] === "methods" && method === "GET") {
-    const credorId = url.searchParams.get("credor_id");
+    // Quando a chave é escopada, ignora ?credor_id= e usa o da própria chave
+    const credorIdParam = credorNome ? null : url.searchParams.get("credor_id");
     const builtIn = [
       { code: "pix", label: "PIX", category: "instantaneo", credor_id: null },
       { code: "cartao", label: "Cartão de Crédito", category: "cartao", credor_id: null },
       { code: "boleto", label: "Boleto Bancário", category: "boleto", credor_id: null },
     ];
     let customQuery = supabaseAdmin.from("meios_pagamento").select("id, nome, descricao, credor_id").eq("tenant_id", tenantId);
-    if (credorId) {
-      customQuery = customQuery.or(`credor_id.is.null,credor_id.eq.${credorId}`);
+    if (credorIdParam) {
+      customQuery = customQuery.or(`credor_id.is.null,credor_id.eq.${credorIdParam}`);
     }
     const { data: customMethods, error: customErr } = await customQuery.order("nome");
     if (customErr) return json({ error: customErr.message }, 500);
@@ -561,22 +644,41 @@ Deno.serve(async (req: Request) => {
     const clientId = url.searchParams.get("client_id");
     const tipo = url.searchParams.get("tipo");
 
-    let query = supabaseAdmin.from("negociarie_cobrancas").select("*", { count: "exact" }).eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    // Quando a chave é escopada por credor, valida o client_id (se informado) e
+    // restringe via JOIN inner com clients filtrando por credor.
+    if (credorNome && clientId) {
+      const v = await validateClientBelongsToCredor(clientId);
+      if (!v.ok) return v.resp;
+    }
+
+    const selectExpr = credorNome
+      ? "*, clients!inner(credor)"
+      : "*";
+    let query = supabaseAdmin.from("negociarie_cobrancas").select(selectExpr, { count: "exact" }).eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    if (credorNome) query = query.eq("clients.credor", credorNome);
     if (status) query = query.eq("status", status);
     if (clientId) query = query.eq("client_id", clientId);
     if (tipo) query = query.eq("tipo", tipo);
 
     const { data, error, count } = await query;
     if (error) return json({ error: error.message }, 500);
-    return json({ data, total: count, page, limit, pages: Math.ceil((count ?? 0) / limit) });
+    // Limpa o join do retorno para manter o shape original
+    const cleanData = credorNome
+      ? (data ?? []).map((row: any) => { const { clients: _c, ...rest } = row; return rest; })
+      : data;
+    return json({ data: cleanData, total: count, page, limit, pages: Math.ceil((count ?? 0) / limit) });
   }
 
   // GET /payments/:id
   if (segments[0] === "payments" && segments[1] && !segments[2] && method === "GET") {
-    const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").select("*").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
+    const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").select("*, clients(credor)").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Pagamento não encontrado" }, 404);
-    return json({ data });
+    if (credorNome && (data as any).clients?.credor !== credorNome) {
+      return json({ error: "Pagamento não encontrado" }, 404);
+    }
+    const { clients: _c, ...rest } = data as any;
+    return json({ data: rest });
   }
 
   // Helper: cria cobrança em negociarie_cobrancas
@@ -584,6 +686,8 @@ Deno.serve(async (req: Request) => {
     if (!body.client_id || !body.valor || !body.data_vencimento) {
       return json({ error: "Campos obrigatórios: client_id, valor, data_vencimento" }, 422);
     }
+    const v = await validateClientBelongsToCredor(String(body.client_id));
+    if (!v.ok) return v.resp;
     const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").insert({
       tenant_id: tenantId,
       client_id: body.client_id,
@@ -635,8 +739,10 @@ Deno.serve(async (req: Request) => {
   if (segments[0] === "portal" && segments[1] === "lookup" && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
     if (!body.cpf) return json({ error: "cpf obrigatório" }, 422);
-    const { data, error } = await supabaseAdmin.from("clients").select("*")
+    let q = supabaseAdmin.from("clients").select("*")
       .eq("tenant_id", tenantId).eq("cpf", String(body.cpf).trim()).eq("status", "pendente");
+    if (credorNome) q = q.eq("credor", credorNome);
+    const { data, error } = await q;
     if (error) return json({ error: error.message }, 500);
     return json({ data, total: data?.length ?? 0 });
   }
@@ -644,6 +750,8 @@ Deno.serve(async (req: Request) => {
   // POST /portal/agreement
   if (segments[0] === "portal" && segments[1] === "agreement" && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
     const required = ["client_cpf", "client_name", "credor", "original_total", "proposed_total", "new_installments", "new_installment_value", "first_due_date"];
     const missing = required.filter(f => !body[f]);
     if (missing.length > 0) return json({ error: `Campos obrigatórios faltando: ${missing.join(", ")}` }, 422);
