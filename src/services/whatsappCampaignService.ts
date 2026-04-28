@@ -232,7 +232,10 @@ export function distributeWeighted(
 
 // ---- Fetch eligible instances (multi-provider: DB + Gupshup virtual) ----
 
-export async function fetchEligibleInstances(tenantId: string): Promise<EligibleInstance[]> {
+export async function fetchEligibleInstances(
+  tenantId: string,
+  opts?: { profileId?: string; isAdmin?: boolean }
+): Promise<EligibleInstance[]> {
   const OPERATIONAL_STATUSES = ["active", "connected", "connecting", "open"];
 
   const { data, error } = await supabase
@@ -242,11 +245,24 @@ export async function fetchEligibleInstances(tenantId: string): Promise<Eligible
 
   if (error) throw error;
 
-  const eligible = ((data || []) as unknown as EligibleInstance[]).filter((i) => {
+  let eligible = ((data || []) as unknown as EligibleInstance[]).filter((i) => {
     const hasOperationalStatus = OPERATIONAL_STATUSES.includes(i.status);
     const isBulkCapable = i.supports_manual_bulk !== false;
     return isBulkCapable && (hasOperationalStatus || i.is_default);
   });
+
+  // Operator-level filtering: restrict to instances assigned via operator_instances
+  const isOperatorScope = opts && opts.isAdmin === false && !!opts.profileId;
+  if (isOperatorScope) {
+    const { data: assignments, error: assignErr } = await supabase
+      .from("operator_instances" as any)
+      .select("instance_id")
+      .eq("profile_id", opts!.profileId!)
+      .eq("tenant_id", tenantId);
+    if (assignErr) throw assignErr;
+    const allowed = new Set((assignments || []).map((a: any) => a.instance_id));
+    eligible = eligible.filter((i) => allowed.has(i.id));
+  }
 
   eligible.sort((a, b) => {
     if (a.is_default && !b.is_default) return -1;
@@ -256,32 +272,35 @@ export async function fetchEligibleInstances(tenantId: string): Promise<Eligible
     return aConn - bConn;
   });
 
-  try {
-    const { data: tenantData } = await supabase
-      .from("tenants")
-      .select("settings")
-      .eq("id", tenantId)
-      .single();
+  // Gupshup virtual instance is admin-only (no per-operator binding exists)
+  if (!isOperatorScope) {
+    try {
+      const { data: tenantData } = await supabase
+        .from("tenants")
+        .select("settings")
+        .eq("id", tenantId)
+        .single();
 
-    const settings = (tenantData?.settings as Record<string, any>) || {};
-    const hasGupshup = !!(settings.gupshup_api_key && settings.gupshup_source_number);
-    const isGupshupActive = settings.whatsapp_provider === "gupshup" || hasGupshup;
+      const settings = (tenantData?.settings as Record<string, any>) || {};
+      const hasGupshup = !!(settings.gupshup_api_key && settings.gupshup_source_number);
+      const isGupshupActive = settings.whatsapp_provider === "gupshup" || hasGupshup;
 
-    if (isGupshupActive && hasGupshup) {
-      eligible.push({
-        id: "gupshup-official",
-        name: `Gupshup (Oficial) — ${settings.gupshup_source_number}`,
-        instance_name: settings.gupshup_app_name || "gupshup",
-        phone_number: settings.gupshup_source_number,
-        provider: "gupshup",
-        status: "active",
-        provider_category: "official_meta",
-        is_default: false,
-        supports_manual_bulk: true,
-      });
+      if (isGupshupActive && hasGupshup) {
+        eligible.push({
+          id: "gupshup-official",
+          name: `Gupshup (Oficial) — ${settings.gupshup_source_number}`,
+          instance_name: settings.gupshup_app_name || "gupshup",
+          phone_number: settings.gupshup_source_number,
+          provider: "gupshup",
+          status: "active",
+          provider_category: "official_meta",
+          is_default: false,
+          supports_manual_bulk: true,
+        });
+      }
+    } catch {
+      // If tenant query fails, continue with DB instances only
     }
-  } catch {
-    // If tenant query fails, continue with DB instances only
   }
 
   return eligible;

@@ -25,6 +25,7 @@ import RecurrenceRuleEditor, {
   describeRecurrenceRule,
 } from "@/components/carteira/RecurrenceRuleEditor";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,7 +98,9 @@ function estimateTimeMinutes(totalRecipients: number): number {
 
 const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDialogProps) => {
   const { tenant } = useTenant();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { role } = usePermissions();
+  const isAdmin = role === "super_admin" || role === "gerente" || role === "supervisor";
   const [step, setStep] = useState<Step>(1);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [customMessage, setCustomMessage] = useState("");
@@ -135,8 +138,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   });
 
   const { data: instances = [] } = useQuery({
-    queryKey: ["eligible-instances", tenant?.id],
-    queryFn: () => fetchEligibleInstances(tenant!.id),
+    queryKey: ["eligible-instances", tenant?.id, profile?.id, isAdmin],
+    queryFn: () => fetchEligibleInstances(tenant!.id, { profileId: profile?.id, isAdmin }),
     enabled: !!tenant?.id && open,
   });
 
@@ -540,7 +543,11 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       {instances.length === 0 ? (
         <div className="text-center py-6 text-muted-foreground text-sm">
           <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-500" />
-          Nenhuma instância habilitada para disparo em lote. Verifique se há instâncias com status operacional em <strong>Integrações &gt; WhatsApp</strong>.
+          {isAdmin ? (
+            <>Nenhuma instância habilitada para disparo em lote. Verifique se há instâncias com status operacional em <strong>Integrações &gt; WhatsApp</strong>.</>
+          ) : (
+            <>Você não possui instâncias de WhatsApp atribuídas. Solicite a um administrador para liberar o acesso.</>
+          )}
         </div>
       ) : (
         <div className="space-y-2 max-h-48 overflow-y-auto">
