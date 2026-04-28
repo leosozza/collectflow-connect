@@ -306,6 +306,7 @@ Deno.serve(async (req: Request) => {
     const cpf = url.searchParams.get("cpf");
 
     let query = supabaseAdmin.from("clients").select("*", { count: "exact" }).eq("tenant_id", tenantId).range(offset, offset + limit - 1);
+    if (credorNome) query = query.eq("credor", credorNome);
     if (status) query = query.eq("status", status);
     if (credor) query = query.ilike("credor", `%${credor}%`);
     if (cpf) query = query.eq("cpf", cpf);
@@ -319,11 +320,13 @@ Deno.serve(async (req: Request) => {
   if (segments[0] === "clients" && segments[1] && segments[2] === "status" && method === "PUT") {
     const body = await req.json() as Record<string, unknown>;
     if (!body.status_cobranca_id) return json({ error: "status_cobranca_id obrigatório" }, 422);
-    const { error } = await supabaseAdmin
+    let upd = supabaseAdmin
       .from("clients")
       .update({ status_cobranca_id: body.status_cobranca_id, updated_at: new Date().toISOString() })
       .eq("id", segments[1])
       .eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { error } = await upd;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
