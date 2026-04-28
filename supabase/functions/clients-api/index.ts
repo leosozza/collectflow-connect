@@ -414,6 +414,12 @@ Deno.serve(async (req: Request) => {
         recordToNormalize = remapped;
       }
       const record = normalizeRecord(recordToNormalize);
+      const enf = enforceCredor(record);
+      if (!enf.ok) {
+        errorList.push({ index: i, external_id: record.external_id as string, cpf: record.cpf as string, error: `Credor não permitido para esta chave (escopo: ${credorNome})` });
+        skipped++;
+        return;
+      }
       const { valid, errors } = validateClientRecord(record);
       if (!valid) {
         errorList.push({ index: i, external_id: record.external_id as string, cpf: record.cpf as string, error: errors.join("; ") });
@@ -450,11 +456,15 @@ Deno.serve(async (req: Request) => {
   // PUT /clients/:id
   if (segments[0] === "clients" && segments[1] && !segments[2] && method === "PUT") {
     const body = await req.json() as Record<string, unknown>;
-    const { error } = await supabaseAdmin
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
+    let upd = supabaseAdmin
       .from("clients")
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq("id", segments[1])
       .eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { error } = await upd;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
@@ -462,25 +472,33 @@ Deno.serve(async (req: Request) => {
   // PUT /clients/by-external/:external_id
   if (segments[0] === "clients" && segments[1] === "by-external" && segments[2] && method === "PUT") {
     const body = await req.json() as Record<string, unknown>;
-    const { error } = await supabaseAdmin
+    const enf = enforceCredor(body);
+    if (!enf.ok) return enf.resp;
+    let upd = supabaseAdmin
       .from("clients")
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq("external_id", segments[2])
       .eq("tenant_id", tenantId);
+    if (credorNome) upd = upd.eq("credor", credorNome);
+    const { error } = await upd;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
 
   // DELETE /clients/:id
   if (segments[0] === "clients" && segments[1] && !segments[2] && method === "DELETE") {
-    const { error } = await supabaseAdmin.from("clients").delete().eq("id", segments[1]).eq("tenant_id", tenantId);
+    let del = supabaseAdmin.from("clients").delete().eq("id", segments[1]).eq("tenant_id", tenantId);
+    if (credorNome) del = del.eq("credor", credorNome);
+    const { error } = await del;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
 
   // DELETE /clients/by-cpf/:cpf
   if (segments[0] === "clients" && segments[1] === "by-cpf" && segments[2] && method === "DELETE") {
-    const { error } = await supabaseAdmin.from("clients").delete().eq("cpf", segments[2]).eq("tenant_id", tenantId);
+    let del = supabaseAdmin.from("clients").delete().eq("cpf", segments[2]).eq("tenant_id", tenantId);
+    if (credorNome) del = del.eq("credor", credorNome);
+    const { error } = await del;
     if (error) return json({ error: error.message }, 500);
     return json({ success: true });
   }
