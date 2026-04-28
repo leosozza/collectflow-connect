@@ -138,8 +138,8 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   });
 
   const { data: instances = [] } = useQuery({
-    queryKey: ["eligible-instances", tenant?.id],
-    queryFn: () => fetchEligibleInstances(tenant!.id),
+    queryKey: ["eligible-instances", tenant?.id, profile?.id, isAdmin],
+    queryFn: () => fetchEligibleInstances(tenant!.id, { profileId: profile?.id, isAdmin }),
     enabled: !!tenant?.id && open,
   });
 
