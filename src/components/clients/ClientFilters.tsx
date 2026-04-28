@@ -52,6 +52,8 @@ interface Filters {
   scoreRange: string;
   debtorProfile: string;
   semWhatsapp: boolean;
+  primeiraParcelaDe: string;
+  primeiraParcelaAte: string;
 }
 
 interface ClientFiltersProps {
