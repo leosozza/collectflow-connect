@@ -486,6 +486,8 @@ export interface CarteiraFilters {
   cadastroDe?: string;
   cadastroAte?: string;
   semWhatsapp?: boolean;
+  primeiraParcelaDe?: string;
+  primeiraParcelaAte?: string;
 }
 
 export const fetchAllCarteiraIds = async (
