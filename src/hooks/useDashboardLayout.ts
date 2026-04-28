@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
 export type DashboardBlockId =
-  | "kpisTop"
+  | "kpiAcionadosHoje"
+  | "kpiAcordosDia"
+  | "kpiAcordosMes"
+  | "kpiQuebra"
+  | "kpiPendentes"
+  | "kpiColchao"
   | "parcelas"
   | "totalRecebido"
   | "metas"
@@ -15,7 +20,12 @@ export interface DashboardLayout {
 }
 
 export const ALL_DASHBOARD_BLOCKS: DashboardBlockId[] = [
-  "kpisTop",
+  "kpiAcionadosHoje",
+  "kpiAcordosDia",
+  "kpiAcordosMes",
+  "kpiQuebra",
+  "kpiPendentes",
+  "kpiColchao",
   "metas",
   "agendamentos",
   "totalRecebido",
@@ -24,18 +34,33 @@ export const ALL_DASHBOARD_BLOCKS: DashboardBlockId[] = [
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
-    kpisTop: true,
+    kpiAcionadosHoje: true,
+    kpiAcordosDia: true,
+    kpiAcordosMes: true,
+    kpiQuebra: true,
+    kpiPendentes: true,
+    kpiColchao: true,
     parcelas: true,
     totalRecebido: true,
     metas: true,
     agendamentos: true,
   },
-  // Approximates the previous 3-column visual: meta+agendamentos on left,
-  // totalRecebido+parcelas in the center, KPIs on the right.
-  order: ["metas", "totalRecebido", "kpisTop", "agendamentos", "parcelas"],
+  // 6 KPIs first (one row of 12 cols, 2 each), then meta/agendamentos and the wide cards.
+  order: [
+    "kpiAcionadosHoje",
+    "kpiAcordosDia",
+    "kpiAcordosMes",
+    "kpiQuebra",
+    "kpiPendentes",
+    "kpiColchao",
+    "metas",
+    "totalRecebido",
+    "agendamentos",
+    "parcelas",
+  ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v2";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v3";
 
 function sanitize(raw: any): DashboardLayout {
   try {
