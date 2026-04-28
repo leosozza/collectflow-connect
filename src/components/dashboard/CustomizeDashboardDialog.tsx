@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
-  ALL_DASHBOARD_BLOCKS,
   DEFAULT_DASHBOARD_LAYOUT,
   DashboardBlockId,
   DashboardLayout,
@@ -26,20 +25,33 @@ interface Props {
 }
 
 const LABELS: Record<DashboardBlockId, string> = {
-  kpisTop: "KPIs (cards superiores)",
+  kpiAcionadosHoje: "Acionados Hoje",
+  kpiAcordosDia: "Acordos do Dia",
+  kpiAcordosMes: "Acordos do Mês",
+  kpiQuebra: "Total de Quebra",
+  kpiPendentes: "Pendentes",
+  kpiColchao: "Colchão de Acordos",
   parcelas: "Parcelas Programadas",
   totalRecebido: "Total Recebido",
   metas: "Metas",
   agendamentos: "Agendamentos para Hoje",
 };
 
-const DESCRIPTIONS: Record<DashboardBlockId, string> = {
-  kpisTop: "Grade de indicadores rápidos",
-  parcelas: "Vencimentos do dia",
-  totalRecebido: "Gráfico de recebimentos",
-  metas: "Progresso da meta mensal",
-  agendamentos: "Callbacks agendados para hoje",
-};
+const KPI_GROUP: DashboardBlockId[] = [
+  "kpiAcionadosHoje",
+  "kpiAcordosDia",
+  "kpiAcordosMes",
+  "kpiQuebra",
+  "kpiPendentes",
+  "kpiColchao",
+];
+
+const CARD_GROUP: DashboardBlockId[] = [
+  "metas",
+  "agendamentos",
+  "totalRecebido",
+  "parcelas",
+];
 
 export default function CustomizeDashboardDialog({
   open,
@@ -57,35 +69,42 @@ export default function CustomizeDashboardDialog({
   const toggle = (id: DashboardBlockId) =>
     setDraft((d) => ({ ...d, visible: { ...d.visible, [id]: !d.visible[id] } }));
 
+  const renderRow = (id: DashboardBlockId) => (
+    <div
+      key={id}
+      className="rounded-lg border border-border/60 p-2.5 flex items-center justify-between gap-3"
+    >
+      <p className="text-sm font-medium truncate">{LABELS[id]}</p>
+      <Switch checked={draft.visible[id]} onCheckedChange={() => toggle(id)} />
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Personalizar Dashboard</DialogTitle>
           <DialogDescription>
-            Escolha quais blocos exibir. Para reordenar, basta arrastar os cards
-            diretamente no Dashboard pelo ícone <GripVertical className="inline w-3 h-3 align-text-bottom" />.
+            Escolha quais blocos exibir. Para reordenar, arraste os cards
+            diretamente no Dashboard pelo ícone{" "}
+            <GripVertical className="inline w-3 h-3 align-text-bottom" />.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2 py-2">
-          {ALL_DASHBOARD_BLOCKS.map((id) => (
-            <div
-              key={id}
-              className="rounded-lg border border-border/60 p-3 flex items-center justify-between gap-3"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{LABELS[id]}</p>
-                <p className="text-[11px] text-muted-foreground truncate">
-                  {DESCRIPTIONS[id]}
-                </p>
-              </div>
-              <Switch
-                checked={draft.visible[id]}
-                onCheckedChange={() => toggle(id)}
-              />
-            </div>
-          ))}
+        <div className="space-y-4 py-2">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+              KPIs
+            </p>
+            <div className="space-y-2">{KPI_GROUP.map(renderRow)}</div>
+          </div>
+
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+              Cards
+            </p>
+            <div className="space-y-2">{CARD_GROUP.map(renderRow)}</div>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
