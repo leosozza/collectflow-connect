@@ -595,17 +595,33 @@ Deno.serve(async (req: Request) => {
   // PAYMENTS ROUTES
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Helper: valida que um client_id pertence ao credor da chave (quando escopada)
+  const validateClientBelongsToCredor = async (clientId: string): Promise<{ ok: true } | { ok: false; resp: Response }> => {
+    if (!credorNome) return { ok: true };
+    const { data: c } = await supabaseAdmin
+      .from("clients")
+      .select("id, credor")
+      .eq("id", clientId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (!c || c.credor !== credorNome) {
+      return { ok: false, resp: json({ error: `Cliente não pertence ao credor desta chave (${credorNome}).` }, 403) };
+    }
+    return { ok: true };
+  };
+
   // GET /payments/methods — Listar meios de pagamento disponíveis
   if (segments[0] === "payments" && segments[1] === "methods" && method === "GET") {
-    const credorId = url.searchParams.get("credor_id");
+    // Quando a chave é escopada, ignora ?credor_id= e usa o da própria chave
+    const credorIdParam = credorNome ? null : url.searchParams.get("credor_id");
     const builtIn = [
       { code: "pix", label: "PIX", category: "instantaneo", credor_id: null },
       { code: "cartao", label: "Cartão de Crédito", category: "cartao", credor_id: null },
       { code: "boleto", label: "Boleto Bancário", category: "boleto", credor_id: null },
     ];
     let customQuery = supabaseAdmin.from("meios_pagamento").select("id, nome, descricao, credor_id").eq("tenant_id", tenantId);
-    if (credorId) {
-      customQuery = customQuery.or(`credor_id.is.null,credor_id.eq.${credorId}`);
+    if (credorIdParam) {
+      customQuery = customQuery.or(`credor_id.is.null,credor_id.eq.${credorIdParam}`);
     }
     const { data: customMethods, error: customErr } = await customQuery.order("nome");
     if (customErr) return json({ error: customErr.message }, 500);
@@ -628,22 +644,41 @@ Deno.serve(async (req: Request) => {
     const clientId = url.searchParams.get("client_id");
     const tipo = url.searchParams.get("tipo");
 
-    let query = supabaseAdmin.from("negociarie_cobrancas").select("*", { count: "exact" }).eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    // Quando a chave é escopada por credor, valida o client_id (se informado) e
+    // restringe via JOIN inner com clients filtrando por credor.
+    if (credorNome && clientId) {
+      const v = await validateClientBelongsToCredor(clientId);
+      if (!v.ok) return v.resp;
+    }
+
+    const selectExpr = credorNome
+      ? "*, clients!inner(credor)"
+      : "*";
+    let query = supabaseAdmin.from("negociarie_cobrancas").select(selectExpr, { count: "exact" }).eq("tenant_id", tenantId).order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    if (credorNome) query = query.eq("clients.credor", credorNome);
     if (status) query = query.eq("status", status);
     if (clientId) query = query.eq("client_id", clientId);
     if (tipo) query = query.eq("tipo", tipo);
 
     const { data, error, count } = await query;
     if (error) return json({ error: error.message }, 500);
-    return json({ data, total: count, page, limit, pages: Math.ceil((count ?? 0) / limit) });
+    // Limpa o join do retorno para manter o shape original
+    const cleanData = credorNome
+      ? (data ?? []).map((row: any) => { const { clients: _c, ...rest } = row; return rest; })
+      : data;
+    return json({ data: cleanData, total: count, page, limit, pages: Math.ceil((count ?? 0) / limit) });
   }
 
   // GET /payments/:id
   if (segments[0] === "payments" && segments[1] && !segments[2] && method === "GET") {
-    const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").select("*").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
+    const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").select("*, clients(credor)").eq("id", segments[1]).eq("tenant_id", tenantId).maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!data) return json({ error: "Pagamento não encontrado" }, 404);
-    return json({ data });
+    if (credorNome && (data as any).clients?.credor !== credorNome) {
+      return json({ error: "Pagamento não encontrado" }, 404);
+    }
+    const { clients: _c, ...rest } = data as any;
+    return json({ data: rest });
   }
 
   // Helper: cria cobrança em negociarie_cobrancas
@@ -651,6 +686,8 @@ Deno.serve(async (req: Request) => {
     if (!body.client_id || !body.valor || !body.data_vencimento) {
       return json({ error: "Campos obrigatórios: client_id, valor, data_vencimento" }, 422);
     }
+    const v = await validateClientBelongsToCredor(String(body.client_id));
+    if (!v.ok) return v.resp;
     const { data, error } = await supabaseAdmin.from("negociarie_cobrancas").insert({
       tenant_id: tenantId,
       client_id: body.client_id,
