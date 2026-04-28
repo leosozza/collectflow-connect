@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Key, Plus, Copy, ShieldX, CheckCircle2, AlertCircle, Code2, BookOpen, Zap, Loader2, ExternalLink, Link2, FileSpreadsheet, Handshake, CreditCard, Globe, Settings2, Plug } from "lucide-react";
 
