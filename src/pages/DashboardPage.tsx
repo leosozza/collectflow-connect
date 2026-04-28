@@ -211,7 +211,12 @@ const DashboardPage = () => {
 
   // Span (Tailwind classes) per block — defines its preferred width on lg+ screens.
   const SPAN_CLASS: Record<DashboardBlockId, string> = {
-    kpisTop: "col-span-1 lg:col-span-3",
+    kpiAcionadosHoje: "col-span-1 lg:col-span-2",
+    kpiAcordosDia: "col-span-1 lg:col-span-2",
+    kpiAcordosMes: "col-span-1 lg:col-span-2",
+    kpiQuebra: "col-span-1 lg:col-span-2",
+    kpiPendentes: "col-span-1 lg:col-span-2",
+    kpiColchao: "col-span-1 lg:col-span-2",
     metas: "col-span-1 lg:col-span-3",
     agendamentos: "col-span-1 lg:col-span-3",
     totalRecebido: "col-span-1 lg:col-span-6",
