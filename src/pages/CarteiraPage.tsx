@@ -162,7 +162,9 @@ const CarteiraPage = () => {
       filters.higienizados === true ||
       filters.semWhatsapp === true ||
       filters.scoreRange !== "" ||
-      filters.debtorProfile !== ""
+      filters.debtorProfile !== "" ||
+      filters.primeiraParcelaDe !== "" ||
+      filters.primeiraParcelaAte !== ""
     );
   }, [filters]);
 
