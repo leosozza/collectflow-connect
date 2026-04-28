@@ -16,9 +16,34 @@ function cleanCPF(cpf: string): string {
   return String(cpf || "").replace(/\D/g, "").padStart(11, "0");
 }
 
+function formatCPF(cpf: string): string {
+  const digits = cleanCPF(cpf);
+  if (digits.length !== 11) return String(cpf || "");
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function cpfVariants(cpf: string): string[] {
+  if (!String(cpf || "").replace(/\D/g, "")) return [];
+  const clean = cleanCPF(cpf);
+  return [...new Set([String(cpf || ""), clean, formatCPF(clean)].filter(Boolean))];
+}
+
 function cleanPhone(phone: string | null): string {
   if (!phone) return "";
   return String(phone).replace(/[^\d]/g, "");
+}
+
+function normalizeContract(contract: unknown): string {
+  return String(contract || "").trim();
+}
+
+function buildInstallmentMatchKey(row: any): string | null {
+  if (!String(row?.cpf || "").replace(/\D/g, "")) return null;
+  const cpf = cleanCPF(row?.cpf);
+  const contract = normalizeContract(row?.cod_contrato);
+  const installment = String(row?.numero_parcela || 1).trim();
+  if (!cpf || !contract || !installment) return null;
+  return `${cpf}|${contract}|${installment}`;
 }
 
 /** Helper for case-insensitive access to object properties */
@@ -441,10 +466,56 @@ Deno.serve(async (req) => {
           }
         }
 
+        const fallbackMap = new Map<string, any>();
+        const ambiguousFallbackKeys = new Set<string>();
+        const missingRecords = chunk.filter((rec: any) => !existingMap.has(rec.external_id));
+
+        if (missingRecords.length > 0) {
+          const cpfLookupValues = [
+            ...new Set(missingRecords.flatMap((rec: any) => cpfVariants(rec.cpf))),
+          ];
+
+          if (cpfLookupValues.length > 0) {
+            const { data: fallbackRows } = await supabase
+              .from("clients")
+              .select("id, external_id, cpf, cod_contrato, numero_parcela, data_pagamento, valor_pago, valor_parcela, valor_saldo, data_vencimento, status, model_name, nome_completo, status_cobranca_id, data_devolucao")
+              .eq("tenant_id", tenant_id)
+              .in("cpf", cpfLookupValues);
+
+            if (fallbackRows) {
+              for (const row of fallbackRows) {
+                const key = buildInstallmentMatchKey(row);
+                if (!key || ambiguousFallbackKeys.has(key)) continue;
+
+                if (fallbackMap.has(key)) {
+                  fallbackMap.delete(key);
+                  ambiguousFallbackKeys.add(key);
+                } else {
+                  fallbackMap.set(key, { ...row, __matched_by_fallback: true });
+                }
+              }
+            }
+          }
+        }
+
         const toUpsert: any[] = [];
 
         for (const rec of chunk) {
-          const existing = existingMap.get(rec.external_id);
+          let existing = existingMap.get(rec.external_id);
+
+          if (!existing) {
+            const fallbackKey = buildInstallmentMatchKey(rec);
+            if (fallbackKey && ambiguousFallbackKeys.has(fallbackKey)) {
+              unchanged++;
+              if (processingLogs.length < 50) {
+                processingLogs.push(`Skipped ambiguous fallback match for CPF ${rec.cpf}, contrato ${rec.cod_contrato}, parcela ${rec.numero_parcela}`);
+              }
+              continue;
+            }
+            if (fallbackKey) {
+              existing = fallbackMap.get(fallbackKey);
+            }
+          }
 
           if (!existing) {
             // New record: queue for insert
@@ -458,10 +529,23 @@ Deno.serve(async (req) => {
           // Compare fields to see if update is actually needed
           let needsUpdate = false;
           const changes: Record<string, { old: any; new: any }> = {};
+          const matchedByFallback = existing.__matched_by_fallback === true;
+
+          if (matchedByFallback && !existing.external_id) {
+            unchanged++;
+            if (processingLogs.length < 50) {
+              processingLogs.push(`Skipped fallback match without external_id for CPF ${rec.cpf}, contrato ${rec.cod_contrato}, parcela ${rec.numero_parcela}`);
+            }
+            continue;
+          }
 
           for (const field of SYNC_FIELDS) {
             const oldVal = existing[field] ?? null;
             const newVal = rec[field] ?? null;
+
+            if (matchedByFallback && field === "external_id" && existing.external_id) {
+              continue;
+            }
 
             if (field === "status") {
               const normOld = String(oldVal ?? "").toLowerCase();
@@ -496,6 +580,7 @@ Deno.serve(async (req) => {
             // Build merged record for upsert
             const updatedRec = {
               ...rec,
+              external_id: matchedByFallback && existing.external_id ? existing.external_id : rec.external_id,
               id: existing.id, // Mandatory to target existing row in upsert
               updated_at: new Date().toISOString()
             };
@@ -733,6 +818,8 @@ Deno.serve(async (req) => {
       unchanged,
       rejected: rejected.length,
       rejected_records: rejected.slice(0, 100),
+      errors,
+      duplicates_discarded: duplicatesDiscarded,
       duration_ms: Date.now() - startTime,
       processing_logs: processingLogs.slice(0, 500),
       debug: {

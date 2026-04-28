@@ -200,6 +200,28 @@ function VirtualizedMaxListTable({
 
 const BATCH_SIZE = 1000;
 
+const DEFAULT_MAXSYSTEM_API_MAPPING: Record<string, string> = {
+  ResponsibleName: "nome_completo",
+  ResponsibleCPF: "cpf",
+  ContractNumber: "cod_contrato",
+  IdRecord: "external_id",
+  CellPhone1: "phone",
+  CellPhone2: "phone2",
+  HomePhone: "phone3",
+  Email: "email",
+  Number: "numero_parcela",
+  Value: "valor_parcela",
+  NetValue: "valor_saldo",
+  PaymentDateQuery: "data_vencimento",
+  PaymentDateEffected: "data_pagamento",
+  IsCancelled: "status",
+  ModelName: "model_name",
+  Observations: "observacoes",
+  Id: "cod_titulo",
+  Producer: "dados_adicionais",
+  Discount: "__ignorar__",
+};
+
 function isMaxListEnabled(tenant: any): boolean {
   const settings = tenant?.settings as any;
   if (settings?.maxlist_enabled === true) return true;
@@ -335,6 +357,35 @@ function convertDateToISO(dateStr: string): string | null {
   return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
 }
 
+function escapeODataString(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+function formatCpfForMaxSystem(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 11) return value.trim();
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+function buildCpfFilter(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 11) {
+    const variants = [...new Set([trimmed, digits, formatCpfForMaxSystem(digits)])]
+      .filter(Boolean)
+      .map((v) => `ResponsibleCPF+eq+'${escapeODataString(v)}'`);
+    return variants.length === 1 ? variants[0] : `(${variants.join("+or+")})`;
+  }
+
+  if (/\p{L}/u.test(trimmed)) {
+    return `substringof('${escapeODataString(trimmed)}',ResponsibleName)`;
+  }
+
+  return `ResponsibleCPF+eq+'${escapeODataString(trimmed)}'`;
+}
+
 function buildFilter(filters: Record<string, string | string[]>): string {
   const parts: string[] = [];
 
@@ -369,7 +420,8 @@ function buildFilter(filters: Record<string, string | string[]>): string {
 
   const cpf = filters.cpf;
   if (cpf && typeof cpf === 'string' && cpf.trim()) {
-    parts.push(`ResponsibleCPF+eq+'${cpf.trim()}'`);
+    const cpfOrNameFilter = buildCpfFilter(cpf);
+    if (cpfOrNameFilter) parts.push(cpfOrNameFilter);
   }
 
   const contrato = filters.contrato;
@@ -688,6 +740,24 @@ const MaxListPage = () => {
     return migrated;
   };
 
+  const getEffectiveMaxSystemMapping = async (useDefaultWhenMissing = false) => {
+    const savedMappings = await fetchFieldMappings(tenant.id);
+    const apiMapping = savedMappings.find((m) => m.source === "api" && m.name.startsWith("MaxSystem"));
+    if (!apiMapping && !useDefaultWhenMissing) return null;
+
+    const mapping = apiMapping
+      ? migrateLegacyMapping(apiMapping.mappings as Record<string, string>)
+      : { ...DEFAULT_MAXSYSTEM_API_MAPPING };
+
+    const mappedValues = new Set(Object.values(mapping));
+    const missingRequired = ["nome_completo", "cpf"].filter((field) => !mappedValues.has(field));
+    if (missingRequired.length > 0) {
+      throw new Error(`Mapeamento MaxSystem inválido: campos obrigatórios ausentes (${missingRequired.join(", ")})`);
+    }
+
+    return mapping;
+  };
+
   const handleSendToCRM = async (importMode: "import" | "update" = "import") => {
     const sourceData = someSelected
       ? Array.from(selectedIndexes).sort((a, b) => a - b).map((i) => data[i])
@@ -702,11 +772,8 @@ const MaxListPage = () => {
 
     // Check if saved mapping exists — if so, skip dialog
     try {
-      const savedMappings = await fetchFieldMappings(tenant.id);
-      const apiMapping = savedMappings.find((m) => m.source === "api" && m.name.startsWith("MaxSystem"));
-      if (apiMapping) {
-        const rawMapping = apiMapping.mappings as Record<string, string>;
-        const effectiveMapping = migrateLegacyMapping(rawMapping);
+      const effectiveMapping = await getEffectiveMaxSystemMapping();
+      if (effectiveMapping) {
         setPendingMappingData(sourceData);
         handleImportOrUpdate(effectiveMapping, importMode);
         return;
@@ -879,10 +946,8 @@ const MaxListPage = () => {
       const pagAte = `${updatePagosAte}T23:59:59`;
       const filter = `PaymentDateEffectedQuery+ge+datetime'${pagDe}'+and+PaymentDateEffectedQuery+le+datetime'${pagAte}'`;
 
-      // Get saved mapping
-      const savedMappings = await fetchFieldMappings(tenant.id);
-      const apiMapping = savedMappings.find((m) => m.source === "api" && m.name.startsWith("MaxSystem"));
-      const fieldMapping = apiMapping ? migrateLegacyMapping(apiMapping.mappings as Record<string, string>) : {};
+      const fieldMapping = await getEffectiveMaxSystemMapping(true);
+      if (!fieldMapping) throw new Error("Mapeamento MaxSystem não encontrado");
 
       logAction({ action: "update_pagos_started", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, period: { de: updatePagosDe, ate: updatePagosAte } } });
 
@@ -1028,9 +1093,9 @@ const MaxListPage = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4">
             <div className="space-y-2">
-              <Label className="font-semibold">CPF</Label>
+              <Label className="font-semibold">CPF ou Nome</Label>
               <Input
-                placeholder="000.000.000-00"
+                placeholder="CPF ou nome do cliente"
                 value={filters.cpf}
                 onChange={(e) => updateFilter("cpf", e.target.value)}
               />
