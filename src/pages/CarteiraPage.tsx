@@ -110,6 +110,8 @@ const CarteiraPage = () => {
   const [urlSemWhatsapp, setUrlSemWhatsapp] = useUrlState("semWhatsapp", false);
   const [urlScoreRange, setUrlScoreRange] = useUrlState("scoreRange", "");
   const [urlDebtorProfile, setUrlDebtorProfile] = useUrlState("debtorProfile", "");
+  const [urlPrimeiraParcelaDe, setUrlPrimeiraParcelaDe] = useUrlState("primeiraParcelaDe", "");
+  const [urlPrimeiraParcelaAte, setUrlPrimeiraParcelaAte] = useUrlState("primeiraParcelaAte", "");
   const [viewMode, setViewMode] = useUrlState("view", "list") as ["list" | "kanban", (val: string) => void];
   const [sortField, setSortField] = useUrlState("sort", "created_at");
   const [sortDir, setSortDir] = useUrlState("dir", "desc") as ["asc" | "desc", (val: string) => void];
