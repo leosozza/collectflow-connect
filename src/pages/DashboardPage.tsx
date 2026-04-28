@@ -244,8 +244,20 @@ const DashboardPage = () => {
   const trendQuebra = pctDelta(stats?.total_quebra ?? 0, stats?.total_quebra_mes_anterior ?? 0, true);
   const trendPendentes = pctDelta(stats?.total_pendente ?? 0, stats?.total_pendente_mes_anterior ?? 0, true);
 
-  const kpis = [
-    {
+  type KpiItem = {
+    label: string;
+    value: string;
+    Icon: React.ElementType;
+    iconColor: string;
+    iconBg: string;
+    trend?: { value: string; text: string; isPositive: boolean };
+  };
+
+  const kpiMap: Record<
+    "kpiAcionadosHoje" | "kpiAcordosDia" | "kpiAcordosMes" | "kpiQuebra" | "kpiPendentes" | "kpiColchao",
+    KpiItem
+  > = {
+    kpiAcionadosHoje: {
       label: "Acionados Hoje",
       value: String(acionadosHoje),
       Icon: Phone,
@@ -253,7 +265,7 @@ const DashboardPage = () => {
       iconBg: "bg-orange-500/10",
       trend: trendAcionados ? { ...trendAcionados, text: "vs ontem" } : undefined,
     },
-    {
+    kpiAcordosDia: {
       label: "Acordos do Dia",
       value: String(stats?.acordos_dia ?? 0),
       Icon: FileText,
@@ -261,7 +273,7 @@ const DashboardPage = () => {
       iconBg: "bg-green-500/10",
       trend: trendAcordosDia ? { ...trendAcordosDia, text: "vs ontem" } : undefined,
     },
-    {
+    kpiAcordosMes: {
       label: "Acordos do Mês",
       value: String(stats?.acordos_mes ?? 0),
       Icon: CalendarCheck,
@@ -269,7 +281,7 @@ const DashboardPage = () => {
       iconBg: "bg-blue-500/10",
       trend: trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : undefined,
     },
-    {
+    kpiQuebra: {
       label: "Total de Quebra",
       value: formatCurrency(stats?.total_quebra ?? 0),
       Icon: TrendingDown,
@@ -277,7 +289,7 @@ const DashboardPage = () => {
       iconBg: "bg-red-500/10",
       trend: trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : undefined,
     },
-    {
+    kpiPendentes: {
       label: "Pendentes",
       value: formatCurrency(stats?.total_pendente ?? 0),
       Icon: Hourglass,
@@ -285,69 +297,68 @@ const DashboardPage = () => {
       iconBg: "bg-amber-500/10",
       trend: trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : undefined,
     },
-    {
+    kpiColchao: {
       label: "Colchão de Acordos",
       value: formatCurrency(stats?.total_projetado ?? 0),
       Icon: Wallet,
       iconColor: "text-indigo-500",
       iconBg: "bg-indigo-500/10",
-      trend: undefined as { value: string; text: string; isPositive: boolean } | undefined,
+      trend: undefined,
     },
-  ];
+  };
+
+  const renderKpiCard = (item: KpiItem) => {
+    const ItemIcon = item.Icon;
+    const isMoney = item.value.startsWith("R$");
+    return (
+      <div className="bg-card rounded-xl border border-border shadow-sm px-3 py-2.5 flex flex-col justify-between min-w-0 h-full">
+        <div className="min-w-0">
+          <div className="flex items-start justify-between gap-2 mb-1.5">
+            <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
+              <ItemIcon className={cn("w-3.5 h-3.5", item.iconColor)} />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground font-medium leading-tight mb-1 break-words">
+            {item.label}
+          </p>
+          <p
+            className={cn(
+              "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
+              isMoney ? "text-sm" : "text-lg"
+            )}
+          >
+            {item.value}
+          </p>
+        </div>
+        {item.trend && (
+          <div className="mt-1.5 text-[9.5px] flex items-center gap-1 flex-wrap leading-tight">
+            <span
+              className={cn(
+                "font-bold tracking-tight",
+                item.trend.isPositive ? "text-success" : "text-destructive"
+              )}
+            >
+              {item.trend.value}
+            </span>
+            <span className="text-muted-foreground font-medium truncate">
+              {item.trend.text}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Renders the inner content for each block id.
   const renderBlock = (id: DashboardBlockId) => {
     switch (id) {
-      case "kpisTop":
-        return (
-          <div className="grid grid-cols-2 gap-2.5">
-            {kpis.map((item) => {
-              const ItemIcon = item.Icon;
-              const isMoney = item.value.startsWith("R$");
-              return (
-                <div
-                  key={item.label}
-                  className="bg-card rounded-xl border border-border shadow-sm px-3 py-2.5 flex flex-col justify-between min-w-0"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
-                        <ItemIcon className={cn("w-3.5 h-3.5", item.iconColor)} />
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground font-medium leading-tight mb-1 break-words">
-                      {item.label}
-                    </p>
-                    <p
-                      className={cn(
-                        "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
-                        isMoney ? "text-sm" : "text-lg"
-                      )}
-                    >
-                      {item.value}
-                    </p>
-                  </div>
-                  {item.trend && (
-                    <div className="mt-1.5 text-[9.5px] flex items-center gap-1 flex-wrap leading-tight">
-                      <span
-                        className={cn(
-                          "font-bold tracking-tight",
-                          item.trend.isPositive ? "text-success" : "text-destructive"
-                        )}
-                      >
-                        {item.trend.value}
-                      </span>
-                      <span className="text-muted-foreground font-medium truncate">
-                        {item.trend.text}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      case "metas":
+      case "kpiAcionadosHoje":
+      case "kpiAcordosDia":
+      case "kpiAcordosMes":
+      case "kpiQuebra":
+      case "kpiPendentes":
+      case "kpiColchao":
+        return renderKpiCard(kpiMap[id]);
         return (
           <DashboardMetaCard
             year={filterYear ?? now.getFullYear()}
