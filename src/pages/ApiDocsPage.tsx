@@ -141,9 +141,15 @@ export default function ApiDocsPage() {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [newKeyToken, setNewKeyToken] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [newKeyCredorId, setNewKeyCredorId] = useState<string>("__all__");
+  const [credores, setCredores] = useState<{ id: string; nome: string }[]>([]);
 
   useEffect(() => {
-    if (tenant?.id) loadKeys();
+    if (tenant?.id) {
+      loadKeys();
+      supabase.from("credores").select("id, nome").eq("tenant_id", tenant.id).eq("status", "ativo").order("nome")
+        .then(({ data }) => setCredores((data ?? []) as { id: string; nome: string }[]));
+    }
   }, [tenant?.id]);
 
   async function loadKeys() {
