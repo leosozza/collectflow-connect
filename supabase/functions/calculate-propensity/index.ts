@@ -61,6 +61,7 @@ function calculateScore(
   let paymentConfirmed = false, partialPayment = false;
   let overdueEvents = 0;
   let hasComplaints = false;
+  let whatsappOutboundCount = 0;
 
   for (const ev of events) {
     const daysAgo = daysBetween(new Date(ev.created_at), now);
