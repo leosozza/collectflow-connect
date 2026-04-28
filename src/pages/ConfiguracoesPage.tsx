@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
+import { Cloud, Settings, Code2, FileSpreadsheet, Activity, Server } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -10,6 +10,7 @@ const LEGACY_TAB_MAP: Record<string, string> = {
   auditoria: "/configuracoes/auditoria",
   api_docs: "/configuracoes/api",
   maxlist: "/configuracoes/maxlist",
+  mcp: "/configuracoes/mcp",
 };
 
 const ConfiguracoesPage = () => {
@@ -38,6 +39,9 @@ const ConfiguracoesPage = () => {
         : []),
       ...(isTenantAdmin
         ? [{ key: "api", label: "API REST", icon: Code2, to: "/configuracoes/api" }]
+        : []),
+      ...(isTenantAdmin
+        ? [{ key: "mcp", label: "Servidor MCP", icon: Server, to: "/configuracoes/mcp" }]
         : []),
       ...(isMaxList
         ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet, to: "/configuracoes/maxlist" }]
