@@ -419,49 +419,21 @@ Fluxo: operador offline vê dropdown de campanhas ativas → seleciona → chama
   // IN PROGRESS
   {
     id: "serasa",
-    title: "Negativação Serasa",
-    description: "Estrutura criada. Falta: configuração real da API, testes de envio e cancelamento de registros.",
-    status: "in_progress",
-    progress: 25,
+    title: "Negativação Serasa & CENPROT",
+    description: "Negativação Serasa e protesto via CENPROT operacionais, com envio, cancelamento e remoção automática por triggers.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Finalizar a integração com Serasa para negativação de devedores.
-
-O que já existe:
-- Estrutura de componentes em src/components/integracao/serasa/
-- SerasaConfigCard, SerasaRecordForm, SerasaRecordsList, SerasaLogsCard, SerasaBatchDialog
-- Serviço em src/services/serasaService.ts
-
-O que falta:
-1. Criar edge function supabase/functions/serasa-proxy/ para chamar a API real da Serasa
-2. Configurar autenticação com a API Serasa (credenciais no vault)
-3. Implementar endpoints: envio de negativação, cancelamento e consulta de status
-4. Adicionar tab "Serasa" na IntegracaoPage com os componentes existentes
-5. Testar fluxo completo de envio e cancelamento
-
-Referência: seguir o mesmo padrão do módulo de Protesto (src/components/integracao/protesto/).`,
+    lovablePrompt: "Negativação Serasa + Protesto CENPROT implementados. Componentes em src/components/integracao/serasa/ e protesto/. Serviços: src/services/serasaService.ts e protestoService.ts. Edge functions de proxy ativas. Auto-remoção via triggers ao quitar.",
   },
   {
     id: "export-relatorios",
-    title: "Relatórios Exportáveis",
-    description: "Exportação completa em PDF e Excel para todos os relatórios e módulos do sistema.",
-    status: "planned",
-    progress: 10,
+    title: "Relatórios Exportáveis (PDF + Excel)",
+    description: "Exportação Excel já presente em vários módulos (xlsx). Falta padronização de PDF para todos os relatórios.",
+    status: "in_progress",
+    progress: 40,
     category: "Core",
-    lovablePrompt: `Implementar exportação de relatórios em PDF e Excel para os principais módulos.
-
-Módulos prioritários:
-1. Relatório de Aging (src/components/relatorios/AgingReport.tsx) → Excel com dados por faixa
-2. Ranking de Operadores (OperatorRanking.tsx) → PDF com formatação de tabela
-3. Carteira de Clientes (CarteiraTable.tsx) → Excel com todos os campos visíveis
-4. Acordos (AcordosPage) → Excel com status e valores
-
-Implementação:
-- Usar a lib xlsx já instalada para Excel
-- Para PDF, usar window.print() com CSS específico ou instalar @react-pdf/renderer
-- Adicionar botão "Exportar" em cada componente de relatório
-- Considerar filtros aplicados no momento da exportação
-
-Dependências já instaladas: xlsx@0.18.5`,
+    lovablePrompt: "Excel via xlsx já implementado em Carteira, Acordos e Relatórios. Falta padronizar exportação PDF (avaliar @react-pdf/renderer ou window.print + CSS print) para Aging, Ranking e Prestação de Contas.",
   },
   {
     id: "mobile",
@@ -592,23 +564,12 @@ Sidebar do tenant (AppLayout.tsx) simplificada: link único "Área Admin" para /
 
   {
     id: "resend-email",
-    title: "Configuração de E-mail — Resend API",
-    description: "Configurar a API Resend para envio de e-mail com planilha de clientes quitados excluídos. Requer: conta Resend, validação de domínio e API Key.",
-    status: "in_progress",
-    progress: 50,
+    title: "Infraestrutura de E-mail — Resend",
+    description: "Domínio rivoconnect.com.br validado no Resend. Edge functions de e-mail transacional e relatório de quitados operacionais.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Finalizar a configuração do envio de e-mail via Resend para o relatório de clientes quitados.
-
-O que já existe:
-- Edge function supabase/functions/send-quitados-report/index.ts — gera CSV e envia e-mail via Resend
-- Fluxo de exclusão de quitados em src/pages/CarteiraPage.tsx com dialog solicitando e-mail
-
-O que falta:
-1. Criar conta no Resend (https://resend.com) e validar o domínio de envio
-2. Gerar API Key em https://resend.com/api-keys
-3. Configurar a secret RESEND_API_KEY no projeto (usar ferramenta de secrets do Lovable)
-4. Atualizar o campo "from" na edge function com o domínio validado (atualmente "Rivo Connect <noreply@rivoconnect.com>")
-5. Testar o fluxo completo: filtrar quitados → excluir → receber planilha por e-mail`,
+    lovablePrompt: "Resend ativo com domínio validado. Edge functions: send-quitados-report (CSV de quitados) e demais e-mails transacionais. Secret RESEND_API_KEY configurada. Fluxos disparam a partir da Carteira e outros módulos.",
   },
 
   // FUTURE
@@ -721,24 +682,12 @@ Implementação:
   },
   {
     id: "whatsapp-meta",
-    title: "WhatsApp Fase 2 — API Oficial Meta + IA",
-    description: "Integração direta com a API oficial do Meta para envio de templates aprovados, webhooks de status e agente IA com handoff automático. Base estrutural (provider_category, templates dedicados) já implementada na Fase 1.",
-    status: "planned",
-    progress: 10,
+    title: "WhatsApp — Provedor Oficial (Meta/Gupshup)",
+    description: "Roteamento automático entre instâncias oficiais (Meta/Gupshup) e não-oficiais (Evolution/WuzAPI/Baylers) via provider_category. Templates aprovados e bulk routing operacionais.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Implementar a Fase 2 do WhatsApp: API oficial Meta + agente IA.
-
-Base já pronta (Fase 1):
-- provider_category official/unofficial nas instâncias
-- Tabela whatsapp_templates com categorias e variáveis
-- Round-robin e campanhas persistidas
-
-O que falta:
-1. Criar edge function supabase/functions/meta-whatsapp-proxy/ para envio via API oficial
-2. Webhook: supabase/functions/meta-whatsapp-webhook/ para status de entrega
-3. Secrets: META_WHATSAPP_TOKEN, META_PHONE_NUMBER_ID, META_VERIFY_TOKEN
-4. Agente IA autônomo com handoff para operador humano
-5. Relatório de mensagens entregues/lidas/respondidas`,
+    lovablePrompt: "WhatsApp multi-provider implementado: provider_category (official_meta/official_gupshup/unofficial), instance-proxy unificado, templates por categoria, round-robin e bulk routing. Veja src/services/whatsappInstanceService.ts e supabase/functions/instance-proxy/.",
   },
 
   // ──────────────────────────────────────────────────
@@ -746,47 +695,19 @@ O que falta:
   // ──────────────────────────────────────────────────
   {
     id: "politicas-desconto-dinamico",
-    title: "Políticas de Desconto Dinâmico",
-    description: "Tabela de margem de desconto por credor com regras automáticas aplicadas durante negociação.",
-    status: "planned",
-    progress: 5,
-    category: "IA",
-    lovablePrompt: `Implementar o módulo de Políticas de Desconto Dinâmico para o Agente IA de Negociação.
-
-Objetivo: Criar uma tabela de regras de desconto por credor que o agente IA consulta automaticamente antes de fazer uma proposta.
-
-Passos:
-1. Criar migração SQL com a tabela discount_policies:
-   - credor_id (FK credores.id)
-   - tenant_id
-   - min_days_overdue (dias mínimos de atraso para aplicar)
-   - max_days_overdue (dias máximos)
-   - max_discount_percent (desconto máximo permitido)
-   - installments_allowed (boolean)
-   - max_installments (número máximo de parcelas)
-   - is_active (boolean)
-
-2. Criar CRUD no CredorForm (src/components/cadastros/CredorForm.tsx) — nova aba "Políticas de Desconto"
-
-3. Criar serviço src/services/discountPolicyService.ts com:
-   - fetchPoliciesByCredor(credorId)
-   - getApplicablePolicy(credorId, daysOverdue) — retorna a política mais adequada
-
-4. Integrar no AgreementCalculator (src/components/client-detail/AgreementCalculator.tsx):
-   - Ao abrir o calculador, buscar a política vigente do credor
-   - Limitar o campo de desconto ao max_discount_percent automaticamente
-   - Exibir badge "Política: X% máx" no formulário
-
-5. RLS: tenant_id deve estar presente em todas as queries.
-
-Tabelas relacionadas: credores, agreements, clients`,
+    title: "Políticas de Desconto por Credor & Aprovação",
+    description: "Tabela de descontos por aging configurável por credor + fluxo de aprovação para descontos acima do limite.",
+    status: "done",
+    progress: 100,
+    category: "Acordos",
+    lovablePrompt: "Políticas de desconto implementadas via aging por credor (CredorForm.tsx aba Acordos). Limites aplicados no AgreementCalculator com checklist de validação e fluxo de aprovação para descontos acima do permitido. Veja memória logic/agreements/billing-validation-flow.",
   },
   {
     id: "agente-ia-autonomo",
     title: "Agente IA Autônomo de Negociação",
     description: "LLM integrado via Edge Function que negocia em tempo real com contorno de objeções no contexto de cobrança.",
     status: "in_progress",
-    progress: 15,
+    progress: 40,
     category: "IA",
     lovablePrompt: `Evoluir o Agente IA do Contact Center para negociar de forma autônoma, aplicando políticas de desconto e contornando objeções.
 
@@ -1010,67 +931,21 @@ Tabelas: message_logs, clients, whatsapp_instances, workflow_executions`,
   // ──────────────────────────────────────────────────
   {
     id: "pix-qrcode-dinamico",
-    title: "Pix QR Code Dinâmico com Juros em Tempo Real",
-    description: "Geração de Pix Copia e Cola / QR Code calculando juros e multa em tempo real na Edge Function.",
+    title: "Pix QR Code Dinâmico (nativo, sem gateway)",
+    description: "Geração de Pix Copia e Cola/QR Code calculando juros e multa em tempo real direto na Edge Function, independente de Asaas/Negociarie.",
     status: "planned",
-    progress: 0,
+    progress: 20,
     category: "Integrações",
-    lovablePrompt: `Implementar geração de Pix QR Code Dinâmico com cálculo de juros em tempo real, sem depender da Negociarie.
-
-Contexto do sistema:
-- Credores já possuem: juros_mes, multa, pix_chave (tabela credores)
-- Acordos existem na tabela agreements com: original_total, proposed_total, first_due_date
-
-Edge Function supabase/functions/generate-pix/:
-1. Receber: { agreement_id, tenant_id, payment_date (opcional, default: hoje) }
-2. Buscar dados do credor e do acordo
-3. Calcular juros diários: valor_base * (juros_mes/100/30) * dias_atraso
-4. Calcular multa: valor_base * (multa/100) — aplicar apenas uma vez se já vencido
-5. Montar payload EMV (padrão Pix Banco Central) com a chave pix do credor
-6. Retornar: { pix_copia_cola: string, valor_final: number, juros_aplicados: number, qrcode_base64?: string }
-
-Para QR Code visual: usar biblioteca qrcode (instalar: bun add qrcode)
-
-Integrar em:
-- PortalCheckout (src/components/portal/PortalCheckout.tsx) — botão "Gerar Pix Atualizado"
-- NegotiationPanel (src/components/atendimento/NegotiationPanel.tsx) — para o operador copiar e enviar
-- AgreementCalculator (src/components/client-detail/AgreementCalculator.tsx)
-
-Exibir: valor atualizado, data de validade (24h), campo de cópia do Pix Copia e Cola com botão
-
-Tabelas: agreements, credores, portal_payments`,
+    lovablePrompt: "Atualmente Pix é gerado via Asaas e Negociarie. Falta criar edge function generate-pix nativa montando payload EMV (BACEN) com chave Pix do credor, com cálculo de juros/multa em tempo real para uso no Portal e NegotiationPanel.",
   },
   {
     id: "webhook-baixa-automatica",
-    title: "Webhook de Baixa Automática",
-    description: "Recebe confirmação de pagamento via webhook e baixa automaticamente o acordo, atualiza status do cliente.",
-    status: "planned",
-    progress: 0,
+    title: "Baixa Automática de Pagamentos",
+    description: "Webhooks de Asaas e Negociarie + confirmação manual com aprovação realizam baixa automática de acordos, atualização de status e gamificação.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Implementar Webhook de Baixa Automática para receber confirmações de pagamento Pix e atualizar o sistema.
-
-O que já existe:
-- supabase/functions/negociarie-callback/ — já faz baixa para pagamentos via Negociarie
-- tabela portal_payments — registra pagamentos do portal
-- tabela agreements — status de acordo (pending, approved, paid)
-
-Nova Edge Function supabase/functions/payment-webhook/:
-1. Receber POST com payload do gateway (Pix direto, Negociarie, futuro Stripe)
-2. Verificar assinatura/token do webhook para segurança
-3. Identificar o pagamento: por negociarie_id_geral ou agreement_id
-4. Executar baixa:
-   a. Atualizar agreements.status = 'paid'
-   b. Atualizar clients.status = 'pago' e clients.valor_pago
-   c. Inserir em portal_payments com status = 'paid'
-   d. Criar notificação interna (usar função create_notification do banco)
-   e. Registrar em audit_logs
-5. Disparar gamificação: chamar lógica de pontos do operador responsável
-
-Configuração:
-- Adicionar secret PAYMENT_WEBHOOK_SECRET para verificação de assinatura
-- Exibir URL do webhook em IntegracaoPage para o cliente configurar no gateway
-
-Tabelas: agreements, clients, portal_payments, audit_logs, notifications, operator_points`,
+    lovablePrompt: "Implementado via supabase/functions/negociarie-callback, asaas-webhook e fluxo manual-payment-confirmation. Atualiza agreements.status, clients.status, portal_payments, dispara notificação e gamificação. Veja memória logic/acordos/reconciliacao-pagamentos.",
   },
 
   // ──────────────────────────────────────────────────
@@ -1198,6 +1073,145 @@ Output:
 4. Exportação priorizada: no DialerExportDialog, ordenar por score DESC
 
 Tabelas: clients, agreements, call_dispositions, message_logs, campaign_participants`,
+  },
+
+  // ──────────────────────────────────────────────────
+  // MÓDULOS PRODUTIVOS RECENTES (já em produção)
+  // ──────────────────────────────────────────────────
+  {
+    id: "score-operacional-v1",
+    title: "Score Operacional V1",
+    description: "Motor heurístico de propensão (Contato 25%, Engajamento 20%, Conversão 35%, Credibilidade 20%) com decaimento por recência e pesos por fonte (operador/sistema/prevenção).",
+    status: "done",
+    progress: 100,
+    category: "IA",
+    lovablePrompt: "Score V1 implementado em supabase/functions/calculate-propensity. Recalculo automático via useScoreRecalc + 6 triggers de client_events. Score base 50 sem histórico. Badge visível em PropensityBadge.tsx.",
+  },
+  {
+    id: "perfis-devedor",
+    title: "Sistema de Perfis de Devedor (4 categorias)",
+    description: "Perfis fixos com pesos no score: Ocasional (+20), Recorrente (+5), Resistente (-15) e Insatisfeito (-10), atribuídos pelo operador no atendimento.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Perfis de devedor em DebtorCategoryPanel.tsx + DebtorProfileBadge.tsx, com seletor por hover na conversa WhatsApp e no detalhe da Carteira. Persistido em client_profiles.",
+  },
+  {
+    id: "client-events-timeline",
+    title: "Timeline Omnichannel Unificada (client_events)",
+    description: "client_events é a fonte única de verdade do histórico do cliente. Unifica WhatsApp, telefonia, eventos do portal e ações do operador via session_id.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Timeline unificada em ClientTimeline.tsx baseada em client_events com session_id. Substitui o histórico textual antigo. Todos os canais gravam eventos estruturados (observation_added, message_sent, call_finished etc.).",
+  },
+  {
+    id: "hub-omnichannel",
+    title: "Hub Omnichannel de Atendimento",
+    description: "Página /atendimento unificada com WhatsApp, telefonia 3CPlus, lock de concorrência, disposições, anexos e timeline em tempo real.",
+    status: "done",
+    progress: 100,
+    category: "Contact Center",
+    lovablePrompt: "Implementado em src/pages/AtendimentoPage.tsx + useAtendimentoModal + atendimento_sessions (uma sessão por tenant/client/credor). Lock real via atendimento_locks com modo somente-leitura.",
+  },
+  {
+    id: "anti-ban-backend",
+    title: "Anti-Ban Backend Lock — Disparos em Lote",
+    description: "Throttling de 8-15s entre mensagens e pausa automática de lote, com checkpoint, executado no servidor (não no cliente).",
+    status: "done",
+    progress: 100,
+    category: "Contact Center",
+    lovablePrompt: "Anti-Ban no backend (supabase/functions/whatsapp-bulk-sender e campaign-runner). Limites e pausas de lote definidos no servidor com checkpoint para retomada. Veja memória features/communication/bulk-campaign-resilience.",
+  },
+  {
+    id: "campanhas-whatsapp",
+    title: "Gestão de Campanhas WhatsApp",
+    description: "Módulo dedicado para acompanhar disparos em lote, com origin_type, estados restritivos pelo Anti-Ban e métricas por campanha.",
+    status: "done",
+    progress: 100,
+    category: "Contact Center",
+    lovablePrompt: "Painel de campanhas em src/components/contact-center/whatsapp/CampaignsTab.tsx + whatsappCampaignService.ts + campaignManagementService.ts. Coluna origin_type diferencia campanhas de mensagens individuais.",
+  },
+  {
+    id: "catalogo-servicos-tokens",
+    title: "Catálogo de Serviços & Tokens (Faturamento SaaS)",
+    description: "Provisionamento por catálogo de serviços e gestão de tokens com consumo atômico (FOR UPDATE) para faturar mensalidade e ações operacionais.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Catálogo em AdminServicosPage + serviceCatalogService.ts. Tokens em src/components/tokens/ + tokenService.ts. Consumo atômico via SQL FOR UPDATE. Veja memórias features/tenant-service-provisioning e features/tokens/architecture.",
+  },
+  {
+    id: "onboarding-cnpj",
+    title: "Onboarding Multi-Tenant com CNPJ + 50 tokens cortesia",
+    description: "Fluxo de onboarding obriga CNPJ, cria o tenant via RPC onboard_tenant, vincula o usuário e concede 50 tokens de cortesia.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Implementado em src/pages/OnboardingPage.tsx + RPC onboard_tenant. Veja memória logic/tenant-provisioning-and-onboarding.",
+  },
+  {
+    id: "asaas-gateway",
+    title: "Gateway Asaas (Mensalidade + Tokens)",
+    description: "Cobrança de mensalidades e pacotes de tokens via Asaas (Cartão, PIX e Boleto), com webhooks de baixa automática.",
+    status: "done",
+    progress: 100,
+    category: "Integrações",
+    lovablePrompt: "Implementado via asaasService.ts + edge functions asaas-* + webhooks. Veja memória integrations/asaas/payment-gateway-architecture.",
+  },
+  {
+    id: "gamificacao-v2",
+    title: "Gamificação V2 — Snapshot RPC + Cron",
+    description: "SSoT financeiro consolidado (Manual + Portal + Negociarie), RPC recalculate_my_full e cron tick a cada 30 min para manter ranking e conquistas atualizados.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Implementado via gamificationService.ts + edge function gamification-recalc-tick (cron 30min) + RPCs unificadas. Templates de conquistas semeados por tenant. Veja memória features/gamification/logic-and-persistence.",
+  },
+  {
+    id: "api-publica-clientes",
+    title: "API Pública REST de Clientes",
+    description: "Endpoint /clients-api com autenticação X-API-Key (hash SHA-256) para CRUD de clientes, acordos, pagamentos e portal lookup.",
+    status: "done",
+    progress: 100,
+    category: "Integrações",
+    lovablePrompt: "API pública em supabase/functions/clients-api + apiKeyService.ts + ApiDocsPage.tsx. Autenticação por X-API-Key SHA-256. Veja memória integrations/api/rest-specification.",
+  },
+  {
+    id: "transcricao-audio",
+    title: "Transcrição Automática de Áudios (Gemini)",
+    description: "Áudios inbound do WhatsApp são transcritos automaticamente via Gemini, sem bloquear a UI.",
+    status: "done",
+    progress: 100,
+    category: "IA",
+    lovablePrompt: "Implementado em supabase/functions/transcribe-audio (google/gemini-2.5-flash). Resultado salvo em chat_messages.metadata. Veja memória features/whatsapp/audio-transcription.",
+  },
+  {
+    id: "documentos-3-niveis",
+    title: "Documentos com Resolução em 3 Níveis",
+    description: "Templates de Acordo, Recibo, Quitação, Descrição de Dívida e Notificação Extrajudicial resolvidos por hierarquia: Credor → Tenant → Padrão.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Implementado em src/pages/DocumentTemplatesPage.tsx + documentRenderer.ts + documentDataResolver.ts + documentPdfService.ts. Snapshots imutáveis para auditoria. Veja memória features/documentos/architecture-and-logic.",
+  },
+  {
+    id: "reconciliacao-pagamentos",
+    title: "Reconciliação Granular de Pagamentos",
+    description: "RPC get_agreement_financials consolida Manual + Portal + Negociarie como Pagamento Real, alimentando dashboards, prestação de contas e gamificação.",
+    status: "done",
+    progress: 100,
+    category: "Financeiro",
+    lovablePrompt: "RPC get_agreement_financials + get_dashboard_vencimentos verificam manual_payments e portal_payments por parcela. Veja memória logic/acordos/reconciliacao-pagamentos.",
+  },
+  {
+    id: "dashboard-rpc",
+    title: "Dashboard via RPC SQL Agregada",
+    description: "Métricas do dashboard calculadas no backend via get_dashboard_stats e get_dashboard_vencimentos, com priorização de custom_installment_values.",
+    status: "done",
+    progress: 100,
+    category: "Core",
+    lovablePrompt: "Implementado em hooks de dashboard + RPCs SQL agregadas para precisão e performance. Veja memórias tech/dashboard-aggregation-strategy e logic/dashboard/value-prioritization.",
   },
 
   // ── NOVOS ITENS ──
