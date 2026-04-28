@@ -1,60 +1,92 @@
-# Expandir API de Pagamentos com Todos os Meios do Rivo
+# Chaves de API por Credor
 
-A API pública (`/clients-api`) hoje expõe apenas **PIX** e **Cartão**, mas o Rivo opera com mais meios reais via Asaas: **PIX, Cartão de Crédito, Boleto** (e meios configuráveis por credor em `meios_pagamento`). O plano alinha a API e a documentação com a realidade da plataforma.
+Atualmente cada `api_key` carrega só `tenant_id` — uma chave acessa todos os credores do tenant. Vamos adicionar **vínculo opcional com credor**, mantendo retrocompatibilidade total: chaves sem `credor_id` continuam sendo "chaves do tenant" (acessam todos os credores).
 
-## Meios de Pagamento Suportados
+## Schema (migration)
 
-| Meio | Código API | Status atual |
-|---|---|---|
-| PIX | `pix` | ✅ já existe |
-| Cartão de Crédito | `cartao` | ✅ já existe |
-| Boleto Bancário | `boleto` | ❌ adicionar |
-| Listar meios disponíveis | — | ❌ adicionar |
+Adicionar coluna em `api_keys`:
 
-> Demais meios customizados (cadastrados em `meios_pagamento` por tenant/credor) serão expostos via novo endpoint de listagem, sem precisar de rota dedicada por meio.
+```sql
+ALTER TABLE api_keys
+  ADD COLUMN credor_id uuid REFERENCES credores(id) ON DELETE CASCADE;
 
-## Mudanças na Edge Function `clients-api`
-
-### 1. Novo endpoint: `GET /payments/methods`
-Retorna todos os meios de pagamento disponíveis para o tenant (globais + por credor, opcional via `?credor_id=`).
-
-```json
-{
-  "data": [
-    { "code": "pix", "label": "PIX", "category": "instantaneo" },
-    { "code": "cartao", "label": "Cartão de Crédito", "category": "cartao" },
-    { "code": "boleto", "label": "Boleto Bancário", "category": "boleto" },
-    { "code": "<uuid>", "label": "<custom>", "category": "custom", "credor_id": "..." }
-  ]
-}
+CREATE INDEX idx_api_keys_credor ON api_keys(credor_id) WHERE credor_id IS NOT NULL;
 ```
 
-### 2. Novo endpoint: `POST /payments/boleto`
-Mesmo contrato dos endpoints existentes (`client_id`, `valor`, `data_vencimento`), grava em `negociarie_cobrancas` com `tipo = "boleto"`.
+- `credor_id IS NULL` → chave do **tenant inteiro** (comportamento atual, retrocompatível).
+- `credor_id` preenchido → chave **escopada ao credor** (X-API-Key só enxerga dados daquele credor).
 
-### 3. Endpoint genérico: `POST /payments`
-Permite escolher o meio via campo `tipo` no body (`pix`, `cartao`, `boleto`), simplificando integrações futuras. Mantém os endpoints específicos por compatibilidade.
+## Edge Function `clients-api`
 
-### 4. Filtro extra em `GET /payments`
-Adicionar suporte ao query param `?tipo=pix|cartao|boleto` para filtrar por meio.
+### 1. Resolução da chave passa a devolver `credorId`
 
-## Mudanças na Documentação (`ApiDocsPage.tsx` + `ApiDocsPublicPage.tsx`)
+```ts
+// retorna { tenantId, keyId, credorId | null }
+.select("id, tenant_id, credor_id, is_active")
+```
 
-Atualizar a seção **"4. Pagamentos"** para listar:
-- `GET  /payments` — Listar pagamentos (com filtros `status`, `client_id`, `tipo`)
-- `GET  /payments/:id` — Status de um pagamento
-- `GET  /payments/methods` — **NOVO** — Listar meios disponíveis
-- `POST /payments` — **NOVO** — Gerar cobrança (meio definido via `tipo`)
-- `POST /payments/pix` — Gerar cobrança PIX
-- `POST /payments/cartao` — Gerar cobrança Cartão
-- `POST /payments/boleto` — **NOVO** — Gerar cobrança Boleto
+### 2. Filtro automático por credor quando a chave for escopada
 
-Atualizar exemplos cURL/Python/JS para incluir Boleto e o endpoint de listagem de meios.
+Adicionar helper `applyScope(query, table)` que aplica `.eq('credor_id', credorId)` (ou coluna equivalente, ex.: `credor` em `agreements`) quando `credorId` está presente, em **todas** as rotas:
+
+- `GET /clients`, `GET /clients/:id`, `DELETE`, etc. → filtrar por `credor_id`.
+- `POST /clients` → forçar `credor_id` da chave (ignorar/validar o que vier no body).
+- `GET /agreements`, `POST /agreements` → idem.
+- `GET /payments`, `POST /payments/...` → idem (via `client_id` pertencente ao credor).
+- `GET /payments/methods` → ignorar query param `?credor_id=` e usar o da chave.
+- `POST /portal/lookup` e `POST /portal/agreement` → escopar.
+
+**Validação na escrita:** se a request tentar inserir um `credor_id` diferente do da chave → `403 Forbidden`.
+
+### 3. Tabela `clients` precisa de `credor_id`?
+
+Verificar se `clients` já tem `credor_id` (ou apenas o texto `credor`). Caso só tenha o texto, o filtro será por `credor = (SELECT nome FROM credores WHERE id = credorId)` resolvido uma vez por request e cacheado.
+
+## Frontend — Gestão de Chaves (`ApiDocsPage.tsx` + `apiKeyService.ts`)
+
+### `apiKeyService.ts`
+
+```ts
+export interface ApiKey {
+  // ...campos atuais
+  credor_id: string | null;
+  credor_nome?: string | null; // join opcional
+}
+
+export async function generateApiKey(
+  tenantId: string,
+  createdBy: string,
+  label = "Nova Chave",
+  credorId: string | null = null,   // ← NOVO
+): Promise<GeneratedKey>
+```
+
+### UI da aba "API Keys"
+
+No diálogo "Gerar nova chave":
+- Campo **Label** (já existe)
+- Novo **Select "Credor"** com opções:
+  - **"Todos os credores (chave do tenant)"** → `credor_id = null`
+  - Lista dos credores ativos do tenant
+- Tabela de chaves passa a mostrar a coluna **"Credor"** (ou "Todos" quando `null`).
+
+### Documentação dos Endpoints
+
+Adicionar nota no topo da seção:
+> "Chaves geradas para um credor específico operam exclusivamente sobre os dados daquele credor. Tentativas de acessar/criar registros de outros credores retornam 403."
+
+## Auditoria
+
+Os logs já gravam `api_key_id` em `import_logs` e nos inserts de `clients`. Como `api_keys` agora tem `credor_id`, o rastreamento "qual credor gerou esta operação via API" passa a ser direto via JOIN.
 
 ## Arquivos Alterados
 
-- `supabase/functions/clients-api/index.ts` — adicionar 3 rotas, ampliar filtro
-- `src/pages/ApiDocsPage.tsx` — atualizar seção Pagamentos (admin/interno)
-- `src/pages/ApiDocsPublicPage.tsx` — atualizar seção Pagamentos (público)
+- **Migration**: nova coluna + índice em `api_keys`
+- `supabase/functions/clients-api/index.ts` — resolveApiKey + helper de escopo aplicado em todas as rotas
+- `src/services/apiKeyService.ts` — interface + parâmetro opcional `credorId`
+- `src/pages/ApiDocsPage.tsx` — Select de credor no diálogo + coluna na tabela
+- `src/pages/ApiDocsPublicPage.tsx` — nota explicativa sobre escopo
 
-Sem migrations. Sem mudanças no schema. Compatível com integrações existentes (rotas antigas continuam funcionando).
+## Retrocompatibilidade
+
+Chaves existentes mantêm `credor_id = NULL` → continuam acessando todos os credores do tenant. **Nenhuma integração ativa quebra.**
