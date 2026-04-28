@@ -564,23 +564,12 @@ Sidebar do tenant (AppLayout.tsx) simplificada: link único "Área Admin" para /
 
   {
     id: "resend-email",
-    title: "Configuração de E-mail — Resend API",
-    description: "Configurar a API Resend para envio de e-mail com planilha de clientes quitados excluídos. Requer: conta Resend, validação de domínio e API Key.",
-    status: "in_progress",
-    progress: 50,
+    title: "Infraestrutura de E-mail — Resend",
+    description: "Domínio rivoconnect.com.br validado no Resend. Edge functions de e-mail transacional e relatório de quitados operacionais.",
+    status: "done",
+    progress: 100,
     category: "Integrações",
-    lovablePrompt: `Finalizar a configuração do envio de e-mail via Resend para o relatório de clientes quitados.
-
-O que já existe:
-- Edge function supabase/functions/send-quitados-report/index.ts — gera CSV e envia e-mail via Resend
-- Fluxo de exclusão de quitados em src/pages/CarteiraPage.tsx com dialog solicitando e-mail
-
-O que falta:
-1. Criar conta no Resend (https://resend.com) e validar o domínio de envio
-2. Gerar API Key em https://resend.com/api-keys
-3. Configurar a secret RESEND_API_KEY no projeto (usar ferramenta de secrets do Lovable)
-4. Atualizar o campo "from" na edge function com o domínio validado (atualmente "Rivo Connect <noreply@rivoconnect.com>")
-5. Testar o fluxo completo: filtrar quitados → excluir → receber planilha por e-mail`,
+    lovablePrompt: "Resend ativo com domínio validado. Edge functions: send-quitados-report (CSV de quitados) e demais e-mails transacionais. Secret RESEND_API_KEY configurada. Fluxos disparam a partir da Carteira e outros módulos.",
   },
 
   // FUTURE
