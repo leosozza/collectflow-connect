@@ -29,8 +29,24 @@ import ParcelasProgramadasCard, {
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
-import { useDashboardLayout } from "@/hooks/useDashboardLayout";
+import SortableCard from "@/components/dashboard/SortableCard";
+import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 
 const generateYearOptions = () => {
   const now = new Date();
