@@ -100,7 +100,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const { tenant } = useTenant();
   const { user, profile } = useAuth();
   const { role } = usePermissions();
-  const isAdmin = role === "admin" || role === "gestor";
+  const isAdmin = role === "super_admin" || role === "gerente" || role === "supervisor";
   const [step, setStep] = useState<Step>(1);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [customMessage, setCustomMessage] = useState("");
