@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CheckCircle2, Copy, Code2, BookOpen, Zap, Shield, CreditCard, Handshake, Globe, MessageSquare, Bell, Settings2, AlertTriangle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CheckCircle2, Copy, Code2, BookOpen, Zap, Shield, CreditCard, Handshake, Globe, MessageSquare, Bell, Settings2, AlertTriangle, Server } from "lucide-react";
+import McpServerTab from "@/components/api-docs/McpServerTab";
 
 const BASE_URL = "https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api";
 
@@ -61,14 +63,21 @@ export default function ApiDocsPublicPage() {
             <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center"><Code2 className="w-5 h-5 text-primary-foreground" /></div>
             <div>
               <h1 className="text-lg font-bold text-foreground">RIVO CONNECT API</h1>
-              <p className="text-xs text-muted-foreground">REST API completa para gestão de cobranças e omnichannel</p>
+              <p className="text-xs text-muted-foreground">REST + MCP para gestão de cobranças e omnichannel</p>
             </div>
           </div>
           <Badge className="bg-primary/10 text-primary border-primary/30 hover:bg-primary/10">v2.0</Badge>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-2">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+        <Tabs defaultValue="rest" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="rest" className="gap-2"><Code2 className="w-4 h-4" /> REST API</TabsTrigger>
+            <TabsTrigger value="mcp" className="gap-2"><Server className="w-4 h-4" /> MCP Server</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="rest" className="space-y-2">
         {/* URL Base */}
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="pt-6">

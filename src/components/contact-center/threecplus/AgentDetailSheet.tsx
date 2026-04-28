@@ -383,7 +383,7 @@ const AgentDetailSheet = ({
                       Agente <strong>{agent.name}</strong> não foi vinculado a um usuário do sistema.
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      O nome do agente no 3CPlus precisa corresponder ao nome completo do perfil no CollectFlow.
+                      O nome do agente no 3CPlus precisa corresponder ao nome completo do perfil no Rivo Connect.
                     </p>
                   </CardContent>
                 </Card>
