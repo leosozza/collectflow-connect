@@ -459,6 +459,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          credor_id: string | null
           id: string
           is_active: boolean
           key_hash: string
@@ -471,6 +472,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by: string
+          credor_id?: string | null
           id?: string
           is_active?: boolean
           key_hash: string
@@ -483,6 +485,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string
+          credor_id?: string | null
           id?: string
           is_active?: boolean
           key_hash?: string
@@ -492,7 +495,15 @@ export type Database = {
           revoked_at?: string | null
           tenant_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       asaas_customers: {
         Row: {
