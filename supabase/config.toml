@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.mcp-server]
 verify_jwt = false
+
+[functions.asaas-platform-proxy]
+verify_jwt = false

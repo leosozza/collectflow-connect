@@ -21,7 +21,7 @@ const TABLE = "platform_billing_accounts" as any;
 export async function listPlatformBillingAccounts(): Promise<PlatformBillingAccount[]> {
   const { data, error } = await supabase.from(TABLE).select("*").order("created_at", { ascending: true });
   if (error) throw error;
-  return (data || []) as PlatformBillingAccount[];
+  return (data || []) as unknown as PlatformBillingAccount[];
 }
 
 export async function getActivePlatformAccount(provider = "asaas"): Promise<PlatformBillingAccount | null> {
@@ -34,7 +34,7 @@ export async function getActivePlatformAccount(provider = "asaas"): Promise<Plat
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return (data || null) as PlatformBillingAccount | null;
+  return (data || null) as unknown as PlatformBillingAccount | null;
 }
 
 export async function upsertPlatformAccount(
@@ -55,7 +55,7 @@ export async function upsertPlatformAccount(
     .select()
     .single();
   if (error) throw error;
-  return data as PlatformBillingAccount;
+  return data as unknown as PlatformBillingAccount;
 }
 
 export async function updatePlatformAccount(
@@ -69,7 +69,7 @@ export async function updatePlatformAccount(
     .select()
     .single();
   if (error) throw error;
-  return data as PlatformBillingAccount;
+  return data as unknown as PlatformBillingAccount;
 }
 
 export async function testPlatformConnection(): Promise<{
