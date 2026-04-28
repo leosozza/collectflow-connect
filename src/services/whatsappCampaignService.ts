@@ -272,32 +272,35 @@ export async function fetchEligibleInstances(
     return aConn - bConn;
   });
 
-  try {
-    const { data: tenantData } = await supabase
-      .from("tenants")
-      .select("settings")
-      .eq("id", tenantId)
-      .single();
+  // Gupshup virtual instance is admin-only (no per-operator binding exists)
+  if (!isOperatorScope) {
+    try {
+      const { data: tenantData } = await supabase
+        .from("tenants")
+        .select("settings")
+        .eq("id", tenantId)
+        .single();
 
-    const settings = (tenantData?.settings as Record<string, any>) || {};
-    const hasGupshup = !!(settings.gupshup_api_key && settings.gupshup_source_number);
-    const isGupshupActive = settings.whatsapp_provider === "gupshup" || hasGupshup;
+      const settings = (tenantData?.settings as Record<string, any>) || {};
+      const hasGupshup = !!(settings.gupshup_api_key && settings.gupshup_source_number);
+      const isGupshupActive = settings.whatsapp_provider === "gupshup" || hasGupshup;
 
-    if (isGupshupActive && hasGupshup) {
-      eligible.push({
-        id: "gupshup-official",
-        name: `Gupshup (Oficial) — ${settings.gupshup_source_number}`,
-        instance_name: settings.gupshup_app_name || "gupshup",
-        phone_number: settings.gupshup_source_number,
-        provider: "gupshup",
-        status: "active",
-        provider_category: "official_meta",
-        is_default: false,
-        supports_manual_bulk: true,
-      });
+      if (isGupshupActive && hasGupshup) {
+        eligible.push({
+          id: "gupshup-official",
+          name: `Gupshup (Oficial) — ${settings.gupshup_source_number}`,
+          instance_name: settings.gupshup_app_name || "gupshup",
+          phone_number: settings.gupshup_source_number,
+          provider: "gupshup",
+          status: "active",
+          provider_category: "official_meta",
+          is_default: false,
+          supports_manual_bulk: true,
+        });
+      }
+    } catch {
+      // If tenant query fails, continue with DB instances only
     }
-  } catch {
-    // If tenant query fails, continue with DB instances only
   }
 
   return eligible;
