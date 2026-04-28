@@ -274,6 +274,8 @@ const CarteiraPage = () => {
     semWhatsapp: filters.semWhatsapp || undefined,
     cadastroDe: filters.cadastroDe || undefined,
     cadastroAte: filters.cadastroAte || undefined,
+    primeiraParcelaDe: filters.primeiraParcelaDe || undefined,
+    primeiraParcelaAte: filters.primeiraParcelaAte || undefined,
   }), [filters, permissions.canViewFullData, profileId]);
 
   // Reset pagination when filters change
