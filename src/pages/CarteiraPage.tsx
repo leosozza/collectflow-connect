@@ -730,10 +730,11 @@ const CarteiraPage = () => {
 
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
-      {/* Banner: selecionar todos os filtrados */}
-      {selectedIds.size > 0 && selectedIds.size === allClientIds.length && allClientIds.length > 0 && totalCount > allClientIds.length && !selectAllFiltered && (
+      {/* Banner: seleção acumulada entre páginas + opção de selecionar tudo */}
+      {selectedIds.size > 0 && totalCount > selectedIds.size && !selectAllFiltered && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
-          {selectedIds.size} clientes desta página selecionados.{" "}
+          <span className="font-medium">{selectedIds.size.toLocaleString("pt-BR")}</span>{" "}
+          registro(s) selecionado(s) (a seleção é mantida ao trocar de página).{" "}
           <Button
             variant="link"
             size="sm"
@@ -747,6 +748,15 @@ const CarteiraPage = () => {
               <>Selecionar todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados</>
             )}
           </Button>
+          {" · "}
+          <Button
+            variant="link"
+            size="sm"
+            className="text-muted-foreground font-medium px-1 h-auto"
+            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
+          >
+            Limpar seleção
+          </Button>
         </div>
       )}
       {selectAllFiltered && (
@@ -756,7 +766,7 @@ const CarteiraPage = () => {
             variant="link"
             size="sm"
             className="text-primary font-semibold px-1 h-auto"
-            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); }}
+            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
           >
             Limpar seleção
           </Button>
