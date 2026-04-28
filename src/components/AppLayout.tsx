@@ -289,7 +289,7 @@ const AppLayout = () => {
               to="/configuracoes"
               onClick={() => setSidebarOpen(false)}
               title={collapsed ? "Configurações" : undefined}
-              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${location.pathname === "/configuracoes"
+              className={`flex items-center ${collapsed ? "justify-center" : ""} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${location.pathname.startsWith("/configuracoes")
                   ? "bg-primary text-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 }`}
@@ -341,6 +341,10 @@ const AppLayout = () => {
                 "/cadastros": "Cadastros",
                 "/auditoria": "Auditoria",
                 "/configuracoes": "Configurações",
+                "/configuracoes/integracao": "Configurações",
+                "/configuracoes/auditoria": "Configurações",
+                "/configuracoes/api": "Configurações",
+                "/configuracoes/maxlist": "Configurações",
                 "/central-empresa": "Central Empresa",
                 "/signs": "Assinatura Digital",
                 "/roadmap": "Roadmap do Produto",
