@@ -25,6 +25,7 @@ import RecurrenceRuleEditor, {
   describeRecurrenceRule,
 } from "@/components/carteira/RecurrenceRuleEditor";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
