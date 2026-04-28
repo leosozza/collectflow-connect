@@ -707,7 +707,7 @@ Implementação:
     title: "Agente IA Autônomo de Negociação",
     description: "LLM integrado via Edge Function que negocia em tempo real com contorno de objeções no contexto de cobrança.",
     status: "in_progress",
-    progress: 15,
+    progress: 40,
     category: "IA",
     lovablePrompt: `Evoluir o Agente IA do Contact Center para negociar de forma autônoma, aplicando políticas de desconto e contornando objeções.
 
