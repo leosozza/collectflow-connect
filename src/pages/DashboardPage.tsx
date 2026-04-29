@@ -255,30 +255,6 @@ const DashboardPage = () => {
   };
 
   const kpiMap: Partial<Record<DashboardBlockId, KpiSpec>> = {
-    acionadosHoje: {
-      label: "Acionados Hoje",
-      value: String(acionadosHoje),
-      Icon: Phone,
-      iconColor: "text-orange-500",
-      iconBg: "bg-orange-500/10",
-      trend: trendAcionados ? { ...trendAcionados, text: "vs ontem" } : undefined,
-    },
-    acordosDia: {
-      label: "Acordos do Dia",
-      value: String(stats?.acordos_dia ?? 0),
-      Icon: FileText,
-      iconColor: "text-green-500",
-      iconBg: "bg-green-500/10",
-      trend: trendAcordosDia ? { ...trendAcordosDia, text: "vs ontem" } : undefined,
-    },
-    acordosMes: {
-      label: "Acordos do Mês",
-      value: String(stats?.acordos_mes ?? 0),
-      Icon: CalendarCheck,
-      iconColor: "text-blue-500",
-      iconBg: "bg-blue-500/10",
-      trend: trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : undefined,
-    },
     totalQuebra: {
       label: "Total de Quebra",
       value: formatCurrency(stats?.total_quebra ?? 0),
