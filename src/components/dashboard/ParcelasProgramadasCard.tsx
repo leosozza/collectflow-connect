@@ -43,38 +43,40 @@ export default function ParcelasProgramadasCard({
   ).length;
 
   return (
-    <div className="bg-card rounded-lg border border-border/80 overflow-hidden shadow-sm w-full h-full min-h-0 flex flex-col">
+    <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <CalendarClock className="w-4 h-4 text-primary shrink-0" />
-          <h2 className="text-sm font-semibold text-foreground truncate">Parcelas Programadas</h2>
+          <div className="rounded-lg p-1.5 inline-flex bg-primary/10 shrink-0">
+            <CalendarClock className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
+          </div>
+          <h2 className="text-[13px] font-semibold text-foreground tracking-tight truncate">Parcelas Programadas</h2>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {/* A receber */}
-          <div className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-blue-500/10">
-            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded bg-blue-600 text-white text-[10px] font-bold tabular-nums">
+          <div className="flex items-center gap-1.5 rounded-xl px-2 py-1 bg-blue-500/10">
+            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded-md bg-blue-500 text-white text-[10px] font-semibold tabular-nums">
               {qtdAndamento}
             </span>
             <div className="flex flex-col items-start leading-tight">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-blue-600">
+              <span className="text-[9px] font-medium uppercase tracking-wide text-blue-500/90">
                 A receber
               </span>
-              <span className="text-xs font-bold text-blue-700 tabular-nums">
+              <span className="text-xs font-semibold text-blue-600 tabular-nums">
                 {formatCurrency(totalDia)}
               </span>
             </div>
           </div>
           {/* Recebido */}
-          <div className="flex items-center gap-1.5 rounded-md px-2 py-1 bg-success/15">
-            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded bg-success text-success-foreground text-[10px] font-bold tabular-nums">
+          <div className="flex items-center gap-1.5 rounded-xl px-2 py-1 bg-emerald-500/10">
+            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded-md bg-emerald-500 text-white text-[10px] font-semibold tabular-nums">
               {qtdPagas}
             </span>
             <div className="flex flex-col items-start leading-tight">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-success">
+              <span className="text-[9px] font-medium uppercase tracking-wide text-emerald-600/90">
                 Recebido
               </span>
-              <span className="text-xs font-bold text-success tabular-nums">
+              <span className="text-xs font-semibold text-emerald-600 tabular-nums">
                 {formatCurrency(totalRecebido)}
               </span>
             </div>
@@ -83,19 +85,19 @@ export default function ParcelasProgramadasCard({
       </div>
 
       {/* Banner data centralizado */}
-      <div className="px-3 pb-3 shrink-0 flex items-center justify-center">
-        <div className="inline-flex items-center bg-blue-600 hover:bg-blue-700 transition-colors rounded-md px-0.5 py-0.5 gap-0">
+      <div className="px-3 pb-2.5 shrink-0 flex items-center justify-center">
+        <div className="inline-flex items-center bg-blue-500 hover:bg-blue-600 transition-colors rounded-full px-0.5 py-0.5 gap-0 shadow-sm">
           <Button
             size="icon"
             variant="ghost"
-            className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
+            className="h-5 w-5 rounded-full text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(-1)}
           >
             <ChevronLeft className="w-3 h-3" />
           </Button>
           <Popover>
             <PopoverTrigger asChild>
-              <button className="text-[10px] font-bold text-white tracking-wide text-center px-1.5 py-0 cursor-pointer min-w-[68px]">
+              <button className="text-[10px] font-semibold text-white tracking-wide text-center px-2 py-0 cursor-pointer min-w-[68px]">
                 {isToday ? "HOJE" : format(browseDate, "dd/MM/yyyy")}
               </button>
             </PopoverTrigger>
@@ -111,7 +113,7 @@ export default function ParcelasProgramadasCard({
           <Button
             size="icon"
             variant="ghost"
-            className="h-5 w-5 text-white hover:bg-white/20 hover:text-white"
+            className="h-5 w-5 rounded-full text-white hover:bg-white/20 hover:text-white"
             onClick={() => onNavigateDate(1)}
           >
             <ChevronRight className="w-3 h-3" />
@@ -179,7 +181,7 @@ export default function ParcelasProgramadasCard({
                     </TableCell>
                     <TableCell className="py-2 px-4 text-center">
                       <span
-                        className={`inline-flex items-center justify-center min-w-[96px] rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusClass}`}
+                        className={`inline-flex items-center justify-center min-w-[88px] rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${statusClass}`}
                       >
                         {statusLabel}
                       </span>
