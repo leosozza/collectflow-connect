@@ -1,61 +1,93 @@
-## Diagnóstico
+## Objetivo
 
-A cliente **Joceane Reis Silva** (CPF 44012770829, credor TESS MODELS) tem:
-
-- Acordo `5626c317...` com status **`pending`** (vigente, em dia)
-- Entrada de R$ 138,70 confirmada em 02/04/2026
-- Primeira parcela (`:2`) vence em **30/04/2026** (amanhã) — nada está vencido
-- Mas o cadastro do cliente está com `status_cobranca_id` = **"Acordo Atrasado"** desde o último update (22/04/2026)
-
-O acordo já foi corrigido para `pending` (provavelmente pelo `auto-expire-agreements` após a confirmação da entrada), mas o status do cliente **nunca foi recalculado** porque o cron `auto-status-sync-daily` está quebrado.
-
-### Causa raiz
-
-A edge function `auto-status-sync` exige `tenant_id` no body e retorna **400** quando recebe `{}`. O cron job `auto-status-sync-daily` chama a função **sem `tenant_id`**:
-
-```sql
--- cron.job atual
-body := '{}'::jsonb
-```
-
-Resultado: todos os dias desde a criação o cron envia `{}`, a função retorna 400, e **nenhum tenant é sincronizado**. O `cron.job_run_details` mostra "succeeded" porque só verifica o HTTP POST — não o status code.
-
-Por isso clientes ficam com status defasado: quando o acordo passa por `pending → overdue → pending`, o `auto-status-sync` deveria reverter o cliente de "Acordo Atrasado" para "Acordo Vigente", mas isso nunca acontece.
-
-## Solução
-
-### 1. Refatorar `auto-status-sync` para suportar modo cron multi-tenant
-
-Em `supabase/functions/auto-status-sync/index.ts`:
-
-- Quando chamado **sem `tenant_id`** (modo cron), buscar todos os tenants ativos em `tenants` e iterar a sincronização para cada um, em vez de retornar 400.
-- Quando chamado **com `tenant_id`**, manter o comportamento atual (modo on-demand).
-- Retornar resumo agregado `{ tenants_processed, total_updated, ... }` no modo cron.
-
-Estrutura proposta:
+Voltar o Dashboard ao padrão visual da imagem de referência:
 
 ```text
-Deno.serve:
-  if (tenant_id) → syncTenant(tenant_id)
-  else → for each tenant in tenants table → syncTenant(tenant.id)
+┌─────────────────┬──────────────────────────┬──────────────────┐
+│  Meta do Mês    │     Total Recebido       │  6 KPIs (3x2)    │
+│   (col 1-3)     │       (col 4-9)          │   (col 10-12)    │
+├─────────────────┼──────────────────────────┴──────────────────┤
+│ Agendamentos    │     Parcelas Programadas (col 4-9)          │
+│   (col 1-3)     │     (lado direito vazio – col 10-12)        │
+└─────────────────┴─────────────────────────────────────────────┘
 ```
 
-Refatorar a lógica atual em uma função `syncTenant(tenant_id)` reutilizada por ambos os modos.
+A altura é fixa (sem scroll global), os 6 KPIs voltam para o estilo "card branco com ícone colorido" (igual ao da imagem), e o **Ticket Médio Dia** sai do Dashboard e vai para a página Analytics.
 
-### 2. Re-executar a sincronização agora
+---
 
-Após o deploy, disparar `auto-status-sync` (sem tenant_id) uma única vez para corrigir **todos os clientes desatualizados** dos tenants — incluindo Joceane, que voltará automaticamente para "Acordo Vigente".
+## Mudanças
 
-### 3. Validação
+### 1. Unificar os 6 KPIs em um único bloco (3 colunas × 2 linhas)
 
-- Confirmar via SQL que Joceane (`cpf=44012770829`, credor TESS MODELS) está com `status_cobranca_id` apontando para "Acordo Vigente" após o sync.
-- Verificar o resumo retornado pela função (contadores por papel).
+Hoje existem dois blocos separados (`KpisOperacionaisCard` com 4 tiles coloridos em gradiente + `KpisFinanceirosCard` com 3 tiles brancos). Vou criar um único componente **`KpisGridCard.tsx`** que renderiza os 6 KPIs no estilo branco da imagem (idêntico ao atual `KpisFinanceirosCard`):
 
-## Arquivos a editar
+| Tile | Ícone | Cor | Trend |
+|---|---|---|---|
+| Acionados Hoje | Phone | azul | vs ontem |
+| Acordos do Dia | FileText | verde | vs ontem |
+| Acordos do Mês | CalendarCheck | azul | vs mês anterior |
+| Total de Quebra | TrendingDown | vermelho | vs mês anterior |
+| Pendentes | Hourglass | âmbar | vs mês anterior |
+| Colchão de Acordos | Wallet | índigo | (sem trend) |
 
-- `supabase/functions/auto-status-sync/index.ts` — adicionar modo cron multi-tenant
-- (sem migrations — o cron job atual já funciona; só estávamos retornando 400 sem motivo)
+Cada tile mantém o visual atual do `KpisFinanceirosCard.Tile` (ícone com bg suave, label cinza pequeno, valor em bold, trend com cor verde/vermelha + texto "vs ontem"/"vs mês anterior").
 
-## Por que não mexer no cron job
+### 2. Remover Ticket Médio Dia do Dashboard
 
-O cron job já está agendado e ativo. Basta a função aceitar body vazio e processar todos os tenants. Isso também garante que futuros tenants criados sejam automaticamente incluídos sem precisar mexer em SQL.
+- Remover a query `dashboard-ticket-medio-dia` e helpers (`getAgreementTicketBase`, `parseCurrencyLike`, `getCustomInstallmentValue`, `TicketAgreementRow`) do `DashboardPage.tsx`.
+- Apagar `KpisOperacionaisCard.tsx` e `KpisFinanceirosCard.tsx` (substituídos pelo novo `KpisGridCard`).
+
+### 3. Mover Ticket Médio Dia para a página Analytics
+
+Em `src/pages/AnalyticsPage.tsx`, adicionar um KPI "Ticket Médio do Dia" junto aos cards de métrica existentes no topo da página, reutilizando a mesma lógica de cálculo (média do `entrada_value` ou primeira parcela dos acordos criados hoje, respeitando os filtros de operador já aplicados na página).
+
+### 4. Ajustar Meta do Mês (apenas dimensões)
+
+Manter o visual atual (gauge laranja + bloco "META R$ ..." + período), mas reduzir as dimensões para caber confortavelmente na coluna ~3/12 (mesma largura da coluna de Agendamentos). Concretamente em `DashboardMetaCard.tsx` / `MetaGaugeCard.tsx`:
+
+- Reduzir `size` do gauge de 150 para ~110.
+- Reduzir tipografia interna do gauge ("60%", "do objetivo", labels Meta/Realizado) para caber sem quebra.
+- Header e padding ficam como estão.
+
+### 5. Reescrever o grid do `DashboardPage.tsx`
+
+Layout fixo, sem drag-and-drop visual (mantendo a tela travada como o usuário pediu antes — sem scroll geral, cards visíveis sem ampliar). Substituir o grid atual por:
+
+```tsx
+<div className="grid flex-1 min-h-0 grid-cols-1 xl:grid-cols-12
+                xl:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3">
+  {/* Linha 1 */}
+  <section className="xl:col-span-3 xl:row-start-1">{Meta}</section>
+  <section className="xl:col-span-6 xl:row-start-1">{TotalRecebido}</section>
+  <section className="xl:col-span-3 xl:row-start-1">{KpisGrid}</section>
+
+  {/* Linha 2 */}
+  <section className="xl:col-span-3 xl:row-start-2">{Agendamentos}</section>
+  <section className="xl:col-span-6 xl:row-start-2">{Parcelas}</section>
+  {/* col 10-12 da linha 2 fica vazio, como na imagem */}
+</div>
+```
+
+### 6. Atualizar `useDashboardLayout.ts` e `CustomizeDashboardDialog`
+
+- Substituir os ids `kpisOperacionais` + `kpisFinanceiros` por um único id **`kpisGrid`** em:
+  - `DashboardBlockId`
+  - `ALL_DASHBOARD_BLOCKS`
+  - `DEFAULT_DASHBOARD_LAYOUT.visible` / `order`
+- Bumpar `STORAGE_PREFIX` para `v8` para invalidar layouts salvos antigos (que ainda referenciam o drag-and-drop quebrado).
+- Atualizar o diálogo de personalização para listar o novo bloco unificado "KPIs".
+
+### 7. Limpeza do drag-and-drop
+
+O usuário já reportou problemas com o arrasta-e-solta. Como o layout agora é fixo e idêntico ao da imagem, vou remover o `SortableCard.tsx` do `DashboardPage` (ele continua existindo no projeto mas deixa de ser importado). Personalizar permanece como toggle de visibilidade.
+
+---
+
+## Arquivos afetados
+
+- **Criar**: `src/components/dashboard/KpisGridCard.tsx`
+- **Editar**: `src/pages/DashboardPage.tsx`, `src/pages/AnalyticsPage.tsx`, `src/hooks/useDashboardLayout.ts`, `src/components/dashboard/CustomizeDashboardDialog.tsx`, `src/components/dashboard/DashboardMetaCard.tsx`, `src/components/dashboard/MetaGaugeCard.tsx`
+- **Remover**: `src/components/dashboard/KpisOperacionaisCard.tsx`, `src/components/dashboard/KpisFinanceirosCard.tsx`
+
+Sem mudanças de banco de dados.

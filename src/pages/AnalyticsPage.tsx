@@ -241,6 +241,28 @@ const AnalyticsPage = () => {
   const ticketMedio = acordosComPagamento.length > 0 ? totalRecebido / acordosComPagamento.length : 0;
   const percentRecebimento = activeAgreements.length > 0 ? ((acordosComPagamento.length / activeAgreements.length) * 100).toFixed(1) : "0";
 
+  // Ticket Médio do Dia: média do valor base (entrada ou 1ª parcela) dos acordos criados hoje,
+  // respeitando o filtro de operador da página. Movido do Dashboard para Analytics.
+  const ticketMedioDia = useMemo(() => {
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+    const todays = (allAgreementsFull || []).filter((a: any) => {
+      if (a.status === "cancelled" || a.status === "rejected") return false;
+      const t = new Date(a.created_at).getTime();
+      if (t < todayStart || t >= todayEnd) return false;
+      if (selectedOperators.length > 0 && !selectedOperators.includes(a.created_by || "")) return false;
+      return true;
+    });
+    if (todays.length === 0) return 0;
+    const sum = todays.reduce((s: number, a: any) => {
+      const entrada = Number(a.entrada_value || 0);
+      if (entrada > 0) return s + entrada;
+      return s + Number(a.new_installment_value || 0);
+    }, 0);
+    return sum / todays.length;
+  }, [allAgreementsFull, selectedOperators]);
+
   // Portfolio conversion rate: agreements with payments > 0 vs total active (sem dupla contagem)
   const totalAtivos = activeAgreements.length;
   const taxaConversao = totalAtivos > 0 ? (acordosComPagamento.length / totalAtivos) * 100 : 0;
@@ -377,7 +399,7 @@ const AnalyticsPage = () => {
         </div>
 
         {/* Operational KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {isOperator ? (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
@@ -403,6 +425,12 @@ const AnalyticsPage = () => {
                 <Target className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">% de Recebimento</p>
                 <p className="text-xl font-bold text-foreground">{percentRecebimento}%</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos criados hoje (entrada ou 1ª parcela)." /></div>
+                <Award className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Ticket Médio do Dia</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedioDia)}</p>
               </div>
             </>
           ) : (
@@ -430,6 +458,12 @@ const AnalyticsPage = () => {
                 <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
                 <p className="text-xs text-muted-foreground">Total Recebido</p>
                 <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
+              </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos criados hoje (entrada ou 1ª parcela)." /></div>
+                <Award className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Ticket Médio do Dia</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedioDia)}</p>
               </div>
             </>
           )}
