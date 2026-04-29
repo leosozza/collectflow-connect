@@ -5,7 +5,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchMyGoal, fetchGoals } from "@/services/goalService";
 import { Trophy } from "lucide-react";
-import MetaGaugeCard from "./MetaGaugeCard";
+import MetaRadialCard from "./MetaRadialCard";
 
 interface DashboardMetaCardProps {
   year: number;
@@ -90,15 +90,15 @@ const DashboardMetaCard = ({
             Nenhuma meta definida para este período.
           </div>
         ) : (
-          <MetaGaugeCard
+          <MetaRadialCard
             percent={pct}
             received={received}
             goal={goal}
             monthLabel={monthLabel}
             year={year}
             month={month}
-            size={110}
-            duration={1.2}
+            size={160}
+            duration={1.4}
           />
         )}
       </div>
