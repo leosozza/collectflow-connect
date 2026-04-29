@@ -241,6 +241,28 @@ const AnalyticsPage = () => {
   const ticketMedio = acordosComPagamento.length > 0 ? totalRecebido / acordosComPagamento.length : 0;
   const percentRecebimento = activeAgreements.length > 0 ? ((acordosComPagamento.length / activeAgreements.length) * 100).toFixed(1) : "0";
 
+  // Ticket Médio do Dia: média do valor base (entrada ou 1ª parcela) dos acordos criados hoje,
+  // respeitando o filtro de operador da página. Movido do Dashboard para Analytics.
+  const ticketMedioDia = useMemo(() => {
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+    const todays = (allAgreementsFull || []).filter((a: any) => {
+      if (a.status === "cancelled" || a.status === "rejected") return false;
+      const t = new Date(a.created_at).getTime();
+      if (t < todayStart || t >= todayEnd) return false;
+      if (selectedOperators.length > 0 && !selectedOperators.includes(a.created_by || "")) return false;
+      return true;
+    });
+    if (todays.length === 0) return 0;
+    const sum = todays.reduce((s: number, a: any) => {
+      const entrada = Number(a.entrada_value || 0);
+      if (entrada > 0) return s + entrada;
+      return s + Number(a.new_installment_value || 0);
+    }, 0);
+    return sum / todays.length;
+  }, [allAgreementsFull, selectedOperators]);
+
   // Portfolio conversion rate: agreements with payments > 0 vs total active (sem dupla contagem)
   const totalAtivos = activeAgreements.length;
   const taxaConversao = totalAtivos > 0 ? (acordosComPagamento.length / totalAtivos) * 100 : 0;
