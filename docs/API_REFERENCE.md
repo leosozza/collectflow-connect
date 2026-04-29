@@ -47,7 +47,9 @@
 - `POST /portal/agreement`
 
 ### Cadastros
-- `GET /credores` · `GET /status-types`
+- `GET /credores` — lista credores. Quando a `X-API-Key` é restrita a 1 credor, retorna **somente** esse credor com **todos os campos públicos** (cadastro, endereço, contato, dados bancários, gateway, regras de negociação, templates, configurações de portal e assinatura). Chaves globais retornam todos os credores `ativos` com os mesmos campos. Campos sensíveis (`gateway_token`) **nunca** são expostos.
+- `GET /credores/{id}` — detalhe completo de um credor. Em chaves restritas, só permite o `id` do próprio escopo (caso contrário, **403**).
+- `GET /status-types`
 
 ### Webhooks
 - `GET /webhooks` · `POST /webhooks/configure`
