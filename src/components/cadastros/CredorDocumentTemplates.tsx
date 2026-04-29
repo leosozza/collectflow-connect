@@ -114,12 +114,9 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
         // ignore — falls back to clipboard
       }
     }
-    // 2) Always copy to clipboard as well, so the user can paste anywhere.
+    // 2) Silently copy to clipboard as well, so the user can paste anywhere.
     try {
       await navigator.clipboard.writeText(key);
-      toast.success(`Variável inserida: ${key}`, {
-        description: "Também copiada para a área de transferência.",
-      });
     } catch {
       const ta = document.createElement("textarea");
       ta.value = key;
