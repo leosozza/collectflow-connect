@@ -286,8 +286,49 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // SINGLE-TENANT MODE
+    // SINGLE-TENANT MODE: requires authorization
     if (tenant_id) {
+      const authHeader = req.headers.get("Authorization") || "";
+      const apikeyHeader = req.headers.get("apikey") || "";
+      const isServiceRole =
+        authHeader === `Bearer ${serviceRoleKey}` || apikeyHeader === serviceRoleKey;
+
+      let authorized = isServiceRole;
+
+      if (!authorized && authHeader.startsWith("Bearer ")) {
+        const jwt = authHeader.replace("Bearer ", "");
+        const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") || serviceRoleKey, {
+          global: { headers: { Authorization: `Bearer ${jwt}` } },
+        });
+        const { data: userData } = await userClient.auth.getUser();
+        const user = userData?.user;
+        if (user) {
+          // Super admin global
+          const { data: isAdmin } = await supabase.rpc("has_role", {
+            _user_id: user.id,
+            _role: "admin",
+          });
+          if (isAdmin) authorized = true;
+          if (!authorized) {
+            const { data: tu } = await supabase
+              .from("tenant_users")
+              .select("role")
+              .eq("user_id", user.id)
+              .eq("tenant_id", tenant_id)
+              .in("role", ["admin", "gerente", "supervisor"])
+              .maybeSingle();
+            if (tu) authorized = true;
+          }
+        }
+      }
+
+      if (!authorized) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const result = await syncTenant(supabase, tenant_id);
       return new Response(
         JSON.stringify({ success: true, ...result }),
@@ -295,11 +336,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // CRON / MULTI-TENANT MODE: iterate over all tenants
+    // CRON / MULTI-TENANT MODE: only active tenants
     const { data: tenants, error: tenantsErr } = await supabase
       .from("tenants")
       .select("id, name, status")
-      .neq("status", "inactive");
+      .eq("status", "active");
 
     if (tenantsErr) {
       return new Response(
