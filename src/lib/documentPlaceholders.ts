@@ -13,6 +13,11 @@ export const DOCUMENT_PLACEHOLDERS: PlaceholderInfo[] = [
   // Credor
   { key: "{razao_social_credor}", label: "Razão Social do Credor", description: "Nome jurídico do credor", category: "credor" },
   { key: "{cnpj_credor}", label: "CNPJ do Credor", description: "CNPJ do credor", category: "credor" },
+  { key: "{endereco_completo_credor}", label: "Endereço Completo do Credor", description: "Endereço completo do credor (rua, número, bairro, cidade/UF, CEP)", category: "credor" },
+  { key: "{cidade_credor}", label: "Cidade do Credor", description: "Cidade da sede do credor", category: "credor" },
+  { key: "{uf_credor}", label: "UF do Credor", description: "Estado da sede do credor", category: "credor" },
+  { key: "{cep_credor}", label: "CEP do Credor", description: "CEP da sede do credor", category: "credor" },
+  { key: "{email_credor}", label: "E-mail do Credor", description: "E-mail de contato do credor", category: "credor" },
 
   // Devedor
   { key: "{nome_devedor}", label: "Nome do Devedor", description: "Nome completo do devedor", category: "devedor" },
