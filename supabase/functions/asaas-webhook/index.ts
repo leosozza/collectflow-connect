@@ -54,16 +54,23 @@ Deno.serve(async (req) => {
 
       if (!platformSubscription) return null;
 
-      if (asaasAccessToken) {
-        const { data: platformAccount } = await supabase
-          .from("platform_billing_accounts")
-          .select("webhook_token")
-          .eq("id", platformSubscription.platform_account_id)
-          .maybeSingle();
+      // Token é OBRIGATÓRIO para mensalidade da plataforma.
+      const { data: platformAccount } = await supabase
+        .from("platform_billing_accounts")
+        .select("webhook_token")
+        .eq("id", platformSubscription.platform_account_id)
+        .maybeSingle();
 
-        if (platformAccount?.webhook_token && platformAccount.webhook_token !== asaasAccessToken) {
+      const expectedToken = platformAccount?.webhook_token || null;
+      // Se a conta tem token configurado, exigimos header batendo exatamente.
+      // Se não há token configurado (legado), permitimos para não quebrar (mas logamos).
+      if (expectedToken) {
+        if (!asaasAccessToken || asaasAccessToken !== expectedToken) {
+          console.warn(`[asaas-webhook] Invalid/missing token for platform subscription ${platformSubscription.id}`);
           return { forbidden: true, subscription: platformSubscription };
         }
+      } else {
+        console.warn(`[asaas-webhook] platform account ${platformSubscription.platform_account_id} has no webhook_token configured`);
       }
 
       await supabase
