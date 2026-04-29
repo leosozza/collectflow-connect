@@ -421,20 +421,34 @@ const DashboardPage = () => {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 auto-rows-[minmax(220px,auto)] items-stretch"
-            style={{ gridAutoFlow: "dense" }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 flex-1 min-h-0 items-stretch"
+            style={{ gridTemplateRows: "repeat(2, minmax(0, 1fr))" }}
           >
             {visibleOrder.map((id) => (
-              <SortableCard key={id} id={id} spanClassName={SPAN_CLASS[id]}>
+              <SortableCard
+                key={id}
+                id={id}
+                spanClassName={SPAN_CLASS[id]}
+                isPlaceholder={activeId === id}
+              >
                 {renderBlock(id)}
               </SortableCard>
             ))}
           </div>
         </SortableContext>
+        <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+          {activeId ? (
+            <div className="h-full w-full opacity-95 shadow-2xl rounded-xl ring-2 ring-primary/50 pointer-events-none">
+              {renderBlock(activeId)}
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
 
       <CustomizeDashboardDialog
