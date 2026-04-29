@@ -4,11 +4,9 @@ import { useAuth } from "@/hooks/useAuth";
 export type DashboardBlockId =
   | "metas"
   | "totalRecebido"
-  | "acionadosHoje"
+  | "kpisOperacionais"
   | "agendamentos"
-  | "acordosDia"
   | "parcelas"
-  | "acordosMes"
   | "totalQuebra"
   | "pendentes"
   | "colchaoAcordos";
@@ -22,11 +20,9 @@ export interface DashboardLayout {
 export const ALL_DASHBOARD_BLOCKS: DashboardBlockId[] = [
   "metas",
   "totalRecebido",
-  "acionadosHoje",
+  "kpisOperacionais",
   "agendamentos",
-  "acordosDia",
   "parcelas",
-  "acordosMes",
   "totalQuebra",
   "pendentes",
   "colchaoAcordos",
@@ -36,35 +32,26 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
     metas: true,
     totalRecebido: true,
-    acionadosHoje: true,
+    kpisOperacionais: true,
     agendamentos: true,
-    acordosDia: true,
     parcelas: true,
-    acordosMes: true,
     totalQuebra: true,
     pendentes: true,
     colchaoAcordos: true,
   },
-  // Ordem linear do grid 3-col (com gridAutoFlow:dense respeitando spans):
-  // Linha 1: Meta | TotalRecebido(rs2) | AcionadosHoje
-  // Linha 2: Agendamentos | (TotalRecebido) | AcordosDia
-  // Linha 3: Parcelas(cs2)              | AcordosMes
-  // Linha 4+: TotalQuebra, Pendentes, Colchão
   order: [
     "metas",
     "totalRecebido",
-    "acionadosHoje",
+    "kpisOperacionais",
     "agendamentos",
-    "acordosDia",
     "parcelas",
-    "acordosMes",
     "totalQuebra",
     "pendentes",
     "colchaoAcordos",
   ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v3";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v4";
 
 function sanitize(raw: any): DashboardLayout {
   try {
