@@ -45,15 +45,44 @@ const AchievementsTab = ({ isAdmin = false }: AchievementsTabProps) => {
     return <div className="text-center py-12 text-muted-foreground text-sm">Carregando conquistas...</div>;
   }
 
-  // Admin: show list with operator names
+  // Admin: show list with operator names + filter by operator
   if (isAdmin) {
+    const operators = useMemo(() => {
+      const map = new Map<string, string>();
+      (earned as any[]).forEach((a) => {
+        if (a.profile_id) map.set(a.profile_id, a.profiles?.full_name || "—");
+      });
+      return Array.from(map.entries())
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }, [earned]);
+
+    const [operatorFilter, setOperatorFilter] = useState<string>("all");
+    const filtered = operatorFilter === "all"
+      ? earned
+      : (earned as any[]).filter((a) => a.profile_id === operatorFilter);
+
     return (
       <div className="space-y-4">
-        <div className="text-sm text-muted-foreground">
-          {earned.length} conquistas concedidas no total
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm text-muted-foreground">
+            {filtered.length} conquistas concedidas
+            {operatorFilter !== "all" && " (filtradas)"}
+          </div>
+          <Select value={operatorFilter} onValueChange={setOperatorFilter}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Filtrar por operador" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os operadores</SelectItem>
+              {operators.map((op) => (
+                <SelectItem key={op.id} value={op.id}>{op.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {earned.map((a: any) => (
+          {filtered.map((a: any) => (
             <div
               key={a.id}
               className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-4"
@@ -69,7 +98,7 @@ const AchievementsTab = ({ isAdmin = false }: AchievementsTabProps) => {
               </div>
             </div>
           ))}
-          {earned.length === 0 && (
+          {filtered.length === 0 && (
             <p className="text-sm text-muted-foreground col-span-2 text-center py-8">Nenhuma conquista concedida ainda.</p>
           )}
         </div>
