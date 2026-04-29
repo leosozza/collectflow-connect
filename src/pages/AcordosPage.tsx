@@ -386,7 +386,14 @@ const AcordosPage = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
+        <span className="text-xs text-muted-foreground">
+          {isAdmin
+            ? "Mostrando todos os acordos do tenant"
+            : "Mostrando apenas os acordos criados por você"}
+        </span>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard title="Total de Acordos" value={String(stats.total)} icon="agreement" />
@@ -397,17 +404,23 @@ const AcordosPage = () => {
       <div className="flex flex-wrap gap-2">
         {statusFilterConfig
           .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
-          .map(({ key, label, color, selectedColor }) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color
-                }`}
-            >
-              {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
-              {label}
-            </button>
-          ))}
+          .map(({ key, label, color, selectedColor }) => {
+            const count = (tabCounts as any)[key] ?? 0;
+            return (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color
+                  }`}
+              >
+                {key === "payment_confirmation" && <HandCoins className="w-3 h-3" />}
+                <span>{label}</span>
+                <span className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] font-bold ${statusFilter === key ? "bg-primary-foreground/20 text-primary-foreground" : "bg-foreground/10 text-foreground"}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
