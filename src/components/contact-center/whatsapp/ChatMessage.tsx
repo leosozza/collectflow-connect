@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChatMessage as ChatMessageType, deleteChatMessageForRecipient, editChatMessage } from "@/services/conversationService";
-import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio, Download, MoreVertical, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio, Download, MoreVertical, Pencil, Trash2, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
