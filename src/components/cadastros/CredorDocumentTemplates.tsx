@@ -12,9 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { DOCUMENT_TYPES, TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
-import { DOCUMENT_PLACEHOLDERS, PLACEHOLDER_CATEGORIES, SAMPLE_DATA } from "@/lib/documentPlaceholders";
-import { markdownToHtml } from "@/lib/markdownLight";
-import { wrapDocumentInA4Page, SAMPLE_CREDOR } from "@/services/documentLayoutService";
+import { DOCUMENT_PLACEHOLDERS, PLACEHOLDER_CATEGORIES } from "@/lib/documentPlaceholders";
+import { SAMPLE_CREDOR } from "@/services/documentLayoutService";
 import A4LiveEditor, { type A4LiveEditorHandle } from "./A4LiveEditor";
 
 interface CredorDocumentTemplatesProps {
