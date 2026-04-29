@@ -159,8 +159,28 @@ Deno.serve(async (req) => {
     }
 
     if (!providerResult.ok) {
-      return json({ error: providerResult.error || "Falha no provider", provider: providerResult.provider }, 502);
+      console.error("[manage-chat-message] provider error", {
+        action,
+        provider: providerResult.provider,
+        httpStatus: providerResult.httpStatus,
+        error: providerResult.error,
+        providerMessageId,
+        instanceName: inst.instance_name,
+        providerBody: providerResult.result,
+      });
+      return json({
+        error: providerResult.error || "Falha no provider",
+        provider: providerResult.provider,
+        httpStatus: providerResult.httpStatus,
+        providerBody: providerResult.result,
+      }, 502);
     }
+
+    console.log("[manage-chat-message] provider success", {
+      action,
+      provider: providerResult.provider,
+      messageId,
+    });
 
     // Persist DB change
     if (action === "delete") {
