@@ -1,61 +1,52 @@
-Plano para corrigir a Gamificação
+## Problema
 
-Problemas identificados
+Hoje, ao criar uma API key escopada a um credor (`api_keys.credor_id` preenchido):
 
-1. Acordos no Ranking aparecem 0 porque a tela está comparando IDs diferentes:
-   - `agreements.created_by` guarda o ID do usuário autenticado.
-   - `operator_points.operator_id` e `campaign_participants.operator_id` usam o ID do perfil do operador.
-   - A consulta atual procura acordos usando o ID do perfil, então não encontra nada.
+- `GET /credores` na `clients-api` retorna **todos** os credores ativos do tenant, ignorando o escopo da chave.
+- O `SELECT` traz apenas um subconjunto pequeno de campos (`razao_social, nome_fantasia, cnpj, status, parcelas_min, parcelas_max, desconto_maximo, juros_mes, multa`).
+- Logo, integrações que usam uma chave restrita a 1 credor não recebem dados completos (endereço, contato, dados bancários, templates, configurações de portal, regras de desconto, SLA, etc.).
 
-2. A campanha mensal com métrica de valor recebido está ficando zerada porque a rotina de campanha depende de uma função que resolve o tenant pelo usuário logado. Em alguns cenários de recálculo automático/admin/cron, isso retorna 0, embora o ranking mensal já tenha valores recebidos.
+## Objetivo
 
-3. A tela de campanhas mostra os participantes, mas não garante um recálculo confiável dos scores da campanha mensal ao abrir a aba.
+Quando a chave for restrita a um credor, `GET /credores` (e `GET /credores/{id}`) devem retornar **todas as informações daquele credor**, exceto campos sensíveis de segurança.
 
-Implementação proposta
+## Mudanças
 
-1. Corrigir a contagem de acordos no Ranking
-   - Atualizar `src/services/gamificationService.ts`.
-   - Ao buscar os perfis dos operadores, também buscar `user_id`.
-   - Montar um mapa:
+### 1. `supabase/functions/clients-api/index.ts` — endpoint `GET /credores`
 
-```text
-profile.id -> profile.user_id
-profile.user_id -> profile.id
-```
+Substituir o handler atual por uma lógica que:
 
-   - Consultar `agreements.created_by` usando os `user_id` reais dos operadores.
-   - Somar o resultado de volta no card do operador usando o ID do perfil.
-   - Manter a regra já solicitada: se o operador criou o acordo e ele mesmo cancelou, não entra na contagem.
-   - Ajustar a leitura de `audit_logs.entity_id`, que é texto, para comparar corretamente com o UUID do acordo.
+- **Quando a chave é escopada (`credorId` presente)**: retornar somente o credor da chave, com todos os campos públicos preenchidos.
+- **Quando a chave é global**: manter o comportamento de listar todos os credores `ativos` do tenant, mas também retornando o conjunto completo de campos públicos (consistência).
 
-2. Corrigir a função de cálculo de campanhas no backend
-   - Criar uma migração no Lovable Cloud com uma função interna tenant-aware para calcular valor recebido por operador sem depender de `auth.uid()` para descobrir o tenant.
-   - Atualizar a rotina consolidada de gamificação para usar essa função em campanhas de:
-     - `maior_valor_recebido`
-     - `negociado_e_recebido`, quando aplicável
-   - Criar/atualizar uma RPC segura para recalcular todos os participantes de uma campanha por `campaign_id`, validando que o usuário pertence ao tenant da campanha.
+Campos retornados (todas as colunas de `credores`, exceto sensíveis):
 
-3. Trocar o recálculo client-side de campanhas por recálculo server-side
-   - Atualizar `src/services/campaignService.ts`.
-   - Fazer `recalculateCampaignScores(campaignId)` chamar a nova função do backend, em vez de recalcular tudo no navegador com queries separadas.
-   - Isso deixa mensal, semanal e demais campanhas usando a mesma lógica canônica.
+Incluir: `id, razao_social, nome_fantasia, cnpj, inscricao_estadual, contato_responsavel, email, telefone, cep, endereco, numero, complemento, bairro, cidade, uf, banco, agencia, conta, tipo_conta, pix_chave, gateway_ativo, gateway_ambiente, gateway_status, parcelas_min, parcelas_max, entrada_minima_valor, entrada_minima_tipo, desconto_maximo, juros_mes, multa, honorarios_grade, aging_discount_tiers, prazo_dias_acordo, indice_correcao_monetaria, sla_hours, carteira_mode, signature_enabled, signature_type, portal_hero_title, portal_hero_subtitle, portal_logo_url, portal_primary_color, portal_enabled, document_logo_url, template_acordo, template_recibo, template_quitacao, template_descricao_divida, template_notificacao_extrajudicial, status, created_at, updated_at`.
 
-4. Recalcular campanhas ativas automaticamente ao abrir a aba
-   - Atualizar `CampaignsTab.tsx` e/ou `CampaignCard.tsx`.
-   - Quando a aba de campanhas carregar, disparar recálculo das campanhas ativas uma vez e invalidar `campaign-participants` para atualizar os cards.
-   - Evitar loop infinito usando controle por campanha já recalculada na sessão da tela.
+Excluir (segredos): `gateway_token`, `tenant_id`.
 
-5. Corrigir detalhe visual/técnico do card
-   - Ajustar `CampaignCard` para aceitar `ref` corretamente com `React.forwardRef`, eliminando o warning atual no console.
+### 2. Adicionar `GET /credores/{id}`
 
-6. Melhorar atualização em tempo real do Ranking
-   - Além de invalidar por alterações em `operator_points`, também invalidar o ranking quando acordos do tenant forem criados/cancelados/alterados.
-   - Assim a quantidade de acordos atualiza sem depender apenas do snapshot de pontos.
+Endpoint novo que retorna o detalhamento completo de um credor:
 
-Validação após implementar
+- Se a chave for escopada e `{id}` ≠ `credor_id` da chave → **403** com mensagem clara.
+- Caso contrário → retorna o credor completo (mesmos campos da lista).
 
-- Confirmar que o Ranking mostra a quantidade real de acordos por operador no mês atual.
-- Confirmar que acordos auto-cancelados pelo próprio operador não entram nessa contagem.
-- Confirmar que a campanha mensal deixa de mostrar 0 quando existem valores recebidos no período.
-- Confirmar que campanhas semanais/mensais continuam respeitando credores vinculados, período da campanha e participantes.
-- Confirmar que o warning de `CampaignCard` com ref desaparece do console.
+### 3. Documentação
+
+Atualizar `docs/API_REFERENCE.md` (seção "Cadastros") para:
+
+- Listar os campos completos retornados por `GET /credores`.
+- Documentar `GET /credores/{id}`.
+- Reforçar que chaves restritas a 1 credor automaticamente recebem somente aquele credor.
+
+## Não muda
+
+- Esquema do banco (nenhuma migração).
+- Autenticação por `X-API-Key` (mesmo SHA-256).
+- Demais endpoints (`/clients`, `/agreements`, `/payments`, etc.).
+- Campo `gateway_token` continua oculto na API pública.
+
+## Riscos
+
+- Baixo. Mudança apenas amplia o payload retornado e adiciona um endpoint. Consumidores existentes que já liam `data[].razao_social` continuam funcionando.
