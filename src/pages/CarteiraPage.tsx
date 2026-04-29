@@ -813,7 +813,7 @@ const CarteiraPage = () => {
                 ))}
               </SelectContent>
             </Select>
-            <span className="ml-2">{totalCount.toLocaleString("pt-BR")} registros</span>
+            <span className="ml-2">{totalCount.toLocaleString("pt-BR")} clientes</span>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -983,7 +983,7 @@ const CarteiraPage = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="ml-2">{totalCount.toLocaleString("pt-BR")} registros</span>
+                <span className="ml-2">{totalCount.toLocaleString("pt-BR")} clientes</span>
               </div>
               <div className="flex items-center gap-2">
                 <Button
