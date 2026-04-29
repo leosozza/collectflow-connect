@@ -10,8 +10,9 @@ import {
   PERIOD_OPTIONS,
 } from "@/services/campaignService";
 import { differenceInDays, parseISO } from "date-fns";
-import { Trophy, Clock, Gift, Building2, AlertTriangle } from "lucide-react";
+import { Trophy, Gift, Building2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import CampaignCountdown from "./CampaignCountdown";
 
 interface CampaignCardProps {
   campaign: Campaign;
