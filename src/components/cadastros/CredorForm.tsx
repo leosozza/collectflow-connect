@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor, triggerExpireAgreementsForCredor } from "@/services/cadastrosService";
