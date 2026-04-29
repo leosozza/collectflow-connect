@@ -994,13 +994,21 @@ export const reopenAgreement = async (
 export const registerAgreementPayment = async (
   cpf: string,
   credor: string,
-  valor: number
+  valor: number,
+  tenantId: string,
 ): Promise<void> => {
   try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+    const rawCpf = (cpf || "").replace(/\D/g, "");
+    const fmtCpf = rawCpf.length === 11
+      ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+      : rawCpf;
+
     const { data: titles, error } = await supabase
       .from("clients")
       .select("*")
-      .eq("cpf", cpf)
+      .eq("tenant_id", tenantId)
+      .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
       .eq("credor", credor)
       .eq("status", "pendente")
       .order("data_vencimento", { ascending: true });
@@ -1029,6 +1037,7 @@ export const registerAgreementPayment = async (
       const { error: updateError } = await supabase
         .from("clients")
         .update(updateData)
+        .eq("tenant_id", tenantId)
         .eq("id", title.id);
 
       if (updateError) throw updateError;
@@ -1051,15 +1060,23 @@ export const registerAgreementPayment = async (
 export const reverseAgreementPayment = async (
   cpf: string,
   credor: string,
-  valor: number
+  valor: number,
+  tenantId: string,
 ): Promise<void> => {
   try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
     if (valor <= 0) return;
+
+    const rawCpf = (cpf || "").replace(/\D/g, "");
+    const fmtCpf = rawCpf.length === 11
+      ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+      : rawCpf;
 
     const { data: titles, error } = await supabase
       .from("clients")
       .select("*")
-      .eq("cpf", cpf)
+      .eq("tenant_id", tenantId)
+      .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
       .eq("credor", credor)
       .gt("valor_pago", 0)
       .order("data_quitacao", { ascending: false, nullsFirst: false })
@@ -1089,6 +1106,7 @@ export const reverseAgreementPayment = async (
       const { error: updateError } = await supabase
         .from("clients")
         .update(updateData)
+        .eq("tenant_id", tenantId)
         .eq("id", title.id);
 
       if (updateError) throw updateError;
