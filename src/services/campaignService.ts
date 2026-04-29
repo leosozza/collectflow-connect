@@ -297,21 +297,7 @@ async function recalculateCampaignScoresFallback(campaignId: string): Promise<{ 
   endExclusive.setDate(endExclusive.getDate() + 1);
   const endExclusiveStr = endExclusive.toISOString().slice(0, 10);
 
-  const { data: campaignCredores } = await supabase
-    .from("campaign_credores")
-    .select("credor_id")
-    .eq("campaign_id", campaignId)
-    .eq("tenant_id", tenantId);
-
-  let credorNames: string[] | null = null;
-  if (campaignCredores && campaignCredores.length > 0) {
-    const { data: credores } = await supabase
-      .from("credores")
-      .select("razao_social")
-      .in("id", campaignCredores.map((cc: any) => cc.credor_id));
-    credorNames = (credores || []).map((c: any) => c.razao_social).filter(Boolean);
-    if (credorNames.length === 0) credorNames = null;
-  }
+  const credorNames = await fetchCampaignCredorNames(campaignId, tenantId);
 
   const { data: participants } = await supabase
     .from("campaign_participants")
@@ -340,6 +326,23 @@ async function recalculateCampaignScoresFallback(campaignId: string): Promise<{ 
   }
 
   return { updated };
+}
+
+async function fetchCampaignCredorNames(campaignId: string, tenantId: string): Promise<string[] | null> {
+  const { data: campaignCredores } = await supabase
+    .from("campaign_credores")
+    .select("credor_id")
+    .eq("campaign_id", campaignId)
+    .eq("tenant_id", tenantId);
+
+  if (!campaignCredores || campaignCredores.length === 0) return null;
+
+  const { data: credores } = await supabase
+    .from("credores")
+    .select("razao_social")
+    .in("id", campaignCredores.map((cc: { credor_id: string }) => cc.credor_id));
+  const names = (credores || []).map((c: { razao_social?: string | null }) => c.razao_social).filter(Boolean) as string[];
+  return names.length > 0 ? names : null;
 }
 
 async function computeCampaignScoreFallback(params: {
