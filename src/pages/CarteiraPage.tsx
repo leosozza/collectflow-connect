@@ -756,10 +756,10 @@ const CarteiraPage = () => {
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
       {/* Banner: seleção acumulada entre páginas + opção de selecionar tudo */}
-      {selectedIds.size > 0 && totalCount > selectedIds.size && !selectAllFiltered && (
+      {selectedCpfs.size > 0 && totalCount > selectedCpfs.size && !selectAllFiltered && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
-          <span className="font-medium">{selectedIds.size.toLocaleString("pt-BR")}</span>{" "}
-          registro(s) selecionado(s) (a seleção é mantida ao trocar de página).{" "}
+          <span className="font-medium">{selectedCpfs.size.toLocaleString("pt-BR")}</span>{" "}
+          cliente(s) selecionado(s) (a seleção é mantida ao trocar de página).{" "}
           <Button
             variant="link"
             size="sm"
@@ -778,7 +778,7 @@ const CarteiraPage = () => {
             variant="link"
             size="sm"
             className="text-muted-foreground font-medium px-1 h-auto"
-            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
+            onClick={() => { setSelectedIds(new Set()); setSelectedCpfs(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
           >
             Limpar seleção
           </Button>
