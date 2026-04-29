@@ -426,6 +426,12 @@ const AnalyticsPage = () => {
                 <p className="text-xs text-muted-foreground">% de Recebimento</p>
                 <p className="text-xl font-bold text-foreground">{percentRecebimento}%</p>
               </div>
+              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
+                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos criados hoje (entrada ou 1ª parcela)." /></div>
+                <Award className="w-5 h-5 text-primary mx-auto mb-1" />
+                <p className="text-xs text-muted-foreground">Ticket Médio do Dia</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedioDia)}</p>
+              </div>
             </>
           ) : (
             <>
