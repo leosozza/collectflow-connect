@@ -97,13 +97,21 @@ const GamificacaoPage = () => {
   const { data: adminAchievements = [] } = useQuery({
     queryKey: ["all-achievements-count", tenant?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: achievements, error } = await supabase
         .from("achievements")
-        .select("id, profiles!inner(role)")
-        .eq("tenant_id", tenant!.id)
-        .in("profiles.role", ["operador", "supervisor", "gerente"] as any);
+        .select("id, profile_id")
+        .eq("tenant_id", tenant!.id);
       if (error) throw error;
-      return data || [];
+      const profileIds = [...new Set((achievements || []).map((a: any) => a.profile_id))];
+      if (profileIds.length === 0) return [];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("tenant_id", tenant!.id)
+        .in("role", ["operador", "supervisor", "gerente"] as any)
+        .in("id", profileIds);
+      const eligibleIds = new Set((profiles || []).map((p: any) => p.id));
+      return (achievements || []).filter((a: any) => eligibleIds.has(a.profile_id));
     },
     enabled: isTenantAdmin && !!tenant?.id,
   });
