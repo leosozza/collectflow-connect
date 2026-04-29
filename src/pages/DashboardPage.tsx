@@ -172,6 +172,39 @@ const DashboardPage = () => {
     refetchInterval: 60_000,
   });
 
+  // Ticket médio dos acordos do dia: total_negociado_dia / acordos_dia.
+  // Usa a mesma lógica do RPC get_dashboard_stats para `_negociado`,
+  // mas filtrando apenas os acordos criados HOJE.
+  const { data: ticketMedioDia = 0 } = useQuery({
+    queryKey: ["dashboard-ticket-medio-dia", rpcUserId, rpcUserIdsKey, profile?.tenant_id],
+    queryFn: async () => {
+      if (!profile?.tenant_id) return 0;
+      const today = new Date().toISOString().slice(0, 10);
+      let q = supabase
+        .from("agreements")
+        .select("entrada_value, new_installment_value, custom_installment_values, created_by")
+        .eq("tenant_id", profile.tenant_id)
+        .gte("created_at", `${today}T00:00:00Z`)
+        .lte("created_at", `${today}T23:59:59Z`)
+        .not("status", "in", "(cancelled,rejected)");
+      if (rpcUserIds) q = q.in("created_by", rpcUserIds);
+      else if (rpcUserId) q = q.eq("created_by", rpcUserId);
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!data?.length) return 0;
+      const total = data.reduce((acc, a: any) => {
+        const civ = a.custom_installment_values || {};
+        const v = Number(a.entrada_value) > 0
+          ? Number(civ.entrada ?? a.entrada_value)
+          : Number(civ["1"] ?? a.new_installment_value ?? 0);
+        return acc + (Number.isFinite(v) ? v : 0);
+      }, 0);
+      return total / data.length;
+    },
+    enabled: !!profile?.tenant_id,
+    refetchInterval: 60_000,
+  });
+
   // Vencimentos
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
@@ -381,7 +414,7 @@ const DashboardPage = () => {
       >
         <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(200px,auto)] items-stretch"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 auto-rows-[minmax(220px,auto)] items-stretch"
             style={{ gridAutoFlow: "dense" }}
           >
             {visibleOrder.map((id) => (
