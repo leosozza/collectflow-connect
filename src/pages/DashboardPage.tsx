@@ -18,8 +18,7 @@ import ParcelasProgramadasCard, {
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
-import KpisOperacionaisCard from "@/components/dashboard/KpisOperacionaisCard";
-import KpisFinanceirosCard from "@/components/dashboard/KpisFinanceirosCard";
+import KpisGridCard from "@/components/dashboard/KpisGridCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 
 const generateYearOptions = () => {
@@ -52,12 +51,6 @@ interface DashboardStats {
   total_pendente_mes_anterior: number;
 }
 
-type TicketAgreementRow = {
-  entrada_value: number | null;
-  new_installment_value: number | null;
-  custom_installment_values: unknown;
-};
-
 function pctDelta(
   current: number,
   previous: number,
@@ -77,33 +70,6 @@ function pctDelta(
     value: `${sign}${rounded}%`,
     isPositive: invert ? !isUp : isUp,
   };
-}
-
-function parseCurrencyLike(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getCustomInstallmentValue(
-  customValues: unknown,
-  key: "entrada" | "1"
-): number | null {
-  if (!customValues || typeof customValues !== "object" || Array.isArray(customValues)) {
-    return null;
-  }
-  return parseCurrencyLike((customValues as Record<string, unknown>)[key]);
-}
-
-function getAgreementTicketBase(row: TicketAgreementRow): number {
-  const entradaValue = Number(row.entrada_value || 0);
-  if (entradaValue > 0) {
-    return getCustomInstallmentValue(row.custom_installment_values, "entrada") ?? entradaValue;
-  }
-  return (
-    getCustomInstallmentValue(row.custom_installment_values, "1") ??
-    Number(row.new_installment_value || 0)
-  );
 }
 
 const DashboardPage = () => {
@@ -174,35 +140,6 @@ const DashboardPage = () => {
     refetchInterval: 60_000,
   });
 
-  const todayKey = format(now, "yyyy-MM-dd");
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const { data: ticketMedioDia = 0 } = useQuery({
-    queryKey: ["dashboard-ticket-medio-dia", todayKey, rpcUserId, rpcUserIdsKey, profile?.tenant_id],
-    queryFn: async () => {
-      let query = supabase
-        .from("agreements")
-        .select("entrada_value, new_installment_value, custom_installment_values")
-        .eq("tenant_id", profile!.tenant_id!)
-        .not("status", "in", "(cancelled,rejected)")
-        .gte("created_at", todayStart.toISOString())
-        .lt("created_at", tomorrowStart.toISOString());
-
-      if (rpcUserIds) query = query.in("created_by", rpcUserIds);
-      else if (rpcUserId) query = query.eq("created_by", rpcUserId);
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      const rows = (data || []) as TicketAgreementRow[];
-      if (rows.length === 0) return 0;
-      const total = rows.reduce((sum, row) => sum + getAgreementTicketBase(row), 0);
-      return total / rows.length;
-    },
-    enabled: !!profile?.tenant_id,
-    refetchInterval: 60_000,
-  });
-
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
     queryKey: ["dashboard-vencimentos", browseDateStr, rpcUserId, rpcUserIdsKey],
@@ -241,69 +178,6 @@ const DashboardPage = () => {
   const trendPendentes = stats ? pctDelta(stats.total_pendente ?? 0, stats.total_pendente_mes_anterior ?? 0, true) : null;
 
   const isVisible = (id: DashboardBlockId) => layout.visible[id];
-
-  const renderBlock = (id: DashboardBlockId) => {
-    switch (id) {
-      case "kpisOperacionais":
-        return (
-          <KpisOperacionaisCard
-            acionadosHoje={acionadosHoje}
-            acordosDia={stats?.acordos_dia ?? 0}
-            acordosMes={stats?.acordos_mes ?? 0}
-            ticketMedioDia={ticketMedioDia}
-            trendAcionados={trendAcionados}
-            trendAcordosDia={trendAcordosDia}
-            trendAcordosMes={trendAcordosMes}
-          />
-        );
-      case "kpisFinanceiros":
-        return (
-          <KpisFinanceirosCard
-            quebra={stats?.total_quebra ?? 0}
-            pendentes={stats?.total_pendente ?? 0}
-            colchao={stats?.total_projetado ?? 0}
-            trendQuebra={trendQuebra}
-            trendPendentes={trendPendentes}
-          />
-        );
-      case "metas":
-        return (
-          <DashboardMetaCard
-            year={filterYear ?? now.getFullYear()}
-            month={filterMonth ?? now.getMonth() + 1}
-            monthLabel={new Date(
-              filterYear ?? now.getFullYear(),
-              (filterMonth ?? now.getMonth() + 1) - 1,
-              1
-            ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
-            selectedOperatorUserId={
-              selectedOperators.length === 1 ? selectedOperators[0] : null
-            }
-            received={stats?.total_recebido ?? 0}
-          />
-        );
-      case "agendamentos":
-        return (
-          <AgendamentosHojeCard
-            callbacks={callbacks}
-            showOperator={canViewAllAgendados}
-          />
-        );
-      case "totalRecebido":
-        return <TotalRecebidoCard totalRecebido={stats?.total_recebido ?? 0} />;
-      case "parcelas":
-        return (
-          <ParcelasProgramadasCard
-            vencimentos={vencimentos}
-            browseDate={browseDate}
-            onNavigateDate={navigateDate}
-            onPickDate={setBrowseDate}
-          />
-        );
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="flex flex-col gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
@@ -373,35 +247,62 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 md:grid-cols-2 xl:grid-cols-12 xl:grid-rows-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-3">
-        {isVisible("kpisOperacionais") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:row-start-1">
-            {renderBlock("kpisOperacionais")}
-          </section>
-        )}
-        {isVisible("kpisFinanceiros") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-5 xl:row-start-1">
-            {renderBlock("kpisFinanceiros")}
+      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 md:grid-cols-2 xl:grid-cols-12 xl:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3">
+        {isVisible("metas") && (
+          <section className="min-h-0 h-full xl:col-span-3 xl:row-start-1">
+            <DashboardMetaCard
+              year={filterYear ?? now.getFullYear()}
+              month={filterMonth ?? now.getMonth() + 1}
+              monthLabel={new Date(
+                filterYear ?? now.getFullYear(),
+                (filterMonth ?? now.getMonth() + 1) - 1,
+                1
+              ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+              selectedOperatorUserId={
+                selectedOperators.length === 1 ? selectedOperators[0] : null
+              }
+              received={stats?.total_recebido ?? 0}
+            />
           </section>
         )}
         {isVisible("totalRecebido") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-9 xl:row-start-1">
-            {renderBlock("totalRecebido")}
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-6 xl:col-start-4 xl:row-start-1">
+            <TotalRecebidoCard totalRecebido={stats?.total_recebido ?? 0} />
+          </section>
+        )}
+        {isVisible("kpisGrid") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-3 xl:col-start-10 xl:row-start-1">
+            <KpisGridCard
+              acionadosHoje={acionadosHoje}
+              acordosDia={stats?.acordos_dia ?? 0}
+              acordosMes={stats?.acordos_mes ?? 0}
+              quebra={stats?.total_quebra ?? 0}
+              pendentes={stats?.total_pendente ?? 0}
+              colchao={stats?.total_projetado ?? 0}
+              trendAcionados={trendAcionados}
+              trendAcordosDia={trendAcordosDia}
+              trendAcordosMes={trendAcordosMes}
+              trendQuebra={trendQuebra}
+              trendPendentes={trendPendentes}
+            />
           </section>
         )}
         {isVisible("agendamentos") && (
-          <section className="min-h-0 h-full xl:col-span-4 xl:row-start-2">
-            {renderBlock("agendamentos")}
+          <section className="min-h-0 h-full xl:col-span-3 xl:col-start-1 xl:row-start-2">
+            <AgendamentosHojeCard
+              callbacks={callbacks}
+              showOperator={canViewAllAgendados}
+            />
           </section>
         )}
         {isVisible("parcelas") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-5 xl:row-start-2">
-            {renderBlock("parcelas")}
-          </section>
-        )}
-        {isVisible("metas") && (
-          <section className="min-h-0 h-full xl:col-span-4 xl:col-start-9 xl:row-start-2">
-            {renderBlock("metas")}
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-6 xl:col-start-4 xl:row-start-2">
+            <ParcelasProgramadasCard
+              vencimentos={vencimentos}
+              browseDate={browseDate}
+              onNavigateDate={navigateDate}
+              onPickDate={setBrowseDate}
+            />
           </section>
         )}
       </div>
