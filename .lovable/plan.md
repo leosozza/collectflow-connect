@@ -1,56 +1,46 @@
-## Adicionar rotas para edição de credor (incluindo abas internas)
+## Diagnosticar e corrigir erro ao editar mensagem do WhatsApp
 
-Hoje, ao clicar em **Editar** em um credor, abre um `Sheet` em cima sem mexer na URL. As abas internas (Dados, Bancário, Negociação, Régua, **Personalização**, Assinatura, Portal) também não estão na URL — então é impossível enviar link, recarregar a página ou voltar pelo navegador.
+O toast mostra apenas `"Edge Function returned a non-2xx status code"`, que é a mensagem genérica do SDK do Supabase quando a edge function retorna 4xx/5xx. **Essa mensagem não é o erro real** — ela esconde a causa.
 
-A página `/cadastros/:tab` já tem rota. O que falta são rotas para o **credor selecionado** e para a **aba interna** dele.
+Os logs mais recentes da função `manage-chat-message` só mostram `shutdown` (sem `[manage-chat-message] fatal`, sem chamadas de `console.error`), e o analytics não retornou execuções dela na última hora — ou seja, ou ela está respondendo com erro **antes** de qualquer log custom (pouco provável), ou o front está engolindo o erro sem expor o `body.error` retornado pela função.
 
-### Rotas novas
+### Causas prováveis (ordenadas)
 
-```
-/cadastros/credores                              → lista (já existe)
-/cadastros/credores/novo                         → abre o formulário em modo "novo"
-/cadastros/credores/:credorId                    → abre o formulário do credor (aba padrão: dados)
-/cadastros/credores/:credorId/:section           → abre na aba específica
-   sections válidas: dados | bancario | negociacao | regua | personalizacao | assinatura | portal
-```
-
-Exemplos:
-- `/cadastros/credores/abc-123/personalizacao`
-- `/cadastros/credores/abc-123/portal`
-- `/cadastros/credores/novo`
+1. **Evolution `/chat/updateMessage/{instance}` retornou erro** (HTTP 400/500) — comum quando:
+   - A mensagem original tem mais de 15 minutos no WhatsApp (mesmo passando na nossa checagem de 15 min em `created_at`, o WhatsApp pode rejeitar).
+   - O `provider_message_id`/`external_id` da mensagem foi gravado com formato diferente do esperado pela Evolution (ex.: prefix de remoteJid, JID com sufixo `_alt`).
+   - A instância está em `connecting`/desconectada.
+2. **Mensagem é `template/interactive`** mas marcada como `text`, ou foi enviada via **Gupshup** (oficial) — `editByProvider` retorna explicitamente "Edição de mensagem não é suportada pela API oficial (Gupshup/Meta).". O texto `Ok` cabe nas duas hipóteses.
+3. **`extractFunctionError` no front falha** ao ler `error.context.response` (o SDK do Supabase nem sempre expõe `clone()` corretamente para erros HTTP), então o usuário só vê a string genérica.
 
 ### Mudanças
 
-1. **`src/App.tsx`** — substituir a rota única por:
-   ```tsx
-   <Route path="cadastros/:tab?" element={<CadastrosPage />} />
-   <Route path="cadastros/credores/novo" element={<CadastrosPage />} />
-   <Route path="cadastros/credores/:credorId/:section?" element={<CadastrosPage />} />
-   ```
+1. **Frontend — exibir o erro real (`src/services/conversationService.ts`)**
+   - Refatorar `extractFunctionError` para aguardar `error?.context?.text()` / `error?.context?.json()` (formato moderno do `FunctionsHttpError`) **antes** de cair no `error.message`.
+   - Tentar nesta ordem: `data.error` → `error.context.json()` (resp body como JSON) → `error.context.text()` → `error.message` → fallback.
+   - Resultado: o toast passa a mostrar exatamente o motivo (ex.: "Edição permitida apenas nos primeiros 15 minutos", "Edição não suportada pela API oficial", "HTTP 400 do provider", etc.).
 
-2. **`src/pages/CadastrosPage.tsx`** — quando os params `credorId` ou rota `/novo` estiverem presentes:
-   - Forçar `active = "credores"` no menu lateral (para destacar a seção correta).
-   - Renderizar `<CredorList />` normalmente (mostra a lista atrás) e abrir `CredorForm` controlado pelos params.
-   - Buscar o credor correspondente pelo `credorId` para passar como `editing` ao `CredorForm`.
+2. **Edge function — logs detalhados (`supabase/functions/manage-chat-message/index.ts`)**
+   - Adicionar `console.log("[manage-chat-message] start", { messageId, action })` no início.
+   - Logar o resultado do provider em caso de falha: `console.error("[manage-chat-message] provider error", { provider, error, providerMessageId })`.
+   - Logar `console.log("[manage-chat-message] success", { provider, action })` ao final.
+   - Assim conseguimos ver no painel de logs o que a Evolution respondeu na próxima tentativa.
 
-3. **`src/components/cadastros/CredorList.tsx`** — substituir o estado local `editing/formOpen` por navegação:
-   - `openNew()` → `navigate("/cadastros/credores/novo")`
-   - `openEdit(c)` → `navigate("/cadastros/credores/${c.id}")`
-   - Remover o `<CredorForm>` daqui (passa a ser renderizado pela página).
+3. **Edge function — incluir status HTTP do provider no payload de erro (`_shared/whatsapp-sender.ts`)**
+   - Em `editByProvider`, anexar `httpStatus` ao retorno em caso de erro Evolution/WuzAPI: `{ ok: false, error, httpStatus: resp.status, providerBody: result }`.
+   - Em `index.ts`, ao retornar 502, propagar esse contexto: `json({ error: providerResult.error, provider: providerResult.provider, httpStatus: providerResult.httpStatus, providerBody: providerResult.result }, 502)`.
+   - O front (após mudança 1) vai exibir esse JSON ou string.
 
-4. **`src/components/cadastros/CredorForm.tsx`** — sincronizar a aba interna com a URL:
-   - Trocar `<Tabs defaultValue="dados">` por `<Tabs value={section} onValueChange={(v) => navigate('/cadastros/credores/${id || "novo"}/${v}', { replace: true })}>`.
-   - `section` vem dos params (`useParams`) com fallback `"dados"`.
-   - Validar contra a lista de seções permitidas; se inválida, redireciona para `dados`.
-   - Ao fechar o Sheet (`onOpenChange(false)`) → `navigate("/cadastros/credores")`.
-   - Quando `editing?.id` muda (após criar um novo credor), atualizar a URL para `/cadastros/credores/:novoId/:section`.
+4. **UI — desativar botão "Editar" quando provider é Gupshup (oficial)**
+   - Em `src/components/contact-center/whatsapp/ChatMessage.tsx`, na flag `canEdit`, considerar a propriedade do provider da conversa/instância (já temos no contexto). Se for Gupshup, esconder a opção do menu e o ícone de edição, evitando o erro.
+   - Se a info de provider não está disponível ali, expor via `useConversationContext`/prop e propagar.
 
-### Comportamento resultante
-- Cada aba do credor passa a ter URL própria, copiável e recarregável.
-- O botão "voltar" do navegador funciona entre abas.
-- Abrir `/cadastros/credores/abc/personalizacao` direto cai já com o formulário aberto na aba certa.
-- Fechar o credor volta para `/cadastros/credores` (lista).
+### Resultado esperado
+
+- Próxima tentativa: o usuário verá no toast uma mensagem real (ex.: `"WhatsApp respondeu HTTP 400: messageId expired"` ou similar), e teremos logs de servidor para fechar o diagnóstico.
+- Se a causa for Gupshup, a opção nem aparece mais no menu.
+- Se a causa for Evolution recusando a edição, fica claro qual o motivo (janela do WhatsApp, JID inválido, instância offline) e pode ser tratado pontualmente.
 
 ### Fora de escopo
-- Não muda nada visualmente nas abas/sheet — só sincroniza estado com URL.
-- Outras seções (`/cadastros/usuarios`, `/cadastros/equipes` etc.) continuam funcionando como hoje, pois a rota `/cadastros/:tab?` é mantida.
+- Não vamos mudar o limite de 15 min (já é regra do produto).
+- Não vamos implementar uma forma alternativa de "edição" (envio de nova mensagem citando) sem o usuário pedir.
