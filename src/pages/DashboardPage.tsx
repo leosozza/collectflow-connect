@@ -1,19 +1,12 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { formatCurrency } from "@/lib/formatters";
+
 import { Button } from "@/components/ui/button";
 import {
   BarChart3,
   FileText,
-  Phone,
-  FileCheck,
-  CalendarCheck,
   Settings2,
-  Handshake,
-  TrendingDown,
-  Hourglass,
-  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,9 +23,10 @@ import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
 import KpisOperacionaisCard from "@/components/dashboard/KpisOperacionaisCard";
+import KpisFinanceirosCard from "@/components/dashboard/KpisFinanceirosCard";
 import SortableCard from "@/components/dashboard/SortableCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
-import { cn } from "@/lib/utils";
+
 import {
   DndContext,
   DragEndEvent,
@@ -178,6 +172,39 @@ const DashboardPage = () => {
     refetchInterval: 60_000,
   });
 
+  // Ticket médio dos acordos do dia: total_negociado_dia / acordos_dia.
+  // Usa a mesma lógica do RPC get_dashboard_stats para `_negociado`,
+  // mas filtrando apenas os acordos criados HOJE.
+  const { data: ticketMedioDia = 0 } = useQuery({
+    queryKey: ["dashboard-ticket-medio-dia", rpcUserId, rpcUserIdsKey, profile?.tenant_id],
+    queryFn: async () => {
+      if (!profile?.tenant_id) return 0;
+      const today = new Date().toISOString().slice(0, 10);
+      let q = supabase
+        .from("agreements")
+        .select("entrada_value, new_installment_value, custom_installment_values, created_by")
+        .eq("tenant_id", profile.tenant_id)
+        .gte("created_at", `${today}T00:00:00Z`)
+        .lte("created_at", `${today}T23:59:59Z`)
+        .not("status", "in", "(cancelled,rejected)");
+      if (rpcUserIds) q = q.in("created_by", rpcUserIds);
+      else if (rpcUserId) q = q.eq("created_by", rpcUserId);
+      const { data, error } = await q;
+      if (error) throw error;
+      if (!data?.length) return 0;
+      const total = data.reduce((acc, a: any) => {
+        const civ = a.custom_installment_values || {};
+        const v = Number(a.entrada_value) > 0
+          ? Number(civ.entrada ?? a.entrada_value)
+          : Number(civ["1"] ?? a.new_installment_value ?? 0);
+        return acc + (Number.isFinite(v) ? v : 0);
+      }, 0);
+      return total / data.length;
+    },
+    enabled: !!profile?.tenant_id,
+    refetchInterval: 60_000,
+  });
+
   // Vencimentos
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
@@ -210,19 +237,17 @@ const DashboardPage = () => {
     });
   };
 
-  // Span (Tailwind classes) per block — col & row spans for the 3-column grid.
-  // Mobile (default): 1 col, 1 row stacking.
-  // Tablet (md, 2 cols): parcelas spans 2 cols.
-  // Desktop (lg, 3 cols): full spec applies.
+  // Span (Tailwind classes) per block — grid 6 colunas no desktop.
+  // Linha 1 (topo): KPIs Operacionais (3 cols) | KPIs Financeiros (3 cols)
+  // Linha 2 (base): Agendamentos (2) | Parcelas (2) | Metas (2)
+  // Linha 3 (extra): Total Recebido (6 cols)
   const SPAN_CLASS: Record<DashboardBlockId, string> = {
-    metas: "col-span-1 row-span-1",
-    totalRecebido: "col-span-1 row-span-1",
-    kpisOperacionais: "col-span-1 row-span-1",
-    agendamentos: "col-span-1 row-span-1",
-    parcelas: "col-span-1 row-span-1",
-    totalQuebra: "col-span-1 row-span-1",
-    pendentes: "col-span-1 row-span-1",
-    colchaoAcordos: "col-span-1 row-span-1",
+    kpisOperacionais: "col-span-1 md:col-span-2 lg:col-span-3 row-span-1",
+    kpisFinanceiros: "col-span-1 md:col-span-2 lg:col-span-3 row-span-1",
+    agendamentos: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
+    parcelas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
+    metas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
+    totalRecebido: "col-span-1 md:col-span-2 lg:col-span-6 row-span-1",
   };
 
   const sensors = useSensors(
@@ -246,88 +271,8 @@ const DashboardPage = () => {
   const trendQuebra = stats ? pctDelta(stats.total_quebra ?? 0, stats.total_quebra_mes_anterior ?? 0, true) : null;
   const trendPendentes = stats ? pctDelta(stats.total_pendente ?? 0, stats.total_pendente_mes_anterior ?? 0, true) : null;
 
-  type KpiSpec = {
-    label: string;
-    value: string;
-    Icon: React.ElementType;
-    iconColor: string;
-    iconBg: string;
-    trend?: { value: string; text: string; isPositive: boolean };
-  };
-
-  const kpiMap: Partial<Record<DashboardBlockId, KpiSpec>> = {
-    totalQuebra: {
-      label: "Total de Quebra",
-      value: formatCurrency(stats?.total_quebra ?? 0),
-      Icon: TrendingDown,
-      iconColor: "text-red-500",
-      iconBg: "bg-red-500/10",
-      trend: trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : undefined,
-    },
-    pendentes: {
-      label: "Pendentes",
-      value: formatCurrency(stats?.total_pendente ?? 0),
-      Icon: Hourglass,
-      iconColor: "text-amber-500",
-      iconBg: "bg-amber-500/10",
-      trend: trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : undefined,
-    },
-    colchaoAcordos: {
-      label: "Colchão de Acordos",
-      value: formatCurrency(stats?.total_projetado ?? 0),
-      Icon: Wallet,
-      iconColor: "text-indigo-500",
-      iconBg: "bg-indigo-500/10",
-    },
-  };
-
-  const renderKpiTile = (item: KpiSpec) => {
-    const ItemIcon = item.Icon;
-    const isMoney = item.value.startsWith("R$");
-    return (
-      <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col justify-between min-w-0 h-full">
-        <div className="min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
-              <ItemIcon className={cn("w-4 h-4", item.iconColor)} />
-            </div>
-          </div>
-          <p className="text-[11px] text-muted-foreground font-medium leading-tight mb-1 break-words">
-            {item.label}
-          </p>
-          <p
-            className={cn(
-              "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
-              isMoney ? "text-base" : "text-xl"
-            )}
-          >
-            {item.value}
-          </p>
-        </div>
-        {item.trend && (
-          <div className="mt-2 text-[10px] flex items-center gap-1 flex-wrap leading-tight">
-            <span
-              className={cn(
-                "font-bold tracking-tight",
-                item.trend.isPositive ? "text-success" : "text-destructive"
-              )}
-            >
-              {item.trend.value}
-            </span>
-            <span className="text-muted-foreground font-medium truncate">
-              {item.trend.text}
-            </span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // Renders the inner content for each block id.
   const renderBlock = (id: DashboardBlockId) => {
-    const kpi = kpiMap[id];
-    if (kpi) return renderKpiTile(kpi);
-
     switch (id) {
       case "kpisOperacionais":
         return (
@@ -335,9 +280,20 @@ const DashboardPage = () => {
             acionadosHoje={acionadosHoje}
             acordosDia={stats?.acordos_dia ?? 0}
             acordosMes={stats?.acordos_mes ?? 0}
+            ticketMedioDia={ticketMedioDia}
             trendAcionados={trendAcionados}
             trendAcordosDia={trendAcordosDia}
             trendAcordosMes={trendAcordosMes}
+          />
+        );
+      case "kpisFinanceiros":
+        return (
+          <KpisFinanceirosCard
+            quebra={stats?.total_quebra ?? 0}
+            pendentes={stats?.total_pendente ?? 0}
+            colchao={stats?.total_projetado ?? 0}
+            trendQuebra={trendQuebra}
+            trendPendentes={trendPendentes}
           />
         );
       case "metas":
@@ -458,7 +414,7 @@ const DashboardPage = () => {
       >
         <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(200px,auto)] items-stretch"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 auto-rows-[minmax(220px,auto)] items-stretch"
             style={{ gridAutoFlow: "dense" }}
           >
             {visibleOrder.map((id) => (

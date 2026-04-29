@@ -29,22 +29,18 @@ const LABELS: Record<DashboardBlockId, string> = {
   metas: "Meta do Mês",
   totalRecebido: "Total Recebido",
   kpisOperacionais: "KPIs Operacionais",
+  kpisFinanceiros: "KPIs Financeiros",
   agendamentos: "Agendamentos para Hoje",
   parcelas: "Parcelas Programadas",
-  totalQuebra: "Total de Quebra",
-  pendentes: "Pendentes",
-  colchaoAcordos: "Colchão de Acordos",
 };
 
 const DESCRIPTIONS: Record<DashboardBlockId, string> = {
-  metas: "Progresso da meta mensal",
+  metas: "Progresso da meta mensal (velocímetro)",
   totalRecebido: "Gráfico de recebimentos",
-  kpisOperacionais: "Acionados hoje, acordos do dia e do mês",
+  kpisOperacionais: "Acionados, acordos do dia, do mês e ticket médio",
+  kpisFinanceiros: "Total de Quebra, Pendentes e Colchão de Acordos",
   agendamentos: "Callbacks agendados para hoje",
   parcelas: "Vencimentos do dia",
-  totalQuebra: "Valor total de quebra de acordos",
-  pendentes: "Valor pendente de pagamento",
-  colchaoAcordos: "Total projetado em acordos",
 };
 
 export default function CustomizeDashboardDialog({
