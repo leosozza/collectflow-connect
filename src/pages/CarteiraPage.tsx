@@ -15,6 +15,7 @@ import {
   fetchAllCarteiraIds,
   fetchAllCarteiraClients,
   fetchCarteiraClientsByIds,
+  fetchFirstNCarteiraSelection,
   createClient,
   updateClient,
   bulkCreateClients,
