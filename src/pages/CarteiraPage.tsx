@@ -791,7 +791,7 @@ const CarteiraPage = () => {
             variant="link"
             size="sm"
             className="text-primary font-semibold px-1 h-auto"
-            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
+            onClick={() => { setSelectedIds(new Set()); setSelectedCpfs(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
           >
             Limpar seleção
           </Button>
