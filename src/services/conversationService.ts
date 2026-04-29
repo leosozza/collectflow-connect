@@ -362,20 +362,50 @@ export async function deleteConversation(id: string) {
   if (error) throw error;
 }
 
+/**
+ * Extracts the real error message from a Supabase Functions invocation.
+ * The SDK returns a generic "Edge Function returned a non-2xx status code"
+ * for any HTTP error; the actual `{ error: "..." }` body is hidden inside
+ * `error.context.response`. We read it and surface it to the user.
+ */
+async function extractFunctionError(
+  error: any,
+  data: any,
+  fallback: string,
+): Promise<string> {
+  if (data?.error) return String(data.error);
+  try {
+    const resp = error?.context?.response;
+    if (resp && typeof resp.clone === "function") {
+      const body = await resp.clone().json().catch(() => null);
+      if (body?.error) return String(body.error);
+      const text = await resp.clone().text().catch(() => "");
+      if (text && text.length < 500) return text;
+    }
+  } catch {
+    // ignore — fall through to fallback
+  }
+  return error?.message || fallback;
+}
+
 export async function deleteChatMessageForRecipient(messageId: string): Promise<void> {
   const { data, error } = await supabase.functions.invoke("manage-chat-message", {
     body: { messageId, action: "delete" },
   });
-  if (error) throw new Error(error.message || "Erro ao excluir mensagem");
-  if (data?.error) throw new Error(data.error);
+  if (error || data?.error) {
+    const msg = await extractFunctionError(error, data, "Erro ao excluir mensagem");
+    throw new Error(msg);
+  }
 }
 
 export async function editChatMessage(messageId: string, newText: string): Promise<void> {
   const { data, error } = await supabase.functions.invoke("manage-chat-message", {
     body: { messageId, action: "edit", newText },
   });
-  if (error) throw new Error(error.message || "Erro ao editar mensagem");
-  if (data?.error) throw new Error(data.error);
+  if (error || data?.error) {
+    const msg = await extractFunctionError(error, data, "Erro ao editar mensagem");
+    throw new Error(msg);
+  }
 }
 
 export async function linkClientToConversation(conversationId: string, clientId: string | null) {
