@@ -731,14 +731,19 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         </TableHeader>
         <TableBody>
           {installmentsWithStatus.map((inst, idx) => {
+            const isCancelled = !!inst.isCancelled;
             const hasBoleto = inst.cobranca?.link_boleto;
             const hasLinhaDigitavel = inst.cobranca?.linha_digitavel;
             const hasPix = inst.cobranca?.pix_copia_cola;
             const isPaid = inst.status === "pago";
-            const canEdit = !isPaid && inst.status !== "pending_confirmation";
+            const canEdit = !isPaid && !isCancelled && inst.status !== "pending_confirmation";
+            const hasActiveBoleto = !!inst.cobranca && !["cancelado", "substituido", "estornado"].includes(inst.cobranca.status);
+            const isOnlyEntrada = inst.isEntrada && inst.entradaCount === 1;
+            const canCancel = !isPaid && !isCancelled && inst.status !== "pending_confirmation"
+              && !hasActiveBoleto && !isOnlyEntrada;
 
             return (
-              <TableRow key={idx}>
+              <TableRow key={idx} className={cn(isCancelled && "opacity-60 [&_td]:line-through [&_td]:decoration-muted-foreground")}>
                 <TableCell className="font-medium text-xs">
                   {inst.isEntrada
                     ? (inst.entradaCount > 1 ? `Entrada ${inst.displayNumber}` : "Entrada")
