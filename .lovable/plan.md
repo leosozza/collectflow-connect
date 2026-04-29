@@ -1,157 +1,201 @@
+# Plano: Camada de RPCs de BI para Analytics (somente backend)
 
-## Análise da auditoria
+Criar **uma única migration nova** adicionando 16 funções `SECURITY DEFINER` somente leitura (`STABLE`, apenas `SELECT`) na schema `public`, prefixadas com `get_bi_`. Nenhuma tela, função, tabela, RLS, trigger ou dado existente será tocado. Nenhum código frontend será alterado.
 
-Verifiquei cada item nos arquivos atuais. Todos os problemas relatados existem de fato:
+## Princípios
 
-- `agreementService.ts`: vários `update("clients")` sem `.eq("tenant_id", ...)` (linhas 243-248, 258-262, 566-589, 945-950) e `cancelAgreement` descobre tenant via "primeiro client do credor" (linha 538). `registerAgreementPayment`/`reverseAgreementPayment` (linhas 991-1101) recebem só `cpf+credor` e fazem update sem tenant nem CPF formatado.
-- `asaas-webhook/index.ts`: token só é validado quando o header existe (linha 57 `if (asaasAccessToken)`). Sem header → passa direto, mesmo para `platform_billing_subscriptions`.
-- `auto-status-sync/index.ts`: aceita `tenant_id` no body sem auth (linhas 268-288); `.neq("status","inactive")` pega `deleted/suspended`; agrupamento por `c.cpf` cru (linha 180); ordenação de acordos por UUID (linha 132).
-- `campaign_celebration_views`: policies usam `operator_id = auth.uid()`, mas o hook insere `profile.id` (hook linha 149).
-- `get_dashboard_vencimentos` (migração 20260429151411): para parcelas regulares, a chave do `custom_installment_values` usa `i+1`, mas a checagem em `manual_payments` usa `installment_number = (i+2 quando há entrada)`. Isso já está correto para manual_payments, porém só considera `status = 'confirmed'` (precisa também `'approved'` se ambos existirem) e não há fallback por `installment_key` em manual_payments.
-- `payment_records` no financeiro do tenant: `PaymentHistoryCard` e `fetchPaymentRecords` listam tudo, incluindo `payment_type='subscription'` (mensalidade SaaS).
-- `clients-api /whatsapp/send|bulk`: não valida que o telefone pertence ao credor da API key escopada.
+- **Apenas CREATE FUNCTION** novas (com `CREATE OR REPLACE` para idempotência futura, mas sem reusar nomes existentes).
+- `SECURITY DEFINER` + `SET search_path = public` (mesmo padrão de `get_agreement_financials`).
+- Toda RPC valida `_tenant_id` e força filtro `tenant_id = _tenant_id` em **todas** as fontes.
+- `GRANT EXECUTE ... TO authenticated`.
+- Sem `INSERT/UPDATE/DELETE`, sem alterações de schema, sem mexer em RLS.
+- Filtros opcionais ignorados quando `NULL` (padrão `coalesce`/`OR ... IS NULL`).
+- Visão consolidada de credores quando `_credor` é `NULL`; filtragem por 1+ credores quando array é passado.
 
----
+## Assinatura padrão dos filtros globais
 
-## Correções
-
-### 1. `src/services/agreementService.ts` — tenant_id explícito em todos os updates de `clients`
-
-Mudanças cirúrgicas, mantendo CPF raw + formatado:
-
-- `createAgreement` → "mark em_acordo" (≈ linhas 243-248): adicionar `.eq("tenant_id", tenantId)`.
-- `createAgreement` → "auto-assign operator" (≈ linhas 258-262): adicionar `.eq("tenant_id", tenantId)` e usar `.or(cpf.eq.${rawCpf},cpf.eq.${fmtCpf})` em vez de `.eq("cpf", data.client_cpf)`.
-- `cancelAgreement` (≈ linhas 537-590): remover o lookup `refClient`/`tenantIdLookup`. Usar `agreement.tenant_id` direto (já vem do `select("client_cpf, credor, tenant_id")`). Adicionar `.eq("tenant_id", agreement.tenant_id)` em todos os 3 updates (`status: "pendente"`, `Em dia`, `Inadimplente`). O `fetchByPapel` passa a usar `agreement.tenant_id`.
-- `reopenAgreement` (≈ linhas 945-950): adicionar `.eq("tenant_id", agreement.tenant_id)`.
-- `registerAgreementPayment` e `reverseAgreementPayment`: adicionar parâmetro `tenantId: string` na assinatura. Atualizar callers:
-  - `src/components/acordos/PaymentConfirmationTab.tsx:96/98` → passar `agr.tenant_id` (já disponível no agreement).
-  - `src/services/manualPaymentService.ts:282` → passar `tenantId` (já é parâmetro da função do serviço).
-  Dentro das funções: `.eq("tenant_id", tenantId)` no SELECT inicial e nos UPDATEs por `id`. Trocar `.eq("cpf", cpf)` por `.or("cpf.eq.${raw},cpf.eq.${fmt}")`.
-
-Não alterar lógica de distribuição/reversão — apenas escopo.
-
-### 2. `supabase/functions/asaas-webhook/index.ts` — token obrigatório para mensalidade da plataforma
-
-Refatorar `updatePlatformSubscription`:
-- Após localizar `platformSubscription`, **sempre** carregar `platform_billing_accounts.webhook_token`.
-- Se `platformAccount?.webhook_token` existir e (`!asaasAccessToken` OR `webhook_token !== asaasAccessToken`) → retornar `{ forbidden: true }`.
-- Manter retorno 401 já existente nos dois pontos de chamada (linhas 91-96 e 140-145), e **não inserir** `payment_records` quando forbidden (já é o caso pois retornamos antes do INSERT).
-- Fluxo de `token_purchase` continua sem exigir o header (mantém compatibilidade), mas mensalidade da plataforma agora é estrita.
-
-### 3. `supabase/functions/auto-status-sync/index.ts`
-
-- Single-tenant: exigir `Authorization`. Decodificar usuário com `supabase.auth.getUser(jwt)`. Permitir se:
-  - Header `apikey === SUPABASE_SERVICE_ROLE_KEY` (chamada interna/cron manual), OU
-  - Usuário autenticado é super_admin (via `super_admins` table, se existir; senão via `has_role(auth.uid(),'admin')` global), OU
-  - Usuário é `admin/gerente/supervisor` daquele `tenant_id` em `tenant_users`.
-  Caso contrário → 401.
-- Cron mode (linha 294): trocar `.neq("status","inactive")` por `.eq("status","active")`.
-- Agrupamento (linhas 178-195): a ordenação por `cpf` cru ainda funciona (postgres ordena strings), mas o **agreementKey** já normaliza CPF (`rawCpf|credor`). O bug é que `cur[0].cpf === c.cpf` compara CPF cru. Corrigir comparando por CPF normalizado:
-  ```ts
-  const norm = (s) => (s||"").replace(/\D/g,"");
-  if (cur.length === 0 || (norm(cur[0].cpf) === norm(c.cpf) && cur[0].credor === c.credor)) ...
-  ```
-  E `processGroup` usa `clients[0].cpf` em rawCpf — mantém. Para o ordering ficar correto entre formatado/não, adicionar segundo SELECT ordenando por `regexp_replace(cpf,'\D','','g')` não é trivial via PostgREST; manter ordering atual mas a comparação normalizada protege contra mistura.
-- "Último acordo cancelado" (linha 132): trocar por `.sort((a,b) => new Date(b.created_at||b.updated_at) - new Date(a.created_at||a.updated_at))`. Adicionar `created_at, updated_at` ao SELECT da linha 59.
-- Updates em `clients` já têm `.eq("tenant_id", tenant_id)` — confirmar que **todos** os 3 pontos (`flushUpdates`, expirar negociação, etc.) mantêm. Já estão OK.
-
-### 4. Nova migration: RLS de `campaign_celebration_views`
-
-Nova migration substituindo as policies (mantendo a tabela):
+Todas as 16 RPCs aceitam:
 
 ```sql
-DROP POLICY IF EXISTS "Operators view own celebration views" ON public.campaign_celebration_views;
-DROP POLICY IF EXISTS "Operators insert own celebration views" ON public.campaign_celebration_views;
-
-CREATE POLICY "Operators view own celebration views"
-  ON public.campaign_celebration_views FOR SELECT TO authenticated
-  USING (operator_id = public.get_my_profile_id() AND tenant_id = public.get_my_tenant_id());
-
-CREATE POLICY "Operators insert own celebration views"
-  ON public.campaign_celebration_views FOR INSERT TO authenticated
-  WITH CHECK (operator_id = public.get_my_profile_id() AND tenant_id = public.get_my_tenant_id());
+_tenant_id      uuid                 -- obrigatório
+_date_from      date    DEFAULT NULL
+_date_to        date    DEFAULT NULL
+_credor         text[]  DEFAULT NULL
+_operator_ids   uuid[]  DEFAULT NULL
+_channel        text[]  DEFAULT NULL
+_score_min      integer DEFAULT NULL
+_score_max      integer DEFAULT NULL
 ```
 
-Hook `useCampaignCelebrations.ts` continua igual (já usa `profile.id`).
+Cada função aplica os filtros que fazem sentido para sua fonte (ex.: `_channel` em call_logs/conversations/client_events; `_score_min/_max` em clients.propensity_score).
 
-### 5. Nova migration: `get_dashboard_vencimentos` aceitar `confirmed`+`approved`
+## Mapeamento fonte → RPC (resumo técnico)
 
-Substituir a função (sem alterar a interface/retorno) trocando todos os `mp.status = 'confirmed'` por `mp.status IN ('confirmed','approved')`. Adicionar fallback por `installment_key` em manual_payments (quando a coluna existir):
+### 1. Receita (prioridade 1)
+
+- **`get_bi_revenue_summary`** — KPIs agregados.
+  - Fonte: `agreements` + `manual_payments` (status IN ('confirmed','approved')) + `negociarie_cobrancas` (status pago).
+  - Retorna: `total_negociado numeric, total_recebido numeric, total_pendente numeric, total_quebra numeric, ticket_medio numeric, qtd_acordos int, qtd_acordos_ativos int, qtd_quebras int`.
+  - Janela por `agreements.created_at` entre `_date_from`/`_date_to`.
+
+- **`get_bi_revenue_by_period`(`_granularity text DEFAULT 'month'`)** — série temporal.
+  - Retorna: `period date, total_negociado numeric, total_recebido numeric, qtd_acordos int`.
+  - `_granularity` ∈ `'day'|'week'|'month'` via `date_trunc`.
+
+- **`get_bi_revenue_by_credor`** — quebra por credor.
+  - Retorna: `credor text, total_negociado numeric, total_recebido numeric, total_pendente numeric, qtd_acordos int, ticket_medio numeric`.
+
+- **`get_bi_revenue_comparison`** — período atual vs período anterior equivalente.
+  - Retorna: `metric text, current_value numeric, previous_value numeric, delta_abs numeric, delta_pct numeric`.
+  - Métricas: `recebido`, `negociado`, `qtd_acordos`, `ticket_medio`.
+
+### 2. Qualidade / Quebra (prioridade 2)
+
+- **`get_bi_breakage_analysis`** — visão geral de quebras.
+  - Fonte: `agreements WHERE status='cancelled' OR cancellation_type IS NOT NULL`.
+  - Retorna: `qtd_total int, qtd_quebra int, taxa_quebra numeric, valor_perdido numeric, motivo text, qtd_motivo int` (agrupado por `cancellation_type`).
+
+- **`get_bi_breakage_by_operator`** — quebra por operador.
+  - Join `agreements.created_by → profiles.user_id`.
+  - Retorna: `operator_id uuid, operator_name text, qtd_acordos int, qtd_quebras int, taxa_quebra numeric, valor_perdido numeric`.
+
+- **`get_bi_recurrence_analysis`** — recorrência de devedores.
+  - Fonte: `agreements` agrupado por `client_cpf` + `tenant_id`.
+  - Retorna: `cpf_distintos int, devedores_recorrentes int, taxa_recorrencia numeric, top_cpfs jsonb` (cpf, nome, qtd_acordos, total_negociado — top 20).
+
+### 3. Funil (prioridade 3)
+
+- **`get_bi_collection_funnel`** — funil cadastro → contato → negociação → acordo → pagamento.
+  - Etapas:
+    1. `clients` distintos por CPF (universo)
+    2. clientes com `client_events` (contato qualquer canal)
+    3. clientes com `atendimento_sessions` (negociação iniciada)
+    4. CPFs com `agreements` no período
+    5. CPFs com `manual_payments`/`negociarie_cobrancas` pagos
+  - Retorna: `stage text, stage_order int, qtd int, conversao_pct numeric` (vs etapa anterior).
+
+- **`get_bi_funnel_dropoff`** — drop-off agrupado por credor.
+  - Retorna: `credor text, stage text, qtd int, dropoff_pct numeric`.
+
+### 4. Performance (prioridade 4)
+
+- **`get_bi_operator_performance`** — ranking de operadores.
+  - Fontes: `agreements.created_by`, `call_logs.operator_id` (cast para uuid quando válido), `call_dispositions.operator_id`.
+  - Retorna: `operator_id uuid, operator_name text, qtd_acordos int, total_recebido numeric, qtd_calls int, qtd_cpc int, taxa_cpc numeric, qtd_quebras int, taxa_quebra numeric`.
+
+- **`get_bi_operator_efficiency`** — eficiência (acordo / hora ativa, talk time, conv rate).
+  - Retorna: `operator_id uuid, operator_name text, talk_time_seconds bigint, qtd_chamadas int, qtd_conversoes int, conv_rate numeric, acordos_por_hora numeric`.
+  - "Conversão" = `call_dispositions` cujo `disposition_type` está em `call_disposition_types.is_conversion = true`.
+
+### 5. Canais (prioridade 5)
+
+- **`get_bi_channel_performance`** — performance por canal.
+  - Fonte: `client_events.event_channel` ∪ `call_logs` (canal `voice`) ∪ `conversations.channel_type` ∪ `chat_messages.provider`.
+  - Retorna: `channel text, qtd_interacoes int, qtd_clientes_unicos int, qtd_acordos_atribuidos int, taxa_conversao numeric, total_recebido_atribuido numeric`.
+  - Atribuição: último canal de `client_events` antes do `agreement.created_at` para o mesmo CPF.
+
+- **`get_bi_response_time_by_channel`** — tempo médio de resposta.
+  - Fonte: `chat_messages` agrupado por `conversation_id` calculando o intervalo `inbound → próxima outbound`.
+  - Retorna: `channel text, avg_response_seconds numeric, p50_seconds numeric, p90_seconds numeric, qtd_amostras int`.
+
+### 6. Score / Inteligência (prioridade 6)
+
+- **`get_bi_score_distribution`** — distribuição em buckets.
+  - Fonte: `clients.propensity_score`.
+  - Buckets: `0-20`, `21-40`, `41-60`, `61-80`, `81-100`, `null`.
+  - Retorna: `bucket text, qtd int, pct numeric, valor_carteira numeric`.
+
+- **`get_bi_score_vs_result`** — score vs resultado real.
+  - Junta `clients.propensity_score` com presença de `agreements` e `manual_payments`/`negociarie_cobrancas` pagos.
+  - Retorna: `bucket text, qtd_clientes int, qtd_com_acordo int, taxa_acordo numeric, qtd_pagos int, taxa_pagamento numeric, valor_recebido numeric`.
+
+- **`get_bi_top_opportunities`(`_limit int DEFAULT 50`)** — top oportunidades.
+  - Critério: `clients` sem `agreements` ativos, ordenados por `propensity_score DESC`, `valor_atualizado DESC`.
+  - Retorna: `client_id uuid, cpf text, nome text, credor text, propensity_score int, valor_atualizado numeric, debtor_profile text, preferred_channel text, ultimo_contato timestamptz`.
+
+## Estrutura técnica das funções
+
+Padrão (exemplo abreviado):
 
 ```sql
-WHEN EXISTS (
-  SELECT 1 FROM manual_payments mp
-  WHERE mp.agreement_id = a.id
-    AND (
-      mp.installment_key = a.id::text || ':' || (i+1)::text
-      OR mp.installment_number = (CASE WHEN a.entrada_value > 0 THEN i+2 ELSE i+1 END)
-    )
-    AND mp.status IN ('confirmed','approved')
-) THEN 'paid'
+CREATE OR REPLACE FUNCTION public.get_bi_revenue_summary(
+  _tenant_id    uuid,
+  _date_from    date    DEFAULT NULL,
+  _date_to      date    DEFAULT NULL,
+  _credor       text[]  DEFAULT NULL,
+  _operator_ids uuid[]  DEFAULT NULL,
+  _channel      text[]  DEFAULT NULL,
+  _score_min    integer DEFAULT NULL,
+  _score_max    integer DEFAULT NULL
+)
+RETURNS TABLE (
+  total_negociado    numeric,
+  total_recebido     numeric,
+  total_pendente     numeric,
+  total_quebra       numeric,
+  ticket_medio       numeric,
+  qtd_acordos        integer,
+  qtd_acordos_ativos integer,
+  qtd_quebras        integer
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  WITH base AS (
+    SELECT a.*
+    FROM agreements a
+    WHERE a.tenant_id = _tenant_id
+      AND (_date_from IS NULL OR a.created_at::date >= _date_from)
+      AND (_date_to   IS NULL OR a.created_at::date <= _date_to)
+      AND (_credor       IS NULL OR a.credor      = ANY(_credor))
+      AND (_operator_ids IS NULL OR a.created_by  = ANY(_operator_ids))
+  ),
+  pagos AS (
+    SELECT mp.agreement_id, SUM(mp.amount_paid) AS pago
+    FROM manual_payments mp
+    WHERE mp.tenant_id = _tenant_id
+      AND mp.status IN ('confirmed','approved')
+    GROUP BY mp.agreement_id
+  )
+  SELECT
+    COALESCE(SUM(b.proposed_total),0),
+    COALESCE(SUM(p.pago),0),
+    GREATEST(COALESCE(SUM(b.proposed_total),0) - COALESCE(SUM(p.pago),0), 0),
+    COALESCE(SUM(b.proposed_total) FILTER (WHERE b.status='cancelled'),0),
+    CASE WHEN COUNT(*) FILTER (WHERE b.status<>'cancelled')>0
+         THEN COALESCE(SUM(b.proposed_total) FILTER (WHERE b.status<>'cancelled'),0)
+              / COUNT(*) FILTER (WHERE b.status<>'cancelled')
+         ELSE 0 END,
+    COUNT(*)::int,
+    COUNT(*) FILTER (WHERE b.status<>'cancelled')::int,
+    COUNT(*) FILTER (WHERE b.status='cancelled')::int
+  FROM base b
+  LEFT JOIN pagos p ON p.agreement_id = b.id;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_bi_revenue_summary(uuid,date,date,text[],uuid[],text[],integer,integer) TO authenticated;
 ```
 
-Análogo para entrada (`installment_key = a.id || ':0'` OR `installment_number = 0`). Filtro `cancelled_installments` permanece. Card UI não muda.
+As demais 15 RPCs seguem o mesmo padrão (CTE → filtros opcionais → agregação no banco → `GRANT EXECUTE ... TO authenticated`).
 
-### 6. Filtrar mensalidade da plataforma em telas tenant
+## Garantias
 
-- `src/components/financeiro/PaymentHistoryCard.tsx` (query linhas 33-43): adicionar `.neq("payment_type","subscription")` e `.or("metadata->platform_billing.is.null,metadata->platform_billing.eq.false")`.
-- `src/services/tokenService.ts:fetchPaymentRecords` (linha 181): mesmo filtro.
-- `src/pages/admin/AdminFinanceiroPage.tsx:57` (Super Admin tenant-facing? checar): se for página tenant, aplicar filtro; se for SuperAdmin, manter.
-- `AdminDashboardPage.tsx:141` é Super Admin → manter sem filtro.
+- Não altera `get_agreement_financials`, `get_carteira_grouped`, `get_my_tenant_id`, nem qualquer função existente.
+- Não altera políticas RLS — `SECURITY DEFINER` lê tabelas com filtro explícito de `tenant_id = _tenant_id`.
+- Não cria índices nem mexe em tabelas (se desempenho for um problema futuro, será tratado em migration separada).
+- Frontend continua intocado: nenhum arquivo `.tsx`/`.ts` será modificado.
 
-### 7. `clients-api` — validação por credor em /whatsapp/send e /whatsapp/bulk
+## Entregáveis ao final
 
-Helper novo (no topo do arquivo) `phoneBelongsToCredor(tenantId, credorNome, phone) → boolean`:
+1. Uma migration nova em `supabase/migrations/<timestamp>_bi_analytics_rpcs.sql` com as 16 funções + GRANTs.
+2. Lista das funções criadas + um exemplo `SELECT` de chamada para cada uma (no corpo da resposta), por exemplo:
+   ```sql
+   SELECT * FROM public.get_bi_revenue_summary('<tenant_uuid>', '2026-01-01', '2026-04-30');
+   SELECT * FROM public.get_bi_collection_funnel('<tenant_uuid>', NULL, NULL, ARRAY['CredorX']);
+   SELECT * FROM public.get_bi_top_opportunities('<tenant_uuid>', NULL, NULL, NULL, NULL, NULL, 60, 100, 50);
+   ```
+3. Confirmação de que `supabase--linter` não acusou novas issues e nenhum arquivo de aplicação foi tocado.
 
-```ts
-async function phonesByCredor(tenantId, credorNome, phones: string[]) {
-  const norm = phones.map(p => p.replace(/\D/g,""));
-  const { data } = await supabaseAdmin.from("clients")
-    .select("phone").eq("tenant_id", tenantId).eq("credor", credorNome)
-    .in("phone", norm); // + variações se necessário
-  return new Set((data||[]).map(r => r.phone.replace(/\D/g,"")));
-}
-```
-
-- `/whatsapp/send`: se `auth.credorId` (escopada) → validar phone; se não pertencer → `403 { error: "Telefone não pertence ao credor desta API key" }`.
-- `/whatsapp/bulk`: se escopada, computar set válido em uma query e rejeitar lote inteiro com 403 listando os phones inválidos (mais seguro e simples que filtrar — auditoria mandou "rejeitar lote com telefones não pertencentes").
-- Chave global (sem `credorId`): comportamento atual.
-
----
-
-## Detalhes técnicos adicionais
-
-- Convenção CPF: usar helper inline `(rawCpf, fmtCpf)` já presente em vários pontos do `agreementService.ts`. Não importar nova lib.
-- Migrations criadas (NÃO editar antigas): 2 novas — `..._fix_celebration_views_rls.sql` e `..._fix_dashboard_vencimentos_manual_pay.sql`.
-- `tenant_users.role` já tem `admin/gerente/supervisor/operador` — usar `.in("role", ["admin","gerente","supervisor"])` na auth do auto-status-sync.
-- Não existe `super_admins` table dedicada; usar `has_role(auth.uid(), 'admin')` global + match em tenant_users.
-
-## Validação ao final
-
-Após implementar:
-1. Build automático do harness (TS/Vite).
-2. `bunx vitest run` para testes existentes.
-3. `supabase--linter` para confirmar que as novas policies não introduzem warnings.
-4. Smoke manual via tool calls: `read_query` em `pg_policies` para confirmar nomes; `curl_edge_functions` no asaas-webhook (sem token → 401, com token errado → 401, com token correto → 200).
-
-Reportarei exatamente o que foi validado, com saídas dos comandos.
-
-## Arquivos alterados
-
-- `src/services/agreementService.ts`
-- `src/components/acordos/PaymentConfirmationTab.tsx`
-- `src/services/manualPaymentService.ts`
-- `src/services/tokenService.ts`
-- `src/components/financeiro/PaymentHistoryCard.tsx`
-- `src/pages/admin/AdminFinanceiroPage.tsx` (apenas filtro se for view tenant)
-- `supabase/functions/asaas-webhook/index.ts`
-- `supabase/functions/auto-status-sync/index.ts`
-- `supabase/functions/clients-api/index.ts`
-- 2 novas migrations em `supabase/migrations/`
-
-## Fora de escopo (não alterado)
-
-- Layout/identidade visual do dashboard e do PaymentHistoryCard (apenas filtro de query).
-- Estrutura das tabelas `campaign_celebration_views`, `payment_records`, `agreements`, `clients`.
-- Migrations antigas.
-- Lógica de cálculo de gamificação e de distribuição de pagamentos.
+Após aprovação deste plano, executo a migration e devolvo a lista final + exemplos de teste.
