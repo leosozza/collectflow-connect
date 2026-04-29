@@ -210,6 +210,9 @@ const CarteiraPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Espelho da seleção em CPFs únicos (1 cliente = 1 CPF). Usado nos rótulos
+  // de UI para que o operador veja "clientes selecionados" e não "parcelas".
+  const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [loadingAllIds, setLoadingAllIds] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);

@@ -1,95 +1,71 @@
 ## Problema
 
-Ao enviar mensagem no WhatsApp do Contact Center:
+Na **Carteira**, quando o operador seleciona linhas:
+- Banner mostra **"291 registro(s) selecionado(s)"** quando na verdade são **50 clientes (CPFs)**.
+- Indicador de paginação mostra **"19.573 registros"** mas já são CPFs únicos (RPC `get_carteira_grouped` agrupa por CPF).
 
-1. **Demora ~3s perceptíveis** entre apertar Enter e a mensagem "sumir" do campo de digitação.
-2. **Foco é perdido**: o operador precisa clicar de novo no textarea para escrever a próxima mensagem.
+A confusão vem de:
+1. A linhagem `clients` é por parcela. A view agrupada (`get_carteira_grouped`) entrega 1 linha por CPF, mas com `all_ids[]` (ids de todas as parcelas daquele CPF/credor).
+2. O state `selectedIds` armazena os **ids de parcelas** (todos os `allIds` de cada CPF marcado), porque ações em massa (hidratação de bulk, agreements, atribuições) precisam dos ids individuais.
+3. O banner usa `selectedIds.size` → conta parcelas.
 
-## Causa raiz
-
-No `WhatsAppChatLayout.tsx → handleSend`:
-```ts
-setSending(true);
-try {
-  await sendTextMessage(...)  // ~3s aguardando edge function + WhatsApp API
-} finally {
-  setSending(false);
-}
-```
-
-Esse `sending=true` é propagado até `ChatInput`:
-```tsx
-<ChatInput disabled={sending || conversation.status === "waiting"} ... />
-```
-
-E o `<Textarea disabled={disabled}>` faz o navegador **remover o foco** do input enquanto está desabilitado. Quando libera, o foco não volta sozinho.
-
-Já existe **optimistic UI** (a mensagem aparece imediatamente no chat com status "sending"), então **não há motivo para bloquear o input** enquanto a edge function processa em segundo plano.
-
-Adicionalmente, o `ChatInput.handleSend` limpa o texto **depois** de chamar `onSend`, e como a chamada é assíncrona no caminho real, há um pequeno delay extra antes do textarea ficar vazio.
+O `totalCount` retornado pela RPC já é a contagem de CPFs (via `COUNT(*) OVER()` na CTE agrupada), então o "19.573 registros" também é tecnicamente CPFs — só o **rótulo** está errado.
 
 ## Solução
 
-### 1. `ChatInput.tsx`
+### 1. Manter um `Set<cpf>` paralelo à seleção
 
-- **Limpar o texto e voltar o foco imediatamente**, antes de invocar `onSend`. Como o envio é fire-and-forget pela ótica do componente, a UI fica responsiva instantaneamente.
-- Adicionar `requestAnimationFrame` + `textareaRef.current?.focus()` após o envio para garantir que o cursor permaneça no campo (Enter já está dentro do textarea, mas após o disabled toggling do pai o foco era perdido).
+Adicionar `selectedCpfs: Set<string>` que é atualizado em todos os pontos onde `selectedIds` é alterado:
 
-```tsx
-const handleSend = () => {
-  const trimmed = text.trim();
-  if (!trimmed) return;
-  setText("");                         // limpa AGORA
-  const wasInternal = isInternalMode;
-  setIsInternalMode(false);
-  if (wasInternal && onSendInternalNote) onSendInternalNote(trimmed);
-  else onSend(trimmed);
-  requestAnimationFrame(() => textareaRef.current?.focus());
-};
-```
+- `toggleSelect(groupClient)` → adiciona/remove `groupClient.cpf` (normalizado).
+- `toggleSelectAll()` → adiciona/remove todos os CPFs da página atual.
+- `handleSelectAllFiltered()` → após buscar todos os IDs, também busca todos os CPFs filtrados (já trivial: usar a mesma chamada da RPC retornando `cpf` em vez de `representative_id`, ou inferir do `bulkClients` quando hidratado). Mais simples: derivar do `displayClients` + `bulkClients` ou usar `totalCount` direto quando `selectAllFiltered=true`.
+- `setSelectedIds(new Set())` (limpar seleção) → também limpa `selectedCpfs`.
+- `useEffect` que reseta seleção ao mudar filtros → também reseta `selectedCpfs`.
 
-### 2. `ChatPanel.tsx` — desacoplar `disabled` do `sending`
+Para `handleSelectAllFiltered`, como `selectAllFiltered=true` significa "tudo", o contador exibe `totalCount` direto sem precisar do Set populado.
 
-Hoje:
-```tsx
-<ChatInput disabled={sending || conversation.status === "waiting"} ... />
-```
-
-Como há optimistic UI, **não precisamos travar o input durante o `sending`**. Basta travar quando a conversa está em `waiting` (estado real onde o operador não pode responder). Mantemos o `sending` apenas para outros indicadores (ex.: spinner em botões de mídia, se houver).
+### 2. Trocar contagens exibidas
 
 ```tsx
-<ChatInput disabled={conversation.status === "waiting"} ... />
+// Banner de seleção acumulada (linha ~750)
+<span className="font-medium">
+  {(selectAllFiltered ? totalCount : selectedCpfs.size).toLocaleString("pt-BR")}
+</span>{" "}
+cliente(s) selecionado(s) (a seleção é mantida ao trocar de página).
+
+// Banner "todos selecionados" (linha ~778)
+Todos os {totalCount.toLocaleString("pt-BR")} clientes filtrados estão selecionados.
+
+// Rodapé/cabeçalho de paginação (linhas 805 e 975)
+<span className="ml-2">{totalCount.toLocaleString("pt-BR")} clientes</span>
 ```
 
-Botões de anexo/áudio podem continuar usando `sending` se necessário, mas isso é separado e pode ser mantido como está sem impacto no campo de texto.
+### 3. Ajustar `selectedCount` (linhas 599-603)
 
-### 3. `WhatsAppChatLayout.tsx → handleSend` — não aguardar bloqueando UX
-
-A função continua `async` (precisamos do `try/catch` para marcar mensagem como falha), mas removemos `setSending(true/false)` do redor da chamada de texto. O estado de erro é refletido na própria mensagem otimista (status `failed`), que é o padrão do WhatsApp.
-
-Para mídia/áudio (que dependem de upload e não têm UI otimista equivalente), `setSending` permanece — esses fluxos justificam o bloqueio temporário.
+Hoje há um cálculo defensivo que tenta deduplicar por CPF apenas quando "tudo está na página atual". Com `selectedCpfs` mantido sempre, isso vira:
 
 ```ts
-const handleSend = async (text, replyToMessageId) => {
-  // ... constrói optimisticMsg e adiciona ao state
-  try {
-    await sendTextMessage(...);
-  } catch (err) {
-    setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "failed" } : m));
-    toast.error(err.message || "Erro ao enviar mensagem");
-  }
-  // sem setSending
-};
+const selectedCount = selectAllFiltered ? totalCount : selectedCpfs.size;
 ```
 
-## Resultado esperado
+Esse `selectedCount` já é usado nos botões de ação em massa (WhatsApp, Discador, etc.) — vai passar a refletir CPFs únicos sempre.
 
-- Pressionar Enter: o texto desaparece do campo **imediatamente**, a mensagem aparece no chat com status "sending" (relógio), e o cursor permanece no textarea pronto para a próxima mensagem.
-- O envio real à edge function continua acontecendo em background; quando o Realtime entrega a confirmação, a mensagem otimista é substituída pela real (status "sent"/"delivered").
-- Se falhar, a mensagem otimista vira "failed" no chat e um toast aparece.
+### 4. Ajustar contador no `CarteiraTable.tsx` (linha 72)
+
+```tsx
+<span className="ml-auto text-sm text-muted-foreground">{grouped.length} clientes</span>
+```
+
+(é a contagem de grupos exibidos na página atual, que já é por CPF/credor).
 
 ## Arquivos afetados
 
-- `src/components/contact-center/whatsapp/ChatInput.tsx` — limpar texto + focus antes do `onSend`.
-- `src/components/contact-center/whatsapp/ChatPanel.tsx` — remover `sending` do `disabled` do `ChatInput`.
-- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` — remover `setSending(true/false)` em `handleSend` (apenas no envio de texto). Manter para mídia e áudio.
+- `src/pages/CarteiraPage.tsx` — adicionar `selectedCpfs`, atualizar nos toggles/clears, trocar textos.
+- `src/components/carteira/CarteiraTable.tsx` — trocar "registros" por "clientes" no rótulo.
+
+## Resultado
+
+- Banner: **"50 cliente(s) selecionado(s)"** em vez de "291 registro(s) selecionado(s)".
+- Rodapé: **"19.573 clientes"** em vez de "19.573 registros".
+- Botão "Selecionar todos os 19.573 clientes filtrados" continua igual (já estava correto).
