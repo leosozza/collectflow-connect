@@ -99,8 +99,9 @@ const GamificacaoPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("achievements")
-        .select("id")
-        .eq("tenant_id", tenant!.id);
+        .select("id, profiles!inner(role)")
+        .eq("tenant_id", tenant!.id)
+        .in("profiles.role", ["operador", "supervisor", "gerente"] as any);
       if (error) throw error;
       return data || [];
     },
