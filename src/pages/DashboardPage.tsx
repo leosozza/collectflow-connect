@@ -247,7 +247,7 @@ const DashboardPage = () => {
     agendamentos: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
     parcelas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
     metas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
-    totalRecebido: "col-span-1 md:col-span-2 lg:col-span-6 row-span-1",
+    totalRecebido: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
   };
 
   const sensors = useSensors(
