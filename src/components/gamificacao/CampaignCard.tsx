@@ -88,7 +88,7 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
           )}
         </div>
 
-        {!datesValid && isTenantAdmin && (
+        {!datesValid && (
           <p className="text-[11px] text-destructive mt-1">
             Edite a campanha para corrigir as datas de início/fim.
           </p>
@@ -156,21 +156,6 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
           <p className="text-xs text-muted-foreground text-center py-2">Sem participantes ainda</p>
         )}
 
-        {isTenantAdmin && (
-          <div className="pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full h-7 text-xs gap-1.5"
-              onClick={handleRecalculate}
-              disabled={recalculating || !datesValid}
-              title={!datesValid ? "Corrija as datas da campanha primeiro" : "Recalcula o ranking usando os dados reais do período"}
-            >
-              <RefreshCw className={`w-3 h-3 ${recalculating ? "animate-spin" : ""}`} />
-              {recalculating ? "Recalculando..." : "Recalcular Ranking"}
-            </Button>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
