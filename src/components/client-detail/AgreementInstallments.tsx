@@ -1012,6 +1012,50 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                           <TooltipContent side="top"><p>Baixar Recibo</p></TooltipContent>
                         </Tooltip>
                       )}
+
+                      {/* Cancelar parcela */}
+                      {canCancel && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={cancellingInstallmentIdx === idx}
+                              onClick={() => setCancelInstallmentDialog({ inst, idx })}
+                            >
+                              {cancellingInstallmentIdx === idx ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Cancelar Parcela</p></TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {/* Reativar parcela cancelada */}
+                      {isCancelled && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                              disabled={cancellingInstallmentIdx === idx}
+                              onClick={() => handleReactivateInstallment(inst, idx)}
+                            >
+                              {cancellingInstallmentIdx === idx ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <RotateCcw className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Reativar Parcela</p></TooltipContent>
+                        </Tooltip>
+                      )}
                     </TooltipProvider>
                   </div>
                 </TableCell>
