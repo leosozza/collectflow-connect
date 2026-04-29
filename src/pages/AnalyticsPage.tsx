@@ -1,578 +1,108 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useUrlState } from "@/hooks/useUrlState";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
-import { formatCurrency } from "@/lib/formatters";
-import { fetchAllRows } from "@/lib/supabaseUtils";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { ArrowLeft, Download, Target, Award, TrendingUp, AlertTriangle, MessageCircle, Handshake } from "lucide-react";
-import { parseISO } from "date-fns";
-import { useNavigate } from "react-router-dom";
-import { MultiSelect } from "@/components/ui/multi-select";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
-  PieChart, Pie, Cell,
-} from "recharts";
-import * as XLSX from "xlsx";
-
-// === MÉTRICA DE ACORDO === (dados de agreements — negociação formalizada)
-// === PAGAMENTO REAL CONSOLIDADO === (manual_payments + negociarie_cobrancas por agreement_id)
-interface AgreementFinancialRow {
-  agreement_id: string;
-  client_cpf: string;
-  client_name: string;
-  credor: string;
-  proposed_total: number;
-  original_total: number;
-  status: string;
-  created_at: string;
-  created_by: string;
-  first_due_date: string;
-  entrada_value: number;
-  total_paid_real: number;
-  pending_balance_real: number;
-  payment_count: number;
-  first_payment_date: string | null;
-  last_payment_date: string | null;
-  paid_via_manual: number;
-  paid_via_negociarie: number;
-}
-
-interface Profile {
-  id: string;
-  full_name: string;
-  role: string;
-}
-
-const monthLabels = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const monthNames = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
-
-const STATUS_COLORS: Record<string, string> = {
-  approved: "hsl(142, 71%, 45%)",
-  completed: "hsl(142, 71%, 35%)",
-  pending: "hsl(38, 92%, 50%)",
-  pending_approval: "hsl(38, 70%, 60%)",
-  overdue: "hsl(24, 95%, 53%)",
-  cancelled: "hsl(0, 84%, 60%)",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  approved: "Vigentes",
-  completed: "Pagos",
-  pending: "Pendentes",
-  pending_approval: "Aguardando",
-  overdue: "Vencidos",
-  cancelled: "Cancelados",
-};
-
-const generateYearOptions = () => {
-  const now = new Date();
-  const years: number[] = [];
-  for (let i = 0; i < 3; i++) years.push(now.getFullYear() - i);
-  return years;
-};
-
-const InfoTooltip = ({ text }: { text: string }) => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <button type="button" className="inline-flex items-center justify-center">
-        <MessageCircle className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-muted-foreground cursor-help transition-colors" />
-      </button>
-    </TooltipTrigger>
-    <TooltipContent side="top" className="max-w-[220px] text-xs">
-      {text}
-    </TooltipContent>
-  </Tooltip>
-);
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, DollarSign, Filter, Users, MessageSquare, ShieldAlert, Brain } from "lucide-react";
+import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
+import { AnalyticsFiltersBar } from "@/components/analytics/AnalyticsFiltersBar";
+import { RevenueTab } from "@/components/analytics/tabs/RevenueTab";
+import { FunnelTab } from "@/components/analytics/tabs/FunnelTab";
+import { PerformanceTab } from "@/components/analytics/tabs/PerformanceTab";
+import { ChannelsTab } from "@/components/analytics/tabs/ChannelsTab";
+import { QualityTab } from "@/components/analytics/tabs/QualityTab";
+import { IntelligenceTab } from "@/components/analytics/tabs/IntelligenceTab";
 
 const AnalyticsPage = () => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const navigate = useNavigate();
-  const now = new Date();
-
-  const [selectedYears, setSelectedYears] = useUrlState("years", [now.getFullYear().toString()]);
-  const [selectedMonths, setSelectedMonths] = useUrlState("months", [] as string[]);
-  const [selectedOperators, setSelectedOperators] = useUrlState("operators", [] as string[]);
-  const [selectedCredores, setSelectedCredores] = useUrlState("credores", [] as string[]);
-
   const isOperator = profile?.role !== "admin";
 
-  // === PAGAMENTO REAL CONSOLIDADO === via RPC get_agreement_financials
-  const { data: allAgreements = [] } = useQuery({
-    queryKey: ["analytics-agreement-financials", tenant?.id, isOperator ? profile?.id : "all"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_agreement_financials", {
-        _tenant_id: tenant!.id,
-      });
-      if (error) throw error;
-      let results = (data || []) as any[];
-      if (isOperator && profile?.id) {
-        results = results.filter((r) => r.created_by === profile.id);
-      }
-      return results.map((r: any) => ({
-        agreement_id: r.agreement_id,
-        client_cpf: r.client_cpf || "",
-        client_name: r.client_name || "",
-        credor: r.credor,
-        proposed_total: Number(r.proposed_total),
-        original_total: Number(r.original_total),
-        status: r.status,
-        created_at: r.created_at,
-        created_by: r.created_by,
-        first_due_date: r.first_due_date,
-        entrada_value: Number(r.entrada_value || 0),
-        total_paid_real: Number(r.total_paid_real || 0),
-        pending_balance_real: Number(r.pending_balance_real || 0),
-        payment_count: Number(r.payment_count || 0),
-        first_payment_date: r.first_payment_date,
-        last_payment_date: r.last_payment_date,
-        paid_via_manual: Number(r.paid_via_manual || 0),
-        paid_via_negociarie: Number(r.paid_via_negociarie || 0),
-      })) as AgreementFinancialRow[];
-    },
-    enabled: !!tenant?.id,
-  });
+  const f = useAnalyticsFilters(tenant?.id);
 
-  // Also fetch full agreement details for export & heatmap
-  const { data: allAgreementsFull = [] } = useQuery({
-    queryKey: ["analytics-agreements-full", tenant?.id, isOperator ? profile?.id : "all"],
-    queryFn: async () => {
-      let query = supabase
-        .from("agreements")
-        .select("id, client_cpf, client_name, credor, proposed_total, original_total, status, created_at, created_by, first_due_date, new_installments, new_installment_value, entrada_value")
-        .not("status", "in", "(rejected)");
-      if (tenant?.id) query = query.eq("tenant_id", tenant.id);
-      if (isOperator && profile?.id) query = query.eq("created_by", profile.id);
-      const data = await fetchAllRows(query);
-      return data as any[];
-    },
-    enabled: !!tenant?.id,
-  });
+  // Canal e Score visíveis apenas em abas relevantes
+  const showChannel = ["funil", "performance", "canais"].includes(f.tab);
+  const showScore = ["funil", "inteligencia"].includes(f.tab);
 
-  // Fetch operators filtered by tenant
-  const { data: operators = [] } = useQuery({
-    queryKey: ["operators", tenant?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, role")
-        .eq("tenant_id", tenant!.id);
-      if (error) throw error;
-      return (data || []) as Profile[];
-    },
-    enabled: !isOperator && !!tenant?.id,
-  });
-
-  const yearOpts = useMemo(() => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })), []);
-  const monthOpts = useMemo(() => monthNames.map((name, i) => ({ value: i.toString(), label: name })), []);
-  const operatorOpts = useMemo(() => operators.map((o) => ({ value: o.id, label: o.full_name || "Sem nome" })), [operators]);
-  const credorOpts = useMemo(() => [...new Set(allAgreements.map((a) => a.credor))].sort().map((c) => ({ value: c, label: c })), [allAgreements]);
-
-  // Filter agreements by selected filters
-  const filteredAgreements = useMemo(() => {
-    return allAgreements.filter((a) => {
-      const d = parseISO(a.created_at);
-      if (selectedYears.length > 0 && !selectedYears.includes(d.getFullYear().toString())) return false;
-      if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth().toString())) return false;
-      if (selectedOperators.length > 0 && !selectedOperators.includes(a.created_by || "")) return false;
-      if (selectedCredores.length > 0 && !selectedCredores.includes(a.credor)) return false;
-      return true;
-    });
-  }, [allAgreements, selectedYears, selectedMonths, selectedOperators, selectedCredores]);
-
-  // Exclude cancelled from active KPIs
-  const activeAgreements = filteredAgreements.filter((a) => a.status !== "cancelled");
-
-  // Status classifications
-  const pagos = activeAgreements.filter((a) => a.status === "completed");
-  const vigentes = activeAgreements.filter((a) => a.status === "approved");
-  const pendentes = activeAgreements.filter((a) => a.status === "pending" || a.status === "pending_approval");
-  const vencidos = activeAgreements.filter((a) => a.status === "overdue");
-  const cancelados = filteredAgreements.filter((a) => a.status === "cancelled");
-
-  const totalNegociado = activeAgreements.reduce((s, a) => s + Number(a.proposed_total), 0);
-  const totalQuebra = cancelados.reduce((s, a) => s + Number(a.proposed_total), 0);
-  const totalPrimeiraParcela = activeAgreements.reduce((s, a) => s + Number(a.entrada_value || 0), 0);
-
-  // === PAGAMENTO REAL CONSOLIDADO === soma de manual_payments + negociarie_cobrancas
-  const totalRecebido = activeAgreements.reduce((s, a) => s + a.total_paid_real, 0);
-
-  // Acordos com pagamento real > 0
-  const acordosComPagamento = activeAgreements.filter((a) => a.total_paid_real > 0);
-
-  // Total Pendente: soma do saldo devedor de toda a carteira (clients)
-  const { data: totalCarteiraPendente = 0 } = useQuery({
-    queryKey: ["analytics-carteira-pendente", tenant?.id],
-    queryFn: async () => {
-      let total = 0;
-      let from = 0;
-      const pageSize = 1000;
-      while (true) {
-        const { data } = await supabase
-          .from("clients")
-          .select("valor_atualizado, valor_saldo, valor_parcela")
-          .eq("tenant_id", tenant!.id)
-          .in("status", ["pendente"])
-          .range(from, from + pageSize - 1);
-        if (!data || data.length === 0) break;
-        total += data.reduce(
-          (sum, c) => sum + Number(c.valor_atualizado || c.valor_saldo || c.valor_parcela || 0),
-          0
-        );
-        if (data.length < pageSize) break;
-        from += pageSize;
-      }
-      return total;
-    },
-    enabled: !!tenant?.id,
-  });
-  const totalPendente = totalCarteiraPendente;
-
-  // KPIs based on real payment data
-  const taxaRecuperacao = totalNegociado > 0 ? ((totalRecebido / totalNegociado) * 100).toFixed(1) : "0";
-  const ticketMedio = acordosComPagamento.length > 0 ? totalRecebido / acordosComPagamento.length : 0;
-  const percentRecebimento = activeAgreements.length > 0 ? ((acordosComPagamento.length / activeAgreements.length) * 100).toFixed(1) : "0";
-
-  // Ticket Médio do Dia: média do valor base (entrada ou 1ª parcela) dos acordos criados hoje,
-  // respeitando o filtro de operador da página. Movido do Dashboard para Analytics.
-  const ticketMedioDia = useMemo(() => {
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-    const todayEnd = todayStart + 24 * 60 * 60 * 1000;
-    const todays = (allAgreementsFull || []).filter((a: any) => {
-      if (a.status === "cancelled" || a.status === "rejected") return false;
-      const t = new Date(a.created_at).getTime();
-      if (t < todayStart || t >= todayEnd) return false;
-      if (selectedOperators.length > 0 && !selectedOperators.includes(a.created_by || "")) return false;
-      return true;
-    });
-    if (todays.length === 0) return 0;
-    const sum = todays.reduce((s: number, a: any) => {
-      const entrada = Number(a.entrada_value || 0);
-      if (entrada > 0) return s + entrada;
-      return s + Number(a.new_installment_value || 0);
-    }, 0);
-    return sum / todays.length;
-  }, [allAgreementsFull, selectedOperators]);
-
-  // Portfolio conversion rate: agreements with payments > 0 vs total active (sem dupla contagem)
-  const totalAtivos = activeAgreements.length;
-  const taxaConversao = totalAtivos > 0 ? (acordosComPagamento.length / totalAtivos) * 100 : 0;
-
-  // Evolution chart data based on agreements.created_at with real payments
-  const evolutionData = useMemo(() => {
-    const years = selectedYears.length > 0 ? selectedYears.map(Number) : generateYearOptions();
-    return monthLabels.map((label, monthIdx) => {
-      const monthAgreements = allAgreements.filter((a) => {
-        const d = parseISO(a.created_at);
-        if (!years.includes(d.getFullYear()) || d.getMonth() !== monthIdx) return false;
-        if (selectedOperators.length > 0 && !selectedOperators.includes(a.created_by || "")) return false;
-        if (selectedCredores.length > 0 && !selectedCredores.includes(a.credor)) return false;
-        return true;
-      });
-      return {
-        name: label,
-        // Negociado por mês de created_at do acordo
-        negociado: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + Number(a.proposed_total), 0),
-        // Recebido: pagamento real consolidado (limitação: agrupado por created_at do acordo, não do pagamento)
-        recebido: monthAgreements.filter((a) => a.status !== "cancelled" && a.status !== "rejected").reduce((s, a) => s + a.total_paid_real, 0),
-        quebra: monthAgreements.filter((a) => a.status === "cancelled").reduce((s, a) => s + Number(a.proposed_total), 0),
-      };
-    });
-  }, [allAgreements, selectedYears, selectedOperators, selectedCredores]);
-
-  // Status pie based on agreement statuses
-  const statusPieData = useMemo(() => {
-    const groups = [
-      { name: "Pagos", value: pagos.length, color: STATUS_COLORS.completed },
-      { name: "Acordo Vigente", value: vigentes.length + pendentes.length, color: STATUS_COLORS.approved },
-      { name: "Vencidos", value: vencidos.length, color: STATUS_COLORS.overdue },
-      { name: "Cancelados", value: cancelados.length, color: STATUS_COLORS.cancelled },
-    ];
-    return groups.filter((d) => d.value > 0);
-  }, [pagos, vigentes, pendentes, vencidos, cancelados]);
-
-  // Top 5 credores by pending value
-  const top5Credores = useMemo(() => {
-    const map = new Map<string, { credor: string; total: number }>();
-    [...vigentes, ...pendentes, ...vencidos].forEach((a) => {
-      if (!map.has(a.credor)) map.set(a.credor, { credor: a.credor, total: 0 });
-      map.get(a.credor)!.total += Number(a.proposed_total);
-    });
-    return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 5);
-  }, [vigentes, pendentes, vencidos]);
-
-  // Heatmap by first_due_date day (use full agreement data)
-  const heatmapData = useMemo(() => {
-    const counts = new Array(31).fill(0);
-    allAgreementsFull.filter((a) => a.status !== "cancelled" && a.status !== "rejected").forEach((a) => {
-      const day = parseISO(a.first_due_date).getDate();
-      counts[day - 1] += 1;
-    });
-    const max = Math.max(...counts, 1);
-    return counts.map((count, i) => ({ day: i + 1, count, intensity: count / max }));
-  }, [allAgreementsFull]);
-
-  // Export (use full agreement data)
-  const handleExport = () => {
-    const ws = XLSX.utils.json_to_sheet(allAgreementsFull.map((a) => ({
-      Cliente: a.client_name,
-      CPF: a.client_cpf,
-      Credor: a.credor,
-      Status: STATUS_LABELS[a.status] || a.status,
-      "Valor Negociado": Number(a.proposed_total),
-      "Valor Original": Number(a.original_total),
-      "1º Vencimento": a.first_due_date,
-      "Data Criação": a.created_at,
-    })));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Analytics");
-    XLSX.writeFile(wb, `analytics-${selectedYears.join("-") || "todos"}.xlsx`);
-  };
-
-  return (
-    <TooltipProvider delayDuration={300}>
+  if (!tenant?.id || !f.rpcParams) {
+    return (
       <div className="space-y-5 animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <h1 className="text-xl font-bold text-foreground">Analytics</h1>
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap justify-end">
-            <MultiSelect options={yearOpts} selected={selectedYears} onChange={setSelectedYears} allLabel="Todos Anos" className="w-[110px]" />
-            <MultiSelect options={monthOpts} selected={selectedMonths} onChange={setSelectedMonths} allLabel="Todos Meses" className="w-[120px]" />
-            {!isOperator && (
-              <MultiSelect options={operatorOpts} selected={selectedOperators} onChange={setSelectedOperators} allLabel="Todos Op." className="w-[120px]" />
-            )}
-            <MultiSelect options={credorOpts} selected={selectedCredores} onChange={setSelectedCredores} allLabel="Todos Cred." className="w-[120px]" />
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleExport} title="Exportar Excel">
-              <Download className="w-4 h-4" />
-            </Button>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <h1 className="text-xl font-bold text-foreground">Analytics</h1>
         </div>
-
-        {/* Global Highlight KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
-                <Handshake className="w-4 h-4 text-purple-500" />
-              </div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
-                Total Negociado no Período
-              </p>
-            </div>
-            <p className="text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words">
-              {formatCurrency(totalNegociado)}
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-tight">
-              Soma do valor de todos os acordos
-            </p>
-          </div>
-          <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <div className="rounded-md p-1.5 bg-purple-500/10 shrink-0">
-                <Handshake className="w-4 h-4 text-purple-500" />
-              </div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
-                Total Primeira Parcela no Período
-              </p>
-            </div>
-            <p className="text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words">
-              {formatCurrency(totalPrimeiraParcela)}
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-tight">
-              Soma da 1ª parcela dos acordos
-            </p>
-          </div>
-        </div>
-
-        {/* Operational KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {isOperator ? (
-            <>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Quantidade de acordos ativos gerados no período." /></div>
-                <Handshake className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Acordos Ativos</p>
-                <p className="text-xl font-bold text-foreground">{activeAgreements.length}</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma do valor de acordos cancelados (quebra)." /></div>
-                <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total de Quebra</p>
-                <p className="text-xl font-bold text-destructive">{formatCurrency(totalQuebra)}</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos pagamentos reais (valor_pago) dos clientes vinculados aos seus acordos." /></div>
-                <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Recebido</p>
-                <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual de acordos com pagamentos em relação ao total de acordos ativos." /></div>
-                <Target className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">% de Recebimento</p>
-                <p className="text-xl font-bold text-foreground">{percentRecebimento}%</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos criados hoje (entrada ou 1ª parcela)." /></div>
-                <Award className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Ticket Médio do Dia</p>
-                <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedioDia)}</p>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Valor total em aberto na carteira do credor disponível para negociação." /></div>
-                <AlertTriangle className="w-5 h-5 text-destructive mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Inadimplência</p>
-                <p className="text-xl font-bold text-destructive">{formatCurrency(totalPendente)}</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Percentual do valor recebido em relação ao valor total negociado nos acordos." /></div>
-                <Target className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Taxa de Recuperação</p>
-                <p className="text-xl font-bold text-foreground">{taxaRecuperacao}%</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio recebido por acordo com pagamentos no período." /></div>
-                <Award className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Ticket Médio</p>
-                <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Soma dos pagamentos reais (valor_pago) dos clientes vinculados a acordos no período." /></div>
-                <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Total Recebido</p>
-                <p className="text-xl font-bold text-success">{formatCurrency(totalRecebido)}</p>
-              </div>
-              <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
-                <div className="absolute top-2 right-2"><InfoTooltip text="Valor médio dos acordos criados hoje (entrada ou 1ª parcela)." /></div>
-                <Award className="w-5 h-5 text-primary mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Ticket Médio do Dia</p>
-                <p className="text-xl font-bold text-foreground">{formatCurrency(ticketMedioDia)}</p>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Charts row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Evolution line chart */}
-          <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Evolução mês a mês do valor negociado, recebido e quebrado baseado na data de criação do acordo." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Evolução Mensal ({selectedYears.length > 0 ? selectedYears.join(", ") : "Todos"})</h3>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={evolutionData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <RechartsTooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
-                <Legend />
-                <Line type="monotone" dataKey="negociado" name="Negociado" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
-                <Line type="monotone" dataKey="recebido" name="Recebido" stroke={STATUS_COLORS.completed} strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="quebra" name="Quebra" stroke={STATUS_COLORS.cancelled} strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Portfolio conversion */}
-          <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative flex flex-col">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Percentual de acordos com pagamentos recebidos em relação ao total de acordos ativos." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Taxa de Conversão de Acordos</h3>
-            <div className="flex-1 flex flex-col items-center justify-center gap-4">
-              <p className="text-5xl font-bold text-primary">{taxaConversao.toFixed(1)}%</p>
-              <Progress value={taxaConversao} className="w-3/4 h-3" />
-              <div className="flex gap-6 text-xs text-muted-foreground">
-                <span>Total Ativos: <strong className="text-foreground">{totalAtivos}</strong></span>
-                <span>Com Pagamento: <strong className="text-foreground">{acordosComPagamento.length}</strong></span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Charts row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Status pie */}
-          <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Distribuição dos status dos acordos formalizados no período selecionado." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Distribuição de Status</h3>
-            {statusPieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={statusPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" stroke="none">
-                    {statusPieData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                  </Pie>
-                  <RechartsTooltip formatter={(value: number, name: string) => [`${value} acordos`, name]} contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', fontSize: 12 }} />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[220px] flex items-center justify-center text-xs text-muted-foreground">Sem dados</div>
-            )}
-          </div>
-
-          {/* Top 5 credores */}
-          {!isOperator && (
-            <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-              <div className="absolute top-3 right-3"><InfoTooltip text="Os 5 credores com maior valor em acordos pendentes/vigentes/vencidos." /></div>
-              <h3 className="text-sm font-semibold text-card-foreground mb-3">Top 5 Maiores Credores</h3>
-              {top5Credores.length > 0 ? (
-                <div className="space-y-2">
-                  {top5Credores.map((d, i) => (
-                    <div key={d.credor} className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-primary w-5">{i + 1}.</span>
-                        <p className="text-xs font-medium text-foreground truncate max-w-[160px]">{d.credor}</p>
-                      </div>
-                      <span className="text-xs font-bold text-destructive">{formatCurrency(d.total)}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground">Sem credores pendentes</div>
-              )}
-            </div>
-          )}
-
-          {/* Heatmap */}
-          <div className="bg-card rounded-xl border border-border p-4 shadow-sm relative">
-            <div className="absolute top-3 right-3"><InfoTooltip text="Concentração de vencimentos por dia do mês baseado no 1º vencimento dos acordos." /></div>
-            <h3 className="text-sm font-semibold text-card-foreground mb-3">Heatmap de Vencimentos</h3>
-            <div className="grid grid-cols-7 gap-1">
-              {heatmapData.map((d) => (
-                <div
-                  key={d.day}
-                  className="aspect-square rounded flex items-center justify-center text-[10px] font-medium"
-                  style={{
-                    backgroundColor: d.count === 0
-                      ? "hsl(var(--muted) / 0.3)"
-                      : `hsl(24, 95%, ${70 - d.intensity * 40}%)`,
-                    color: d.intensity > 0.5 ? "white" : "hsl(var(--foreground))",
-                  }}
-                  title={`Dia ${d.day}: ${d.count} acordos`}
-                >
-                  {d.day}
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="bg-card rounded-xl border border-border p-8 text-center text-sm text-muted-foreground">
+          Carregando contexto do tenant…
         </div>
       </div>
-    </TooltipProvider>
+    );
+  }
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <h1 className="text-xl font-bold text-foreground">Analytics</h1>
+        </div>
+      </div>
+
+      <AnalyticsFiltersBar
+        tenantId={tenant.id}
+        isOperator={isOperator}
+        showChannel={showChannel}
+        showScore={showScore}
+        dateFrom={f.dateFrom}
+        dateTo={f.dateTo}
+        credores={f.credores}
+        operators={f.operators}
+        channels={f.channels}
+        scoreMin={f.scoreMin}
+        scoreMax={f.scoreMax}
+        setDateFrom={f.setDateFrom}
+        setDateTo={f.setDateTo}
+        setCredores={f.setCredores}
+        setOperators={f.setOperators}
+        setChannels={f.setChannels}
+        setScoreMin={f.setScoreMin}
+        setScoreMax={f.setScoreMax}
+      />
+
+      <Tabs value={f.tab} onValueChange={f.setTab}>
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="receita" className="gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Receita</TabsTrigger>
+          <TabsTrigger value="funil" className="gap-1.5"><Filter className="w-3.5 h-3.5" /> Funil</TabsTrigger>
+          <TabsTrigger value="performance" className="gap-1.5"><Users className="w-3.5 h-3.5" /> Performance</TabsTrigger>
+          <TabsTrigger value="canais" className="gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Canais</TabsTrigger>
+          <TabsTrigger value="qualidade" className="gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> Qualidade</TabsTrigger>
+          <TabsTrigger value="inteligencia" className="gap-1.5"><Brain className="w-3.5 h-3.5" /> Inteligência</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="receita" className="mt-4">
+          {f.tab === "receita" && <RevenueTab params={f.rpcParams} periodDays={f.periodDays} />}
+        </TabsContent>
+        <TabsContent value="funil" className="mt-4">
+          {f.tab === "funil" && <FunnelTab params={f.rpcParams} />}
+        </TabsContent>
+        <TabsContent value="performance" className="mt-4">
+          {f.tab === "performance" && <PerformanceTab params={f.rpcParams} />}
+        </TabsContent>
+        <TabsContent value="canais" className="mt-4">
+          {f.tab === "canais" && <ChannelsTab params={f.rpcParams} />}
+        </TabsContent>
+        <TabsContent value="qualidade" className="mt-4">
+          {f.tab === "qualidade" && <QualityTab params={f.rpcParams} />}
+        </TabsContent>
+        <TabsContent value="inteligencia" className="mt-4">
+          {f.tab === "inteligencia" && <IntelligenceTab params={f.rpcParams} />}
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 };
 
