@@ -240,6 +240,7 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
                     nome_fantasia: form?.nome_fantasia || SAMPLE_CREDOR.nome_fantasia,
                     cnpj: form?.cnpj || SAMPLE_CREDOR.cnpj,
                     portal_logo_url: form?.portal_logo_url || SAMPLE_CREDOR.portal_logo_url,
+                    document_logo_url: form?.document_logo_url || SAMPLE_CREDOR.document_logo_url,
                     endereco: form?.endereco || SAMPLE_CREDOR.endereco,
                     numero: form?.numero || SAMPLE_CREDOR.numero,
                     complemento: form?.complemento || SAMPLE_CREDOR.complemento,
