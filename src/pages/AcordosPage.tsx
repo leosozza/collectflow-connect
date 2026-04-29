@@ -352,6 +352,36 @@ const AcordosPage = () => {
     return { total, pending, paid };
   }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
 
+  // Contadores por aba (status filter) — usa o mesmo conjunto classificado pós credor/operador/busca
+  const tabCounts = useMemo(() => {
+    const isMonthSelected = selectedMonth !== "todos" && !dateFrom && !dateTo;
+    const counts = {
+      vigentes: 0,
+      approved: 0,
+      overdue: 0,
+      pending_approval: 0,
+      cancelled: 0,
+      payment_confirmation: 0,
+    };
+    for (const a of classifiedAgreements) {
+      const cls = (a as any)._installmentClass as InstallmentClassification | undefined;
+      if (a.status === "pending_approval") { counts.pending_approval++; continue; }
+      if (a.status === "cancelled") { counts.cancelled++; continue; }
+      if (isMonthSelected && cls !== undefined) {
+        if (cls === "pago") counts.approved++;
+        else if (cls === "vigente") counts.vigentes++;
+        else if (cls === "vencido") counts.overdue++;
+        else if (cls === "pending_confirmation") counts.payment_confirmation++;
+      } else {
+        const hasPaid = (a as any)._hasPaidInScope as boolean | undefined;
+        if (hasPaid === true || a.status === "approved" || a.status === "completed") counts.approved++;
+        else if (a.status === "overdue") counts.overdue++;
+        else if (a.status === "pending") counts.vigentes++;
+      }
+    }
+    return counts;
+  }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
+
   const isOperationalFilter = statusFilter === "pending_approval" || statusFilter === "payment_confirmation";
 
   return (
