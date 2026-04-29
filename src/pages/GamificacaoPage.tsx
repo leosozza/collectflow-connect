@@ -4,10 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
+import { supabase } from "@/integrations/supabase/client";
 import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
 import { fetchMyGoal } from "@/services/goalService";
 import { fetchMyWallet } from "@/services/rivocoinService";
 import { fetchScoringRules } from "@/services/scoringRulesService";
+import { fetchCampaigns, Campaign } from "@/services/campaignService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,10 +33,26 @@ import RankingManagementTab from "@/components/gamificacao/RankingManagementTab"
 import ParticipantsManagementTab from "@/components/gamificacao/ParticipantsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
+const adminTabs = ["ranking", "campaigns", "achievements", "goals", "manage"];
+const operatorTabs = ["ranking", "campaigns", "achievements", "goals", "shop", "wallet", "history"];
+
+const isValidDate = (s?: string | null) => {
+  if (!s) return false;
+  const ts = Date.parse(s);
+  if (isNaN(ts)) return false;
+  const y = new Date(ts).getFullYear();
+  return y >= 2000 && y <= 2100;
+};
+
+const isCampaignActive = (campaign: Campaign) => {
+  if (campaign.status !== "ativa") return false;
+  if (!isValidDate(campaign.start_date) || !isValidDate(campaign.end_date)) return false;
+  return new Date(campaign.end_date).getTime() >= new Date(new Date().toDateString()).getTime();
+};
 
 const GamificacaoPage = () => {
   const { profile } = useAuth();
-  const { isTenantAdmin } = useTenant();
+  const { tenant, isTenantAdmin } = useTenant();
   const [urlTab, setUrlTab] = useUrlState("tab", "");
   const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
