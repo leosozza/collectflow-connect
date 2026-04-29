@@ -84,8 +84,9 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name")
+        .select("id, full_name, role")
         .eq("tenant_id", tenant!.id)
+        .in("role", ["operador", "supervisor", "gerente"] as any)
         .order("full_name");
       return data || [];
     },
@@ -153,8 +154,9 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
         .in("equipe_id", selectedEquipes);
 
       const seen = new Set<string>();
+      const eligibleOperatorIds = new Set(operators.map((op: any) => op.id));
       for (const m of (members || []) as any[]) {
-        if (!seen.has(m.profile_id)) {
+        if (eligibleOperatorIds.has(m.profile_id) && !seen.has(m.profile_id)) {
           seen.add(m.profile_id);
           participants.push({
             operator_id: m.profile_id,

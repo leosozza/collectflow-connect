@@ -39,8 +39,9 @@ const GoalsManagementTab = () => {
 
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, avatar_url")
+        .select("id, full_name, avatar_url, role")
         .in("id", enabledIds)
+        .in("role", ["operador", "supervisor", "gerente"] as any)
         .order("full_name");
       return data || [];
     },

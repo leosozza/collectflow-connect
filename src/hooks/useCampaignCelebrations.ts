@@ -10,12 +10,13 @@ import type { CelebrationPayload } from "@/components/gamificacao/CampaignCelebr
  */
 export const useCampaignCelebrations = () => {
   const { profile } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, tenantUser, isTenantAdmin } = useTenant();
   const [queue, setQueue] = useState<CelebrationPayload[]>([]);
   const [current, setCurrent] = useState<CelebrationPayload | null>(null);
+  const isOperationalParticipant = ["operador", "supervisor", "gerente"].includes(tenantUser?.role || "");
 
   const loadPending = useCallback(async () => {
-    if (!profile?.id || !tenant?.id) return;
+    if (isTenantAdmin || !isOperationalParticipant || !profile?.id || !tenant?.id) return;
 
     // Recently closed campaigns (last 30 days)
     const since = new Date();
@@ -61,15 +62,24 @@ export const useCampaignCelebrations = () => {
         .order("score", { ascending: false });
 
       const rows = (ranking || []) as Array<{ operator_id: string; score: number }>;
-      const idx = rows.findIndex((r) => r.operator_id === profile.id);
+      const operatorIds = [...new Set(rows.map((r) => r.operator_id))];
+      if (operatorIds.length === 0) continue;
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, role")
+        .in("id", operatorIds)
+        .in("role", ["operador", "supervisor", "gerente"] as any);
+      const eligibleIds = new Set((profiles || []).map((p: any) => p.id));
+      const eligibleRows = rows.filter((r) => eligibleIds.has(r.operator_id));
+      const idx = eligibleRows.findIndex((r) => r.operator_id === profile.id);
       if (idx === -1) continue;
       payloads.push({
         campaign_id: c.id,
         campaign_title: c.title,
         prize_description: c.prize_description,
         position: idx + 1,
-        total: rows.length,
-        score: Number(rows[idx].score) || 0,
+        total: eligibleRows.length,
+        score: Number(eligibleRows[idx].score) || 0,
       });
     }
 
@@ -81,7 +91,14 @@ export const useCampaignCelebrations = () => {
         return merged;
       });
     }
-  }, [profile?.id, tenant?.id]);
+  }, [isTenantAdmin, isOperationalParticipant, profile?.id, tenant?.id]);
+
+  useEffect(() => {
+    if (isTenantAdmin || !isOperationalParticipant) {
+      setCurrent(null);
+      setQueue([]);
+    }
+  }, [isTenantAdmin, isOperationalParticipant]);
 
   // Initial load + on tenant/profile ready
   useEffect(() => {
@@ -90,7 +107,7 @@ export const useCampaignCelebrations = () => {
 
   // Realtime: re-check when a campaign auto-closes for this tenant
   useEffect(() => {
-    if (!tenant?.id) return;
+    if (isTenantAdmin || !isOperationalParticipant || !tenant?.id) return;
     const channel = supabase
       .channel(`celebration-watch-${tenant.id}`)
       .on(
@@ -111,7 +128,7 @@ export const useCampaignCelebrations = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenant?.id, loadPending]);
+  }, [isTenantAdmin, isOperationalParticipant, tenant?.id, loadPending]);
 
   // Promote head of queue to current
   useEffect(() => {
@@ -124,7 +141,7 @@ export const useCampaignCelebrations = () => {
     const closing = current;
     setCurrent(null);
     setQueue((q) => q.slice(1));
-    if (!closing || !profile?.id || !tenant?.id) return;
+    if (isTenantAdmin || !isOperationalParticipant || !closing || !profile?.id || !tenant?.id) return;
     try {
       await supabase.from("campaign_celebration_views").insert({
         tenant_id: tenant.id,
@@ -135,7 +152,7 @@ export const useCampaignCelebrations = () => {
       // unique violation = already seen, ignore
       console.warn("celebration mark seen error:", err);
     }
-  }, [current, profile?.id, tenant?.id]);
+  }, [current, isTenantAdmin, isOperationalParticipant, profile?.id, tenant?.id]);
 
   return { current, dismiss, open: !!current };
 };

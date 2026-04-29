@@ -4,13 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
+import { supabase } from "@/integrations/supabase/client";
 import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
-import { fetchMyGoal } from "@/services/goalService";
 import { fetchMyWallet } from "@/services/rivocoinService";
 import { fetchScoringRules } from "@/services/scoringRulesService";
+import { fetchCampaigns, Campaign } from "@/services/campaignService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/formatters";
@@ -31,10 +31,26 @@ import RankingManagementTab from "@/components/gamificacao/RankingManagementTab"
 import ParticipantsManagementTab from "@/components/gamificacao/ParticipantsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
+const adminTabs = ["ranking", "campaigns", "achievements", "goals", "manage"];
+const operatorTabs = ["ranking", "campaigns", "achievements", "goals", "shop", "wallet", "history"];
+
+const isValidDate = (s?: string | null) => {
+  if (!s) return false;
+  const ts = Date.parse(s);
+  if (isNaN(ts)) return false;
+  const y = new Date(ts).getFullYear();
+  return y >= 2000 && y <= 2100;
+};
+
+const isCampaignActive = (campaign: Campaign) => {
+  if (campaign.status !== "ativa") return false;
+  if (!isValidDate(campaign.start_date) || !isValidDate(campaign.end_date)) return false;
+  return new Date(campaign.end_date).getTime() >= new Date(new Date().toDateString()).getTime();
+};
 
 const GamificacaoPage = () => {
   const { profile } = useAuth();
-  const { isTenantAdmin } = useTenant();
+  const { tenant, isTenantAdmin } = useTenant();
   const [urlTab, setUrlTab] = useUrlState("tab", "");
   const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
@@ -45,10 +61,20 @@ const GamificacaoPage = () => {
     triggerGamificationUpdate();
   }, [triggerGamificationUpdate]);
 
+  const allowedTabs = isTenantAdmin ? adminTabs : operatorTabs;
+  const defaultTab = isTenantAdmin ? "ranking" : "goals";
+  const currentTab = urlTab && allowedTabs.includes(urlTab) ? urlTab : defaultTab;
+
+  useEffect(() => {
+    if (urlTab && !allowedTabs.includes(urlTab)) {
+      setUrlTab(defaultTab);
+    }
+  }, [urlTab, defaultTab, setUrlTab, isTenantAdmin]);
+
   const { data: myPoints } = useQuery({
     queryKey: ["my-points", profile?.id, year, month],
     queryFn: () => fetchMyPoints(profile!.id, year, month),
-    enabled: !!profile?.id,
+    enabled: !isTenantAdmin && !!profile?.id,
   });
 
   const { data: ranking = [] } = useQuery({
@@ -59,13 +85,41 @@ const GamificacaoPage = () => {
   const { data: wallet } = useQuery({
     queryKey: ["rivocoin-wallet", profile?.id],
     queryFn: () => fetchMyWallet(profile!.id),
-    enabled: !!profile?.id,
+    enabled: !isTenantAdmin && !!profile?.id,
   });
 
   const { data: earnedAchievements = [] } = useQuery({
     queryKey: ["achievements", profile?.id],
     queryFn: () => fetchAllAchievements(profile!.id),
-    enabled: !!profile?.id,
+    enabled: !isTenantAdmin && !!profile?.id,
+  });
+
+  const { data: adminAchievementsCount = 0 } = useQuery({
+    queryKey: ["all-achievements-count", tenant?.id],
+    queryFn: async () => {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("tenant_id", tenant!.id)
+        .in("role", ["operador", "supervisor", "gerente"] as any)
+        .range(0, 999);
+      const profileIds = (profiles || []).map((p: any) => p.id);
+      if (profileIds.length === 0) return 0;
+      const { count, error } = await supabase
+        .from("achievements")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant!.id)
+        .in("profile_id", profileIds);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: isTenantAdmin && !!tenant?.id,
+  });
+
+  const { data: adminCampaigns = [] } = useQuery({
+    queryKey: ["campaigns", tenant?.id],
+    queryFn: () => fetchCampaigns(tenant?.id),
+    enabled: isTenantAdmin && !!tenant?.id,
   });
 
   const { data: scoringRules = [] } = useQuery({
@@ -81,15 +135,63 @@ const GamificacaoPage = () => {
   const points = myPoints?.points || 0;
   const achievementsCount = earnedAchievements.length;
   const rivoBalance = wallet?.balance || 0;
+  const adminParticipantsCount = ranking.length;
+  const adminPointsTotal = ranking.reduce((sum, entry) => sum + Number(entry.points || 0), 0);
+  const adminReceivedTotal = ranking.reduce((sum, entry) => sum + Number(entry.total_received || 0), 0);
+  const activeCampaignsCount = adminCampaigns.filter(isCampaignActive).length;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Gamificação</h1>
-        <p className="text-muted-foreground text-sm">Seu desempenho e ranking do mês</p>
+        <p className="text-muted-foreground text-sm">
+          {isTenantAdmin ? "Visão geral da equipe e gestão da gamificação" : "Seu desempenho e ranking do mês"}
+        </p>
       </div>
 
-      {/* My stats hero */}
+      {isTenantAdmin ? (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Target className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{adminParticipantsCount.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Participantes ranqueados</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Trophy className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{adminPointsTotal.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Pontos da equipe</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Star className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{adminAchievementsCount.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Conquistas concedidas</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <BarChart3 className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{formatCurrency(adminReceivedTotal)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Recebido da equipe</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 text-center">
+              <Flame className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{activeCampaignsCount.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Campanhas ativas</p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <Card className="border-border">
           <CardContent className="p-4 text-center">
@@ -165,9 +267,10 @@ const GamificacaoPage = () => {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Tabs */}
-      <Tabs defaultValue={urlTab || (isTenantAdmin ? "ranking" : "goals")} onValueChange={setUrlTab} value={urlTab || undefined}>
+      <Tabs defaultValue={defaultTab} onValueChange={setUrlTab} value={currentTab}>
         <TabsList className="w-full sm:w-auto flex-wrap">
           <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
             <Trophy className="w-3.5 h-3.5" /> Ranking
@@ -181,15 +284,19 @@ const GamificacaoPage = () => {
           <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
             <Target className="w-3.5 h-3.5" /> Metas
           </TabsTrigger>
-          <TabsTrigger value="shop" className="flex-1 sm:flex-none gap-1.5">
-            <ShoppingBag className="w-3.5 h-3.5" /> Loja
-          </TabsTrigger>
-          <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
-            <Coins className="w-3.5 h-3.5" /> Carteira
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
-            <History className="w-3.5 h-3.5" /> Histórico
-          </TabsTrigger>
+          {!isTenantAdmin && (
+            <>
+              <TabsTrigger value="shop" className="flex-1 sm:flex-none gap-1.5">
+                <ShoppingBag className="w-3.5 h-3.5" /> Loja
+              </TabsTrigger>
+              <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
+                <Coins className="w-3.5 h-3.5" /> Carteira
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
+                <History className="w-3.5 h-3.5" /> Histórico
+              </TabsTrigger>
+            </>
+          )}
           {isTenantAdmin && (
             <TabsTrigger value="manage" className="flex-1 sm:flex-none gap-1.5">
               <Settings className="w-3.5 h-3.5" /> Gerenciar
@@ -198,32 +305,36 @@ const GamificacaoPage = () => {
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
-          <RankingTab />
+          <RankingTab highlightCurrentUser={!isTenantAdmin} />
         </TabsContent>
 
         <TabsContent value="campaigns" className="mt-4">
-          <CampaignsTab />
+          <CampaignsTab highlightCurrentUser={!isTenantAdmin} />
         </TabsContent>
 
         <TabsContent value="achievements" className="mt-4">
-          <AchievementsTab isAdmin={false} />
+          <AchievementsTab isAdmin={isTenantAdmin} />
         </TabsContent>
 
         <TabsContent value="goals" className="mt-4">
           <GoalsTab />
         </TabsContent>
 
-        <TabsContent value="shop" className="mt-4">
-          <ShopTab />
-        </TabsContent>
+        {!isTenantAdmin && (
+          <>
+            <TabsContent value="shop" className="mt-4">
+              <ShopTab />
+            </TabsContent>
 
-        <TabsContent value="wallet" className="mt-4">
-          <WalletTab />
-        </TabsContent>
+            <TabsContent value="wallet" className="mt-4">
+              <WalletTab />
+            </TabsContent>
 
-        <TabsContent value="history" className="mt-4">
-          <PointsHistoryTab />
-        </TabsContent>
+            <TabsContent value="history" className="mt-4">
+              <PointsHistoryTab />
+            </TabsContent>
+          </>
+        )}
 
         {isTenantAdmin && (
           <TabsContent value="manage" className="mt-4">

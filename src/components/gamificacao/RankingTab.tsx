@@ -13,7 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const medals = ["🥇", "🥈", "🥉"];
 const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-const RankingTab = () => {
+interface RankingTabProps {
+  highlightCurrentUser?: boolean;
+}
+
+const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
   const { profile } = useAuth();
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
@@ -82,7 +86,7 @@ const RankingTab = () => {
 
       <div className="space-y-3">
         {ranking.map((entry: RankingEntry) => {
-          const isMe = entry.operator_id === profile?.id;
+          const isMe = highlightCurrentUser && entry.operator_id === profile?.id;
           const medal = entry.position && entry.position <= 3 ? medals[entry.position - 1] : null;
           const name = entry.profile?.full_name || "Operador";
           const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
