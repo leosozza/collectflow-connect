@@ -89,14 +89,11 @@ export function wrapDocumentInA4Page(
 ): string {
   const cleanBody = stripDuplicateTitle(bodyHtml, title);
   const { line1: footerLine1, line2: footerLine2 } = buildFooterLines(credor);
-  const logoUrl = credor?.portal_logo_url?.trim() || "";
-  const credorName = credor?.razao_social || credor?.nome_fantasia || "";
+  const logoUrl = credor?.document_logo_url?.trim() || "";
 
   const headerLeft = logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="max-height:60px;max-width:200px;object-fit:contain;display:block" crossorigin="anonymous" />`
-    : credorName
-      ? `<div style="font-family:'Georgia','Times New Roman',serif;font-size:11pt;font-weight:600;color:#1a1a1a;letter-spacing:.3px">${escapeHtml(credorName)}</div>`
-      : "";
+    ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="width:20mm;max-width:20mm;height:auto;max-height:25mm;object-fit:contain;display:block" crossorigin="anonymous" />`
+    : "";
 
   const mainContent = options.bodyOverrideHtml ?? cleanBody;
 
@@ -139,20 +136,17 @@ export function wrapDocumentInA4Page(
     }
   </style>
 
-  <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:10mm;">
-    <div style="flex:0 0 auto;min-height:60px;display:flex;align-items:center">${headerLeft}</div>
+  <header style="display:grid;grid-template-columns:25mm 1fr 25mm;align-items:center;gap:6mm;padding-bottom:5mm;border-bottom:1.2px solid #1a1a1a;margin-bottom:8mm;">
+    <div style="min-height:20mm;display:flex;align-items:center;justify-content:flex-start">${headerLeft}</div>
+    <h1 style="font-family:'Georgia','Times New Roman',serif;font-size:16pt;font-weight:700;letter-spacing:.5px;margin:0;text-transform:uppercase;color:#1a1a1a;text-align:center;line-height:1.2">${escapeHtml(title)}</h1>
+    <div></div>
   </header>
-
-  <div style="text-align:center;margin-bottom:8mm;">
-    <h1 style="font-family:'Georgia','Times New Roman',serif;font-size:18pt;font-weight:700;letter-spacing:.5px;margin:0;text-transform:uppercase;color:#1a1a1a">${escapeHtml(title)}</h1>
-    <div style="width:60px;height:2px;background:#1a1a1a;margin:6pt auto 0"></div>
-  </div>
 
   <main style="flex:1 1 auto;">
     ${mainContent}
   </main>
 
-  <footer style="margin-top:12mm;padding-top:6mm;border-top:1px solid #d4d4d4;text-align:center;font-family:'Helvetica','Arial',sans-serif;font-size:8.5pt;line-height:1.5;color:#666;">
+  <footer style="margin-top:12mm;padding-top:5mm;border-top:1.2px solid #1a1a1a;text-align:center;font-family:'Helvetica','Arial',sans-serif;font-size:8.5pt;line-height:1.5;color:#666;">
     ${footerLine1 ? `<div style="font-weight:600;color:#333;margin-bottom:2pt">${escapeHtml(footerLine1)}</div>` : ""}
     ${footerLine2 ? `<div style="color:#666">${escapeHtml(footerLine2)}</div>` : ""}
   </footer>
@@ -166,6 +160,7 @@ export const SAMPLE_CREDOR: CredorLayoutInfo = {
   nome_fantasia: "Empresa Exemplo",
   cnpj: "12345678000190",
   portal_logo_url: "",
+  document_logo_url: "",
   endereco: "Av. Paulista",
   numero: "1000",
   complemento: "Sala 1201",
