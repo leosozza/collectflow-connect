@@ -169,7 +169,7 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
                   </Badge>
                 )}
                 <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
-                  🎯 {receiveRate}% taxa
+                  🎯 {receiveRate}% Taxa de Conversão
                 </Badge>
               </div>
 
