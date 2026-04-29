@@ -56,7 +56,7 @@ async function syncTenant(supabase: any, tenant_id: string) {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("agreements")
-      .select("id, client_cpf, credor, status")
+      .select("id, client_cpf, credor, status, created_at, updated_at")
       .eq("tenant_id", tenant_id)
       .neq("status", "rejected")
       .range(from, from + PAGE - 1);
