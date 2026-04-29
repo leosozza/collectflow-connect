@@ -63,6 +63,7 @@ export const useCampaignCelebrations = () => {
 
       const rows = (ranking || []) as Array<{ operator_id: string; score: number }>;
       const operatorIds = [...new Set(rows.map((r) => r.operator_id))];
+      if (operatorIds.length === 0) continue;
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, role")
