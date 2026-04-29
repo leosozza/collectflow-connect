@@ -740,7 +740,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             const hasActiveBoleto = !!inst.cobranca && !["cancelado", "substituido", "estornado"].includes(inst.cobranca.status);
             const isOnlyEntrada = inst.isEntrada && inst.entradaCount === 1;
             const canCancel = !isPaid && !isCancelled && inst.status !== "pending_confirmation"
-              && !hasActiveBoleto && !isOnlyEntrada;
+              && !hasActiveBoleto && !isOnlyEntrada
+              && activeInstallmentsCount > 1;
 
             return (
               <TableRow key={idx} className={cn(isCancelled && "opacity-60 [&_td]:line-through [&_td]:decoration-muted-foreground")}>
@@ -1131,6 +1132,55 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Cancel Installment Confirmation */}
+    <AlertDialog
+      open={!!cancelInstallmentDialog}
+      onOpenChange={(o) => !o && setCancelInstallmentDialog(null)}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancelar parcela?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {cancelInstallmentDialog && (
+              <>
+                A parcela{" "}
+                <b>
+                  {cancelInstallmentDialog.inst.isEntrada
+                    ? (cancelInstallmentDialog.inst.entradaCount > 1
+                        ? `Entrada ${cancelInstallmentDialog.inst.entradaIndex + 1}`
+                        : "Entrada")
+                    : `${cancelInstallmentDialog.inst.displayNumber}/${totalInstallments}`}
+                </b>{" "}
+                ({formatCurrency(Number(cancelInstallmentDialog.inst.value))}) será marcada como
+                cancelada. Ela continuará visível na lista, com risco, e será desconsiderada do
+                progresso e do dashboard "Parcelas Programadas". Você poderá reativá-la depois.
+                <br /><br />
+                <span className="text-xs text-muted-foreground">
+                  O valor original do acordo (proposed_total) é preservado para fins de histórico
+                  contratual.
+                </span>
+              </>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={cancellingInstallmentIdx !== null}>
+            Voltar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleConfirmCancelInstallment}
+            disabled={cancellingInstallmentIdx !== null}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {cancellingInstallmentIdx !== null && (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            )}
+            Cancelar Parcela
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     {/* Boleto Pendente Missing Fields Dialog */}
     <Dialog open={boletoPendenteMissingOpen} onOpenChange={(o) => !o && setBoletoPendenteMissingOpen(false)}>
