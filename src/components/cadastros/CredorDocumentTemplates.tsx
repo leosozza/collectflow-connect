@@ -157,18 +157,28 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
     toast.success("Modelo atualizado. Salve o credor para persistir.");
   };
 
-  const handleInsertPlaceholder = (key: string) => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const newContent = editContent.substring(0, start) + key + editContent.substring(end);
-    setEditContent(newContent);
-    setEditorTab("editor");
-    setTimeout(() => {
-      el.focus();
-      el.setSelectionRange(start + key.length, start + key.length);
-    }, 0);
+  const handleInsertPlaceholder = async (key: string) => {
+    try {
+      await navigator.clipboard.writeText(key);
+      toast.success(`Variável copiada: ${key}`, {
+        description: "Cole (Ctrl+V) onde desejar no editor.",
+      });
+    } catch {
+      // Fallback: legacy execCommand
+      const ta = document.createElement("textarea");
+      ta.value = key;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        toast.success(`Variável copiada: ${key}`);
+      } catch {
+        toast.error("Não foi possível copiar a variável");
+      }
+      document.body.removeChild(ta);
+    }
   };
 
   const editingDocType = DOCUMENT_TYPES.find((d) => d.credorKey === editingKey);
