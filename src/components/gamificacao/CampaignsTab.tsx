@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
@@ -58,7 +58,7 @@ const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "campaign_participants", filter: `tenant_id=eq.${tenant.id}` },
-        (payload: any) => {
+        (payload: { new?: { campaign_id?: string }; old?: { campaign_id?: string } }) => {
           const cid = payload?.new?.campaign_id || payload?.old?.campaign_id;
           if (cid) {
             queryClient.invalidateQueries({ queryKey: ["campaign-participants", cid] });
@@ -73,8 +73,9 @@ const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
     };
   }, [tenant?.id, queryClient]);
 
-  const active = campaigns.filter(isCampaignActive);
-  const others = campaigns.filter((c) => !isCampaignActive(c));
+  const active = useMemo(() => campaigns.filter(isCampaignActive), [campaigns]);
+  const others = useMemo(() => campaigns.filter((c) => !isCampaignActive(c)), [campaigns]);
+  const activeIds = active.map((c) => c.id).join("|");
 
   useEffect(() => {
     if (!tenant?.id || active.length === 0) return;
@@ -83,7 +84,7 @@ const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
         .then(() => queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] }))
         .catch((error) => console.warn("Erro ao recalcular campanha", campaign.id, error));
     });
-  }, [tenant?.id, active.map((c) => c.id).join("|"), queryClient]);
+  }, [tenant?.id, activeIds, active, queryClient]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
