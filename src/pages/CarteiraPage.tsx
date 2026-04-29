@@ -578,6 +578,8 @@ const CarteiraPage = () => {
       setLoadingSelectN(false);
     }
   };
+
+  const toggleSelect = (groupClient: any) => {
     const ids: string[] = groupClient.allIds || [groupClient.id];
     const cpf = (groupClient.cpf || "").replace(/\D/g, "");
     const next = new Set(selectedIds);
