@@ -50,18 +50,35 @@ async function syncTenant(supabase: any, tenant_id: string) {
     };
   }
 
-  // 2. Fetch ALL clients
-  const { data: allClients } = await supabase
-    .from("clients")
-    .select("id, cpf, credor, status, data_vencimento, status_cobranca_id")
-    .eq("tenant_id", tenant_id);
+  // 2. Fetch ALL clients (paginated to bypass 1000-row limit)
+  const allClients: any[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, cpf, credor, status, data_vencimento, status_cobranca_id")
+      .eq("tenant_id", tenant_id)
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allClients.push(...data);
+    if (data.length < PAGE) break;
+  }
 
-  // 3. Fetch ALL active agreements
-  const { data: allAgreements } = await supabase
-    .from("agreements")
-    .select("id, client_cpf, credor, status")
-    .eq("tenant_id", tenant_id)
-    .not("status", "in", "(rejected)");
+  // 3. Fetch ALL active agreements (paginated)
+  const allAgreements: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("agreements")
+      .select("id, client_cpf, credor, status")
+      .eq("tenant_id", tenant_id)
+      .neq("status", "rejected")
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allAgreements.push(...data);
+    if (data.length < PAGE) break;
+  }
 
   // 4. Group clients by CPF+Credor
   const cpfGroups = new Map<string, any[]>();
