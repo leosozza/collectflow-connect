@@ -39,6 +39,17 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
   const [isInternalMode, setIsInternalMode] = useState(false);
   const [qrPopoverOpen, setQrPopoverOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea like WhatsApp: grows up to ~6 lines, then scrolls.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const maxHeight = 180; // ~6 lines at text-sm
+    const next = Math.min(ta.scrollHeight, maxHeight);
+    ta.style.height = `${next}px`;
+  }, [text]);
 
   // Quick replies: detect "/" at start
   useEffect(() => {
