@@ -94,24 +94,24 @@ const GamificacaoPage = () => {
     enabled: !isTenantAdmin && !!profile?.id,
   });
 
-  const { data: adminAchievements = [] } = useQuery({
+  const { data: adminAchievementsCount = 0 } = useQuery({
     queryKey: ["all-achievements-count", tenant?.id],
     queryFn: async () => {
-      const { data: achievements, error } = await supabase
-        .from("achievements")
-        .select("id, profile_id")
-        .eq("tenant_id", tenant!.id);
-      if (error) throw error;
-      const profileIds = [...new Set((achievements || []).map((a: any) => a.profile_id))];
-      if (profileIds.length === 0) return [];
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id")
         .eq("tenant_id", tenant!.id)
         .in("role", ["operador", "supervisor", "gerente"] as any)
-        .in("id", profileIds);
-      const eligibleIds = new Set((profiles || []).map((p: any) => p.id));
-      return (achievements || []).filter((a: any) => eligibleIds.has(a.profile_id));
+        .range(0, 999);
+      const profileIds = (profiles || []).map((p: any) => p.id);
+      if (profileIds.length === 0) return 0;
+      const { count, error } = await supabase
+        .from("achievements")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenant!.id)
+        .in("profile_id", profileIds);
+      if (error) throw error;
+      return count || 0;
     },
     enabled: isTenantAdmin && !!tenant?.id,
   });
@@ -138,7 +138,6 @@ const GamificacaoPage = () => {
   const adminParticipantsCount = ranking.length;
   const adminPointsTotal = ranking.reduce((sum, entry) => sum + Number(entry.points || 0), 0);
   const adminReceivedTotal = ranking.reduce((sum, entry) => sum + Number(entry.total_received || 0), 0);
-  const adminAchievementsCount = adminAchievements.length;
   const activeCampaignsCount = adminCampaigns.filter(isCampaignActive).length;
 
   return (
