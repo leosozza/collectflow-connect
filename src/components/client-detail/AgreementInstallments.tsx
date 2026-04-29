@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { negociarieService } from "@/services/negociarieService";
-import { updateInstallmentDate, updateInstallmentValue } from "@/services/agreementService";
+import { updateInstallmentDate, updateInstallmentValue, cancelInstallment, reactivateInstallment } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
 import { getClientProfile, upsertClientProfile } from "@/services/clientProfileService";
 import { logAction } from "@/services/auditService";
@@ -24,7 +24,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ExternalLink, FileText, ClipboardCopy,
   CheckCircle2, Clock, AlertTriangle, Loader2, FileBarChart, DollarSign, Pencil, FileCheck, ChevronDown,
+  Trash2, RotateCcw, XCircle,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
