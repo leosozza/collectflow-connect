@@ -141,10 +141,16 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => upsertCredor(data),
-    onSuccess: (_data, variables: any) => {
+    onSuccess: (data: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["credores"] });
+      queryClient.invalidateQueries({ queryKey: ["credores-count"] });
       toast.success("Credor salvo!");
       const newPrazo = parseInt(variables?.prazo_dias_acordo) || 30;
+      const newId = data?.id || data?.[0]?.id;
+      // Se acabou de criar (rota /novo) e há id retornado, atualizar URL para /:id/:section
+      if (!editing?.id && newId) {
+        navigate(`/cadastros/credores/${newId}/${activeSection}`, { replace: true });
+      }
       if (
         canApplyExpireNow &&
         editing?.id &&
