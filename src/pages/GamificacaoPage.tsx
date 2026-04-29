@@ -63,10 +63,20 @@ const GamificacaoPage = () => {
     triggerGamificationUpdate();
   }, [triggerGamificationUpdate]);
 
+  const allowedTabs = isTenantAdmin ? adminTabs : operatorTabs;
+  const defaultTab = isTenantAdmin ? "ranking" : "goals";
+  const currentTab = urlTab && allowedTabs.includes(urlTab) ? urlTab : defaultTab;
+
+  useEffect(() => {
+    if (urlTab && !allowedTabs.includes(urlTab)) {
+      setUrlTab(defaultTab);
+    }
+  }, [urlTab, defaultTab, setUrlTab, isTenantAdmin]);
+
   const { data: myPoints } = useQuery({
     queryKey: ["my-points", profile?.id, year, month],
     queryFn: () => fetchMyPoints(profile!.id, year, month),
-    enabled: !!profile?.id,
+    enabled: !isTenantAdmin && !!profile?.id,
   });
 
   const { data: ranking = [] } = useQuery({
@@ -77,13 +87,32 @@ const GamificacaoPage = () => {
   const { data: wallet } = useQuery({
     queryKey: ["rivocoin-wallet", profile?.id],
     queryFn: () => fetchMyWallet(profile!.id),
-    enabled: !!profile?.id,
+    enabled: !isTenantAdmin && !!profile?.id,
   });
 
   const { data: earnedAchievements = [] } = useQuery({
     queryKey: ["achievements", profile?.id],
     queryFn: () => fetchAllAchievements(profile!.id),
-    enabled: !!profile?.id,
+    enabled: !isTenantAdmin && !!profile?.id,
+  });
+
+  const { data: adminAchievements = [] } = useQuery({
+    queryKey: ["all-achievements", tenant?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("achievements")
+        .select("id")
+        .eq("tenant_id", tenant!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isTenantAdmin && !!tenant?.id,
+  });
+
+  const { data: adminCampaigns = [] } = useQuery({
+    queryKey: ["campaigns", tenant?.id],
+    queryFn: () => fetchCampaigns(tenant?.id),
+    enabled: isTenantAdmin && !!tenant?.id,
   });
 
   const { data: scoringRules = [] } = useQuery({
@@ -99,6 +128,11 @@ const GamificacaoPage = () => {
   const points = myPoints?.points || 0;
   const achievementsCount = earnedAchievements.length;
   const rivoBalance = wallet?.balance || 0;
+  const adminParticipantsCount = ranking.length;
+  const adminPointsTotal = ranking.reduce((sum, entry) => sum + Number(entry.points || 0), 0);
+  const adminReceivedTotal = ranking.reduce((sum, entry) => sum + Number(entry.total_received || 0), 0);
+  const adminAchievementsCount = adminAchievements.length;
+  const activeCampaignsCount = adminCampaigns.filter(isCampaignActive).length;
 
   return (
     <div className="space-y-6 animate-fade-in">
