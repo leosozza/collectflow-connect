@@ -74,12 +74,12 @@ const DashboardMetaCard = ({
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full h-full flex flex-col">
-      <div className="px-4 pt-3 pb-1">
+    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full h-full max-h-[220px] flex flex-col">
+      <div className="px-4 pt-2 pb-0.5 shrink-0">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       </div>
 
-      <div className="flex-1 px-3 pb-3 flex items-center justify-center min-h-0">
+      <div className="flex-1 px-3 pb-2 flex items-center justify-center min-h-0">
         {goal === 0 ? (
           <div className="text-center py-4 text-muted-foreground text-xs">
             Nenhuma meta definida para este período.
@@ -92,7 +92,7 @@ const DashboardMetaCard = ({
             monthLabel={monthLabel}
             year={year}
             month={month}
-            size={170}
+            size={150}
             duration={1.2}
           />
         )}

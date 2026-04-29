@@ -5,11 +5,9 @@ export type DashboardBlockId =
   | "metas"
   | "totalRecebido"
   | "kpisOperacionais"
+  | "kpisFinanceiros"
   | "agendamentos"
-  | "parcelas"
-  | "totalQuebra"
-  | "pendentes"
-  | "colchaoAcordos";
+  | "parcelas";
 
 export interface DashboardLayout {
   visible: Record<DashboardBlockId, boolean>;
@@ -18,41 +16,37 @@ export interface DashboardLayout {
 }
 
 export const ALL_DASHBOARD_BLOCKS: DashboardBlockId[] = [
-  "metas",
-  "totalRecebido",
   "kpisOperacionais",
+  "kpisFinanceiros",
   "agendamentos",
   "parcelas",
-  "totalQuebra",
-  "pendentes",
-  "colchaoAcordos",
+  "metas",
+  "totalRecebido",
 ];
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
-    metas: true,
-    totalRecebido: true,
     kpisOperacionais: true,
+    kpisFinanceiros: true,
     agendamentos: true,
     parcelas: true,
-    totalQuebra: true,
-    pendentes: true,
-    colchaoAcordos: true,
+    metas: true,
+    totalRecebido: true,
   },
-  // Linha 1 (referência): Agendamentos | Parcelas | Metas
+  // Linha 1 (topo): KPIs Operacionais | KPIs Financeiros
+  // Linha 2 (base): Agendamentos | Parcelas | Metas
+  // Linha 3 (extra): Total Recebido (gráfico)
   order: [
+    "kpisOperacionais",
+    "kpisFinanceiros",
     "agendamentos",
     "parcelas",
     "metas",
-    "kpisOperacionais",
     "totalRecebido",
-    "totalQuebra",
-    "pendentes",
-    "colchaoAcordos",
   ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v5";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v6";
 
 function sanitize(raw: any): DashboardLayout {
   try {

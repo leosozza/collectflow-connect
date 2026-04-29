@@ -11,8 +11,8 @@ interface Props {
 
 export default function AgendamentosHojeCard({ callbacks, showOperator }: Props) {
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm w-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+    <div className="bg-card rounded-xl border border-border shadow-sm w-full h-full flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2">
           <CalendarCheck className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Agendamentos para Hoje</h2>
@@ -31,7 +31,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">para hoje</p>
         </div>
       ) : (
-        <div className="overflow-auto max-h-[200px]">
+        <div className="flex-1 overflow-auto min-h-0">
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border hover:bg-transparent">
@@ -83,7 +83,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
         </div>
       )}
 
-      <div className="px-4 py-2 border-t border-border">
+      <div className="px-4 py-2 border-t border-border shrink-0">
         <Link to="/atendimento" className="text-xs text-primary hover:underline font-medium">
           Ver todos
         </Link>
