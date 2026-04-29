@@ -349,7 +349,7 @@ const DashboardPage = () => {
   const visibleOrder = layout.order.filter((id) => layout.visible[id]);
 
   return (
-    <div className="flex flex-col gap-4 animate-fade-in h-full min-h-0">
+    <div className="flex flex-col gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
       {/* Header with filters */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
