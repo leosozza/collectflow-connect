@@ -393,7 +393,7 @@ export default function CampaignManagementTab() {
                     <th className="text-left p-3 font-medium">Origem</th>
                     <th className="text-left p-3 font-medium">Criado por</th>
                     <th className="text-left p-3 font-medium">Status</th>
-                    <th className="text-right p-3 font-medium">Selecionados</th>
+                    <th className="text-right p-3 font-medium">CPFs</th>
                     
                     <th className="text-right p-3 font-medium">Enviados</th>
                     <th className="text-right p-3 font-medium">Falhas</th>
@@ -436,7 +436,7 @@ export default function CampaignManagementTab() {
                             {statusLabels[c.status] || c.status}
                           </Badge>
                         </td>
-                        <td className="p-3 text-right">{c.total_selected}</td>
+                        <td className="p-3 text-right">{c.total_unique_recipients ?? c.total_selected}</td>
                         
                         <td className="p-3 text-right">{c.sent_count}</td>
                         <td className="p-3 text-right text-destructive">{c.failed_count}</td>
