@@ -216,10 +216,10 @@ const DashboardPage = () => {
   // Desktop (lg, 3 cols): full spec applies.
   const SPAN_CLASS: Record<DashboardBlockId, string> = {
     metas: "col-span-1 row-span-1",
-    totalRecebido: "col-span-1 row-span-1 lg:row-span-2",
+    totalRecebido: "col-span-1 row-span-1",
     kpisOperacionais: "col-span-1 row-span-1",
     agendamentos: "col-span-1 row-span-1",
-    parcelas: "col-span-1 md:col-span-2 row-span-1",
+    parcelas: "col-span-1 row-span-1",
     totalQuebra: "col-span-1 row-span-1",
     pendentes: "col-span-1 row-span-1",
     colchaoAcordos: "col-span-1 row-span-1",
