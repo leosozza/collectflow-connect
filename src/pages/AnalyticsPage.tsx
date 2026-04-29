@@ -399,7 +399,7 @@ const AnalyticsPage = () => {
         </div>
 
         {/* Operational KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {isOperator ? (
             <>
               <div className="bg-card rounded-xl border border-border p-4 text-center shadow-sm relative">
