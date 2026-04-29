@@ -305,16 +305,28 @@ async function computeCampaignScoreFallback(params: {
   const { metric, tenantId, authUid, startDate, endExclusiveStr, credorNames } = params;
   const addCredor = <T extends any>(q: T): T => (credorNames ? (q as any).in("credor", credorNames) : q);
 
-  if (metric === "maior_valor_recebido") {
+  if (metric === "maior_valor_recebido" || metric === "negociado_e_recebido") {
+    let agreementsQuery = addCredor(
+      supabase.from("agreements").select("id").eq("tenant_id", tenantId).eq("created_by", authUid)
+    );
+    if (metric === "negociado_e_recebido") {
+      agreementsQuery = agreementsQuery
+        .not("status", "in", "(rejected,cancelled)")
+        .gte("created_at", startDate)
+        .lt("created_at", endExclusiveStr);
+    }
+    const { data: agreements } = await agreementsQuery.range(0, 999);
+    const agreementIds = (agreements || []).map((a: any) => a.id);
+    if (agreementIds.length === 0) return 0;
+
     const [manual, portal, negociarie] = await Promise.all([
-      supabase.from("manual_payments").select("amount_paid, agreements!inner(created_by, credor)").eq("tenant_id", tenantId).in("status", ["confirmed", "approved"] as any).eq("agreements.created_by", authUid).gte("payment_date", startDate).lt("payment_date", endExclusiveStr),
-      supabase.from("portal_payments").select("amount, agreements!inner(created_by, credor)").eq("tenant_id", tenantId).eq("status", "paid").eq("agreements.created_by", authUid).gte("updated_at", startDate).lt("updated_at", endExclusiveStr),
-      supabase.from("negociarie_cobrancas").select("valor_pago, agreements!inner(created_by, credor)").eq("tenant_id", tenantId).eq("status", "pago").eq("agreements.created_by", authUid).gte("data_pagamento", startDate).lt("data_pagamento", endExclusiveStr),
+      supabase.from("manual_payments").select("amount_paid").eq("tenant_id", tenantId).in("agreement_id", agreementIds).in("status", ["confirmed", "approved"] as any).gte("payment_date", startDate).lt("payment_date", endExclusiveStr),
+      supabase.from("portal_payments").select("amount").eq("tenant_id", tenantId).in("agreement_id", agreementIds).eq("status", "paid").gte("updated_at", startDate).lt("updated_at", endExclusiveStr),
+      supabase.from("negociarie_cobrancas").select("valor_pago").eq("tenant_id", tenantId).in("agreement_id", agreementIds).eq("status", "pago").gte("data_pagamento", startDate).lt("data_pagamento", endExclusiveStr),
     ]);
-    const allowed = (row: any) => !credorNames || credorNames.includes(row.agreements?.credor);
-    return (manual.data || []).filter(allowed).reduce((s: number, r: any) => s + Number(r.amount_paid || 0), 0)
-      + (portal.data || []).filter(allowed).reduce((s: number, r: any) => s + Number(r.amount || 0), 0)
-      + (negociarie.data || []).filter(allowed).reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
+    return (manual.data || []).reduce((s: number, r: any) => s + Number(r.amount_paid || 0), 0)
+      + (portal.data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0)
+      + (negociarie.data || []).reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
   }
 
   if (metric === "maior_qtd_acordos") {
