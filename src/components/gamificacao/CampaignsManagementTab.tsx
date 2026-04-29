@@ -123,24 +123,31 @@ const CampaignsManagementTab = () => {
       )}
 
       {otherCampaigns.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold mb-3">Outras Campanhas</h3>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {otherCampaigns.map((c) => (
-              <div key={c.id} className="relative group">
-                <CampaignCard campaign={c} currentUserId={profile?.id} />
-                <div className="absolute top-2 right-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditing(c); setFormOpen(true); }}>
-                    <Pencil className="w-3 h-3" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteMut.mutate(c.id)}>
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
+        <Collapsible open={othersOpen} onOpenChange={setOthersOpen}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 rounded-md border border-border bg-card hover:bg-muted/40 transition-colors">
+            <span className="text-sm font-semibold text-foreground">
+              Campanhas encerradas <span className="text-muted-foreground font-normal">({otherCampaigns.length})</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${othersOpen ? "rotate-180" : ""}`} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {otherCampaigns.map((c) => (
+                <div key={c.id} className="relative group">
+                  <CampaignCard campaign={c} currentUserId={profile?.id} />
+                  <div className="absolute top-2 right-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditing(c); setFormOpen(true); }}>
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteMut.mutate(c.id)}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {campaigns.length === 0 && (
