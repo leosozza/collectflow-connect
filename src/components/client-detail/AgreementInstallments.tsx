@@ -814,17 +814,23 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                 </TableCell>
 
                 {/* Status */}
-                <TableCell className="text-center">
-                  <Badge variant="outline" className={cn(
-                    "gap-1 text-[10px]",
-                    inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
-                    inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
-                    inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
-                    "bg-warning/10 text-warning border-warning/30"
-                  )}>
-                    {statusIcon(inst.status)}
-                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
-                  </Badge>
+                <TableCell className="text-center no-underline [text-decoration:none]">
+                  {isCancelled ? (
+                    <Badge variant="outline" className="gap-1 text-[10px] bg-muted text-muted-foreground border-border no-underline [text-decoration:none]">
+                      <XCircle className="w-3.5 h-3.5" /> Cancelada
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className={cn(
+                      "gap-1 text-[10px]",
+                      inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
+                      inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                      inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
+                      "bg-warning/10 text-warning border-warning/30"
+                    )}>
+                      {statusIcon(inst.status)}
+                      {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
+                    </Badge>
+                  )}
                 </TableCell>
 
                 {/* Inline action icons */}
