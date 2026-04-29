@@ -324,6 +324,19 @@ export interface ManageResult {
   result: any;
   provider: string;
   error?: string;
+  httpStatus?: number;
+}
+
+/** Build a human-readable error string from an HTTP response body. */
+function describeProviderError(status: number, result: any): string {
+  const detail =
+    result?.message ||
+    result?.error ||
+    result?.response?.message ||
+    (typeof result?.raw === "string" ? result.raw : null) ||
+    (typeof result === "string" ? result : null);
+  if (detail) return `HTTP ${status}: ${typeof detail === "string" ? detail : JSON.stringify(detail).slice(0, 300)}`;
+  return `HTTP ${status}`;
 }
 
 /**
@@ -356,7 +369,7 @@ export async function deleteByProvider(
         body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, messageId: providerMessageId, fromMe: true }),
       });
       const result = await resp.json().catch(() => ({}));
-      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.error || `HTTP ${resp.status}`) };
+      return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
     } catch (err) {
       return { ok: false, result: null, provider, error: `Falha de rede WuzAPI: ${(err as Error).message}` };
     }
@@ -375,7 +388,7 @@ export async function deleteByProvider(
       const text = await resp.text();
       let result: any;
       try { result = JSON.parse(text); } catch { result = { raw: text }; }
-      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.message || `HTTP ${resp.status}`) };
+      return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
     } catch (err) {
       return { ok: false, result: null, provider, error: `Falha de rede Gupshup: ${(err as Error).message}` };
     }
@@ -398,7 +411,7 @@ export async function deleteByProvider(
       }),
     });
     const result = await resp.json().catch(() => ({}));
-    return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.message || result?.error || `HTTP ${resp.status}`) };
+    return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
   } catch (err) {
     return { ok: false, result: null, provider, error: `Falha de rede Evolution: ${(err as Error).message}` };
   }
@@ -438,7 +451,7 @@ export async function editByProvider(
         body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, id: providerMessageId, body: newText }),
       });
       const result = await resp.json().catch(() => ({}));
-      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.error || `HTTP ${resp.status}`) };
+      return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
     } catch (err) {
       return { ok: false, result: null, provider, error: `Falha de rede WuzAPI: ${(err as Error).message}` };
     }
@@ -461,7 +474,7 @@ export async function editByProvider(
       }),
     });
     const result = await resp.json().catch(() => ({}));
-    return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.message || result?.error || `HTTP ${resp.status}`) };
+    return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
   } catch (err) {
     return { ok: false, result: null, provider, error: `Falha de rede Evolution: ${(err as Error).message}` };
   }
