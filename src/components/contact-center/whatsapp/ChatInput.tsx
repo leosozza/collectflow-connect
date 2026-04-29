@@ -39,6 +39,17 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
   const [isInternalMode, setIsInternalMode] = useState(false);
   const [qrPopoverOpen, setQrPopoverOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea like WhatsApp: grows up to ~6 lines, then scrolls.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const maxHeight = 180; // ~6 lines at text-sm
+    const next = Math.min(ta.scrollHeight, maxHeight);
+    ta.style.height = `${next}px`;
+  }, [text]);
 
   // Quick replies: detect "/" at start
   useEffect(() => {
@@ -257,11 +268,12 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           )}
         </div>
         <Textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
-          className={`resize-none min-h-[40px] max-h-[120px] text-sm rounded-lg ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : "bg-card"}`}
+          className={`resize-none min-h-[40px] max-h-[180px] overflow-y-auto text-sm rounded-lg leading-5 ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : "bg-card"}`}
           rows={1}
           disabled={disabled}
         />
