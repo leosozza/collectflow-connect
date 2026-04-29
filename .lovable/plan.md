@@ -1,108 +1,100 @@
+## Objetivos do usuário
 
-# Editor de modelos de documento — WYSIWYG com layout A4 ao vivo
+1. **Editor abre cortado/encostado na lateral** — atualmente o Sheet entra pela direita (`side="right"`, `sm:max-w-2xl`), o que corta o A4. Mudar para um **Dialog centralizado, largo (max-w-5xl) e com altura controlada**, sem corte e com a folha visível por inteiro.
+2. **Conteúdo inicial (formatação, variáveis) está empurrando o editor para baixo** — reorganizar em **layout de duas colunas**: à esquerda variáveis/formatação compactas, à direita a folha A4 (editor visual). Assim o editor aparece imediatamente sem rolar.
+3. **Adicionar campo "Logo do documento"** no formulário do credor, na aba **Dados → abaixo de Endereço**, separado do logo do Portal. Esse logo é o usado no cabeçalho de TODOS os documentos.
+4. **Layout fixo do documento (padronizar todos)**: 
+   - Cabeçalho: logo do credor à esquerda (~20mm de largura), título do documento centralizado (puxado dinamicamente — "Carta de Acordo", "Recibo de Pagamento", etc.).
+   - Linha horizontal de fora a fora abaixo do cabeçalho.
+   - Corpo (única parte editável).
+   - Linha horizontal de fora a fora acima do rodapé.
+   - Rodapé: nome do credor + CNPJ + endereço completo (centralizado).
+   - Quando o credor não tiver logo, **não exibir nada** (sem fallback de texto).
 
-## Objetivos
-1. Eliminar o modo "bloco de notas" (textarea monoespaçada) e o uso obrigatório da aba **Preview**. O editor já mostra a folha A4 com título centralizado e rodapé como ficará no PDF final.
-2. Reorganizar o rodapé: 1ª linha **Razão Social — CNPJ 00.000.000/0000-00** (centralizada); 2ª linha endereço completo (Rua, nº, complemento — Bairro — Cidade/UF — CEP), também centralizado.
+---
 
-## O que muda na UI
+## Implementação
 
-### Antes
-- Sheet com abas **Editor / Preview**.
-- Editor: `Textarea` font-mono, sem qualquer formatação visual, sem header/título nem rodapé.
-- Para ver o resultado o usuário precisa clicar em "Preview".
-- Rodapé renderizado em uma única linha juntando tudo com " — ", ordem: Credor, Endereço, Bairro, Cidade/UF, CEP, CNPJ.
+### 1. Novo campo `document_logo_url` na tabela `credores`
 
-### Depois
-- **Aba única** dentro do Sheet (abas Editor/Preview removidas).
-- O editor passa a ser um **`contentEditable` estilizado como folha A4**, dentro de um wrapper que reproduz o `wrapDocumentInA4Page`:
-  - Cabeçalho com logo do credor (canto superior esquerdo).
-  - **Título do documento centralizado** (ex.: "CARTA DE QUITAÇÃO") com a barra decorativa — não editável, atualizado automaticamente conforme o documento.
-  - Corpo editável com tipografia Georgia/Times 11.5pt, justificado, espaçamento de Word.
-  - Rodapé fixo (não editável) na nova ordem.
-- Tokens de variável (ex.: `{nome_devedor}`) aparecem destacados como "chips" coloridos dentro do texto editável (badge sutil, fundo accent), preservando a edição livre ao redor.
-- Atalhos básicos do editor: **Ctrl/⌘+B** negrito, **Ctrl/⌘+I** itálico, **Enter** novo parágrafo, **Shift+Enter** quebra de linha. Atalhos opcionais via barra de ferramentas mínima (Negrito · Itálico · Título · Lista · Separador) acima da folha.
-- Clicar em uma variável da lista lateral continua **copiando para o clipboard** (comportamento atual). Adicionalmente, se o cursor estiver dentro do editor, é inserida no ponto do cursor (mantendo retro-compatibilidade do fluxo).
+Migration adicionando a coluna (nullable, text). É independente do `portal_logo_url` (que continua sendo usado pelo portal de auto-atendimento).
 
-### Rodapé reorganizado (duas linhas)
-Linha 1 (centralizada, semibold):
+```sql
+ALTER TABLE public.credores ADD COLUMN document_logo_url text;
 ```
-{Razão Social} — CNPJ 12.345.678/0001-90
-```
-Linha 2 (centralizada, normal):
-```
-Av. Paulista, 1000 - Sala 1201 — Bela Vista — São Paulo/SP — CEP 01310-100
-```
-Se algum campo estiver vazio, ele é omitido sem deixar separador órfão.
 
-## Arquivos afetados
+### 2. `src/components/cadastros/CredorForm.tsx` — aba Dados
 
-1. **`src/services/documentLayoutService.ts`**
-   - `buildFooterText` deixa de retornar uma única string e passa a retornar `{ line1, line2 }`.
-   - Em `wrapDocumentInA4Page`, o `<footer>` é renderizado com duas `<div>` empilhadas, ambas `text-align:center`, line1 com `font-weight:600;color:#333`, line2 com `color:#666`.
-   - Mesma função continua sendo a fonte única de verdade, então PDF final, preview do `ClientDocuments` e o novo editor herdam o layout idêntico.
+Logo abaixo do `Collapsible` de Endereço (linha 365), inserir um novo bloco **"Logo dos Documentos"**:
 
-2. **`src/components/cadastros/CredorDocumentTemplates.tsx`**
-   - Remover `Tabs/TabsList/TabsTrigger/TabsContent` e o estado `editorTab`.
-   - Substituir o `Textarea` por um novo componente `A4LiveEditor` (definido no mesmo arquivo ou em `src/components/cadastros/A4LiveEditor.tsx`):
-     - Renderiza o resultado de `wrapDocumentInA4Page` em volta de um `<div contentEditable>` que ocupa o lugar do `<main>`.
-     - `onInput` lê `innerHTML` da área editável → converte de volta para o formato markdown-leve usado hoje (negrito `**`, itálico `*`, headings `##/###`, listas `-`, separador `---`) via util novo `htmlToMarkdownLight` (espelho de `markdownLight`). Atualiza `editContent` no estado pai.
-     - Variáveis `{xxx}` são "tokenizadas" no momento do render: regex envolve cada match com `<span class="rivo-var-chip" data-var="{xxx}">{xxx}</span>` (style: bg accent/15, border accent/30, padding 0 4px, rounded). No save, esses chips voltam a ser texto puro `{xxx}`.
-   - Barra de ferramentas mínima acima da folha (5 botões: B, I, H2, lista, hr) usando `document.execCommand` ou `Selection` API para inserir o markdown correspondente.
-   - Pequena legenda inferior: "Substituições e variáveis aparecem como dados de exemplo no rodapé/preview real do PDF."
+- Preview quadrado 80×80, mesmo padrão visual do logo do portal.
+- Botão "Upload" usando o mesmo bucket `avatars`, prefixo `credor-doc-logos/{credorId}/...`.
+- Input opcional para colar URL.
+- Texto auxiliar: *"Aparece no canto superior esquerdo de todos os documentos (~20mm). Recomendado: PNG transparente."*
+- Botão "Remover" quando houver valor.
 
-3. **`src/lib/markdownLight.ts`** (somente verificação — não altera saída).
-   - Adiciona, ao lado do `markdownToHtml` existente, um `htmlToMarkdownLight(html)` que faz a conversão inversa:
-     - `<strong>`/`<b>` → `**...**`
-     - `<em>`/`<i>` → `*...*`
-     - `<h2>` → `## ...`, `<h3>` → `### ...`
-     - `<ul><li>` → `- item`
-     - `<hr>` → `---`
-     - `<p>` → linha em branco entre blocos.
-   - Strip de outras tags HTML residuais para manter o conteúdo salvo igual ao formato atual (o backend e o `markdownToHtml` continuam funcionando sem mudanças).
+Reaproveita o `logoInputRef` pattern já usado para o portal (cria um segundo `useRef` para este input).
 
-4. **`EditorPreview`** dentro de `CredorDocumentTemplates.tsx`
-   - Passa a ser usado **apenas** como base do novo editor ao vivo (não há mais aba Preview separada). A função `replaceVars(content, SAMPLE_DATA)` continua sendo usada para os "chips" de variável e para a renderização do rodapé com dados do credor real / SAMPLE_CREDOR.
+### 3. `src/services/documentLayoutService.ts` — fonte única do layout
 
-## Detalhes técnicos
+Ajustes no `wrapDocumentInA4Page`:
 
-### Sincronização texto ↔ HTML editável
-```text
-state.editContent (markdown leve, com {vars})
-        │  markdownToHtml + tokenizeVars
-        ▼
-contentEditable.innerHTML  ← exibido em A4
-        │  htmlToMarkdownLight + untokenizeVars
-        ▼
-state.editContent (atualizado em onInput)
-```
-Para evitar o problema clássico de cursor "pular" no contentEditable, usamos um padrão "uncontrolled":
-- Setamos `innerHTML` apenas quando `editingKey` muda (abertura do sheet) ou ao inserir uma variável programaticamente.
-- O `onInput` atualiza apenas o estado em `editContent`, mas **não** reescreve o `innerHTML` enquanto o usuário digita.
+- Header **redesenhado**: logo à esquerda com **largura fixa de 20mm** (`width:20mm; max-width:20mm; height:auto; object-fit:contain`), e o **título do documento centralizado na linha do cabeçalho** (não mais embaixo). Usar grid de 3 colunas: `[20mm | 1fr | 20mm]` para manter o título perfeitamente centralizado mesmo sem logo.
+- Quando não houver logo, a coluna esquerda fica vazia (sem texto-fallback do nome do credor — atender requisito "quando não tiver logo, não colocar nada").
+- Abaixo do header, **linha horizontal de fora a fora** (`<hr>` com margin-left/right negativo igual ao padding lateral, ou um `border-bottom` na div do header com largura 100%).
+- Acima do rodapé, mantém a linha (já existe `border-top`) — apenas garantir que vá de borda a borda do conteúdo.
+- Rodapé: continua com as duas linhas centralizadas (`line1: Razão Social — CNPJ`, `line2: Endereço completo`) implementadas no passo anterior.
+- `CredorLayoutInfo` ganha o campo opcional `document_logo_url`. A prioridade do header é `document_logo_url ?? null` (não cai mais para `portal_logo_url`, que é específico do portal).
 
-### Rodapé responsivo
 ```ts
-function buildFooter(credor) {
-  const name = credor.razao_social || credor.nome_fantasia;
-  const cnpj = credor.cnpj ? `CNPJ ${formatCnpj(credor.cnpj)}` : '';
-  const line1 = [name, cnpj].filter(Boolean).join(' — ');
+const headerLeft = documentLogoUrl
+  ? `<img src="..." style="width:20mm;max-width:20mm;height:auto;object-fit:contain" />`
+  : ''; // vazio quando não há logo
 
-  const street = [credor.endereco, credor.numero].filter(Boolean).join(', ');
-  const streetWithComp = credor.complemento ? `${street} - ${credor.complemento}` : street;
-  const cityState = [credor.cidade, credor.uf].filter(Boolean).join('/');
-  const cep = formatCep(credor.cep);
-  const line2 = [streetWithComp, credor.bairro, cityState, cep && `CEP ${cep}`]
-    .filter(Boolean).join(' — ');
-
-  return { line1, line2 };
-}
+// Header em 3 colunas para centralizar o título de fato:
+<header style="display:grid;grid-template-columns:20mm 1fr 20mm;align-items:center;gap:8mm;padding-bottom:6mm;border-bottom:1px solid #1a1a1a;">
+  <div>${headerLeft}</div>
+  <h1 style="text-align:center;font-size:16pt;...">${title}</h1>
+  <div></div>
+</header>
 ```
 
-### Aspectos preservados
-- Validação de variáveis desconhecidas (`validatePlaceholders`) e o diálogo de confirmação continuam idênticos.
-- Salvar segue gravando no mesmo campo do form (markdown leve), portanto **PDF, preview do `ClientDocuments` e templates já existentes não quebram**.
-- Botão "Aplicar/Cancelar" e fluxo de Sheet permanecem.
+A barra decorativa atual (60px abaixo do título) é removida — substituída pela linha de fora a fora.
+
+### 4. `src/services/documentDataResolver.ts` e demais consumidores
+
+Passar `document_logo_url` no objeto `credor` para o wrapper. Verificar que `ClientDocuments.tsx`, `DocumentPreviewDialog.tsx` e `documentPdfService` passam o campo (ou apenas o objeto credor inteiro do banco).
+
+### 5. `src/components/cadastros/CredorDocumentTemplates.tsx` — abrir centralizado
+
+Trocar `Sheet` por `Dialog` com `DialogContent` largo:
+
+- `className="max-w-5xl w-[95vw] max-h-[92vh] overflow-hidden p-0"` para garantir centralização e altura controlada.
+- Layout interno em **duas colunas** (grid `lg:grid-cols-[280px_1fr]`):
+  - **Coluna esquerda** (compacta, scroll próprio): título/descrição, guia de formatação compactada em 1 linha, lista de variáveis em accordion (igual hoje, mas mais densa).
+  - **Coluna direita** (a folha A4 + toolbar do editor + botões Aplicar/Cancelar fixos no rodapé do dialog).
+- O A4LiveEditor passa a receber `document_logo_url` no objeto `credor`.
+
+### 6. `src/components/cadastros/A4LiveEditor.tsx` — ajuste de tamanho
+
+- Remover/reduzir o `transform: scale(0.85)` e usar `zoom` adaptativo ou simplesmente deixar o A4 em escala natural com scroll vertical. Dado que o Dialog passa a ter `max-w-5xl`, o A4 (210mm ≈ 794px) cabe à direita.
+- Wrapper ganha `max-h: calc(92vh - 180px)` com `overflow-y-auto`, garantindo que a folha role internamente sem cortar o Dialog.
+
+### 7. Sample data
+
+Atualizar `SAMPLE_CREDOR` em `documentLayoutService.ts` adicionando `document_logo_url: ""` para preview consistente.
+
+---
+
+## Resumo dos arquivos
+
+- **DB migration**: `ALTER TABLE credores ADD COLUMN document_logo_url text`.
+- **`src/components/cadastros/CredorForm.tsx`**: novo bloco de upload "Logo dos Documentos" abaixo do Endereço.
+- **`src/services/documentLayoutService.ts`**: header em grid 3 colunas, logo 20mm, título centralizado na linha do header, linha horizontal full-width, sem fallback textual quando não há logo, novo campo `document_logo_url`.
+- **`src/components/cadastros/CredorDocumentTemplates.tsx`**: trocar Sheet por Dialog centralizado e adotar layout 2 colunas.
+- **`src/components/cadastros/A4LiveEditor.tsx`**: ajustar dimensões/scroll para caber no novo Dialog; passar `document_logo_url`.
+- **`src/services/documentDataResolver.ts`** e callers (`ClientDocuments.tsx`, `DocumentPreviewDialog.tsx`): incluir `document_logo_url` ao montar o objeto do credor.
 
 ## Fora de escopo
-- Não migra para um editor rich-text completo (Tiptap/Slate). A edição continua restrita ao subset markdown que o sistema já renderiza, evitando divergência entre o que aparece no editor e o PDF final.
-- Não muda a tipografia/estilos do PDF além das duas linhas do rodapé.
+- Não altera a renderização do PDF além do que vem do wrapper (continua single source of truth).
+- Não migra logos antigos do portal para o novo campo — o admin sobe a logo nova quando quiser usar nos documentos.
