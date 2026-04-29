@@ -278,15 +278,19 @@ const GamificacaoPage = () => {
           <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
             <Target className="w-3.5 h-3.5" /> Metas
           </TabsTrigger>
-          <TabsTrigger value="shop" className="flex-1 sm:flex-none gap-1.5">
-            <ShoppingBag className="w-3.5 h-3.5" /> Loja
-          </TabsTrigger>
-          <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
-            <Coins className="w-3.5 h-3.5" /> Carteira
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
-            <History className="w-3.5 h-3.5" /> Histórico
-          </TabsTrigger>
+          {!isTenantAdmin && (
+            <>
+              <TabsTrigger value="shop" className="flex-1 sm:flex-none gap-1.5">
+                <ShoppingBag className="w-3.5 h-3.5" /> Loja
+              </TabsTrigger>
+              <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
+                <Coins className="w-3.5 h-3.5" /> Carteira
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
+                <History className="w-3.5 h-3.5" /> Histórico
+              </TabsTrigger>
+            </>
+          )}
           {isTenantAdmin && (
             <TabsTrigger value="manage" className="flex-1 sm:flex-none gap-1.5">
               <Settings className="w-3.5 h-3.5" /> Gerenciar
@@ -295,32 +299,36 @@ const GamificacaoPage = () => {
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
-          <RankingTab />
+          <RankingTab highlightCurrentUser={!isTenantAdmin} />
         </TabsContent>
 
         <TabsContent value="campaigns" className="mt-4">
-          <CampaignsTab />
+          <CampaignsTab highlightCurrentUser={!isTenantAdmin} />
         </TabsContent>
 
         <TabsContent value="achievements" className="mt-4">
-          <AchievementsTab isAdmin={false} />
+          <AchievementsTab isAdmin={isTenantAdmin} />
         </TabsContent>
 
         <TabsContent value="goals" className="mt-4">
           <GoalsTab />
         </TabsContent>
 
-        <TabsContent value="shop" className="mt-4">
-          <ShopTab />
-        </TabsContent>
+        {!isTenantAdmin && (
+          <>
+            <TabsContent value="shop" className="mt-4">
+              <ShopTab />
+            </TabsContent>
 
-        <TabsContent value="wallet" className="mt-4">
-          <WalletTab />
-        </TabsContent>
+            <TabsContent value="wallet" className="mt-4">
+              <WalletTab />
+            </TabsContent>
 
-        <TabsContent value="history" className="mt-4">
-          <PointsHistoryTab />
-        </TabsContent>
+            <TabsContent value="history" className="mt-4">
+              <PointsHistoryTab />
+            </TabsContent>
+          </>
+        )}
 
         {isTenantAdmin && (
           <TabsContent value="manage" className="mt-4">
