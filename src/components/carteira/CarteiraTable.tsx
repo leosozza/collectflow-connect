@@ -69,7 +69,7 @@ const CarteiraTable = ({ clients, loading, title, isOverdue = false }: CarteiraT
           <CalendarClock className="w-5 h-5 text-primary" />
         )}
         <h2 className="font-semibold text-card-foreground">{title}</h2>
-        <span className="ml-auto text-sm text-muted-foreground">{grouped.length} registros</span>
+        <span className="ml-auto text-sm text-muted-foreground">{grouped.length} clientes</span>
         <Button
           variant="ghost"
           size="sm"
