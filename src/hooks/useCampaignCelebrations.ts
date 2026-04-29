@@ -62,15 +62,23 @@ export const useCampaignCelebrations = () => {
         .order("score", { ascending: false });
 
       const rows = (ranking || []) as Array<{ operator_id: string; score: number }>;
-      const idx = rows.findIndex((r) => r.operator_id === profile.id);
+      const operatorIds = [...new Set(rows.map((r) => r.operator_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, role")
+        .in("id", operatorIds)
+        .in("role", ["operador", "supervisor", "gerente"] as any);
+      const eligibleIds = new Set((profiles || []).map((p: any) => p.id));
+      const eligibleRows = rows.filter((r) => eligibleIds.has(r.operator_id));
+      const idx = eligibleRows.findIndex((r) => r.operator_id === profile.id);
       if (idx === -1) continue;
       payloads.push({
         campaign_id: c.id,
         campaign_title: c.title,
         prize_description: c.prize_description,
         position: idx + 1,
-        total: rows.length,
-        score: Number(rows[idx].score) || 0,
+        total: eligibleRows.length,
+        score: Number(eligibleRows[idx].score) || 0,
       });
     }
 
