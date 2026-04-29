@@ -93,8 +93,6 @@ const CredorList = () => {
           </Table>
         )}
       </div>
-
-      <CredorForm open={formOpen} onOpenChange={setFormOpen} editing={editing} />
     </div>
   );
 };
