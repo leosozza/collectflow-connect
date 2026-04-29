@@ -7049,6 +7049,324 @@ export type Database = {
           valor_pago: number
         }[]
       }
+      get_bi_breakage_analysis: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          motivo: string
+          pct_motivo: number
+          qtd_motivo: number
+          valor_perdido: number
+        }[]
+      }
+      get_bi_breakage_by_operator: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          operator_id: string
+          operator_name: string
+          qtd_acordos: number
+          qtd_quebras: number
+          taxa_quebra: number
+          valor_perdido: number
+        }[]
+      }
+      get_bi_channel_performance: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          channel: string
+          qtd_acordos_atribuidos: number
+          qtd_clientes_unicos: number
+          qtd_interacoes: number
+          taxa_conversao: number
+          total_recebido_atribuido: number
+        }[]
+      }
+      get_bi_collection_funnel: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          conversao_pct: number
+          qtd: number
+          stage: string
+          stage_order: number
+        }[]
+      }
+      get_bi_funnel_dropoff: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          credor: string
+          dropoff_pct: number
+          qtd: number
+          stage: string
+        }[]
+      }
+      get_bi_operator_efficiency: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          acordos_por_hora: number
+          conv_rate: number
+          operator_id: string
+          operator_name: string
+          qtd_chamadas: number
+          qtd_conversoes: number
+          talk_time_seconds: number
+        }[]
+      }
+      get_bi_operator_performance: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          operator_id: string
+          operator_name: string
+          qtd_acordos: number
+          qtd_calls: number
+          qtd_cpc: number
+          qtd_quebras: number
+          taxa_cpc: number
+          taxa_quebra: number
+          total_recebido: number
+        }[]
+      }
+      get_bi_recurrence_analysis: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          cpf_distintos: number
+          devedores_recorrentes: number
+          taxa_recorrencia: number
+          top_cpfs: Json
+        }[]
+      }
+      get_bi_response_time_by_channel: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          avg_response_seconds: number
+          channel: string
+          p50_seconds: number
+          p90_seconds: number
+          qtd_amostras: number
+        }[]
+      }
+      get_bi_revenue_by_credor: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          credor: string
+          qtd_acordos: number
+          ticket_medio: number
+          total_negociado: number
+          total_pendente: number
+          total_recebido: number
+        }[]
+      }
+      get_bi_revenue_by_period: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _granularity?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          period: string
+          qtd_acordos: number
+          total_negociado: number
+          total_recebido: number
+        }[]
+      }
+      get_bi_revenue_comparison: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          current_value: number
+          delta_abs: number
+          delta_pct: number
+          metric: string
+          previous_value: number
+        }[]
+      }
+      get_bi_revenue_summary: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          qtd_acordos: number
+          qtd_acordos_ativos: number
+          qtd_quebras: number
+          ticket_medio: number
+          total_negociado: number
+          total_pendente: number
+          total_quebra: number
+          total_recebido: number
+        }[]
+      }
+      get_bi_score_distribution: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          bucket: string
+          pct: number
+          qtd: number
+          valor_carteira: number
+        }[]
+      }
+      get_bi_score_vs_result: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          bucket: string
+          qtd_clientes: number
+          qtd_com_acordo: number
+          qtd_pagos: number
+          taxa_acordo: number
+          taxa_pagamento: number
+          valor_recebido: number
+        }[]
+      }
+      get_bi_top_opportunities: {
+        Args: {
+          _channel?: string[]
+          _credor?: string[]
+          _date_from?: string
+          _date_to?: string
+          _limit?: number
+          _operator_ids?: string[]
+          _score_max?: number
+          _score_min?: number
+          _tenant_id: string
+        }
+        Returns: {
+          client_id: string
+          cpf: string
+          credor: string
+          debtor_profile: string
+          nome: string
+          preferred_channel: string
+          propensity_score: number
+          ultimo_contato: string
+          valor_atualizado: number
+        }[]
+      }
       get_carteira_grouped: {
         Args: {
           _cadastro_ate?: string
