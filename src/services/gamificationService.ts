@@ -16,6 +16,7 @@ export interface OperatorPoints {
 export interface RankingEntry extends OperatorPoints {
   profile?: { full_name: string; avatar_url: string | null };
   position?: number;
+  agreements_count?: number;
 }
 
 export const calculatePoints = (paymentsCount: number, totalReceived: number, breaksCount: number, achievementsCount: number, goalReached: boolean): number => {
