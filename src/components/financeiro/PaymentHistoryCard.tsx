@@ -35,6 +35,8 @@ const PaymentHistoryCard = ({ tenantId }: PaymentHistoryCardProps) => {
         .from("payment_records")
         .select("*")
         .eq("tenant_id", tenantId)
+        .neq("payment_type", "subscription")
+        .or("metadata->>platform_billing.is.null,metadata->>platform_billing.neq.true")
         .order("created_at", { ascending: false })
         .limit(20);
 
