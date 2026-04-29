@@ -553,7 +553,31 @@ const CarteiraPage = () => {
     }
   };
 
-  const toggleSelect = (groupClient: any) => {
+  const handleSelectFirstN = async () => {
+    if (!tenant?.id) return;
+    const n = parseInt(selectNInput, 10);
+    if (!n || n <= 0) {
+      toast.error("Informe uma quantidade válida");
+      return;
+    }
+    if (n > totalCount) {
+      toast.error(`Apenas ${totalCount.toLocaleString("pt-BR")} clientes disponíveis`);
+      return;
+    }
+    setLoadingSelectN(true);
+    try {
+      const { ids, cpfs } = await fetchFirstNCarteiraSelection(tenant.id, n, rpcFilters, sortField, sortDir);
+      setSelectedIds(new Set(ids));
+      setSelectedCpfs(new Set(cpfs));
+      setSelectAllFiltered(false);
+      setBulkClients(null);
+      toast.success(`${cpfs.length.toLocaleString("pt-BR")} cliente(s) selecionado(s)`);
+    } catch (err: any) {
+      toast.error("Erro ao selecionar clientes");
+    } finally {
+      setLoadingSelectN(false);
+    }
+  };
     const ids: string[] = groupClient.allIds || [groupClient.id];
     const cpf = (groupClient.cpf || "").replace(/\D/g, "");
     const next = new Set(selectedIds);
