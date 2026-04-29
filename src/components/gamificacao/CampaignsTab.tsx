@@ -23,7 +23,11 @@ const isCampaignActive = (c: Campaign) => {
   return differenceInDays(parseISO(c.end_date), new Date()) >= 0;
 };
 
-const CampaignsTab = () => {
+interface CampaignsTabProps {
+  highlightCurrentUser?: boolean;
+}
+
+const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
   const { tenant } = useTenant();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
@@ -83,7 +87,7 @@ const CampaignsTab = () => {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {active.map((c) => (
-              <CampaignCard key={c.id} campaign={c} currentUserId={profile?.id} />
+              <CampaignCard key={c.id} campaign={c} currentUserId={highlightCurrentUser ? profile?.id : undefined} />
             ))}
           </div>
         )}
@@ -102,7 +106,7 @@ const CampaignsTab = () => {
           <CollapsibleContent className="pt-3">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {others.map((c) => (
-                <CampaignCard key={c.id} campaign={c} currentUserId={profile?.id} />
+                <CampaignCard key={c.id} campaign={c} currentUserId={highlightCurrentUser ? profile?.id : undefined} />
               ))}
             </div>
           </CollapsibleContent>
