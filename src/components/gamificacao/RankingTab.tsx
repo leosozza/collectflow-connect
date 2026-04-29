@@ -116,7 +116,7 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
           return (
             <div
               key={entry.id}
-              className={`relative overflow-hidden rounded-xl border-2 p-3 transition-all hover:scale-[1.01] ${
+              className={`relative overflow-hidden rounded-2xl border-2 p-5 transition-all hover:scale-[1.01] ${
                 isMe
                   ? "border-primary bg-gradient-to-br from-primary/15 via-primary/5 to-transparent shadow-lg shadow-primary/20"
                   : isTop3
@@ -124,67 +124,67 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
                     : "border-border bg-card hover:bg-muted/30"
               } ${extraClass}`}
             >
-              <div className="absolute -top-2 -right-1 text-[5rem] font-black opacity-[0.06] select-none pointer-events-none leading-none text-foreground">
+              <div className="absolute -top-3 -right-2 text-[7rem] font-black opacity-[0.06] select-none pointer-events-none leading-none text-foreground">
                 {entry.position}
               </div>
 
-              <div className="flex items-center gap-3 mb-2 relative">
-                <div className="flex items-center justify-center w-10 h-10 flex-shrink-0">
+              <div className="flex items-center gap-4 mb-4 relative">
+                <div className="flex items-center justify-center w-14 h-14 flex-shrink-0">
                   {medal ? (
-                    <span className="text-3xl drop-shadow-md">{medal}</span>
+                    <span className="text-5xl drop-shadow-md">{medal}</span>
                   ) : (
-                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
-                      <span className="text-xs font-black text-muted-foreground">#{entry.position}</span>
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                      <span className="text-base font-black text-muted-foreground">#{entry.position}</span>
                     </div>
                   )}
                 </div>
-                <Avatar className="w-10 h-10 ring-2 ring-background shadow-md">
+                <Avatar className="w-14 h-14 ring-2 ring-background shadow-md">
                   <AvatarImage src={entry.profile?.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
+                  <AvatarFallback className="text-base font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className={`text-sm font-bold truncate leading-tight ${isMe ? "text-primary" : "text-foreground"}`}>
+                    <p className={`text-base font-bold truncate leading-tight ${isMe ? "text-primary" : "text-foreground"}`}>
                       {name}
                     </p>
                     {isMe && (
-                      <span className="text-[9px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded uppercase tracking-wider">
+                      <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded uppercase tracking-wider">
                         Você
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-semibold text-foreground mt-0.5">
+                  <p className="text-sm font-semibold text-foreground mt-1">
                     {formatCurrency(entry.total_received)}
-                    <span className="text-[10px] font-normal text-muted-foreground ml-1">recebido</span>
+                    <span className="text-xs font-normal text-muted-foreground ml-1">recebido</span>
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xl font-black text-foreground leading-none tracking-tight">
+                  <p className="text-3xl font-black text-foreground leading-none tracking-tight">
                     {entry.points.toLocaleString("pt-BR")}
                   </p>
-                  <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mt-0.5">pontos</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">pontos</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-semibold bg-background/50">
+              <div className="flex items-center gap-2 flex-wrap mb-3">
+                <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
                   🎯 {receiveRate}% taxa
                 </Badge>
-                <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-semibold bg-background/50">
+                <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
                   💰 {entry.payments_count} pagos
                 </Badge>
                 {entry.breaks_count > 0 && (
-                  <Badge variant="destructive" className="text-[10px] h-5 px-1.5 font-semibold">
+                  <Badge variant="destructive" className="text-xs h-6 px-2 font-semibold">
                     ⚠️ {entry.breaks_count} quebras
                   </Badge>
                 )}
               </div>
 
-              <div className="relative pt-3">
-                <span className="absolute right-0 top-0 text-[9px] font-bold text-muted-foreground">
+              <div className="relative pt-4">
+                <span className="absolute right-0 top-0 text-[10px] font-bold text-muted-foreground">
                   {progressPct}%
                 </span>
-                <Progress value={progressPct} className="h-1.5" />
+                <Progress value={progressPct} className="h-2.5" />
               </div>
             </div>
           );
