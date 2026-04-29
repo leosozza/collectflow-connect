@@ -31,7 +31,9 @@ import {
 import NotificationBell from "@/components/notifications/NotificationBell";
 import UpdateButton from "@/components/system/UpdateButton";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
+import CampaignCelebrationModal from "@/components/gamificacao/CampaignCelebrationModal";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useCampaignCelebrations } from "@/hooks/useCampaignCelebrations";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import SupportFloatingButton from "@/components/support/SupportFloatingButton";
@@ -43,6 +45,7 @@ const AppLayout = () => {
   const permissions = usePermissions();
   const { isModuleEnabled } = useModules();
   const { celebrationNotification, dismissCelebration } = useNotifications();
+  const campaignCelebration = useCampaignCelebrations();
   const navigate = useNavigate();
   const location = useLocation();
   useActivityTracker();
