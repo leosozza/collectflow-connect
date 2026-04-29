@@ -9,6 +9,7 @@ import { resolveDocumentData } from "@/services/documentDataResolver";
 import { renderDocument } from "@/services/documentRenderer";
 import { validateDocumentGeneration, type ValidationResult } from "@/services/documentValidationService";
 import { downloadPdf } from "@/services/documentPdfService";
+import { wrapDocumentInA4Page } from "@/services/documentLayoutService";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import DocumentPreviewDialog from "./DocumentPreviewDialog";
 import { useState } from "react";
