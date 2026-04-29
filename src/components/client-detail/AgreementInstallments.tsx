@@ -149,6 +149,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
+  const cancelledMap: Record<string, any> = (agreement as any).cancelled_installments || {};
 
   const hasEntrada = agreement.entrada_value > 0;
   const installments: any[] = [];
@@ -218,13 +219,20 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   }
 
   const totalInstallments = installments.length;
+  const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
   let remainingPaid = totalPaidFromClients;
   const installmentsWithStatus = installments.map((inst) => {
+    const isCancelled = !!cancelledMap[inst.customKey];
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
     const isOverdue = dueDay < today;
     const instValue = Number(inst.value);
+
+    if (isCancelled) {
+      return { ...inst, status: "cancelled", isOverdue: false, pendingManual: undefined, isCancelled: true };
+    }
+
     let isPaidManually = false;
     if (remainingPaid >= instValue) {
       isPaidManually = true;
@@ -232,7 +240,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     } else {
       remainingPaid = 0;
     }
-    // Match manual_payments by installment_key (canonical) or fallback to installment_number (legacy)
     const matchesInst = (mp: any) =>
       (mp.installment_key && mp.installment_key === inst.customKey) ||
       (!mp.installment_key && mp.installment_number === inst.number);
@@ -253,11 +260,11 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       : isPaidByManual
       ? "pago"
       : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-    return { ...inst, status, isOverdue, pendingManual };
+    return { ...inst, status, isOverdue, pendingManual, isCancelled: false };
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
-  const progressPercent = totalInstallments > 0 ? Math.round((paidCount / totalInstallments) * 100) : 0;
+  const progressPercent = activeInstallmentsCount > 0 ? Math.round((paidCount / activeInstallmentsCount) * 100) : 0;
 
   const handleGenerateBoleto = async (inst: any, idx: number) => {
     if (!tenantId) {
