@@ -388,7 +388,7 @@ export async function deleteByProvider(
       const text = await resp.text();
       let result: any;
       try { result = JSON.parse(text); } catch { result = { raw: text }; }
-      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.message || `HTTP ${resp.status}`) };
+      return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
     } catch (err) {
       return { ok: false, result: null, provider, error: `Falha de rede Gupshup: ${(err as Error).message}` };
     }
