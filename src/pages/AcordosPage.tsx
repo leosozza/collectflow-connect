@@ -547,6 +547,38 @@ const AcordosPage = () => {
         tenant?.id ? <PaymentConfirmationTab tenantId={tenant.id} /> : <p className="text-muted-foreground">Carregando...</p>
       ) : loading ? (
         <p className="text-muted-foreground">Carregando...</p>
+      ) : filteredAgreements.length === 0 && agreements.length > 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Você tem <span className="font-semibold text-foreground">{agreements.length}</span> acordo(s),
+            mas nenhum corresponde aos filtros atuais
+            {selectedMonth !== "todos" && !dateFrom && !dateTo
+              ? ` no mês selecionado`
+              : ""}.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {selectedMonth !== "todos" && (
+              <Button variant="outline" size="sm" onClick={() => setSelectedMonth("todos")}>
+                Ver todos os meses
+              </Button>
+            )}
+            {(dateFrom || dateTo) && (
+              <Button variant="outline" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}>
+                Limpar datas
+              </Button>
+            )}
+            {credorFilter !== "todos" && (
+              <Button variant="outline" size="sm" onClick={() => setCredorFilter("todos")}>
+                Limpar credor
+              </Button>
+            )}
+            {searchQuery && (
+              <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                Limpar busca
+              </Button>
+            )}
+          </div>
+        </div>
       ) : (
         <AgreementsList agreements={filteredAgreements} />
       )}
