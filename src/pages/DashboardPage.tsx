@@ -6,14 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   BarChart3,
   FileText,
-  Phone,
-  FileCheck,
-  CalendarCheck,
   Settings2,
-  Handshake,
-  TrendingDown,
-  Hourglass,
-  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +23,7 @@ import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
 import KpisOperacionaisCard from "@/components/dashboard/KpisOperacionaisCard";
+import KpisFinanceirosCard from "@/components/dashboard/KpisFinanceirosCard";
 import SortableCard from "@/components/dashboard/SortableCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
