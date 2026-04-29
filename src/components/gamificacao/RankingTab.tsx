@@ -84,8 +84,18 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {ranking.map((entry: RankingEntry) => {
+      {(() => {
+        const top3 = ranking.slice(0, 3);
+        const rest = ranking.slice(3);
+
+        // Cascade offset by position: 1 (no offset), 2 (offset right + down), 3 (offset more right + more down)
+        const cascadeOffset: Record<number, string> = {
+          1: "md:mt-0 md:ml-0",
+          2: "md:mt-8 md:ml-8",
+          3: "md:mt-16 md:ml-16",
+        };
+
+        const renderCard = (entry: RankingEntry, extraClass = "") => {
           const isMe = highlightCurrentUser && entry.operator_id === profile?.id;
           const isTop3 = !!entry.position && entry.position <= 3;
           const medal = isTop3 ? medals[entry.position! - 1] : null;
@@ -112,7 +122,7 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
                   : isTop3
                     ? podiumClass
                     : "border-border bg-card hover:bg-muted/30"
-              }`}
+              } ${extraClass}`}
             >
               <div className="absolute -top-3 -right-2 text-[7rem] font-black opacity-[0.06] select-none pointer-events-none leading-none text-foreground">
                 {entry.position}
@@ -178,8 +188,28 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
               </div>
             </div>
           );
-        })}
-      </div>
+        };
+
+        return (
+          <>
+            {top3.length > 0 && (
+              <div className="flex flex-col gap-3 md:max-w-[80%]">
+                {top3.map(entry => (
+                  <div key={entry.id} className={cascadeOffset[entry.position!] || ""}>
+                    {renderCard(entry)}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {rest.length > 0 && (
+              <div className="flex flex-col gap-3 mt-4">
+                {rest.map(entry => renderCard(entry))}
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 };
