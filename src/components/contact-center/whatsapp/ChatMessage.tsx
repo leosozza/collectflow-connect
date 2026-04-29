@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChatMessage as ChatMessageType, deleteChatMessageForRecipient, editChatMessage } from "@/services/conversationService";
-import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio, Download, MoreVertical, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Check, CheckCheck, Clock, AlertCircle, StickyNote, Reply, FileText, FileAudio, Download, MoreVertical, Pencil, Trash2, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -11,14 +11,6 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -28,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { formatWhatsAppText, stripWhatsAppMarkers } from "@/lib/whatsappFormat";
@@ -57,6 +49,8 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   const [editText, setEditText] = useState(message.content || "");
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const repliedMessage = message.reply_to_message_id
     ? allMessages.find((m) => m.id === message.reply_to_message_id) ?? null
@@ -73,20 +67,17 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   const isDeleted = !!message.deleted_for_recipient_at;
   const isEdited = !!message.edited_at;
   const isOptimistic = (message as any).__optimistic === true;
-  const ageMs = Date.now() - new Date(message.created_at).getTime();
+  const EDIT_WINDOW_MS = 15 * 60 * 1000;
+  const ageMs = now - new Date(message.created_at).getTime();
   const canEdit =
+    !isOfficialApi &&
     isOutbound &&
     !isInternal &&
     !isDeleted &&
     !isOptimistic &&
     message.message_type === "text" &&
     message.status !== "failed" &&
-    ageMs <= 15 * 60 * 1000;
-  const editDisabledReason = isOfficialApi
-    ? "Edição não suportada nas instâncias oficiais (Meta)"
-    : !canEdit && isOutbound && message.message_type === "text"
-      ? "Edição permitida apenas nos primeiros 15 minutos"
-      : null;
+    ageMs <= EDIT_WINDOW_MS;
   const canDelete =
     isOutbound &&
     !isInternal &&
@@ -95,6 +86,35 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     message.status !== "failed" &&
     (!!(message as any).provider_message_id || !!message.external_id);
   const showActionsMenu = isOutbound && !isInternal && !isOptimistic;
+
+  // Schedule a re-render exactly when the edit window expires, so the
+  // "Editar mensagem" item disappears from the menu and any open inline
+  // editor closes automatically.
+  useEffect(() => {
+    if (!isOutbound || isInternal || isDeleted || isOptimistic) return;
+    if (message.message_type !== "text") return;
+    const remaining = EDIT_WINDOW_MS - ageMs;
+    if (remaining <= 0) return;
+    const t = setTimeout(() => setNow(Date.now()), remaining + 250);
+    return () => clearTimeout(t);
+  }, [message.id, message.created_at, isOutbound, isInternal, isDeleted, isOptimistic, message.message_type, ageMs]);
+
+  // Auto-close inline editor if the window expires while it's open.
+  useEffect(() => {
+    if (editOpen && !canEdit) {
+      setEditOpen(false);
+    }
+  }, [editOpen, canEdit]);
+
+  // Auto-resize the inline textarea to grow with content.
+  useEffect(() => {
+    if (!editOpen) return;
+    const ta = editTextareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  }, [editText, editOpen]);
+
 
   const handleDocumentDownload = async (url: string, filename: string) => {
     try {
@@ -328,14 +348,12 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
                     <DropdownMenuSeparator />
                   </>
                 )}
-                {message.message_type === "text" && (
+                {canEdit && (
                   <DropdownMenuItem
-                    disabled={!canEdit || isOfficialApi}
                     onClick={() => {
                       setEditText(message.content || "");
                       setEditOpen(true);
                     }}
-                    title={editDisabledReason || undefined}
                   >
                     <Pencil className="w-4 h-4 mr-2" /> Editar mensagem
                   </DropdownMenuItem>
@@ -377,7 +395,56 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
             )}
           </div>
         )}
-        {renderContent()}
+        {editOpen ? (
+          <div className="min-w-[260px] max-w-[480px]">
+            <div className="flex items-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => !busy && setEditOpen(false)}
+                disabled={busy}
+                aria-label="Cancelar edição"
+                className="shrink-0 w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 flex items-center justify-center transition-colors disabled:opacity-50"
+              >
+                <X className="w-4 h-4 text-[#667781] dark:text-[#aebac1]" />
+              </button>
+              <textarea
+                ref={editTextareaRef}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleConfirmEdit();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    if (!busy) setEditOpen(false);
+                  }
+                }}
+                disabled={busy}
+                rows={1}
+                autoFocus
+                className="flex-1 resize-none rounded-2xl bg-white dark:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-[14.5px] leading-[20px] px-3.5 py-2 outline-none focus:ring-2 focus:ring-[#25d366]/40 disabled:opacity-60 placeholder:text-[#8696a0]"
+                placeholder="Editar mensagem..."
+                style={{ minHeight: "36px", maxHeight: "160px" }}
+              />
+              <button
+                type="button"
+                onClick={handleConfirmEdit}
+                disabled={busy || !editText.trim() || editText.trim() === (message.content || "")}
+                aria-label="Salvar edição"
+                className="shrink-0 w-8 h-8 rounded-full bg-[#25d366] hover:bg-[#1ebe5d] flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {busy ? (
+                  <Loader2 className="w-4 h-4 text-white animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          renderContent()
+        )}
 
         {/* Footer: time, edited tag, deleted icon, status */}
         <div className={`flex items-center gap-1 justify-end mt-[2px] -mb-[2px] ${
@@ -433,33 +500,6 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
         </div>
       </div>
 
-      {/* Edit dialog */}
-      <Dialog open={editOpen} onOpenChange={(o) => { if (!busy) setEditOpen(o); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar mensagem</DialogTitle>
-            <DialogDescription>
-              A alteração será aplicada também no WhatsApp do cliente. O texto original ficará registrado para auditoria.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            rows={4}
-            disabled={busy}
-            className="resize-none"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={busy}>
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirmEdit} disabled={busy}>
-              {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete confirm */}
       <AlertDialog open={confirmDelete} onOpenChange={(o) => { if (!busy) setConfirmDelete(o); }}>
