@@ -84,10 +84,11 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {ranking.map((entry: RankingEntry) => {
           const isMe = highlightCurrentUser && entry.operator_id === profile?.id;
-          const medal = entry.position && entry.position <= 3 ? medals[entry.position - 1] : null;
+          const isTop3 = !!entry.position && entry.position <= 3;
+          const medal = isTop3 ? medals[entry.position! - 1] : null;
           const name = entry.profile?.full_name || "Operador";
           const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
           const progressPct = Math.round((entry.points / maxPoints) * 100);
@@ -95,41 +96,86 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
             ? Math.round((entry.payments_count / (entry.payments_count + entry.breaks_count)) * 100)
             : 0;
 
+          const podiumStyles: Record<number, string> = {
+            1: "border-amber-400/60 bg-gradient-to-br from-amber-400/15 via-amber-300/5 to-transparent shadow-[0_8px_30px_-12px_rgba(251,191,36,0.5)]",
+            2: "border-slate-400/60 bg-gradient-to-br from-slate-300/15 via-slate-200/5 to-transparent",
+            3: "border-orange-500/50 bg-gradient-to-br from-orange-400/15 via-orange-300/5 to-transparent",
+          };
+          const podiumClass = isTop3 ? podiumStyles[entry.position!] : "";
+
           return (
             <div
               key={entry.id}
-              className={`rounded-xl border p-4 transition-all ${
+              className={`relative overflow-hidden rounded-2xl border-2 p-5 transition-all hover:scale-[1.01] ${
                 isMe
-                  ? "border-primary bg-primary/5 shadow-sm"
-                  : "border-border bg-card hover:bg-muted/30"
+                  ? "border-primary bg-gradient-to-br from-primary/15 via-primary/5 to-transparent shadow-lg shadow-primary/20"
+                  : isTop3
+                    ? podiumClass
+                    : "border-border bg-card hover:bg-muted/30"
               }`}
             >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex items-center justify-center w-8 h-8 text-lg">
-                  {medal || <span className="text-sm font-bold text-muted-foreground">#{entry.position}</span>}
+              <div className="absolute -top-3 -right-2 text-[7rem] font-black opacity-[0.06] select-none pointer-events-none leading-none text-foreground">
+                {entry.position}
+              </div>
+
+              <div className="flex items-center gap-4 mb-4 relative">
+                <div className="flex items-center justify-center w-14 h-14 flex-shrink-0">
+                  {medal ? (
+                    <span className="text-5xl drop-shadow-md">{medal}</span>
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                      <span className="text-base font-black text-muted-foreground">#{entry.position}</span>
+                    </div>
+                  )}
                 </div>
-                <Avatar className="w-9 h-9">
+                <Avatar className="w-14 h-14 ring-2 ring-background shadow-md">
                   <AvatarImage src={entry.profile?.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs bg-primary/10 text-primary">{initials}</AvatarFallback>
+                  <AvatarFallback className="text-base font-bold bg-primary/15 text-primary">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold truncate ${isMe ? "text-primary" : "text-foreground"}`}>
-                    {name} {isMe && <span className="text-xs font-normal text-muted-foreground">(você)</span>}
-                  </p>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground">{formatCurrency(entry.total_received)} recebido</span>
-                    <Badge variant="outline" className="text-[10px] h-4 px-1.5">{receiveRate}% taxa</Badge>
-                    {entry.breaks_count > 0 && (
-                      <Badge variant="destructive" className="text-[10px] h-4 px-1.5">{entry.breaks_count} quebras</Badge>
+                    <p className={`text-base font-bold truncate leading-tight ${isMe ? "text-primary" : "text-foreground"}`}>
+                      {name}
+                    </p>
+                    {isMe && (
+                      <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded uppercase tracking-wider">
+                        Você
+                      </span>
                     )}
                   </div>
+                  <p className="text-sm font-semibold text-foreground mt-1">
+                    {formatCurrency(entry.total_received)}
+                    <span className="text-xs font-normal text-muted-foreground ml-1">recebido</span>
+                  </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-foreground">{entry.points.toLocaleString("pt-BR")}</p>
-                  <p className="text-[10px] text-muted-foreground">pontos</p>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-3xl font-black text-foreground leading-none tracking-tight">
+                    {entry.points.toLocaleString("pt-BR")}
+                  </p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">pontos</p>
                 </div>
               </div>
-              <Progress value={progressPct} className="h-1.5" />
+
+              <div className="flex items-center gap-2 flex-wrap mb-3">
+                <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
+                  🎯 {receiveRate}% taxa
+                </Badge>
+                <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
+                  💰 {entry.payments_count} pagos
+                </Badge>
+                {entry.breaks_count > 0 && (
+                  <Badge variant="destructive" className="text-xs h-6 px-2 font-semibold">
+                    ⚠️ {entry.breaks_count} quebras
+                  </Badge>
+                )}
+              </div>
+
+              <div className="relative pt-4">
+                <span className="absolute right-0 top-0 text-[10px] font-bold text-muted-foreground">
+                  {progressPct}%
+                </span>
+                <Progress value={progressPct} className="h-2.5" />
+              </div>
             </div>
           );
         })}
