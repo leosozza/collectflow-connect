@@ -425,33 +425,6 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
         </div>
       </div>
 
-      {/* Edit dialog */}
-      <Dialog open={editOpen} onOpenChange={(o) => { if (!busy) setEditOpen(o); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar mensagem</DialogTitle>
-            <DialogDescription>
-              A alteração será aplicada também no WhatsApp do cliente. O texto original ficará registrado para auditoria.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            rows={4}
-            disabled={busy}
-            className="resize-none"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={busy}>
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirmEdit} disabled={busy}>
-              {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete confirm */}
       <AlertDialog open={confirmDelete} onOpenChange={(o) => { if (!busy) setConfirmDelete(o); }}>
