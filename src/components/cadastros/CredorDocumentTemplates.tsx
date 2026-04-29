@@ -23,55 +23,7 @@ interface CredorDocumentTemplatesProps {
   credorId?: string;
 }
 
-const replaceVars = (text: string, vars: Record<string, string>) => {
-  let result = text;
-  Object.entries(vars).forEach(([key, val]) => {
-    result = result.replace(new RegExp(key.replace(/[{}]/g, "\\$&"), "g"), val);
-  });
-  return result;
-};
-
-const EditorPreview = ({ content, title, credor }: { content: string; title: string; credor: any }) => {
-  const resolved = replaceVars(content, SAMPLE_DATA);
-  const htmlBlocks: string[] = [];
-  let textForMd = resolved.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
-    htmlBlocks.push(match);
-    return `<!--HTML_BLOCK_${htmlBlocks.length - 1}-->`;
-  });
-  let html = markdownToHtml(textForMd, { highlightPlaceholders: false });
-  htmlBlocks.forEach((block, i) => {
-    html = html.replace(`<!--HTML_BLOCK_${i}-->`, block);
-  });
-
-  const wrapped = wrapDocumentInA4Page({
-    bodyHtml: html,
-    title: title || "Documento",
-    credor: {
-      ...SAMPLE_CREDOR,
-      razao_social: credor?.razao_social || SAMPLE_CREDOR.razao_social,
-      nome_fantasia: credor?.nome_fantasia || SAMPLE_CREDOR.nome_fantasia,
-      cnpj: credor?.cnpj || SAMPLE_CREDOR.cnpj,
-      portal_logo_url: credor?.portal_logo_url || SAMPLE_CREDOR.portal_logo_url,
-      endereco: credor?.endereco || SAMPLE_CREDOR.endereco,
-      numero: credor?.numero || SAMPLE_CREDOR.numero,
-      complemento: credor?.complemento || SAMPLE_CREDOR.complemento,
-      bairro: credor?.bairro || SAMPLE_CREDOR.bairro,
-      cidade: credor?.cidade || SAMPLE_CREDOR.cidade,
-      uf: credor?.uf || SAMPLE_CREDOR.uf,
-      cep: credor?.cep || SAMPLE_CREDOR.cep,
-    },
-  });
-
-  return (
-    <div className="flex justify-center">
-      <div
-        className="shadow-md border border-border/50"
-        style={{ transform: "scale(0.85)", transformOrigin: "top center" }}
-        dangerouslySetInnerHTML={{ __html: wrapped }}
-      />
-    </div>
-  );
-};
+// (EditorPreview legacy component removed — replaced by A4LiveEditor)
 
 /** Extract all {placeholder} tokens from text */
 const extractPlaceholders = (text: string): string[] => {
