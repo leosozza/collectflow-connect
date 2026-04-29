@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { DOCUMENT_TYPES, TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
 import { DOCUMENT_PLACEHOLDERS, PLACEHOLDER_CATEGORIES, SAMPLE_DATA } from "@/lib/documentPlaceholders";
 import { markdownToHtml } from "@/lib/markdownLight";
+import { wrapDocumentInA4Page, SAMPLE_CREDOR } from "@/services/documentLayoutService";
 
 interface CredorDocumentTemplatesProps {
   form: any;
