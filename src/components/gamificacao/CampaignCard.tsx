@@ -107,16 +107,19 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
           </div>
         )}
 
-        <div className="flex flex-wrap gap-1.5 mt-2">
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
           <Badge variant="outline" className="text-[10px]">{metricLabel}</Badge>
           <Badge variant="outline" className="text-[10px]">{periodLabel}</Badge>
-          {isActive && daysLeft >= 0 && (
-            <Badge variant="outline" className="text-[10px] gap-1">
-              <Clock className="w-3 h-3" />
-              {daysLeft === 0 ? "Último dia" : `${daysLeft}d restantes`}
-            </Badge>
-          )}
         </div>
+
+        {isActive && datesValid && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-gradient-to-br from-muted/40 to-muted/10 border border-border/50 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+              Termina em
+            </span>
+            <CampaignCountdown endDate={campaign.end_date} />
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
         {campaign.prize_description && (
