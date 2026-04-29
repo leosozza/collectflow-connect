@@ -83,3 +83,66 @@ export function markdownToHtml(
   closeList();
   return html.join("\n");
 }
+
+/**
+ * Reverse of `markdownToHtml` — converts contentEditable HTML back to the
+ * lightweight markdown format we store. Preserves {placeholder} tokens.
+ */
+export function htmlToMarkdownLight(html: string): string {
+  if (!html) return "";
+  let h = html.replace(/<br\s*\/?>/gi, "\n");
+
+  // Unwrap variable chips
+  h = h.replace(/<span[^>]*rivo-var-chip[^>]*>([\s\S]*?)<\/span>/gi, "$1");
+  h = h.replace(/<span[^>]*mdl-placeholder[^>]*>([\s\S]*?)<\/span>/gi, "$1");
+
+  // Spacers
+  h = h.replace(/<div[^>]*mdl-spacer[^>]*>\s*<\/div>/gi, "\n");
+
+  // Block elements → markdown
+  h = h.replace(/<hr[^>]*\/?>/gi, "\n---\n");
+  h = h.replace(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/gi, (_m, inner) => `\n## ${stripTags(inner).trim()}\n`);
+  h = h.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, (_m, inner) => `\n### ${stripTags(inner).trim()}\n`);
+
+  h = h.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_m, inner) => {
+    const items = [...String(inner).matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+      .map((mm) => `- ${inlineToMd(mm[1]).trim()}`)
+      .join("\n");
+    return `\n${items}\n`;
+  });
+  h = h.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_m, inner) => {
+    const items = [...String(inner).matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+      .map((mm, i) => `${i + 1}. ${inlineToMd(mm[1]).trim()}`)
+      .join("\n");
+    return `\n${items}\n`;
+  });
+
+  h = h.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, (_m, inner) => `\n${inlineToMd(inner)}\n`);
+  h = h.replace(/<div[^>]*>([\s\S]*?)<\/div>/gi, (_m, inner) => `\n${inlineToMd(inner)}\n`);
+
+  h = inlineToMd(h);
+
+  h = h
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+
+  h = stripTags(h);
+  h = h.replace(/\n{3,}/g, "\n\n").trim();
+  return h;
+}
+
+function inlineToMd(s: string): string {
+  return s
+    .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, "**$1**")
+    .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, "**$1**")
+    .replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, "*$1*")
+    .replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, "*$1*");
+}
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]+>/g, "");
+}

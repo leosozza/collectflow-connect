@@ -1,22 +1,20 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
 import { toast } from "sonner";
-import { FileText, Pencil, Eye, Info, ChevronDown, AlertTriangle } from "lucide-react";
+import { FileText, Pencil, Info, ChevronDown, AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { DOCUMENT_TYPES, TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
-import { DOCUMENT_PLACEHOLDERS, PLACEHOLDER_CATEGORIES, SAMPLE_DATA } from "@/lib/documentPlaceholders";
-import { markdownToHtml } from "@/lib/markdownLight";
-import { wrapDocumentInA4Page, SAMPLE_CREDOR } from "@/services/documentLayoutService";
+import { DOCUMENT_PLACEHOLDERS, PLACEHOLDER_CATEGORIES } from "@/lib/documentPlaceholders";
+import { SAMPLE_CREDOR } from "@/services/documentLayoutService";
+import A4LiveEditor, { type A4LiveEditorHandle } from "./A4LiveEditor";
 
 interface CredorDocumentTemplatesProps {
   form: any;
@@ -24,55 +22,7 @@ interface CredorDocumentTemplatesProps {
   credorId?: string;
 }
 
-const replaceVars = (text: string, vars: Record<string, string>) => {
-  let result = text;
-  Object.entries(vars).forEach(([key, val]) => {
-    result = result.replace(new RegExp(key.replace(/[{}]/g, "\\$&"), "g"), val);
-  });
-  return result;
-};
-
-const EditorPreview = ({ content, title, credor }: { content: string; title: string; credor: any }) => {
-  const resolved = replaceVars(content, SAMPLE_DATA);
-  const htmlBlocks: string[] = [];
-  let textForMd = resolved.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
-    htmlBlocks.push(match);
-    return `<!--HTML_BLOCK_${htmlBlocks.length - 1}-->`;
-  });
-  let html = markdownToHtml(textForMd, { highlightPlaceholders: false });
-  htmlBlocks.forEach((block, i) => {
-    html = html.replace(`<!--HTML_BLOCK_${i}-->`, block);
-  });
-
-  const wrapped = wrapDocumentInA4Page({
-    bodyHtml: html,
-    title: title || "Documento",
-    credor: {
-      ...SAMPLE_CREDOR,
-      razao_social: credor?.razao_social || SAMPLE_CREDOR.razao_social,
-      nome_fantasia: credor?.nome_fantasia || SAMPLE_CREDOR.nome_fantasia,
-      cnpj: credor?.cnpj || SAMPLE_CREDOR.cnpj,
-      portal_logo_url: credor?.portal_logo_url || SAMPLE_CREDOR.portal_logo_url,
-      endereco: credor?.endereco || SAMPLE_CREDOR.endereco,
-      numero: credor?.numero || SAMPLE_CREDOR.numero,
-      complemento: credor?.complemento || SAMPLE_CREDOR.complemento,
-      bairro: credor?.bairro || SAMPLE_CREDOR.bairro,
-      cidade: credor?.cidade || SAMPLE_CREDOR.cidade,
-      uf: credor?.uf || SAMPLE_CREDOR.uf,
-      cep: credor?.cep || SAMPLE_CREDOR.cep,
-    },
-  });
-
-  return (
-    <div className="flex justify-center">
-      <div
-        className="shadow-md border border-border/50"
-        style={{ transform: "scale(0.85)", transformOrigin: "top center" }}
-        dangerouslySetInnerHTML={{ __html: wrapped }}
-      />
-    </div>
-  );
-};
+// (EditorPreview legacy component removed — replaced by A4LiveEditor)
 
 /** Extract all {placeholder} tokens from text */
 const extractPlaceholders = (text: string): string[] => {
@@ -98,10 +48,9 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
-  const [editorTab, setEditorTab] = useState<string>("editor");
   const [confirmSaveInvalid, setConfirmSaveInvalid] = useState(false);
   const [invalidKeys, setInvalidKeys] = useState<string[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<A4LiveEditorHandle>(null);
 
   const { data: tenantTemplates } = useQuery({
     queryKey: ["document-templates-fallback", tenantId],
@@ -134,7 +83,6 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
   const handleEdit = (credorKey: string, docType: string) => {
     setEditContent(getEffectiveContent(credorKey, docType));
     setEditingKey(credorKey);
-    setEditorTab("editor");
   };
 
   const handleSave = () => {
@@ -158,13 +106,21 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
   };
 
   const handleInsertPlaceholder = async (key: string) => {
+    // 1) Insert at the caret inside the live editor (preferred behaviour now).
+    if (editorRef.current) {
+      try {
+        editorRef.current.insertAtCaret(key);
+      } catch {
+        // ignore — falls back to clipboard
+      }
+    }
+    // 2) Always copy to clipboard as well, so the user can paste anywhere.
     try {
       await navigator.clipboard.writeText(key);
-      toast.success(`Variável copiada: ${key}`, {
-        description: "Cole (Ctrl+V) onde desejar no editor.",
+      toast.success(`Variável inserida: ${key}`, {
+        description: "Também copiada para a área de transferência.",
       });
     } catch {
-      // Fallback: legacy execCommand
       const ta = document.createElement("textarea");
       ta.value = key;
       ta.style.position = "fixed";
@@ -173,9 +129,8 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
       ta.select();
       try {
         document.execCommand("copy");
-        toast.success(`Variável copiada: ${key}`);
       } catch {
-        toast.error("Não foi possível copiar a variável");
+        // ignore
       }
       document.body.removeChild(ta);
     }
@@ -270,36 +225,36 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
               })}
             </div>
 
-            {/* Editor / Preview tabs */}
-            <Tabs value={editorTab} onValueChange={setEditorTab}>
-              <TabsList className="w-full">
-                <TabsTrigger value="editor" className="flex-1">
-                  <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editor
-                </TabsTrigger>
-                <TabsTrigger value="preview" className="flex-1">
-                  <Eye className="w-3.5 h-3.5 mr-1.5" /> Preview
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="editor" className="mt-3">
-                <Textarea
-                  ref={textareaRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="min-h-[450px] font-mono text-sm leading-relaxed"
-                  placeholder="Conteúdo do modelo..."
-                />
-              </TabsContent>
-
-              <TabsContent value="preview" className="mt-3">
-                <div className="rounded-lg border border-border bg-muted/30 p-4 overflow-auto max-h-[500px]">
-                  <EditorPreview content={editContent} title={editingDocType?.label || "Documento"} credor={form} />
+            {/* Live A4 editor (WYSIWYG) */}
+            {editingKey && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Pencil className="w-3.5 h-3.5" /> Editor visual (folha A4)
                 </div>
-                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                  <Info className="w-3 h-3" /> Variáveis substituídas por dados fictícios.
+                <A4LiveEditor
+                  ref={editorRef}
+                  initialMarkdown={editContent}
+                  title={editingDocType?.label || "Documento"}
+                  credor={{
+                    razao_social: form?.razao_social || SAMPLE_CREDOR.razao_social,
+                    nome_fantasia: form?.nome_fantasia || SAMPLE_CREDOR.nome_fantasia,
+                    cnpj: form?.cnpj || SAMPLE_CREDOR.cnpj,
+                    portal_logo_url: form?.portal_logo_url || SAMPLE_CREDOR.portal_logo_url,
+                    endereco: form?.endereco || SAMPLE_CREDOR.endereco,
+                    numero: form?.numero || SAMPLE_CREDOR.numero,
+                    complemento: form?.complemento || SAMPLE_CREDOR.complemento,
+                    bairro: form?.bairro || SAMPLE_CREDOR.bairro,
+                    cidade: form?.cidade || SAMPLE_CREDOR.cidade,
+                    uf: form?.uf || SAMPLE_CREDOR.uf,
+                    cep: form?.cep || SAMPLE_CREDOR.cep,
+                  }}
+                  onChange={setEditContent}
+                />
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="w-3 h-3" /> O título e o rodapé do credor são fixos — você edita apenas o corpo do documento.
                 </p>
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" type="button" onClick={() => setEditingKey(null)}>
