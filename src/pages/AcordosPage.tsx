@@ -55,7 +55,8 @@ const AcordosPage = () => {
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
   const [operatorFilter, setOperatorFilter] = useUrlState("operator", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
-  const [selectedMonth, setSelectedMonth] = useUrlState("month", String(new Date().getMonth()));
+  // Default "todos" para operadores não verem tela vazia quando não há parcela no mês corrente.
+  const [selectedMonth, setSelectedMonth] = useUrlState("month", "todos");
   const [selectedYear, setSelectedYear] = useUrlState("year", String(new Date().getFullYear()));
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
