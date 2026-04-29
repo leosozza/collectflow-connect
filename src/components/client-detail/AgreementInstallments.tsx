@@ -497,7 +497,68 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     }
   };
 
-  const statusIcon = (status: string) => {
+  const handleConfirmCancelInstallment = async () => {
+    if (!cancelInstallmentDialog) return;
+    const { inst, idx } = cancelInstallmentDialog;
+    setCancellingInstallmentIdx(idx);
+    try {
+      await cancelInstallment(agreementId, inst.customKey);
+      try {
+        await supabase.from("client_events").insert({
+          tenant_id: tenantId,
+          client_cpf: cpf,
+          event_source: "operator",
+          event_type: "installment_cancelled",
+          metadata: {
+            agreement_id: agreementId,
+            installment_key: inst.customKey,
+            installment_label: inst.isEntrada
+              ? (inst.entradaCount > 1 ? `Entrada ${inst.entradaIndex + 1}` : "Entrada")
+              : `Parcela ${inst.displayNumber}/${totalInstallments}`,
+            valor: Number(inst.value),
+            cancelled_by: profile?.id,
+          },
+        } as any);
+      } catch {}
+      toast({ title: "Parcela cancelada", description: "A parcela foi marcada como cancelada." });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      onRefresh?.();
+      setCancelInstallmentDialog(null);
+    } catch (err: any) {
+      toast({ title: "Erro ao cancelar parcela", description: err.message, variant: "destructive" });
+    } finally {
+      setCancellingInstallmentIdx(null);
+    }
+  };
+
+  const handleReactivateInstallment = async (inst: any, idx: number) => {
+    setCancellingInstallmentIdx(idx);
+    try {
+      await reactivateInstallment(agreementId, inst.customKey);
+      try {
+        await supabase.from("client_events").insert({
+          tenant_id: tenantId,
+          client_cpf: cpf,
+          event_source: "operator",
+          event_type: "installment_reactivated",
+          metadata: {
+            agreement_id: agreementId,
+            installment_key: inst.customKey,
+            reactivated_by: profile?.id,
+          },
+        } as any);
+      } catch {}
+      toast({ title: "Parcela reativada" });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao reativar parcela", description: err.message, variant: "destructive" });
+    } finally {
+      setCancellingInstallmentIdx(null);
+    }
+  };
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
     if (status === "pending_confirmation") return <Clock className="w-3.5 h-3.5 text-blue-600" />;
