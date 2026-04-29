@@ -324,6 +324,19 @@ export interface ManageResult {
   result: any;
   provider: string;
   error?: string;
+  httpStatus?: number;
+}
+
+/** Build a human-readable error string from an HTTP response body. */
+function describeProviderError(status: number, result: any): string {
+  const detail =
+    result?.message ||
+    result?.error ||
+    result?.response?.message ||
+    (typeof result?.raw === "string" ? result.raw : null) ||
+    (typeof result === "string" ? result : null);
+  if (detail) return `HTTP ${status}: ${typeof detail === "string" ? detail : JSON.stringify(detail).slice(0, 300)}`;
+  return `HTTP ${status}`;
 }
 
 /**
