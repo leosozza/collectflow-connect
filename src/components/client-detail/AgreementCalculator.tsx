@@ -87,10 +87,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
 
   // Agreement form
   const [entradas, setEntradas] = useState<EntradaItem[]>([{ date: "", value: "0", method: "BOLETO" }]);
-  const [numParcelas, setNumParcelas] = useState<number | "">(0);
+  // Default: 1 installment due today — speeds up the most common simulation flow
+  const [numParcelas, setNumParcelas] = useState<number | "">(1);
   const [formaPagto, setFormaPagto] = useState("BOLETO");
   const [intervalo, setIntervalo] = useState("mensal");
-  const [firstDueDate, setFirstDueDate] = useState("");
+  const [firstDueDate, setFirstDueDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
 
   // Simulation state
