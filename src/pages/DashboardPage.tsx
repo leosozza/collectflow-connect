@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { formatCurrency } from "@/lib/formatters";
+
 import { Button } from "@/components/ui/button";
 import {
   BarChart3,
@@ -26,7 +26,7 @@ import KpisOperacionaisCard from "@/components/dashboard/KpisOperacionaisCard";
 import KpisFinanceirosCard from "@/components/dashboard/KpisFinanceirosCard";
 import SortableCard from "@/components/dashboard/SortableCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
-import { cn } from "@/lib/utils";
+
 import {
   DndContext,
   DragEndEvent,
