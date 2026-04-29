@@ -56,6 +56,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number; key: string; label: string } | null>(null);
   const [unconfirmingIdx, setUnconfirmingIdx] = useState<number | null>(null);
   const [cancellingIdx, setCancellingIdx] = useState<number | null>(null);
+  const [cancelInstallmentDialog, setCancelInstallmentDialog] = useState<{ inst: any; idx: number } | null>(null);
+  const [cancellingInstallmentIdx, setCancellingInstallmentIdx] = useState<number | null>(null);
 
   // Boleto pendente states
   const [generatingAllBoletos, setGeneratingAllBoletos] = useState(false);
