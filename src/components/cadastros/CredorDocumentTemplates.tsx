@@ -267,36 +267,36 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
               })}
             </div>
 
-            {/* Editor / Preview tabs */}
-            <Tabs value={editorTab} onValueChange={setEditorTab}>
-              <TabsList className="w-full">
-                <TabsTrigger value="editor" className="flex-1">
-                  <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editor
-                </TabsTrigger>
-                <TabsTrigger value="preview" className="flex-1">
-                  <Eye className="w-3.5 h-3.5 mr-1.5" /> Preview
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="editor" className="mt-3">
-                <Textarea
-                  ref={textareaRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="min-h-[450px] font-mono text-sm leading-relaxed"
-                  placeholder="Conteúdo do modelo..."
-                />
-              </TabsContent>
-
-              <TabsContent value="preview" className="mt-3">
-                <div className="rounded-lg border border-border bg-muted/30 p-4 overflow-auto max-h-[500px]">
-                  <EditorPreview content={editContent} title={editingDocType?.label || "Documento"} credor={form} />
+            {/* Live A4 editor (WYSIWYG) */}
+            {editingKey && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Pencil className="w-3.5 h-3.5" /> Editor visual (folha A4)
                 </div>
-                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                  <Info className="w-3 h-3" /> Variáveis substituídas por dados fictícios.
+                <A4LiveEditor
+                  ref={editorRef}
+                  initialMarkdown={editContent}
+                  title={editingDocType?.label || "Documento"}
+                  credor={{
+                    razao_social: form?.razao_social || SAMPLE_CREDOR.razao_social,
+                    nome_fantasia: form?.nome_fantasia || SAMPLE_CREDOR.nome_fantasia,
+                    cnpj: form?.cnpj || SAMPLE_CREDOR.cnpj,
+                    portal_logo_url: form?.portal_logo_url || SAMPLE_CREDOR.portal_logo_url,
+                    endereco: form?.endereco || SAMPLE_CREDOR.endereco,
+                    numero: form?.numero || SAMPLE_CREDOR.numero,
+                    complemento: form?.complemento || SAMPLE_CREDOR.complemento,
+                    bairro: form?.bairro || SAMPLE_CREDOR.bairro,
+                    cidade: form?.cidade || SAMPLE_CREDOR.cidade,
+                    uf: form?.uf || SAMPLE_CREDOR.uf,
+                    cep: form?.cep || SAMPLE_CREDOR.cep,
+                  }}
+                  onChange={setEditContent}
+                />
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="w-3 h-3" /> O título e o rodapé do credor são fixos — você edita apenas o corpo do documento.
                 </p>
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" type="button" onClick={() => setEditingKey(null)}>
