@@ -787,12 +787,65 @@ Deno.serve(async (req: Request) => {
     return json({ data });
   }
 
-  // GET /credores
-  if (segments[0] === "credores" && method === "GET") {
-    const { data, error } = await supabaseAdmin.from("credores")
-      .select("id, razao_social, nome_fantasia, cnpj, status, parcelas_min, parcelas_max, desconto_maximo, juros_mes, multa")
-      .eq("tenant_id", tenantId).eq("status", "ativo");
+  // Campos públicos de credor — exclui segredos (gateway_token) e tenant_id.
+  // Quando a chave for escopada por credor, sempre retornamos o credor inteiro.
+  const CREDOR_PUBLIC_FIELDS = [
+    "id", "razao_social", "nome_fantasia", "cnpj", "inscricao_estadual",
+    "contato_responsavel", "email", "telefone",
+    "cep", "endereco", "numero", "complemento", "bairro", "cidade", "uf",
+    "banco", "agencia", "conta", "tipo_conta", "pix_chave",
+    "gateway_ativo", "gateway_ambiente", "gateway_status",
+    "parcelas_min", "parcelas_max",
+    "entrada_minima_valor", "entrada_minima_tipo",
+    "desconto_maximo", "juros_mes", "multa",
+    "honorarios_grade", "aging_discount_tiers",
+    "prazo_dias_acordo", "indice_correcao_monetaria",
+    "sla_hours", "carteira_mode",
+    "signature_enabled", "signature_type",
+    "portal_hero_title", "portal_hero_subtitle", "portal_logo_url",
+    "portal_primary_color", "portal_enabled", "document_logo_url",
+    "template_acordo", "template_recibo", "template_quitacao",
+    "template_descricao_divida", "template_notificacao_extrajudicial",
+    "status", "created_at", "updated_at",
+  ].join(", ");
+
+  // GET /credores  — lista (escopada se a chave tiver credor_id)
+  if (segments[0] === "credores" && segments.length === 1 && method === "GET") {
+    let query = supabaseAdmin.from("credores")
+      .select(CREDOR_PUBLIC_FIELDS)
+      .eq("tenant_id", tenantId);
+
+    if (auth.credorId) {
+      // Chave escopada: retorna apenas o credor da chave (independente do status)
+      query = query.eq("id", auth.credorId);
+    } else {
+      // Chave global: somente credores ativos
+      query = query.eq("status", "ativo");
+    }
+
+    const { data, error } = await query;
     if (error) return json({ error: error.message }, 500);
+    return json({ data });
+  }
+
+  // GET /credores/{id}  — detalhe completo
+  if (segments[0] === "credores" && segments.length === 2 && method === "GET") {
+    const credorId = segments[1];
+
+    if (auth.credorId && auth.credorId !== credorId) {
+      return json({
+        error: `Esta chave está restrita ao credor "${credorNome}". Acesso negado a outros credores.`,
+      }, 403);
+    }
+
+    const { data, error } = await supabaseAdmin.from("credores")
+      .select(CREDOR_PUBLIC_FIELDS)
+      .eq("tenant_id", tenantId)
+      .eq("id", credorId)
+      .maybeSingle();
+
+    if (error) return json({ error: error.message }, 500);
+    if (!data) return json({ error: "Credor não encontrado" }, 404);
     return json({ data });
   }
 
