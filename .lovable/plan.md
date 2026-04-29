@@ -1,46 +1,108 @@
-## Edição de mensagem no estilo WhatsApp + janela de tempo correta
 
-### Problemas atuais
-1. O item **"Editar mensagem"** aparece no menu mesmo depois de expirar a janela de 15 min — fica visível, mas desabilitado e com tooltip de explicação. O usuário quer que **simplesmente não apareça**.
-2. A edição abre um **Dialog modal genérico** (caixa centralizada com título "Editar mensagem", descrição, textarea grande). Isso quebra a identidade do WhatsApp, que faz a edição **inline**, no próprio fluxo do chat: aparece um balão preview "Você" com a mensagem original e logo abaixo um input com botão **X** (cancelar) à esquerda e **✓** (confirmar) à direita.
-3. O `canEdit` é calculado apenas no render — se a janela expirar enquanto o usuário está com o dialog aberto/menu aberto, o estado não atualiza. Precisa de um "tick" para forçar re-render quando a mensagem se aproxima dos 15 min.
+# Editor de modelos de documento — WYSIWYG com layout A4 ao vivo
 
-### Mudanças
+## Objetivos
+1. Eliminar o modo "bloco de notas" (textarea monoespaçada) e o uso obrigatório da aba **Preview**. O editor já mostra a folha A4 com título centralizado e rodapé como ficará no PDF final.
+2. Reorganizar o rodapé: 1ª linha **Razão Social — CNPJ 00.000.000/0000-00** (centralizada); 2ª linha endereço completo (Rua, nº, complemento — Bairro — Cidade/UF — CEP), também centralizado.
 
-**Arquivo: `src/components/contact-center/whatsapp/ChatMessage.tsx`**
+## O que muda na UI
 
-1. **Esconder em vez de desabilitar** (linhas 331-342)
-   - O item `<DropdownMenuItem>` "Editar mensagem" só renderiza quando `canEdit && !isOfficialApi && message.message_type === "text"`. Sem mais `disabled` + `title`.
-   - Mantemos a remoção de `editDisabledReason` (não é mais necessário).
+### Antes
+- Sheet com abas **Editor / Preview**.
+- Editor: `Textarea` font-mono, sem qualquer formatação visual, sem header/título nem rodapé.
+- Para ver o resultado o usuário precisa clicar em "Preview".
+- Rodapé renderizado em uma única linha juntando tudo com " — ", ordem: Credor, Endereço, Bairro, Cidade/UF, CEP, CNPJ.
 
-2. **Re-render quando expira a janela** (depois do `ageMs`)
-   - Adicionar `useEffect` que, se `isOutbound && !isInternal && !isDeleted && message.message_type === "text"` e a mensagem ainda está dentro de 15 min, agenda um `setTimeout` para o momento exato em que vai expirar (`15min - ageMs`). No callback, força re-render via `setNow(Date.now())`. Isso garante que o item suma do menu **e** que o input inline se feche automaticamente quando o tempo acaba.
+### Depois
+- **Aba única** dentro do Sheet (abas Editor/Preview removidas).
+- O editor passa a ser um **`contentEditable` estilizado como folha A4**, dentro de um wrapper que reproduz o `wrapDocumentInA4Page`:
+  - Cabeçalho com logo do credor (canto superior esquerdo).
+  - **Título do documento centralizado** (ex.: "CARTA DE QUITAÇÃO") com a barra decorativa — não editável, atualizado automaticamente conforme o documento.
+  - Corpo editável com tipografia Georgia/Times 11.5pt, justificado, espaçamento de Word.
+  - Rodapé fixo (não editável) na nova ordem.
+- Tokens de variável (ex.: `{nome_devedor}`) aparecem destacados como "chips" coloridos dentro do texto editável (badge sutil, fundo accent), preservando a edição livre ao redor.
+- Atalhos básicos do editor: **Ctrl/⌘+B** negrito, **Ctrl/⌘+I** itálico, **Enter** novo parágrafo, **Shift+Enter** quebra de linha. Atalhos opcionais via barra de ferramentas mínima (Negrito · Itálico · Título · Lista · Separador) acima da folha.
+- Clicar em uma variável da lista lateral continua **copiando para o clipboard** (comportamento atual). Adicionalmente, se o cursor estiver dentro do editor, é inserida no ponto do cursor (mantendo retro-compatibilidade do fluxo).
 
-3. **Substituir Dialog por edição inline** (linhas 437-462)
-   - Remover o `<Dialog>` inteiro.
-   - Quando `editOpen === true`: dentro do balão da mensagem, em vez de mostrar o conteúdo normal (`renderContent()`), renderizamos um bloco de edição:
-     - Pequena tag "Você" (em laranja primary) — opcional, dispensável já que o balão já tem orientação.
-     - O texto original cinza acima como referência (line-clamp-2, opcional)
-     - Um input/textarea limpo com fundo branco (no escuro, fundo do balão), sem bordas pesadas
-     - Linha com botão **X** (ghost circular cinza, à esquerda) e botão **✓** (verde `#25d366`, à direita), seguindo cor de envio/check do WhatsApp
-     - Atalho: **Enter** confirma, **Esc** cancela, **Shift+Enter** quebra linha
-   - O input usa auto-resize (mesma técnica do `ChatInput`) para crescer com o texto.
-   - Durante `busy=true`: ✓ vira spinner, X desabilitado.
-   - O resto do balão (footer com hora, status, etc.) continua aparecendo normalmente abaixo.
+### Rodapé reorganizado (duas linhas)
+Linha 1 (centralizada, semibold):
+```
+{Razão Social} — CNPJ 12.345.678/0001-90
+```
+Linha 2 (centralizada, normal):
+```
+Av. Paulista, 1000 - Sala 1201 — Bela Vista — São Paulo/SP — CEP 01310-100
+```
+Se algum campo estiver vazio, ele é omitido sem deixar separador órfão.
 
-4. **Visual fiel à referência (imagem 2)**
-   - Container: o próprio balão verde da mensagem ganha um leve outline para indicar modo edição.
-   - Input: `bg-white dark:bg-[#2a3942]`, sem borda, padding 8px 12px, rounded-full.
-   - Botão X: 32×32, círculo cinza claro, ícone `X` muted.
-   - Botão ✓: 32×32, círculo verde `#25d366`, ícone `Check` branco.
-   - Tipografia idêntica ao balão (mesma `font-size`, `line-height`).
+## Arquivos afetados
 
-### Arquivos afetados
-- `src/components/contact-center/whatsapp/ChatMessage.tsx` (única alteração)
+1. **`src/services/documentLayoutService.ts`**
+   - `buildFooterText` deixa de retornar uma única string e passa a retornar `{ line1, line2 }`.
+   - Em `wrapDocumentInA4Page`, o `<footer>` é renderizado com duas `<div>` empilhadas, ambas `text-align:center`, line1 com `font-weight:600;color:#333`, line2 com `color:#666`.
+   - Mesma função continua sendo a fonte única de verdade, então PDF final, preview do `ClientDocuments` e o novo editor herdam o layout idêntico.
 
-### Não vamos mexer
-- A lógica de `editChatMessage` no service — segue igual.
-- O comportamento de "editada" no rodapé do balão (continua mostrando o tooltip com texto original).
-- A tela de exclusão (`AlertDialog`) — esta permanece como modal pois é uma ação destrutiva mais formal.
+2. **`src/components/cadastros/CredorDocumentTemplates.tsx`**
+   - Remover `Tabs/TabsList/TabsTrigger/TabsContent` e o estado `editorTab`.
+   - Substituir o `Textarea` por um novo componente `A4LiveEditor` (definido no mesmo arquivo ou em `src/components/cadastros/A4LiveEditor.tsx`):
+     - Renderiza o resultado de `wrapDocumentInA4Page` em volta de um `<div contentEditable>` que ocupa o lugar do `<main>`.
+     - `onInput` lê `innerHTML` da área editável → converte de volta para o formato markdown-leve usado hoje (negrito `**`, itálico `*`, headings `##/###`, listas `-`, separador `---`) via util novo `htmlToMarkdownLight` (espelho de `markdownLight`). Atualiza `editContent` no estado pai.
+     - Variáveis `{xxx}` são "tokenizadas" no momento do render: regex envolve cada match com `<span class="rivo-var-chip" data-var="{xxx}">{xxx}</span>` (style: bg accent/15, border accent/30, padding 0 4px, rounded). No save, esses chips voltam a ser texto puro `{xxx}`.
+   - Barra de ferramentas mínima acima da folha (5 botões: B, I, H2, lista, hr) usando `document.execCommand` ou `Selection` API para inserir o markdown correspondente.
+   - Pequena legenda inferior: "Substituições e variáveis aparecem como dados de exemplo no rodapé/preview real do PDF."
 
-Aplico?
+3. **`src/lib/markdownLight.ts`** (somente verificação — não altera saída).
+   - Adiciona, ao lado do `markdownToHtml` existente, um `htmlToMarkdownLight(html)` que faz a conversão inversa:
+     - `<strong>`/`<b>` → `**...**`
+     - `<em>`/`<i>` → `*...*`
+     - `<h2>` → `## ...`, `<h3>` → `### ...`
+     - `<ul><li>` → `- item`
+     - `<hr>` → `---`
+     - `<p>` → linha em branco entre blocos.
+   - Strip de outras tags HTML residuais para manter o conteúdo salvo igual ao formato atual (o backend e o `markdownToHtml` continuam funcionando sem mudanças).
+
+4. **`EditorPreview`** dentro de `CredorDocumentTemplates.tsx`
+   - Passa a ser usado **apenas** como base do novo editor ao vivo (não há mais aba Preview separada). A função `replaceVars(content, SAMPLE_DATA)` continua sendo usada para os "chips" de variável e para a renderização do rodapé com dados do credor real / SAMPLE_CREDOR.
+
+## Detalhes técnicos
+
+### Sincronização texto ↔ HTML editável
+```text
+state.editContent (markdown leve, com {vars})
+        │  markdownToHtml + tokenizeVars
+        ▼
+contentEditable.innerHTML  ← exibido em A4
+        │  htmlToMarkdownLight + untokenizeVars
+        ▼
+state.editContent (atualizado em onInput)
+```
+Para evitar o problema clássico de cursor "pular" no contentEditable, usamos um padrão "uncontrolled":
+- Setamos `innerHTML` apenas quando `editingKey` muda (abertura do sheet) ou ao inserir uma variável programaticamente.
+- O `onInput` atualiza apenas o estado em `editContent`, mas **não** reescreve o `innerHTML` enquanto o usuário digita.
+
+### Rodapé responsivo
+```ts
+function buildFooter(credor) {
+  const name = credor.razao_social || credor.nome_fantasia;
+  const cnpj = credor.cnpj ? `CNPJ ${formatCnpj(credor.cnpj)}` : '';
+  const line1 = [name, cnpj].filter(Boolean).join(' — ');
+
+  const street = [credor.endereco, credor.numero].filter(Boolean).join(', ');
+  const streetWithComp = credor.complemento ? `${street} - ${credor.complemento}` : street;
+  const cityState = [credor.cidade, credor.uf].filter(Boolean).join('/');
+  const cep = formatCep(credor.cep);
+  const line2 = [streetWithComp, credor.bairro, cityState, cep && `CEP ${cep}`]
+    .filter(Boolean).join(' — ');
+
+  return { line1, line2 };
+}
+```
+
+### Aspectos preservados
+- Validação de variáveis desconhecidas (`validatePlaceholders`) e o diálogo de confirmação continuam idênticos.
+- Salvar segue gravando no mesmo campo do form (markdown leve), portanto **PDF, preview do `ClientDocuments` e templates já existentes não quebram**.
+- Botão "Aplicar/Cancelar" e fluxo de Sheet permanecem.
+
+## Fora de escopo
+- Não migra para um editor rich-text completo (Tiptap/Slate). A edição continua restrita ao subset markdown que o sistema já renderiza, evitando divergência entre o que aparece no editor e o PDF final.
+- Não muda a tipografia/estilos do PDF além das duas linhas do rodapé.
