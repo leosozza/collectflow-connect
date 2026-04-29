@@ -175,17 +175,6 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
           <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr] overflow-hidden">
             {/* LEFT: variables + formatting (compact) */}
             <aside className="border-r border-border bg-muted/20 overflow-y-auto p-4 space-y-3">
-              <div className="rounded-md border border-border bg-card px-3 py-2 text-[11px] text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground text-[11px]">Formatação</p>
-                <p className="leading-relaxed">
-                  <code className="bg-muted px-1 rounded">**b**</code> negrito ·
-                  <code className="bg-muted px-1 rounded ml-1">*i*</code> itálico ·
-                  <code className="bg-muted px-1 rounded ml-1">## Título</code> ·
-                  <code className="bg-muted px-1 rounded ml-1">- item</code> ·
-                  <code className="bg-muted px-1 rounded ml-1">---</code> linha
-                </p>
-              </div>
-
               <div className="space-y-1">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Variáveis</p>
                 {PLACEHOLDER_CATEGORIES.map((cat) => {
