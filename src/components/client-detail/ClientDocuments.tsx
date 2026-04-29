@@ -40,7 +40,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     queryFn: async () => {
       const { data } = await supabase
         .from("credores")
-        .select("razao_social, nome_fantasia, cnpj, portal_logo_url, endereco, numero, complemento, bairro, cidade, uf, cep, email, template_acordo, template_recibo, template_quitacao, template_descricao_divida, template_notificacao_extrajudicial")
+        .select("razao_social, nome_fantasia, cnpj, portal_logo_url, document_logo_url, endereco, numero, complemento, bairro, cidade, uf, cep, email, template_acordo, template_recibo, template_quitacao, template_descricao_divida, template_notificacao_extrajudicial")
         .or(`razao_social.eq.${client.credor},nome_fantasia.eq.${client.credor}`)
         .limit(1)
         .maybeSingle();
