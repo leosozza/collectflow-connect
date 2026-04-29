@@ -216,6 +216,8 @@ const CarteiraPage = () => {
   const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [loadingAllIds, setLoadingAllIds] = useState(false);
+  const [selectNInput, setSelectNInput] = useState<string>("");
+  const [loadingSelectN, setLoadingSelectN] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [calculatingScore, setCalculatingScore] = useState(false);
