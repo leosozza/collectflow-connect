@@ -1,85 +1,81 @@
-## Objetivo
+## Finalização: AlertDialog de cancelamento + revisão de conflitos
 
-Adicionar a possibilidade de **cancelar uma parcela individual** dentro de "Parcelas do Acordo", sem precisar cancelar o acordo inteiro. A parcela permanece visível na lista, **riscada (line-through)** e com status **"Cancelada"**.
+### Estado atual
+A implementação anterior deixou o feature **quase pronto**:
+- ✅ Migration `cancelled_installments jsonb` aplicada
+- ✅ RPC `get_dashboard_vencimentos` já filtra parcelas canceladas
+- ✅ Service `cancelInstallment` / `reactivateInstallment` funcionando
+- ✅ UI: ícone Trash2 (cancelar) e RotateCcw (reativar) renderizando
+- ✅ Linha com `line-through` + badge "Cancelada"
+- ❌ **Falta**: o `<AlertDialog>` de confirmação que `setCancelInstallmentDialog` deveria abrir nunca foi renderizado no JSX. Hoje, ao clicar em Trash2, o estado é setado mas **nada acontece visualmente**.
 
-## Comportamento esperado
+### Etapa 1 — Adicionar o AlertDialog de confirmação
+Em `src/components/client-detail/AgreementInstallments.tsx`, antes de `</>` final (depois do Dialog de Boleto Pendente), inserir:
 
-- Ícone de lixeira (vermelho) na coluna **Ações** da tabela de parcelas.
-- Disponível para parcelas regulares e entradas adicionais (entrada_2, entrada_3...).
-- **Desabilitado / oculto** quando:
-  - Parcela já está paga (`status = pago`) ou aguardando confirmação (`pending_confirmation`).
-  - É a **única entrada** existente.
-  - Existe boleto/cobrança ativa em `negociarie_cobrancas` (status diferente de `cancelado`/`substituido`) — usuário deve estornar/cancelar o boleto primeiro.
-  - Parcela já está cancelada → no lugar do botão exibe um ícone "Reativar" (opcional, mesma posição).
-- Confirmação via dialog: "Cancelar esta parcela? Ela continuará visível, mas marcada como cancelada e não será mais cobrada."
-- Apenas usuários com permissão de edição (`canEdit`).
-
-## Visual da parcela cancelada
-
-- Linha inteira com `line-through` e opacidade reduzida (`opacity-60`).
-- Badge de status substituído por **"Cancelada"** (cinza/neutro, ícone XCircle).
-- Demais ações da linha desabilitadas (não permite gerar boleto, baixar manualmente, etc).
-- Ícone de **reativar** (ex.: RotateCcw) substitui a lixeira para permitir desfazer.
-
-## Modelo de dados
-
-Em vez de excluir e renumerar, usamos uma nova coluna **`cancelled_installments jsonb`** em `agreements`, com a forma:
-
-```json
-{
-  "2": { "cancelled_at": "2026-04-29T15:00:00Z", "cancelled_by": "<profile_id>", "reason": null },
-  "entrada_2": { ... }
-}
+```tsx
+<AlertDialog
+  open={!!cancelInstallmentDialog}
+  onOpenChange={(o) => !o && setCancelInstallmentDialog(null)}
+>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Cancelar parcela?</AlertDialogTitle>
+      <AlertDialogDescription>
+        A parcela <b>{label}</b> ({formatCurrency(value)}) será marcada como
+        cancelada. Ela continuará visível na lista, mas com risco, e será
+        desconsiderada das métricas de progresso e do dashboard "Parcelas
+        Programadas". Você pode reativá-la depois.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel>Voltar</AlertDialogCancel>
+      <AlertDialogAction onClick={handleConfirmCancelInstallment}>
+        Cancelar Parcela
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
 ```
 
-- A chave segue o mesmo padrão canônico de `custom_installment_dates`/`custom_installment_values` ("1", "2"... ou "entrada", "entrada_2"...).
-- `new_installments` **NÃO** é alterado — a parcela continua existindo na sequência, apenas marcada.
-- `total_amount` é recalculado **excluindo** parcelas canceladas (entrada + soma das parcelas cujo `customKey` não está em `cancelled_installments`).
+### Etapa 2 — Revisão de conflitos (auditoria cruzada)
 
-## Efeitos derivados
+Após inspecionar todos os pontos que consomem `custom_installment_values`, identifiquei **3 áreas que precisam respeitar `cancelled_installments`** para evitar drift de números:
 
-- **Status do acordo**: ao cancelar parcela em aberto, o acordo recalcula se ainda está vigente. Não muda o status do acordo automaticamente — a parcela apenas deixa de contar.
-- **Dashboard / Vencimentos** (`get_dashboard_vencimentos`): filtra parcelas cancelada (chave presente em `cancelled_installments`) para não aparecer em "Parcelas Programadas".
-- **Cálculos de progresso** (`progressPercent`, `paidCount`, `totalInstallments`): canceladas saem do denominador.
-- **Boletos**: cobranças de uma parcela cancelada são marcadas como `cancelado` em `negociarie_cobrancas` quando aplicável (a UI já bloqueia cancelar parcela com boleto ativo, então normalmente não há boleto vivo nesse momento).
+**2.1 — `src/lib/agreementInstallmentClassifier.ts`**
+Classifica cada parcela como "em dia / vencida / paga" e alimenta o status global do acordo (em dia / atrasado / quebrado). Hoje **não conhece `cancelled_installments`**, então uma parcela cancelada vencida ainda contaria como atraso → poderia marcar acordo como "QUEBRA DE ACORDO" indevidamente.
+**Fix**: pular parcelas presentes em `cancelled_installments` ao classificar.
 
-## Onde mexer
+**2.2 — `src/lib/installmentUtils.ts` (`buildInstallmentSchedule`)**
+Função utilitária consumida por `documentDataResolver` (geração de contratos/recibos) e pela sync de pagamentos manuais. Hoje retorna **todas** as parcelas, inclusive canceladas.
+**Fix**: aceitar opção `{ excludeCancelled: boolean }` (default false para preservar compatibilidade) e propagar `cancelled: boolean` no schedule. Documentos passam `excludeCancelled: true`; sync de pagamento manual mantém comportamento atual (só faz match por chave).
 
-### Banco
-1. **Migração**: `ALTER TABLE agreements ADD COLUMN cancelled_installments jsonb NOT NULL DEFAULT '{}'::jsonb`.
-2. Atualizar RPC `get_dashboard_vencimentos` para excluir parcelas cuja chave está em `cancelled_installments` (entrada + parcelas regulares).
+**2.3 — `total_amount` recalculado**
+Hoje `cancelInstallment` apenas marca a chave como cancelada, mas **não recalcula `proposed_total`** do acordo. Isso é proposital (mantém histórico do acordo original), mas é importante deixar **explícito**: a UI de progresso, o dashboard e os documentos vão usar a soma das parcelas ativas dinamicamente — `proposed_total` continua refletindo o acordo original assinado.
+**Decisão**: **não** alterar `proposed_total`. Adicionar comentário no service explicando.
 
-### Backend (services)
-- `src/services/agreementService.ts`:
-  - `cancelInstallment(agreementId, installmentKey, reason?)` — adiciona a chave em `cancelled_installments`, recalcula `total_amount` e registra `audit_logs` + `client_events` (`installment_cancelled`).
-  - `reactivateInstallment(agreementId, installmentKey)` — remove a chave do `cancelled_installments` e recalcula `total_amount`.
+### Etapa 3 — Validação adicional na UI
+Reforçar `canCancel` no JSX para também bloquear quando:
+- `inst.cobranca?.status === "pago"` (já coberto via `isPaid`)
+- existe `manualPayment` confirmado (já coberto via `isPaid`)
+- é a única entrada de uma única parcela do acordo (não faz sentido cancelar tudo — usar "Cancelar Acordo")
 
-### Frontend
-- `src/components/client-detail/AgreementInstallments.tsx`:
-  - Lê `agreement.cancelled_installments` e marca cada parcela com `isCancelled` no objeto.
-  - Aplica `line-through opacity-60` na linha quando `isCancelled`.
-  - Substitui badge de status por "Cancelada" e desabilita ações conflitantes.
-  - Adiciona botão Trash2 (cancelar) e RotateCcw (reativar) com `AlertDialog` de confirmação.
-  - Ajusta cálculo de `progressPercent`, `paidCount`, `totalInstallments` para ignorar canceladas.
+A regra `!isOnlyEntrada` já existe. Adicionar também: bloquear se sobrar apenas 1 parcela ativa (evitar acordo vazio):
 
-## Detalhes técnicos
-
-```text
-agreements:
-  + cancelled_installments jsonb DEFAULT '{}'
-
-Chave canônica reutilizada de custom_installment_dates:
-  "entrada", "entrada_2", "1", "2", "3"...
-
-Cancelar parcela "2" de [1,2,3,4]:
-  cancelled_installments = { "2": { cancelled_at, cancelled_by } }
-  parcelas exibidas:        1  2(risco)  3  4
-  total_amount:             entrada + valor1 + valor3 + valor4
-  progresso:                pagas / (4 - 1 cancelada)
+```ts
+const activeCount = installments.filter(i => !cancelledMap[i.customKey]).length;
+const canCancel = ... && activeCount > 1;
 ```
 
-## Fora de escopo
+### Resumo de arquivos a editar
+- `src/components/client-detail/AgreementInstallments.tsx` → adicionar AlertDialog + reforçar `canCancel`
+- `src/lib/agreementInstallmentClassifier.ts` → ignorar parcelas canceladas
+- `src/lib/installmentUtils.ts` → opção `excludeCancelled`
+- `src/services/documentDataResolver.ts` → passar `excludeCancelled: true`
+- `src/services/agreementService.ts` → comentário explicativo sobre `proposed_total`
 
-- Reordenação manual de parcelas.
-- Cancelamento em massa de várias parcelas em uma ação.
-- Cancelar a entrada principal (`entrada`) — exige recalcular o acordo.
+### Não faremos (intencional)
+- Não recalcular `proposed_total` — preserva histórico contratual
+- Não alterar a fonte de pagamentos reais (`agreement-real-payments`) — ela é independente das parcelas agendadas
+- Não mexer em `negociarie_cobrancas` — boletos canceláveis pela UI já existente
+
+Posso prosseguir?
