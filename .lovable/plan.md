@@ -1,86 +1,46 @@
-## Modelo de Documento A4 com Cabeçalho e Rodapé Profissional
+## Edição de mensagem no estilo WhatsApp + janela de tempo correta
 
-### Objetivo
-Transformar o documento padrão (hoje só corpo de texto solto) em uma folha **A4 estruturada**: logo do credor no canto superior esquerdo, **título centralizado no topo**, corpo limpo e organizado, e no rodapé centralizado o **endereço completo do credor**. Isso vale para preview na tela e para o PDF gerado.
-
-### Arquitetura — onde plugar
-
-O fluxo já existe e está bem dividido — vamos preservar tudo:
-1. `resolveDocumentData()` → resolve placeholders do corpo
-2. `renderDocument()` → aplica os placeholders + converte markdown
-3. `DocumentPreviewDialog` → mostra preview A4
-4. `documentPdfService.downloadPdf()` → gera PDF
-
-A estratégia é **introduzir um wrapper "página A4" único** que envolve o HTML do corpo com cabeçalho e rodapé. Esse wrapper é usado nos dois pontos (preview e PDF) — fonte única de verdade, sem duplicação.
+### Problemas atuais
+1. O item **"Editar mensagem"** aparece no menu mesmo depois de expirar a janela de 15 min — fica visível, mas desabilitado e com tooltip de explicação. O usuário quer que **simplesmente não apareça**.
+2. A edição abre um **Dialog modal genérico** (caixa centralizada com título "Editar mensagem", descrição, textarea grande). Isso quebra a identidade do WhatsApp, que faz a edição **inline**, no próprio fluxo do chat: aparece um balão preview "Você" com a mensagem original e logo abaixo um input com botão **X** (cancelar) à esquerda e **✓** (confirmar) à direita.
+3. O `canEdit` é calculado apenas no render — se a janela expirar enquanto o usuário está com o dialog aberto/menu aberto, o estado não atualiza. Precisa de um "tick" para forçar re-render quando a mensagem se aproxima dos 15 min.
 
 ### Mudanças
 
-#### 1. Trazer dados do credor para o renderer
-- `ClientDocuments.tsx`: expandir o `select` da query do credor para incluir `portal_logo_url, endereco, numero, complemento, bairro, cidade, uf, cep, email`.
-- Adicionar novos placeholders (opcionais, para quem quiser usar no corpo do template):
-  - `{logo_credor}`, `{endereco_completo_credor}`, `{cidade_credor}`, `{uf_credor}`, `{cep_credor}`, `{email_credor}`, `{telefone_credor}`
-- Atualizar `documentPlaceholders.ts` (lista oficial + amostras) e `documentDataResolver.ts` (resolver real).
+**Arquivo: `src/components/contact-center/whatsapp/ChatMessage.tsx`**
 
-#### 2. Criar `documentLayoutService.ts` — o wrapper A4
-Arquivo novo, exporta `wrapDocumentInA4Page({ bodyHtml, title, credor })`. Retorna HTML completo de uma folha A4 com:
+1. **Esconder em vez de desabilitar** (linhas 331-342)
+   - O item `<DropdownMenuItem>` "Editar mensagem" só renderiza quando `canEdit && !isOfficialApi && message.message_type === "text"`. Sem mais `disabled` + `title`.
+   - Mantemos a remoção de `editDisabledReason` (não é mais necessário).
 
-```text
-┌─────────────────────────────────────────┐
-│ [LOGO]                                  │  ← topo, alinhado à esquerda, h ~70px
-│                                         │
-│         TÍTULO DO DOCUMENTO             │  ← centralizado, 18pt, bold, com filete fino abaixo
-│                                         │
-│  Corpo do documento (markdown render).. │  ← serif, 11.5pt, line-height 1.65, justificado
-│  .......................................│
-│  .......................................│
-│                                         │
-│ ─────────────────────────────────────── │  ← filete superior do rodapé
-│   Razão Social — Rua, nº — Bairro,      │  ← rodapé, centralizado, 9pt, cor cinza
-│   Cidade/UF — CEP — CNPJ                │
-└─────────────────────────────────────────┘
-```
+2. **Re-render quando expira a janela** (depois do `ageMs`)
+   - Adicionar `useEffect` que, se `isOutbound && !isInternal && !isDeleted && message.message_type === "text"` e a mensagem ainda está dentro de 15 min, agenda um `setTimeout` para o momento exato em que vai expirar (`15min - ageMs`). No callback, força re-render via `setNow(Date.now())`. Isso garante que o item suma do menu **e** que o input inline se feche automaticamente quando o tempo acaba.
 
-Detalhes:
-- **Header**: flex com logo à esquerda (max 60×60mm, `object-fit: contain`); se não houver logo, mostra a razão social em pequeno como fallback.
-- **Título**: extraído do `label` do tipo de documento (Acordo, Recibo, etc.) — centralizado, fonte serif, peso 700, com filete sutil abaixo.
-- **Corpo**: o HTML que já vinha de `renderDocument`. Se o template do usuário começar com um `## Título` igual ao `label`, removemos para não duplicar.
-- **Rodapé**: linha única centralizada, monta endereço a partir dos campos do credor (filtra vazios e une com " — "); inclui CNPJ no fim.
-- Estilo Georgia/Times New Roman 11.5pt, cores neutras (`#1a1a1a` no corpo, `#666` no rodapé), filetes em `#d4d4d4`.
-- Margens internas: 25mm topo, 20mm laterais, 22mm rodapé.
+3. **Substituir Dialog por edição inline** (linhas 437-462)
+   - Remover o `<Dialog>` inteiro.
+   - Quando `editOpen === true`: dentro do balão da mensagem, em vez de mostrar o conteúdo normal (`renderContent()`), renderizamos um bloco de edição:
+     - Pequena tag "Você" (em laranja primary) — opcional, dispensável já que o balão já tem orientação.
+     - O texto original cinza acima como referência (line-clamp-2, opcional)
+     - Um input/textarea limpo com fundo branco (no escuro, fundo do balão), sem bordas pesadas
+     - Linha com botão **X** (ghost circular cinza, à esquerda) e botão **✓** (verde `#25d366`, à direita), seguindo cor de envio/check do WhatsApp
+     - Atalho: **Enter** confirma, **Esc** cancela, **Shift+Enter** quebra linha
+   - O input usa auto-resize (mesma técnica do `ChatInput`) para crescer com o texto.
+   - Durante `busy=true`: ✓ vira spinner, X desabilitado.
+   - O resto do balão (footer com hora, status, etc.) continua aparecendo normalmente abaixo.
 
-#### 3. Integrar nos dois pontos de uso
-- **Preview (`DocumentPreviewDialog`)**: trocar o `dangerouslySetInnerHTML` direto pelo HTML envelopado. Manter o aspect-ratio A4 e o scroll do dialog.
-- **PDF (`documentPdfService.downloadPdf`)**: aceitar `wrappedHtml` já pronto; ajustar `html2pdf` para `margin: 0` (as margens agora são do próprio layout) e manter A4 retrato.
-- **`ClientDocuments.handleGenerate`**: passar `credor` + `label` para o wrapper antes de setar o preview.
-
-#### 4. Atualizar templates default (`documentDefaults.ts`)
-Reescrever os 5 defaults removendo os títulos repetidos no início (já vão pro cabeçalho) e ajustando para markdown limpo:
-- Tipografia hierárquica com `##` apenas para subtítulos internos (ex: "Cláusula Primeira"), parágrafos justificados, listas com `-`, separadores `---` para áreas de assinatura.
-- Inclui `{tabela_parcelas}` no template de **Acordo** (já que existe o componente).
-- Inclui blocos de assinatura padronizados (linha + nome).
-
-#### 5. Polir o preview do editor (`CredorDocumentTemplates.tsx` — tela da imagem)
-A pré-visualização dentro do editor (aba **Preview**) também usa o mesmo wrapper, para o usuário ver exatamente como ficará a folha final. O `EditorPreview` passa a chamar `wrapDocumentInA4Page` com dados fictícios (`SAMPLE_DATA` + um credor mock).
+4. **Visual fiel à referência (imagem 2)**
+   - Container: o próprio balão verde da mensagem ganha um leve outline para indicar modo edição.
+   - Input: `bg-white dark:bg-[#2a3942]`, sem borda, padding 8px 12px, rounded-full.
+   - Botão X: 32×32, círculo cinza claro, ícone `X` muted.
+   - Botão ✓: 32×32, círculo verde `#25d366`, ícone `Check` branco.
+   - Tipografia idêntica ao balão (mesma `font-size`, `line-height`).
 
 ### Arquivos afetados
-- **Novos**: `src/services/documentLayoutService.ts`
-- **Editados**:
-  - `src/services/documentDataResolver.ts` (novos placeholders + tipo do input)
-  - `src/lib/documentPlaceholders.ts` (lista + amostras)
-  - `src/lib/documentDefaults.ts` (templates reescritos, sem repetir título)
-  - `src/services/documentPdfService.ts` (margens 0, recebe HTML já envelopado)
-  - `src/components/client-detail/ClientDocuments.tsx` (select expandido + envelope no handleGenerate)
-  - `src/components/client-detail/DocumentPreviewDialog.tsx` (renderiza HTML envelopado)
-  - `src/components/cadastros/CredorDocumentTemplates.tsx` (preview com wrapper)
+- `src/components/contact-center/whatsapp/ChatMessage.tsx` (única alteração)
 
-### Compatibilidade
-- Templates já customizados pelo credor **continuam funcionando** — o corpo deles vai pro miolo da folha, ganhando cabeçalho e rodapé "de graça".
-- Se o credor não tiver logo cadastrado: o cabeçalho exibe só o título centralizado (sem espaço fantasma).
-- Se faltar parte do endereço: o rodapé monta com o que existir, sem mostrar separadores soltos.
+### Não vamos mexer
+- A lógica de `editChatMessage` no service — segue igual.
+- O comportamento de "editada" no rodapé do balão (continua mostrando o tooltip com texto original).
+- A tela de exclusão (`AlertDialog`) — esta permanece como modal pois é uma ação destrutiva mais formal.
 
-### Não faremos agora
-- Múltiplas páginas com numeração (1/2, 2/2) — o html2pdf já paginar automaticamente; numeração explícita exige outra biblioteca.
-- Marca d'água ou QR Code de validação.
-- Editor visual WYSIWYG (continua sendo markdown leve, como hoje).
-
-Posso aplicar?
+Aplico?
