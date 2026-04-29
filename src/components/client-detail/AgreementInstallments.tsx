@@ -183,13 +183,31 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
   for (let i = 0; i < agreement.new_installments; i++) {
     const defaultDate = addMonths(new Date(agreement.first_due_date + "T00:00:00"), i);
-    const instNum = (hasEntrada ? 1 : 0) + i + 1;
-    const customKey = String(instNum);
+    // Canonical key matches what the boleto generator persists in negociarie_cobrancas:
+    // first non-entrada parcela = ":1", second = ":2", etc. (independent of entrada count).
+    const canonicalNum = i + 1;
+    const customKey = String(canonicalNum);
+    // Display label keeps the visual offset when there is an entrada: "2/12, 3/12...".
+    const displayNumber = (hasEntrada ? 1 : 0) + i + 1;
     const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
     const value = customValues[customKey] ?? agreement.new_installment_value;
-    const expectedKey = `${agreementId}:${instNum}`;
-    const cobranca = cobrancas.find((c: any) => c.installment_key === expectedKey);
-    installments.push({ number: instNum, displayNumber: instNum, dueDate, value, cobranca, isEntrada: false, customKey });
+    // Lookup by canonical key first; fall back to legacy display-based key for old data.
+    const expectedKey = `${agreementId}:${canonicalNum}`;
+    const legacyKey = `${agreementId}:${displayNumber}`;
+    const cobranca =
+      cobrancas.find((c: any) => c.installment_key === expectedKey) ||
+      (canonicalNum !== displayNumber
+        ? cobrancas.find((c: any) => c.installment_key === legacyKey)
+        : undefined);
+    installments.push({
+      number: canonicalNum,
+      displayNumber,
+      dueDate,
+      value,
+      cobranca,
+      isEntrada: false,
+      customKey,
+    });
   }
 
   const totalInstallments = installments.length;
