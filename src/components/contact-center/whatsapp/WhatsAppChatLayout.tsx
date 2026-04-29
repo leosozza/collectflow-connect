@@ -612,7 +612,9 @@ const WhatsAppChatLayout = () => {
       __optimistic: true,
     } as any;
     setMessages((prev) => [...prev, optimisticMsg]);
-    setSending(true);
+    // Não usamos setSending aqui: o input deve continuar livre para que o
+    // operador digite a próxima mensagem enquanto esta vai sendo entregue
+    // em segundo plano (o status da bolha otimista reflete o resultado).
     try {
       await sendTextMessage(selectedConv.id, tenantId, text, instance.instance_name, replyToMessageId);
       // Real message will arrive via Realtime and replace the optimistic one.
@@ -622,8 +624,6 @@ const WhatsAppChatLayout = () => {
         prev.map((m) => (m.id === tempId ? ({ ...m, status: "failed" } as ChatMessage) : m))
       );
       toast.error(err.message || "Erro ao enviar mensagem");
-    } finally {
-      setSending(false);
     }
   };
 
