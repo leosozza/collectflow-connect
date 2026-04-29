@@ -689,6 +689,98 @@ export const updateInstallmentValue = async (
 };
 
 /**
+ * Cancela uma parcela individual sem alterar a estrutura do acordo.
+ * A parcela permanece visível mas marcada como cancelada (line-through na UI).
+ */
+export const cancelInstallment = async (
+  agreementId: string,
+  installmentKey: string,
+  reason?: string | null,
+): Promise<Record<string, any>> => {
+  try {
+    if (!installmentKey) throw new Error("installment_key é obrigatório");
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = user
+      ? await supabase.from("profiles").select("id").eq("user_id", user.id).maybeSingle()
+      : { data: null };
+
+    const { data: agreement, error: fetchErr } = await supabase
+      .from("agreements")
+      .select("cancelled_installments")
+      .eq("id", agreementId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const current = ((agreement as any)?.cancelled_installments || {}) as Record<string, any>;
+    const updated = {
+      ...current,
+      [installmentKey]: {
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: profile?.id || null,
+        reason: reason || null,
+      },
+    };
+
+    const { error } = await supabase
+      .from("agreements")
+      .update({ cancelled_installments: updated } as any)
+      .eq("id", agreementId);
+    if (error) throw error;
+
+    logger.info(MODULE, "cancelInstallment", { agreementId, installmentKey });
+    logAction({
+      action: "parcela_cancelada",
+      entity_type: "agreement",
+      entity_id: agreementId,
+      details: { installment_key: installmentKey, reason: reason || null },
+    });
+    return updated;
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
+
+/**
+ * Reativa uma parcela previamente cancelada.
+ */
+export const reactivateInstallment = async (
+  agreementId: string,
+  installmentKey: string,
+): Promise<Record<string, any>> => {
+  try {
+    if (!installmentKey) throw new Error("installment_key é obrigatório");
+
+    const { data: agreement, error: fetchErr } = await supabase
+      .from("agreements")
+      .select("cancelled_installments")
+      .eq("id", agreementId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const current = ((agreement as any)?.cancelled_installments || {}) as Record<string, any>;
+    const { [installmentKey]: _removed, ...rest } = current;
+
+    const { error } = await supabase
+      .from("agreements")
+      .update({ cancelled_installments: rest } as any)
+      .eq("id", agreementId);
+    if (error) throw error;
+
+    logger.info(MODULE, "reactivateInstallment", { agreementId, installmentKey });
+    logAction({
+      action: "parcela_reativada",
+      entity_type: "agreement",
+      entity_id: agreementId,
+      details: { installment_key: installmentKey },
+    });
+    return rest;
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
+
+/**
  * Sync the scheduled value of an installment to match the actual paid amount
  * from a confirmed/edited manual_payment.
  *
