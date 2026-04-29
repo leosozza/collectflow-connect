@@ -50,22 +50,8 @@ async function syncTenant(supabase: any, tenant_id: string) {
     };
   }
 
-  // 2. Fetch ALL clients (paginated to bypass 1000-row limit)
-  const allClients: any[] = [];
+  // 2. Fetch ALL active agreements (small dataset, paginated for safety)
   const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from("clients")
-      .select("id, cpf, credor, status, data_vencimento, status_cobranca_id")
-      .eq("tenant_id", tenant_id)
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    allClients.push(...data);
-    if (data.length < PAGE) break;
-  }
-
-  // 3. Fetch ALL active agreements (paginated)
   const allAgreements: any[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
@@ -80,30 +66,40 @@ async function syncTenant(supabase: any, tenant_id: string) {
     if (data.length < PAGE) break;
   }
 
-  // 4. Group clients by CPF+Credor
-  const cpfGroups = new Map<string, any[]>();
-  (allClients || []).forEach((c: any) => {
-    const key = `${c.cpf}|${c.credor}`;
-    if (!cpfGroups.has(key)) cpfGroups.set(key, []);
-    cpfGroups.get(key)!.push(c);
-  });
-
-  // 5. Index agreements
+  // 3. Index agreements by normalized CPF+Credor
   const agreementsByKey = new Map<string, any[]>();
-  (allAgreements || []).forEach((a: any) => {
+  allAgreements.forEach((a: any) => {
     const rawCpf = (a.client_cpf || "").replace(/\D/g, "");
     const key = `${rawCpf}|${a.credor}`;
     if (!agreementsByKey.has(key)) agreementsByKey.set(key, []);
     agreementsByKey.get(key)!.push(a);
   });
 
-  // 6. Apply hierarchy
-  const updates: { ids: string[]; statusId: string }[] = [];
+  // 4. Stream clients page by page, ordered by (cpf, credor) so groups are contiguous.
+  //    Carry-over the last partial group between pages.
   let countQuitado = 0, countAcordoVigente = 0, countAcordoAtrasado = 0;
   let countQuebraAcordo = 0, countInadimplente = 0, countEmDia = 0;
+  let totalUpdated = 0;
 
-  cpfGroups.forEach((clients) => {
-    const rawCpf = clients[0].cpf.replace(/\D/g, "");
+  const pendingUpdates = new Map<string, string[]>(); // statusId -> client ids
+  const flushUpdates = async () => {
+    for (const [statusId, ids] of pendingUpdates) {
+      for (let i = 0; i < ids.length; i += 200) {
+        const batch = ids.slice(i, i + 200);
+        await supabase
+          .from("clients")
+          .update({ status_cobranca_id: statusId })
+          .eq("tenant_id", tenant_id)
+          .in("id", batch);
+        totalUpdated += batch.length;
+      }
+    }
+    pendingUpdates.clear();
+  };
+
+  const processGroup = (clients: any[]) => {
+    if (clients.length === 0) return;
+    const rawCpf = (clients[0].cpf || "").replace(/\D/g, "");
     const agreementKey = `${rawCpf}|${clients[0].credor}`;
     const agreements = agreementsByKey.get(agreementKey) || [];
 
@@ -113,32 +109,27 @@ async function syncTenant(supabase: any, tenant_id: string) {
     let targetStatusId: string | null = null;
 
     const allPago = clients.every((c: any) => c.status === "pago");
-    const allAgreementsApproved = agreements.length > 0 && agreements.every((a: any) => a.status === "approved" || a.status === "cancelled");
     if (allPago && quitadoId) {
       targetStatusId = quitadoId;
       countQuitado += clients.length;
     }
 
     if (!targetStatusId && acordoVigenteId) {
-      const hasPending = agreements.some((a: any) => a.status === "pending");
-      if (hasPending) {
+      if (agreements.some((a: any) => a.status === "pending")) {
         targetStatusId = acordoVigenteId;
         countAcordoVigente += clients.length;
       }
     }
 
     if (!targetStatusId && acordoAtrasadoId) {
-      const hasOverdue = agreements.some((a: any) => a.status === "overdue");
-      if (hasOverdue) {
+      if (agreements.some((a: any) => a.status === "overdue")) {
         targetStatusId = acordoAtrasadoId;
         countAcordoAtrasado += clients.length;
       }
     }
 
     if (!targetStatusId && quebraAcordoId) {
-      const sortedAgreements = [...agreements].sort((a, b) =>
-        (b.id > a.id ? 1 : -1)
-      );
+      const sortedAgreements = [...agreements].sort((a, b) => (b.id > a.id ? 1 : -1));
       if (sortedAgreements.length > 0 && sortedAgreements[0].status === "cancelled") {
         targetStatusId = quebraAcordoId;
         countQuebraAcordo += clients.length;
@@ -163,56 +154,87 @@ async function syncTenant(supabase: any, tenant_id: string) {
       countEmDia += clients.length;
     }
 
-    const idsToUpdate = clients
-      .filter((c: any) => c.status_cobranca_id !== targetStatusId)
-      .map((c: any) => c.id);
-
-    if (idsToUpdate.length > 0 && targetStatusId) {
-      updates.push({ ids: idsToUpdate, statusId: targetStatusId });
+    if (!targetStatusId) return;
+    for (const c of clients) {
+      if (c.status_cobranca_id !== targetStatusId) {
+        if (!pendingUpdates.has(targetStatusId)) pendingUpdates.set(targetStatusId, []);
+        pendingUpdates.get(targetStatusId)!.push(c.id);
+      }
     }
-  });
+  };
 
-  // 7. Apply updates in batches
-  let totalUpdated = 0;
-  for (const { ids, statusId } of updates) {
-    for (let i = 0; i < ids.length; i += 100) {
-      const batch = ids.slice(i, i + 100);
-      await supabase
-        .from("clients")
-        .update({ status_cobranca_id: statusId })
-        .eq("tenant_id", tenant_id)
-        .in("id", batch);
-      totalUpdated += batch.length;
+  let carry: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, cpf, credor, status, data_vencimento, status_cobranca_id")
+      .eq("tenant_id", tenant_id)
+      .order("cpf", { ascending: true })
+      .order("credor", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    let cur: any[] = carry;
+    for (const c of data) {
+      if (cur.length === 0 || (cur[0].cpf === c.cpf && cur[0].credor === c.credor)) {
+        cur.push(c);
+      } else {
+        processGroup(cur);
+        cur = [c];
+      }
+    }
+    if (data.length < PAGE) {
+      // Last page — process the final group too
+      processGroup(cur);
+      carry = [];
+      break;
+    } else {
+      // Hold the trailing group as carry (it may continue on next page)
+      carry = cur;
+    }
+
+    // Periodically flush updates to avoid building up memory
+    if (pendingUpdates.size > 50) {
+      await flushUpdates();
     }
   }
+  // Final flush
+  await flushUpdates();
 
-  // 8. Expire "Em negociação"
+  // 5. Expire "Em negociação"
   if (emNegociacaoId) {
     const regras = regrasByPapel.get("em_negociacao") || regrasByName.get("Em negociação") || {};
     const expiracaoDias = regras.tempo_expiracao_dias || 10;
     const autoTransicaoNome = regras.auto_transicao || "Inadimplente";
     const targetId = statusByName.get(autoTransicaoNome) || inadimplenteId;
 
-    const { data: negociacaoClients } = await supabase
-      .from("clients")
-      .select("id, status_cobranca_locked_at")
-      .eq("tenant_id", tenant_id)
-      .eq("status_cobranca_id", emNegociacaoId);
+    const negociacaoClients: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, status_cobranca_locked_at")
+        .eq("tenant_id", tenant_id)
+        .eq("status_cobranca_id", emNegociacaoId)
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      negociacaoClients.push(...data);
+      if (data.length < PAGE) break;
+    }
 
     const idsToExpire: string[] = [];
-    (negociacaoClients || []).forEach((c: any) => {
+    negociacaoClients.forEach((c: any) => {
       if (c.status_cobranca_locked_at) {
         const lockedAt = new Date(c.status_cobranca_locked_at);
         const diffDays = Math.floor((now.getTime() - lockedAt.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays >= expiracaoDias) {
-          idsToExpire.push(c.id);
-        }
+        if (diffDays >= expiracaoDias) idsToExpire.push(c.id);
       }
     });
 
     if (idsToExpire.length > 0) {
-      for (let i = 0; i < idsToExpire.length; i += 100) {
-        const batch = idsToExpire.slice(i, i + 100);
+      for (let i = 0; i < idsToExpire.length; i += 200) {
+        const batch = idsToExpire.slice(i, i + 200);
         await supabase
           .from("clients")
           .update({
