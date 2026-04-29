@@ -9,7 +9,8 @@ import {
 import CampaignForm from "./CampaignForm";
 import CampaignCard from "./CampaignCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, Trophy } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Plus, Pencil, Trash2, Trophy, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 const CampaignsManagementTab = () => {
