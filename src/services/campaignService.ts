@@ -188,12 +188,13 @@ export const fetchCampaignParticipants = async (campaignId: string): Promise<Cam
   const operatorIds = [...new Set(data.map((p: any) => p.operator_id))];
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, full_name, avatar_url")
+    .select("id, full_name, avatar_url, role")
+    .in("role", ["operador", "supervisor", "gerente"] as any)
     .in("id", operatorIds);
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-  return (data as CampaignParticipant[]).map((entry, idx) => ({
+  return (data as CampaignParticipant[]).filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
     ...entry,
     rank: idx + 1,
     profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
