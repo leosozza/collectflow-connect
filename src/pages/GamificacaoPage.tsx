@@ -6,13 +6,11 @@ import { useTenant } from "@/hooks/useTenant";
 import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchMyPoints, fetchRanking, fetchAllAchievements } from "@/services/gamificationService";
-import { fetchMyGoal } from "@/services/goalService";
 import { fetchMyWallet } from "@/services/rivocoinService";
 import { fetchScoringRules } from "@/services/scoringRulesService";
 import { fetchCampaigns, Campaign } from "@/services/campaignService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/formatters";
@@ -97,7 +95,7 @@ const GamificacaoPage = () => {
   });
 
   const { data: adminAchievements = [] } = useQuery({
-    queryKey: ["all-achievements", tenant?.id],
+    queryKey: ["all-achievements-count", tenant?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("achievements")
