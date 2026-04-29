@@ -95,10 +95,24 @@ export function resolveDocumentData(input: DocumentDataInput): DocumentData {
   const cpf = client.cpf || "";
   const totalPago = clients.reduce((s: number, c: any) => s + (Number(c.valor_pago) || 0), 0);
 
+  // Build creditor address
+  const credorAddrParts = [
+    [credor?.endereco, credor?.numero].filter(Boolean).join(", "),
+    credor?.complemento || "",
+    credor?.bairro || "",
+    [credor?.cidade, credor?.uf].filter(Boolean).join("/"),
+    credor?.cep ? `CEP ${credor.cep}` : "",
+  ].filter((p) => p && String(p).trim().length > 0);
+
   const vars: Record<string, string> = {
     // Credor
     "{razao_social_credor}": credor?.razao_social || client.credor || "",
     "{cnpj_credor}": credor?.cnpj || "",
+    "{endereco_completo_credor}": credorAddrParts.join(" - "),
+    "{cidade_credor}": credor?.cidade || "",
+    "{uf_credor}": credor?.uf || "",
+    "{cep_credor}": credor?.cep || "",
+    "{email_credor}": credor?.email || "",
 
     // Devedor
     "{nome_devedor}": client.nome_completo || "",
