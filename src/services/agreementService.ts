@@ -691,6 +691,12 @@ export const updateInstallmentValue = async (
 /**
  * Cancela uma parcela individual sem alterar a estrutura do acordo.
  * A parcela permanece visível mas marcada como cancelada (line-through na UI).
+ *
+ * IMPORTANTE: por design, NÃO recalculamos `proposed_total` / `original_total`
+ * aqui. O total contratual original do acordo é preservado para histórico.
+ * Métricas de progresso, dashboard "Parcelas Programadas" e o classificador
+ * de parcelas leem dinamicamente `cancelled_installments` para excluir as
+ * canceladas dos cálculos ativos.
  */
 export const cancelInstallment = async (
   agreementId: string,

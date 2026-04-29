@@ -164,8 +164,21 @@ export function classifyInstallment(
 }
 
 /**
+ * Returns the set of cancelled installment keys for an agreement.
+ * Cancelled installments are tracked in the `cancelled_installments` jsonb column
+ * (keys: "entrada", "entrada_2", "1", "2", ...) and must be excluded from
+ * progress/classification metrics so a cancelled vencida doesn't trip
+ * "QUEBRA DE ACORDO" status.
+ */
+function getCancelledKeys(agreement: Agreement): Set<string> {
+  const map = ((agreement as any).cancelled_installments || {}) as Record<string, unknown>;
+  return new Set(Object.keys(map));
+}
+
+/**
  * Count paid vs total installments for an agreement,
  * considering both confirmed manual payments and Negociarie cobrancas.
+ * Cancelled installments are excluded from BOTH numerator and denominator.
  */
 export function countPaidInstallments(
   agreement: Agreement,
@@ -174,10 +187,26 @@ export function countPaidInstallments(
   today: Date = new Date()
 ): { paid: number; total: number } {
   const schedule = buildInstallmentSchedule(agreement);
+  const cancelled = getCancelledKeys(agreement);
   let paid = 0;
+  let total = 0;
   for (const inst of schedule) {
+    if (cancelled.has(inst.key)) continue;
+    total++;
     const cls = classifyInstallment(inst, cobrancas, manualPayments, today);
     if (cls === "pago") paid++;
   }
-  return { paid, total: schedule.length };
+  return { paid, total };
+}
+
+/**
+ * Returns true when the given installment was cancelled on the agreement.
+ * Useful for upstream classifiers that want to short-circuit a "vencido" verdict.
+ */
+export function isInstallmentCancelled(
+  agreement: Agreement,
+  installmentKey: string,
+): boolean {
+  const map = ((agreement as any).cancelled_installments || {}) as Record<string, unknown>;
+  return Object.prototype.hasOwnProperty.call(map, installmentKey);
 }
