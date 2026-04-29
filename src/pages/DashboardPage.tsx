@@ -253,11 +253,18 @@ const DashboardPage = () => {
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const [activeId, setActiveId] = useState<DashboardBlockId | null>(null);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as DashboardBlockId);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = layout.order.indexOf(active.id as DashboardBlockId);
@@ -265,6 +272,8 @@ const DashboardPage = () => {
     if (oldIndex < 0 || newIndex < 0) return;
     setLayout({ ...layout, order: arrayMove(layout.order, oldIndex, newIndex) });
   };
+
+  const handleDragCancel = () => setActiveId(null);
 
   const trendAcionados = stats ? pctDelta(acionadosHoje, stats.acionados_ontem ?? 0) : null;
   const trendAcordosDia = stats ? pctDelta(stats.acordos_dia ?? 0, stats.acordos_dia_anterior ?? 0) : null;
