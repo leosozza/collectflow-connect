@@ -1,6 +1,5 @@
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { useEffect } from "react";
-import { Target } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 
 interface MetaGaugeCardProps {
@@ -14,34 +13,56 @@ interface MetaGaugeCardProps {
   duration?: number;
 }
 
+/**
+ * Velocímetro tricolor (vermelho → amarelo → verde) com ponteiro animado.
+ * Lado esquerdo: Meta Recebimento, Realizado e período.
+ * Lado direito: gauge semicircular com %.
+ */
 const MetaGaugeCard = ({
   percent,
   received,
   goal,
-  monthLabel,
   year,
   month,
-  size = 220,
-  duration = 1.6,
+  size = 180,
+  duration = 1.4,
 }: MetaGaugeCardProps) => {
   const clampedPct = Math.min(100, Math.max(0, percent));
 
-  // Geometry — radial chart proportions
-  const strokeWidth = Math.max(12, size * 0.06);
-  const radius = size * 0.35;
-  const center = size / 2;
-  const circumference = Math.PI * radius;
-  const innerRadius = radius - strokeWidth / 2;
-  const innerLineRadius = radius - strokeWidth - 4;
+  // Geometry
+  const w = size;
+  const h = size * 0.62;
+  const cx = w / 2;
+  const cy = h * 0.92;
+  const radius = size * 0.4;
+  const strokeWidth = Math.max(16, size * 0.1);
 
-  // Animation
+  // Convert pct (0..100) → angle in radians along upper semicircle (180° → 0°)
+  const angleFromPct = (p: number) => Math.PI - (p / 100) * Math.PI;
+
+  const arcPath = (startPct: number, endPct: number) => {
+    const a1 = angleFromPct(startPct);
+    const a2 = angleFromPct(endPct);
+    const x1 = cx + radius * Math.cos(a1);
+    const y1 = cy - radius * Math.sin(a1);
+    const x2 = cx + radius * Math.cos(a2);
+    const y2 = cy - radius * Math.sin(a2);
+    return `M ${x1} ${y1} A ${radius} ${radius} 0 0 1 ${x2} ${y2}`;
+  };
+
+  // Animated needle: -90° (0%) → +90° (100%)
   const animatedValue = useMotionValue(0);
-  const offset = useTransform(animatedValue, [0, 100], [circumference, 0]);
-  const progressAngle = useTransform(animatedValue, [0, 100], [-Math.PI, 0]);
-  const displayPct = useTransform(animatedValue, (latest) => Math.round(latest));
+  const needleAngleDeg = useTransform(
+    animatedValue,
+    (v) => -90 + (v / 100) * 180
+  );
+  const displayPct = useTransform(animatedValue, (v) => Math.round(v));
 
   useEffect(() => {
-    const controls = animate(animatedValue, clampedPct, { duration, ease: "easeOut" });
+    const controls = animate(animatedValue, clampedPct, {
+      duration,
+      ease: "easeOut",
+    });
     return controls.stop;
   }, [clampedPct, animatedValue, duration]);
 
@@ -53,163 +74,105 @@ const MetaGaugeCard = ({
   const lastDay = new Date(y, m + 1, 0).getDate();
   const lastDayStr = `${lastDay}/${String(m + 1).padStart(2, "0")}/${String(y).slice(-2)}`;
 
-  const fontSize = Math.max(28, size * 0.16);
-  const labelFontSize = Math.max(10, size * 0.045);
-  const uniqueId = `meta-${size}`;
-
-  // Animated extending line endpoints
-  const lineX1 = useTransform(progressAngle, (a) => center + Math.cos(a) * innerRadius);
-  const lineY1 = useTransform(progressAngle, (a) => center + Math.sin(a) * innerRadius);
-  const lineX2 = useTransform(
-    progressAngle,
-    (a) => center + Math.cos(a) * innerRadius - Math.cos(a) * (size * 0.1)
-  );
-  const lineY2 = useTransform(
-    progressAngle,
-    (a) => center + Math.sin(a) * innerRadius - Math.sin(a) * (size * 0.1)
-  );
+  const needleLength = radius - strokeWidth * 0.4;
+  const hubRadius = Math.max(8, size * 0.05);
 
   return (
-    <div className="flex items-center gap-4 w-full">
-      {/* Radial gauge */}
-      <div
-        className="relative shrink-0"
-        style={{ width: size, height: size * 0.7 }}
-      >
+    <div className="flex items-center justify-between gap-2 w-full h-full">
+      {/* Left: meta / realizado / período */}
+      <div className="flex flex-col gap-2 min-w-0 shrink-0">
+        <div>
+          <p className="text-base font-bold text-foreground tabular-nums leading-tight">
+            {formatCurrency(goal)}
+          </p>
+          <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+            Meta Recebimento
+          </p>
+        </div>
+        <div>
+          <p className="text-base font-bold text-foreground tabular-nums leading-tight">
+            {formatCurrency(received)}
+          </p>
+          <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+            Realizado
+          </p>
+        </div>
+        <p className="text-[10px] text-muted-foreground tabular-nums">
+          {firstDay} à {lastDayStr}
+        </p>
+      </div>
+
+      {/* Right: speedometer */}
+      <div className="relative shrink-0" style={{ width: w, height: h }}>
         <svg
-          width={size}
-          height={size * 0.7}
-          viewBox={`0 0 ${size} ${size * 0.7}`}
+          width={w}
+          height={h}
+          viewBox={`0 0 ${w} ${h}`}
           className="overflow-visible"
         >
-          <defs>
-            {/* Base track gradient — neutral semantic */}
-            <linearGradient id={`baseGradient-${uniqueId}`} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity="0.18" />
-              <stop offset="50%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="hsl(var(--muted-foreground))" stopOpacity="0.12" />
-            </linearGradient>
-
-            {/* Progress gradient — RIVO orange (primary) */}
-            <linearGradient id={`progressGradient-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.95" />
-              <stop offset="50%" stopColor="hsl(var(--primary))" />
-              <stop offset="100%" stopColor="hsl(var(--destructive))" />
-            </linearGradient>
-
-            {/* Soft drop shadow */}
-            <filter id={`dropshadow-${uniqueId}`} x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow
-                dx="0"
-                dy="2"
-                stdDeviation="3"
-                floodColor="hsl(var(--primary))"
-                floodOpacity="0.35"
-              />
-            </filter>
-          </defs>
-
-          {/* Inner thin guide line */}
+          {/* Red 0..33 */}
           <path
-            d={`M ${center - innerLineRadius} ${center} A ${innerLineRadius} ${innerLineRadius} 0 0 1 ${center + innerLineRadius} ${center}`}
+            d={arcPath(0, 33.33)}
             fill="none"
-            stroke="hsl(var(--muted-foreground))"
-            strokeWidth="1"
+            stroke="hsl(var(--destructive))"
+            strokeWidth={strokeWidth}
             strokeLinecap="butt"
-            opacity="0.4"
           />
-
-          {/* Base track */}
+          {/* Yellow 33..66 */}
           <path
-            d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
+            d={arcPath(33.33, 66.66)}
             fill="none"
-            stroke={`url(#baseGradient-${uniqueId})`}
+            stroke="hsl(48 96% 53%)"
+            strokeWidth={strokeWidth}
+            strokeLinecap="butt"
+          />
+          {/* Green 66..100 */}
+          <path
+            d={arcPath(66.66, 100)}
+            fill="none"
+            stroke="hsl(142 71% 45%)"
             strokeWidth={strokeWidth}
             strokeLinecap="butt"
           />
 
-          {/* Animated progress arc */}
-          <motion.path
-            d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
-            fill="none"
-            stroke={`url(#progressGradient-${uniqueId})`}
-            strokeWidth={strokeWidth}
-            strokeLinecap="butt"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            filter={`url(#dropshadow-${uniqueId})`}
-          />
+          {/* Needle */}
+          <motion.g
+            style={{
+              originX: `${cx}px`,
+              originY: `${cy}px`,
+              rotate: needleAngleDeg,
+            }}
+          >
+            <polygon
+              points={`${cx - 4},${cy} ${cx + 4},${cy} ${cx},${cy - needleLength}`}
+              fill="hsl(var(--foreground))"
+            />
+          </motion.g>
 
-          {/* Animated extending tick line */}
-          <motion.line
-            x1={lineX1}
-            y1={lineY1}
-            x2={lineX2}
-            y2={lineY2}
-            stroke="hsl(var(--primary))"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            opacity="0.7"
+          {/* Hub */}
+          <circle cx={cx} cy={cy} r={hubRadius} fill="hsl(var(--foreground))" />
+          <circle
+            cx={cx}
+            cy={cy}
+            r={hubRadius * 0.45}
+            fill="hsl(var(--background))"
           />
         </svg>
 
-        {/* Animated percentage */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <motion.div
-            className="font-bold tracking-tight leading-none text-primary"
-            style={{ fontSize: `${fontSize}px` }}
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, delay: duration * 0.6 }}
+        {/* % label inside the arc */}
+        <div
+          className="absolute pointer-events-none flex items-center justify-center"
+          style={{ left: 0, right: 0, top: h * 0.42, height: h * 0.32 }}
+        >
+          <motion.span
+            className="text-2xl font-bold text-foreground tabular-nums"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: duration * 0.7 }}
           >
-            <motion.span>{displayPct}</motion.span>
-            <span style={{ fontSize: `${fontSize * 0.55}px` }}>%</span>
-          </motion.div>
-          <p className="text-[10px] text-muted-foreground font-medium mt-1">
-            {clampedPct >= 100 ? "🏆 META ATINGIDA!" : "do objetivo"}
-          </p>
+            <motion.span>{displayPct}</motion.span>%
+          </motion.span>
         </div>
-
-        {/* 0% / 100% labels */}
-        <div
-          className="absolute text-muted-foreground font-medium"
-          style={{
-            fontSize: `${labelFontSize}px`,
-            left: center - radius - 4,
-            top: center + strokeWidth / 2 + 2,
-          }}
-        >
-          0%
-        </div>
-        <div
-          className="absolute text-muted-foreground font-medium"
-          style={{
-            fontSize: `${labelFontSize}px`,
-            left: center + radius - labelFontSize * 1.8,
-            top: center + strokeWidth / 2 + 2,
-          }}
-        >
-          100%
-        </div>
-      </div>
-
-      {/* Meta */}
-      <div className="flex-1 flex flex-col gap-2 min-w-0">
-        <div className="rounded-lg border border-primary/20 bg-muted/30 px-3 py-2">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <Target className="w-3 h-3 text-primary" />
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
-              Meta
-            </p>
-          </div>
-          <p className="text-sm font-bold text-foreground tabular-nums truncate">
-            {formatCurrency(goal)}
-          </p>
-        </div>
-
-        <p className="text-[9px] text-muted-foreground text-center mt-0.5">
-          {firstDay} à {lastDayStr}
-        </p>
       </div>
     </div>
   );
