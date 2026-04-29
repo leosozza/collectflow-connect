@@ -540,14 +540,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
     if (agreement) {
       try {
         const today = new Date().toISOString().split("T")[0];
-        // Lookup do tenant_id via primeiro client encontrado
-        const { data: refClient } = await supabase
-          .from("clients")
-          .select("tenant_id")
-          .eq("credor", agreement.credor)
-          .limit(1)
-          .maybeSingle();
-        const tenantIdLookup = refClient?.tenant_id;
+        const tenantIdLookup = agreement.tenant_id;
 
         const fetchByPapel = async (papel: string, fallbackNome: string) => {
           if (!tenantIdLookup) return null;
@@ -572,6 +565,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
         await supabase
           .from("clients")
           .update({ status: "pendente" } as any)
+          .eq("tenant_id", agreement.tenant_id)
           .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
           .eq("credor", agreement.credor)
           .eq("status", "em_acordo");
@@ -580,6 +574,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
           await supabase
             .from("clients")
             .update({ status_cobranca_id: emDiaStatus.id } as any)
+            .eq("tenant_id", agreement.tenant_id)
             .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
             .eq("credor", agreement.credor)
             .eq("status", "pendente")
@@ -589,6 +584,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
           await supabase
             .from("clients")
             .update({ status_cobranca_id: aguardandoStatus.id } as any)
+            .eq("tenant_id", agreement.tenant_id)
             .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
             .eq("credor", agreement.credor)
             .eq("status", "pendente")
