@@ -141,6 +141,9 @@ export default function ParcelasProgramadasCard({
                 <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Credor
                 </TableHead>
+                <TableHead className="h-9 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Parcela
+                </TableHead>
                 <TableHead className="h-9 px-4 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Valor
                 </TableHead>
@@ -175,14 +178,10 @@ export default function ParcelasProgramadasCard({
                       </Link>
                     </TableCell>
                     <TableCell className="py-2 px-4 text-sm text-muted-foreground">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate">{credorShort}</span>
-                        {v.total_parcelas ? (
-                          <span className="shrink-0 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground tabular-nums">
-                            {v.numero_parcela}/{v.total_parcelas}
-                          </span>
-                        ) : null}
-                      </div>
+                      <span className="truncate">{credorShort}</span>
+                    </TableCell>
+                    <TableCell className="py-2 px-4 text-center text-sm font-semibold text-foreground tabular-nums">
+                      {v.total_parcelas ? `${v.numero_parcela}/${v.total_parcelas}` : "—"}
                     </TableCell>
                     <TableCell className="py-2 px-4 text-sm text-right text-foreground tabular-nums">
                       {formatCurrency(Number(v.valor_parcela))}
