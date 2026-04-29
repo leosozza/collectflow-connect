@@ -95,7 +95,7 @@ const CampaignsTab = () => {
             className="flex items-center justify-between w-full px-3 py-2 rounded-md border border-border bg-card hover:bg-muted/40 transition-colors"
           >
             <span className="text-sm font-semibold text-foreground">
-              Outras campanhas <span className="text-muted-foreground font-normal">({others.length})</span>
+              Campanhas encerradas <span className="text-muted-foreground font-normal">({others.length})</span>
             </span>
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${othersOpen ? "rotate-180" : ""}`} />
           </CollapsibleTrigger>
