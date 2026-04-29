@@ -132,7 +132,6 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
   const handleEdit = (credorKey: string, docType: string) => {
     setEditContent(getEffectiveContent(credorKey, docType));
     setEditingKey(credorKey);
-    setEditorTab("editor");
   };
 
   const handleSave = () => {
