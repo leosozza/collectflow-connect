@@ -9,6 +9,8 @@ export interface Campaign {
   period: string;
   start_date: string;
   end_date: string;
+  end_time?: string;
+  auto_closed_at?: string | null;
   prize_description: string | null;
   status: string;
   points_first?: number;

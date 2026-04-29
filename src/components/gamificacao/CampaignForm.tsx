@@ -36,6 +36,7 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
   const [period, setPeriod] = useState(campaign?.period || "");
   const [startDate, setStartDate] = useState(campaign?.start_date || "");
   const [endDate, setEndDate] = useState(campaign?.end_date || "");
+  const [endTime, setEndTime] = useState((campaign?.end_time || "23:59:00").slice(0, 5));
   const [prize, setPrize] = useState(campaign?.prize_description || "");
   const [status, setStatus] = useState(campaign?.status || "ativa");
   const [pointsFirst, setPointsFirst] = useState<number>(campaign?.points_first ?? 0);
@@ -178,6 +179,7 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
         period,
         start_date: startDate,
         end_date: endDate,
+        end_time: endTime ? `${endTime}:00` : "23:59:00",
         prize_description: prize || null,
         status,
         points_first: pointsFirst,
@@ -257,6 +259,18 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
                 required
               />
             </div>
+          </div>
+          <div>
+            <Label>Horário de encerramento *</Label>
+            <Input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              required
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              A campanha será encerrada automaticamente neste horário (fuso de São Paulo).
+            </p>
           </div>
 
           {/* Credores */}

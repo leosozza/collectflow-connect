@@ -1,20 +1,17 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import {
   Campaign,
   fetchCampaignParticipants,
-  recalculateCampaignScores,
   METRIC_OPTIONS,
   PERIOD_OPTIONS,
 } from "@/services/campaignService";
 import { differenceInDays, parseISO } from "date-fns";
-import { Trophy, Clock, Gift, Building2, RefreshCw, AlertTriangle } from "lucide-react";
-import { useTenant } from "@/hooks/useTenant";
-import { toast } from "sonner";
+import { Trophy, Clock, Gift, Building2, AlertTriangle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CampaignCardProps {
   campaign: Campaign;
@@ -32,14 +29,35 @@ const isValidDateString = (s?: string | null): boolean => {
 };
 
 const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
-  const { isTenantAdmin } = useTenant();
   const queryClient = useQueryClient();
-  const [recalculating, setRecalculating] = useState(false);
 
   const { data: participants = [] } = useQuery({
     queryKey: ["campaign-participants", campaign.id],
     queryFn: () => fetchCampaignParticipants(campaign.id),
+    refetchOnWindowFocus: true,
   });
+
+  // Realtime per-card: invalidate this card's participants on any change
+  useEffect(() => {
+    const channel = supabase
+      .channel(`campaign-participants-${campaign.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "campaign_participants",
+          filter: `campaign_id=eq.${campaign.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [campaign.id, queryClient]);
 
   const metricLabel = METRIC_OPTIONS.find((m) => m.value === campaign.metric)?.label || campaign.metric;
   const periodLabel = PERIOD_OPTIONS.find((p) => p.value === campaign.period)?.label || campaign.period;
@@ -47,19 +65,6 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
   const datesValid = isValidDateString(campaign.start_date) && isValidDateString(campaign.end_date);
   const daysLeft = datesValid ? differenceInDays(parseISO(campaign.end_date), new Date()) : 0;
   const isActive = datesValid && campaign.status === "ativa" && daysLeft >= 0;
-
-  const handleRecalculate = async () => {
-    setRecalculating(true);
-    try {
-      const { updated } = await recalculateCampaignScores(campaign.id);
-      toast.success(`Ranking recalculado (${updated} participante${updated === 1 ? "" : "s"}).`);
-      await queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] });
-    } catch (err: any) {
-      toast.error(err?.message || "Falha ao recalcular ranking.");
-    } finally {
-      setRecalculating(false);
-    }
-  };
 
   return (
     <Card className="border-border">
@@ -83,7 +88,7 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
           )}
         </div>
 
-        {!datesValid && isTenantAdmin && (
+        {!datesValid && (
           <p className="text-[11px] text-destructive mt-1">
             Edite a campanha para corrigir as datas de início/fim.
           </p>
@@ -151,21 +156,6 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
           <p className="text-xs text-muted-foreground text-center py-2">Sem participantes ainda</p>
         )}
 
-        {isTenantAdmin && (
-          <div className="pt-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full h-7 text-xs gap-1.5"
-              onClick={handleRecalculate}
-              disabled={recalculating || !datesValid}
-              title={!datesValid ? "Corrija as datas da campanha primeiro" : "Recalcula o ranking usando os dados reais do período"}
-            >
-              <RefreshCw className={`w-3 h-3 ${recalculating ? "animate-spin" : ""}`} />
-              {recalculating ? "Recalculando..." : "Recalcular Ranking"}
-            </Button>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

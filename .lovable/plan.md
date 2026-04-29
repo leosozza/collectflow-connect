@@ -1,97 +1,120 @@
+## Objetivo
 
-# Melhoria da Documentação da API Rivo Connect
+Tornar o módulo Gamificação totalmente reativo (Realtime), reorganizar a aba Campanhas (ativas no topo, encerradas/rascunho colapsadas) e implementar **encerramento automático de campanha em horário definido**, com notificação no sininho e um **modal de celebração** (1ª vez por operador por campanha) que parabeniza top 3 com fogos e incentiva os demais.
 
-Objetivo: transformar a página `ApiDocs` (interna e pública) em uma referência técnica completa, alinhada ao contrato real do edge function `clients-api`, respondendo a todos os 10 blocos do questionário enviado pelo time da Y Brasil.
+## 1. UI da aba Campanhas
 
-## Diagnóstico
+`src/components/gamificacao/CampaignsTab.tsx`:
+- "Campanhas Ativas" no topo (sempre aberto).
+- Bloco **Collapsible** (Radix) "Outras campanhas (N)" colapsado por padrão para `encerrada`/`rascunho`/expiradas.
+- Helper local `isCampaignActive(c)` (status `ativa` + datas válidas + `daysLeft >= 0`).
+- **Sem** botão de recalcular (recálculo é automático via cron/triggers).
 
-A documentação atual (`src/pages/ApiDocsPage.tsx` e `ApiDocsPublicPage.tsx`) cobre apenas exemplos rápidos por endpoint. **Não responde** os pontos críticos cobrados pelo cliente:
-- Não há seção de autenticação detalhada (rotação, sandbox, base URL única).
-- Schemas de request/response não estão formalizados (pt-BR vs en, tipos, formatos).
-- Códigos de erro não estão tabulados.
-- Webhooks, idempotência, rate-limit e bulk-limits não aparecem.
-- Não existe OpenAPI/Swagger nem Postman exportável.
+## 2. Realtime no módulo Gamificação
 
-## Escopo
+Em `CampaignsTab.tsx` e `CampaignCard.tsx`, criar canais Supabase Realtime que invalidam as queries TanStack ao receber `postgres_changes`:
+- `gamification_campaigns` → invalida `["campaigns", tenantId]`.
+- `campaign_participants` → invalida `["campaign-participants", campaign_id]`.
+- `campaign_credores` → invalida `["campaigns", tenantId]`.
+- `operator_points` (no `RankingTab`) → invalida `["ranking", year, month]`.
 
-### 1. Reescrita da `ApiDocsPage.tsx` com novas seções (em abas)
+Cleanup com `removeChannel` no unmount.
 
-Substituir as abas atuais por uma estrutura que segue o questionário do cliente:
+Migração SQL:
+```sql
+ALTER TABLE public.gamification_campaigns REPLICA IDENTITY FULL;
+ALTER TABLE public.campaign_participants REPLICA IDENTITY FULL;
+ALTER TABLE public.campaign_credores REPLICA IDENTITY FULL;
+ALTER TABLE public.operator_points REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.gamification_campaigns;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.campaign_participants;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.campaign_credores;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.operator_points;
+```
+(idempotente / com `IF NOT EXISTS` quando aplicável).
 
-```text
-[Início] [Auth] [Endpoints] [Schemas] [Webhooks] [Erros] [Limites] [Multi-credor] [Sandbox] [Downloads]
-                                                                                    ↓
-                                                                        OpenAPI / Postman / MCP
+## 3. Horário de encerramento da campanha
+
+Schema:
+```sql
+ALTER TABLE public.gamification_campaigns
+  ADD COLUMN IF NOT EXISTS end_time time without time zone NOT NULL DEFAULT '23:59:00',
+  ADD COLUMN IF NOT EXISTS auto_closed_at timestamptz NULL;
 ```
 
-Conteúdo por aba:
+Em `CampaignForm.tsx` adicionar um campo "Horário de encerramento" (input `time`, default `23:59`). `campaignService.Campaign` ganha `end_time`.
 
-- **Início**: visão geral, base URL única (`https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`), ambientes (produção/sandbox compartilham URL — sandbox controlado pelo `tenant_id` da chave), versão (`v2.0.0`), changelog resumido.
-- **Auth**: método (`X-API-Key` SHA-256 hash), header exato, prefixo `cf_`, como gerar/revogar (link para aba "API Keys"), escopo por credor (chave restrita a um credor força filtro automático em todas operações), CORS habilitado.
-- **Endpoints**: lista completa extraída do código fonte (`clients-api/index.ts`):
-  - `/health` (GET)
-  - `/clients` (GET, POST), `/clients/bulk` (POST), `/clients/:id` (GET/PUT/DELETE), `/clients/by-external/:id` (PUT), `/clients/by-cpf/:cpf` (DELETE), `/clients/:id/status` (PUT)
-  - `/agreements` (GET, POST), `/agreements/:id` (GET), `/agreements/:id/approve` (PUT), `/agreements/:id/reject` (PUT)
-  - `/payments` (GET, POST), `/payments/methods` (GET), `/payments/:id` (GET), `/payments/pix` (POST), `/payments/cartao` (POST), `/payments/boleto` (POST)
-  - `/portal/lookup` (POST), `/portal/agreement` (POST)
-  - `/credores` (GET), `/status-types` (GET)
-  - `/propensity/calculate` (POST)
-  - Cada endpoint com: método, caminho, parâmetros, exemplo `curl` + JSON request + JSON response real + códigos HTTP possíveis.
-- **Schemas**: tabela formal por entidade (Client, Agreement, Payment, Credor) com nome do campo, tipo, formato, obrigatório, descrição, valores aceitos. Inclui:
-  - Aliases de mailing (`NOME_DEVEDOR` → `nome_completo`, etc.) — extrair do `normalizeRecord` do edge.
-  - CPF/CNPJ: aceita com ou sem máscara.
-  - Datas: `YYYY-MM-DD` (ISO) ou `DD/MM/YYYY` (auto-convertido).
-  - Valores: decimal em reais (não centavos).
-  - Status válidos: `pendente | pago | quebrado` (clients), `pending | approved | rejected` (agreements).
-  - Tipos de pagamento: `pix | cartao | boleto` (+ meios customizados via `/payments/methods`).
-- **Webhooks**: documentar o estado atual (ainda não exposto via `clients-api`) e a recomendação operacional — polling em `GET /payments/:id` até confirmar status. Sinalizar como "roadmap" se não houver hoje.
-- **Erros**: tabela com todos os HTTP retornados pelo edge:
-  - `400` body inválido, `401` X-API-Key inválida/ausente, `403` credor fora de escopo, `404` recurso inexistente, `422` validação (campos faltando/erros listados em `errors[]`), `500` erro interno.
-  - Formato canônico: `{ "error": "...", "errors": [...] }`.
-- **Limites**:
-  - Bulk: máx **500 registros** por chamada `/clients/bulk` (extraído do código).
-  - Paginação: `limit` máx 500 (clients) / 200 (agreements/payments), default 100/50.
-  - Rate-limit: documentar política atual (Supabase Edge default) e indicar header `Retry-After` se aplicado.
-- **Multi-credor**: como funciona escopo de chave, listar credores via `GET /credores`, qual valor usar em `credor` (string = `nome_fantasia` ou `razao_social`), regra de `enforceCredor` que sobrescreve.
-- **Sandbox**: instruções para criar chave de teste (mesma URL, tenant separado), CPFs de teste sugeridos, como simular conclusão de pagamento (UPDATE manual no painel — admin).
-- **Downloads**: 3 botões → OpenAPI 3.1 YAML, Coleção Postman v2.1, link MCP server (`supabase/functions/mcp-server`).
+### Edge function de encerramento automático
 
-### 2. Geração de OpenAPI 3.1
+Nova função `supabase/functions/gamification-campaign-closer/index.ts`:
+- Lista campanhas com `status = 'ativa'` cujo `end_date + end_time` (no fuso `America/Sao_Paulo`) já passou e `auto_closed_at IS NULL`.
+- Para cada uma:
+  1. Roda `recalculateCampaignScores` (lógica do `campaignService` portada para SQL/RPC ou reaproveita a já existente RPC `close_campaign_and_award_points`).
+  2. Chama `close_campaign_and_award_points(_campaign_id)` (já existe).
+  3. Marca `status = 'encerrada'`, `auto_closed_at = now()`.
+  4. Insere notificações na tabela `notifications` para cada participante (uma por operador), com `category = 'gamification_campaign_closed'`, payload `{ campaign_id, title, position, score, total_participants }`.
 
-Criar arquivo estático `public/api/openapi.yaml` cobrindo todos os endpoints, schemas e respostas. Endpoint público para baixar: `https://rivoconnect.com/api/openapi.yaml`. Botão "Download" e "Abrir no Swagger UI" (`https://editor.swagger.io/?url=...`).
+Cron a cada 5 min via `pg_cron + pg_net` (`select cron.schedule(...)` chamando a função). Será inserido com a ferramenta de insert (não migration), pois contém URL/anon key.
 
-### 3. Coleção Postman
+## 4. Notificação no sininho
 
-Criar `public/api/rivo-connect.postman_collection.json` com variáveis `{{baseUrl}}` e `{{apiKey}}` e exemplos de cada endpoint.
+`src/services/notificationService.ts` e `NotificationBell` já consomem a tabela `notifications`. Apenas adicionamos o tipo `gamification_campaign_closed` na renderização de `NotificationList.tsx` com ícone `Trophy` e link que abre o modal de celebração na próxima visita à `/gamificacao?tab=campaigns&celebrate=<campaign_id>`.
 
-### 4. Atualizar `ApiDocsPublicPage.tsx`
+## 5. Modal de celebração (1x por operador por campanha)
 
-Refletir as mesmas seções (sem aba de gerenciamento de chaves nem logs de importação) — é a página linkável para devs externos.
+Novo componente `src/components/gamificacao/CampaignCelebrationModal.tsx`:
+- Centro da tela (Dialog shadcn).
+- **Top 1/2/3**: confetes (`canvas-confetti` já está disponível? caso não, instalar `canvas-confetti`), título "🥇 Parabéns, campeão!" / "🥈 Vice-campeão!" / "🥉 3º lugar!", nome da campanha, prêmio, score.
+- **4º+**: mensagem motivacional "Você ficou em Xº lugar. Continue firme — a próxima é sua!" sem fogos.
+- Botão fechar (X) no canto.
 
-### 5. Email pronto para o cliente
+Persistência (1x por operador por campanha):
+- Tabela nova:
+```sql
+CREATE TABLE public.campaign_celebration_views (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL,
+  campaign_id uuid NOT NULL REFERENCES public.gamification_campaigns(id) ON DELETE CASCADE,
+  operator_id uuid NOT NULL,
+  seen_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (campaign_id, operator_id)
+);
+ALTER TABLE public.campaign_celebration_views ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "tenant isolation" ON public.campaign_celebration_views
+  FOR ALL TO authenticated
+  USING (tenant_id = public.get_my_tenant_id())
+  WITH CHECK (tenant_id = public.get_my_tenant_id());
+```
 
-Bloco copiável dentro da aba "Início" com **resposta consolidada** ao questionário recebido, para que o usuário possa enviar diretamente ao time da Y Brasil sem reescrever.
+Lógica:
+- Hook `useCampaignCelebrations()` montado em `AppLayout` (autenticado). Busca campanhas com `status = 'encerrada'` + `auto_closed_at` recente (últimos 30 dias) onde o usuário é participante e não há registro em `campaign_celebration_views` para ele.
+- Enfileira modais; ao fechar (X), insere a row em `campaign_celebration_views` (não reabre mais, em nenhuma sessão).
+- Como o hook roda no layout autenticado, se o operador não estava logado quando a campanha encerrou, o modal aparece logo após o login. Subscription Realtime em `campaign_celebration_views` + `gamification_campaigns` mantém isso vivo enquanto a sessão está aberta.
 
-## Arquivos a alterar / criar
+## 6. Detalhes técnicos
 
-- `src/pages/ApiDocsPage.tsx` — reestruturar abas e conteúdo.
-- `src/pages/ApiDocsPublicPage.tsx` — espelhar conteúdo público.
-- `src/components/api-docs/SchemaTable.tsx` (novo) — componente reutilizável para tabela de schemas.
-- `src/components/api-docs/ErrorTable.tsx` (novo) — tabela de erros.
-- `src/components/api-docs/EndpointReference.tsx` (novo) — card de endpoint com request/response/erros, evolução do `EndpointCard` atual.
-- `public/api/openapi.yaml` (novo).
-- `public/api/rivo-connect.postman_collection.json` (novo).
-- `docs/API_REFERENCE.md` (novo) — markdown idêntico ao da página, para versionar.
+- Critério "ativa" centralizado em helper.
+- `recalculate_my_full` continua sendo chamado em mount da página (`useGamificationTrigger`), mas com Realtime ativo o recálculo de UI passa a ser passivo.
+- Confetes leves: `canvas-confetti` (~6kb gz). Instalar via `bun add canvas-confetti`.
+- Toda subscription/canal usa nome com `tenantId` para evitar colisão entre tenants.
+- Notificações respeitam RLS de `notifications` já existente.
 
-## Detalhes técnicos
+## Arquivos afetados / novos
 
-- Base URL exibida: `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api` (já hardcoded em `BASE_URL`).
-- Schemas extraídos diretamente de `clients-api/index.ts` (validators `validateClientRecord`, `buildClientRow`) para evitar drift.
-- OpenAPI usará `securitySchemes.ApiKeyAuth` com `in: header, name: X-API-Key`.
-- Respeitar tema RIVO (laranja primário) e padrão dos componentes shadcn já em uso.
+- `src/components/gamificacao/CampaignsTab.tsx` — colapsar inativas, Realtime.
+- `src/components/gamificacao/CampaignCard.tsx` — remover botão "Recalcular Ranking", subscription pontual.
+- `src/components/gamificacao/CampaignForm.tsx` — campo "Horário de encerramento".
+- `src/components/gamificacao/RankingTab.tsx` — Realtime em `operator_points`.
+- `src/components/gamificacao/CampaignCelebrationModal.tsx` — novo.
+- `src/hooks/useCampaignCelebrations.ts` — novo.
+- `src/components/AppLayout.tsx` — montar o hook de celebração.
+- `src/components/notifications/NotificationList.tsx` — render do tipo `gamification_campaign_closed`.
+- `src/services/campaignService.ts` — tipo `end_time`, remoção do export `recalculateCampaignScores` do uso de UI (mantém para edge function).
+- `supabase/functions/gamification-campaign-closer/index.ts` — novo.
+- Migration: `end_time`, `auto_closed_at`, tabela `campaign_celebration_views`, RLS, REPLICA IDENTITY + publicação Realtime.
+- Insert (não migration): cron `pg_cron` chamando a edge function a cada 5 min.
 
-## Fora de escopo
+## Fora do escopo
 
-- Implementar webhooks de pagamento (apenas documentar estado atual / roadmap).
-- Endpoints de cancelamento de cobrança (`POST /payments/:id/cancel`) — não existem hoje; serão marcados como "Em breve".
-- Implementar idempotency-key real (será marcado como "use `external_id` ou `cod_contrato` como chave funcional de idempotência" — comportamento atual de upsert).
+- Não alterar fórmulas de pontuação nem RPCs existentes.
+- Não mudar permissões/roles.

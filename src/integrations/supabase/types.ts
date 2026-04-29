@@ -984,6 +984,38 @@ export type Database = {
           },
         ]
       }
+      campaign_celebration_views: {
+        Row: {
+          campaign_id: string
+          id: string
+          operator_id: string
+          seen_at: string
+          tenant_id: string
+        }
+        Insert: {
+          campaign_id: string
+          id?: string
+          operator_id: string
+          seen_at?: string
+          tenant_id: string
+        }
+        Update: {
+          campaign_id?: string
+          id?: string
+          operator_id?: string
+          seen_at?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_celebration_views_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "gamification_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_credores: {
         Row: {
           campaign_id: string
@@ -3279,10 +3311,12 @@ export type Database = {
       }
       gamification_campaigns: {
         Row: {
+          auto_closed_at: string | null
           created_at: string
           created_by: string
           description: string | null
           end_date: string
+          end_time: string
           id: string
           metric: string
           period: string
@@ -3297,10 +3331,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_closed_at?: string | null
           created_at?: string
           created_by: string
           description?: string | null
           end_date: string
+          end_time?: string
           id?: string
           metric: string
           period: string
@@ -3315,10 +3351,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_closed_at?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
           end_date?: string
+          end_time?: string
           id?: string
           metric?: string
           period?: string
