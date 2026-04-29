@@ -11,13 +11,15 @@ interface Props {
 
 export default function AgendamentosHojeCard({ callbacks, showOperator }: Props) {
   return (
-    <div className="bg-card rounded-lg border border-border/80 shadow-sm w-full h-full min-h-0 flex flex-col overflow-hidden">
+    <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2">
-          <CalendarCheck className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Agendamentos para Hoje</h2>
+          <div className="rounded-lg p-1.5 inline-flex bg-primary/10">
+            <CalendarCheck className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
+          </div>
+          <h2 className="text-[13px] font-semibold text-foreground tracking-tight">Agendamentos para Hoje</h2>
         </div>
-        <span className="inline-flex items-center justify-center min-w-[24px] h-5 px-2 rounded-md bg-primary text-primary-foreground text-[11px] font-bold">
+        <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-2 rounded-full bg-primary/10 text-primary text-[11px] font-semibold tabular-nums">
           {callbacks.length}
         </span>
       </div>

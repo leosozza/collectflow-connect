@@ -157,21 +157,23 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   const isPositive = diffPct !== null && diffPct >= 0;
 
   return (
-    <div className="bg-card rounded-lg border border-border/80 shadow-sm w-full h-full min-h-0 flex flex-col overflow-hidden">
+    <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Total Recebido</h2>
+          <div className="rounded-lg p-1.5 inline-flex bg-primary/10">
+            <TrendingUp className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
+          </div>
+          <h2 className="text-[13px] font-semibold text-foreground tracking-tight">Total Recebido</h2>
         </div>
         {/* Legenda */}
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground/80">
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500" />
+            <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
             Atual
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-0.5 bg-slate-400" style={{ borderTop: "1px dashed #94a3b8" }} />
+            <span className="inline-block w-3 h-px bg-slate-400" style={{ borderTop: "1px dashed #94a3b8" }} />
             Mês anterior
           </span>
         </div>
@@ -179,7 +181,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
 
       <div className="px-4 pb-2 shrink-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
+          <p className="text-[26px] font-semibold text-primary tabular-nums leading-none tracking-tight">
             {formatCurrency(totalRecebido)}
           </p>
           {diffPct !== null ? (() => {
