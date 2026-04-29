@@ -180,8 +180,12 @@ async function syncTenant(supabase: any, tenant_id: string) {
     if (!data || data.length === 0) break;
 
     let cur: any[] = carry;
+    const normCpf = (s: any) => (s || "").toString().replace(/\D/g, "");
     for (const c of data) {
-      if (cur.length === 0 || (cur[0].cpf === c.cpf && cur[0].credor === c.credor)) {
+      if (
+        cur.length === 0 ||
+        (normCpf(cur[0].cpf) === normCpf(c.cpf) && cur[0].credor === c.credor)
+      ) {
         cur.push(c);
       } else {
         processGroup(cur);
