@@ -4,8 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 export type DashboardBlockId =
   | "metas"
   | "totalRecebido"
-  | "kpisOperacionais"
-  | "kpisFinanceiros"
+  | "kpisGrid"
   | "agendamentos"
   | "parcelas";
 
@@ -16,39 +15,42 @@ export interface DashboardLayout {
 }
 
 export const ALL_DASHBOARD_BLOCKS: DashboardBlockId[] = [
-  "kpisOperacionais",
-  "kpisFinanceiros",
-  "agendamentos",
-  "parcelas",
   "metas",
   "totalRecebido",
+  "kpisGrid",
+  "agendamentos",
+  "parcelas",
 ];
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
-    kpisOperacionais: true,
-    kpisFinanceiros: true,
-    agendamentos: true,
-    parcelas: true,
     metas: true,
     totalRecebido: true,
+    kpisGrid: true,
+    agendamentos: true,
+    parcelas: true,
   },
   order: [
-    "kpisOperacionais",
-    "kpisFinanceiros",
+    "metas",
     "totalRecebido",
+    "kpisGrid",
     "agendamentos",
     "parcelas",
-    "metas",
   ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v7";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v8";
 
 function sanitize(raw: any): DashboardLayout {
   try {
     if (!raw || typeof raw !== "object") return DEFAULT_DASHBOARD_LAYOUT;
     const visible = { ...DEFAULT_DASHBOARD_LAYOUT.visible, ...(raw.visible || {}) };
+    // strip out any unknown ids from the persisted visibility map
+    Object.keys(visible).forEach((k) => {
+      if (!ALL_DASHBOARD_BLOCKS.includes(k as DashboardBlockId)) {
+        delete (visible as any)[k];
+      }
+    });
     const incoming: DashboardBlockId[] = Array.isArray(raw.order)
       ? raw.order.filter((id: any) => ALL_DASHBOARD_BLOCKS.includes(id))
       : [];
@@ -56,7 +58,7 @@ function sanitize(raw: any): DashboardLayout {
       ...incoming,
       ...ALL_DASHBOARD_BLOCKS.filter((id) => !incoming.includes(id)),
     ];
-    return { visible, order };
+    return { visible: visible as Record<DashboardBlockId, boolean>, order };
   } catch {
     return DEFAULT_DASHBOARD_LAYOUT;
   }

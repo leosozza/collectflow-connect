@@ -28,8 +28,7 @@ interface Props {
 const LABELS: Record<DashboardBlockId, string> = {
   metas: "Meta do Mês",
   totalRecebido: "Total Recebido",
-  kpisOperacionais: "KPIs Operacionais",
-  kpisFinanceiros: "KPIs Financeiros",
+  kpisGrid: "KPIs",
   agendamentos: "Agendamentos para Hoje",
   parcelas: "Parcelas Programadas",
 };
@@ -37,8 +36,7 @@ const LABELS: Record<DashboardBlockId, string> = {
 const DESCRIPTIONS: Record<DashboardBlockId, string> = {
   metas: "Progresso da meta mensal (velocímetro)",
   totalRecebido: "Gráfico de recebimentos",
-  kpisOperacionais: "Acionados, acordos do dia, do mês e ticket médio",
-  kpisFinanceiros: "Total de Quebra, Pendentes e Colchão de Acordos",
+  kpisGrid: "Acionados, acordos, quebra, pendentes e colchão",
   agendamentos: "Callbacks agendados para hoje",
   parcelas: "Vencimentos do dia",
 };
