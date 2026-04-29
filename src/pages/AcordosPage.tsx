@@ -55,7 +55,8 @@ const AcordosPage = () => {
   const [credorFilter, setCredorFilter] = useUrlState("credor", "todos");
   const [operatorFilter, setOperatorFilter] = useUrlState("operator", "todos");
   const [searchQuery, setSearchQuery] = useUrlState("q", "");
-  const [selectedMonth, setSelectedMonth] = useUrlState("month", String(new Date().getMonth()));
+  // Default "todos" para operadores não verem tela vazia quando não há parcela no mês corrente.
+  const [selectedMonth, setSelectedMonth] = useUrlState("month", "todos");
   const [selectedYear, setSelectedYear] = useUrlState("year", String(new Date().getFullYear()));
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
@@ -351,11 +352,48 @@ const AcordosPage = () => {
     return { total, pending, paid };
   }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
 
+  // Contadores por aba (status filter) — usa o mesmo conjunto classificado pós credor/operador/busca
+  const tabCounts = useMemo(() => {
+    const isMonthSelected = selectedMonth !== "todos" && !dateFrom && !dateTo;
+    const counts = {
+      vigentes: 0,
+      approved: 0,
+      overdue: 0,
+      pending_approval: 0,
+      cancelled: 0,
+      payment_confirmation: 0,
+    };
+    for (const a of classifiedAgreements) {
+      const cls = (a as any)._installmentClass as InstallmentClassification | undefined;
+      if (a.status === "pending_approval") { counts.pending_approval++; continue; }
+      if (a.status === "cancelled") { counts.cancelled++; continue; }
+      if (isMonthSelected && cls !== undefined) {
+        if (cls === "pago") counts.approved++;
+        else if (cls === "vigente") counts.vigentes++;
+        else if (cls === "vencido") counts.overdue++;
+        else if (cls === "pending_confirmation") counts.payment_confirmation++;
+      } else {
+        const hasPaid = (a as any)._hasPaidInScope as boolean | undefined;
+        if (hasPaid === true || a.status === "approved" || a.status === "completed") counts.approved++;
+        else if (a.status === "overdue") counts.overdue++;
+        else if (a.status === "pending") counts.vigentes++;
+      }
+    }
+    return counts;
+  }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
+
   const isOperationalFilter = statusFilter === "pending_approval" || statusFilter === "payment_confirmation";
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">Gestão de Acordos</h1>
+        <span className="text-xs text-muted-foreground">
+          {isAdmin
+            ? "Mostrando todos os acordos do tenant"
+            : "Mostrando apenas os acordos criados por você"}
+        </span>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard title="Total de Acordos" value={String(stats.total)} icon="agreement" />
@@ -366,17 +404,23 @@ const AcordosPage = () => {
       <div className="flex flex-wrap gap-2">
         {statusFilterConfig
           .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
-          .map(({ key, label, color, selectedColor }) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color
-                }`}
-            >
-              {key === "payment_confirmation" && <HandCoins className="w-3 h-3 mr-1" />}
-              {label}
-            </button>
-          ))}
+          .map(({ key, label, color, selectedColor }) => {
+            const count = (tabCounts as any)[key] ?? 0;
+            return (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color
+                  }`}
+              >
+                {key === "payment_confirmation" && <HandCoins className="w-3 h-3" />}
+                <span>{label}</span>
+                <span className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] font-bold ${statusFilter === key ? "bg-primary-foreground/20 text-primary-foreground" : "bg-foreground/10 text-foreground"}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -503,6 +547,38 @@ const AcordosPage = () => {
         tenant?.id ? <PaymentConfirmationTab tenantId={tenant.id} /> : <p className="text-muted-foreground">Carregando...</p>
       ) : loading ? (
         <p className="text-muted-foreground">Carregando...</p>
+      ) : filteredAgreements.length === 0 && agreements.length > 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Você tem <span className="font-semibold text-foreground">{agreements.length}</span> acordo(s),
+            mas nenhum corresponde aos filtros atuais
+            {selectedMonth !== "todos" && !dateFrom && !dateTo
+              ? ` no mês selecionado`
+              : ""}.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {selectedMonth !== "todos" && (
+              <Button variant="outline" size="sm" onClick={() => setSelectedMonth("todos")}>
+                Ver todos os meses
+              </Button>
+            )}
+            {(dateFrom || dateTo) && (
+              <Button variant="outline" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}>
+                Limpar datas
+              </Button>
+            )}
+            {credorFilter !== "todos" && (
+              <Button variant="outline" size="sm" onClick={() => setCredorFilter("todos")}>
+                Limpar credor
+              </Button>
+            )}
+            {searchQuery && (
+              <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                Limpar busca
+              </Button>
+            )}
+          </div>
+        </div>
       ) : (
         <AgreementsList agreements={filteredAgreements} />
       )}
