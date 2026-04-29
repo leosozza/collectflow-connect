@@ -348,14 +348,12 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
                     <DropdownMenuSeparator />
                   </>
                 )}
-                {message.message_type === "text" && (
+                {canEdit && (
                   <DropdownMenuItem
-                    disabled={!canEdit || isOfficialApi}
                     onClick={() => {
                       setEditText(message.content || "");
                       setEditOpen(true);
                     }}
-                    title={editDisabledReason || undefined}
                   >
                     <Pencil className="w-4 h-4 mr-2" /> Editar mensagem
                   </DropdownMenuItem>
