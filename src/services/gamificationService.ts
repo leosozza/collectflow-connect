@@ -73,7 +73,7 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
     .from("profiles")
     .select("id, full_name, avatar_url, role")
     .eq("tenant_id", tenantId)
-    .in("role", ["operador", "supervisor", "gerente"] as any)
+    .in("role", ["operador"] as any)
     .in("id", operatorIds);
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));

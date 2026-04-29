@@ -101,7 +101,7 @@ const GamificacaoPage = () => {
         .from("profiles")
         .select("id")
         .eq("tenant_id", tenant!.id)
-        .in("role", ["operador", "supervisor", "gerente"] as any)
+        .in("role", ["operador"] as any)
         .range(0, 999);
       const profileIds = (profiles || []).map((p: any) => p.id);
       if (profileIds.length === 0) return 0;

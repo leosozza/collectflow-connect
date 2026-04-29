@@ -68,7 +68,7 @@ const AchievementsManagementTab = () => {
         .from("profiles")
         .select("id, full_name, role")
         .eq("tenant_id", tenant!.id)
-        .in("role", ["operador", "supervisor", "gerente"] as any)
+        .in("role", ["operador"] as any)
         .order("full_name");
       return data || [];
     },
@@ -84,7 +84,7 @@ const AchievementsManagementTab = () => {
         .eq("tenant_id", tenant!.id)
         .order("earned_at", { ascending: false });
       if (error) throw error;
-      return (data || []).filter((a: any) => ["operador", "supervisor", "gerente"].includes(a.profiles?.role));
+      return (data || []).filter((a: any) => ["operador"].includes(a.profiles?.role));
     },
     enabled: !!tenant?.id,
   });

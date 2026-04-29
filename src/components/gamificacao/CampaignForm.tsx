@@ -86,7 +86,7 @@ const CampaignForm = ({ open, onClose, onSave, campaign, loading }: CampaignForm
         .from("profiles")
         .select("id, full_name, role")
         .eq("tenant_id", tenant!.id)
-        .in("role", ["operador", "supervisor", "gerente"] as any)
+        .in("role", ["operador"] as any)
         .order("full_name");
       return data || [];
     },

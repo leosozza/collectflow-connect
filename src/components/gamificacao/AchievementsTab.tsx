@@ -31,7 +31,7 @@ const AchievementsTab = ({ isAdmin = false }: AchievementsTabProps) => {
         .eq("tenant_id", tenant!.id)
         .order("earned_at", { ascending: false });
       if (error) throw error;
-      return (data || []).filter((a: any) => ["operador", "supervisor", "gerente"].includes(a.profiles?.role));
+      return (data || []).filter((a: any) => ["operador"].includes(a.profiles?.role));
     },
     enabled: isAdmin && !!tenant?.id,
   });
