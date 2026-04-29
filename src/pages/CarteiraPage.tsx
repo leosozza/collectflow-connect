@@ -210,6 +210,9 @@ const CarteiraPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Espelho da seleção em CPFs únicos (1 cliente = 1 CPF). Usado nos rótulos
+  // de UI para que o operador veja "clientes selecionados" e não "parcelas".
+  const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [loadingAllIds, setLoadingAllIds] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
@@ -284,6 +287,7 @@ const CarteiraPage = () => {
   useEffect(() => {
     setUrlPage(1);
     setSelectedIds(new Set());
+    setSelectedCpfs(new Set());
     setSelectAllFiltered(false);
     setBulkClients(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -490,12 +494,22 @@ const CarteiraPage = () => {
   // preservando seleções feitas em outras páginas.
   const toggleSelectAll = () => {
     const next = new Set(selectedIds);
+    const nextCpfs = new Set(selectedCpfs);
     if (allCurrentPageSelected) {
       allClientIds.forEach((id) => next.delete(id));
+      displayClients.forEach((c: any) => {
+        const cpf = (c.cpf || "").replace(/\D/g, "");
+        if (cpf) nextCpfs.delete(cpf);
+      });
     } else {
       allClientIds.forEach((id) => next.add(id));
+      displayClients.forEach((c: any) => {
+        const cpf = (c.cpf || "").replace(/\D/g, "");
+        if (cpf) nextCpfs.add(cpf);
+      });
     }
     setSelectedIds(next);
+    setSelectedCpfs(nextCpfs);
     setSelectAllFiltered(false);
     setBulkClients(null);
   };
@@ -525,6 +539,8 @@ const CarteiraPage = () => {
     try {
       const allFilteredIds = await fetchAllCarteiraIds(tenant.id, rpcFilters, sortField, sortDir);
       setSelectedIds(new Set(allFilteredIds));
+      // Não tentamos enumerar CPFs aqui: quando selectAllFiltered=true, os
+      // rótulos usam `totalCount` (que já é a contagem de CPFs vinda da RPC).
       setSelectAllFiltered(true);
       setBulkClients(null);
     } catch (err: any) {
@@ -536,14 +552,19 @@ const CarteiraPage = () => {
 
   const toggleSelect = (groupClient: any) => {
     const ids: string[] = groupClient.allIds || [groupClient.id];
+    const cpf = (groupClient.cpf || "").replace(/\D/g, "");
     const next = new Set(selectedIds);
+    const nextCpfs = new Set(selectedCpfs);
     const allSelected = ids.every((id: string) => next.has(id));
     if (allSelected) {
       ids.forEach((id: string) => next.delete(id));
+      if (cpf) nextCpfs.delete(cpf);
     } else {
       ids.forEach((id: string) => next.add(id));
+      if (cpf) nextCpfs.add(cpf);
     }
     setSelectedIds(next);
+    setSelectedCpfs(nextCpfs);
     setBulkClients(null);
   };
 
@@ -587,20 +608,10 @@ const CarteiraPage = () => {
   const selectedClients = displayClients.filter((c) =>
     (c.allIds || [c.id]).some((id: string) => selectedIds.has(id))
   );
-  // Contagem exibida nos botões de ação:
-  // - selectAllFiltered → total filtrado no servidor
-  // - Toda a seleção está na página atual → CPFs únicos da página
-  // - Há seleção acumulada de outras páginas → total real de IDs selecionados
-  const allSelectedAreOnCurrentPage =
-    selectedClients.reduce((sum, c) => {
-      const ids = (c.allIds || [c.id]) as string[];
-      return sum + ids.filter((id) => selectedIds.has(id)).length;
-    }, 0) === selectedIds.size;
-  const selectedCount = selectAllFiltered
-    ? totalCount
-    : allSelectedAreOnCurrentPage
-      ? new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size
-      : selectedIds.size;
+  // Contagem exibida nos botões/banners: sempre em CPFs (clientes), nunca em
+  // parcelas. Quando "Selecionar todos" foi acionado, usamos `totalCount`
+  // que já vem da RPC agrupada por CPF.
+  const selectedCount = selectAllFiltered ? totalCount : selectedCpfs.size;
 
   // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
   const uniqueSelectedClients = useMemo(() => {
@@ -745,10 +756,10 @@ const CarteiraPage = () => {
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
       {/* Banner: seleção acumulada entre páginas + opção de selecionar tudo */}
-      {selectedIds.size > 0 && totalCount > selectedIds.size && !selectAllFiltered && (
+      {selectedCpfs.size > 0 && totalCount > selectedCpfs.size && !selectAllFiltered && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
-          <span className="font-medium">{selectedIds.size.toLocaleString("pt-BR")}</span>{" "}
-          registro(s) selecionado(s) (a seleção é mantida ao trocar de página).{" "}
+          <span className="font-medium">{selectedCpfs.size.toLocaleString("pt-BR")}</span>{" "}
+          cliente(s) selecionado(s) (a seleção é mantida ao trocar de página).{" "}
           <Button
             variant="link"
             size="sm"
@@ -767,7 +778,7 @@ const CarteiraPage = () => {
             variant="link"
             size="sm"
             className="text-muted-foreground font-medium px-1 h-auto"
-            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
+            onClick={() => { setSelectedIds(new Set()); setSelectedCpfs(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
           >
             Limpar seleção
           </Button>
@@ -780,7 +791,7 @@ const CarteiraPage = () => {
             variant="link"
             size="sm"
             className="text-primary font-semibold px-1 h-auto"
-            onClick={() => { setSelectedIds(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
+            onClick={() => { setSelectedIds(new Set()); setSelectedCpfs(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
           >
             Limpar seleção
           </Button>
@@ -802,7 +813,7 @@ const CarteiraPage = () => {
                 ))}
               </SelectContent>
             </Select>
-            <span className="ml-2">{totalCount.toLocaleString("pt-BR")} registros</span>
+            <span className="ml-2">{totalCount.toLocaleString("pt-BR")} clientes</span>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -972,7 +983,7 @@ const CarteiraPage = () => {
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="ml-2">{totalCount.toLocaleString("pt-BR")} registros</span>
+                <span className="ml-2">{totalCount.toLocaleString("pt-BR")} clientes</span>
               </div>
               <div className="flex items-center gap-2">
                 <Button
