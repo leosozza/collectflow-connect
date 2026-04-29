@@ -80,24 +80,24 @@ const MetaGaugeCard = ({
   return (
     <div className="flex items-center justify-between gap-2 w-full h-full">
       {/* Left: meta / realizado / período */}
-      <div className="flex flex-col gap-2 min-w-0 shrink-0">
+      <div className="flex flex-col gap-1.5 min-w-0 shrink-0">
         <div>
-          <p className="text-base font-bold text-foreground tabular-nums leading-tight">
+          <p className="text-sm font-bold text-foreground tabular-nums leading-tight">
             {formatCurrency(goal)}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
             Meta Recebimento
           </p>
         </div>
         <div>
-          <p className="text-base font-bold text-foreground tabular-nums leading-tight">
+          <p className="text-sm font-bold text-foreground tabular-nums leading-tight">
             {formatCurrency(received)}
           </p>
-          <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
             Realizado
           </p>
         </div>
-        <p className="text-[10px] text-muted-foreground tabular-nums">
+        <p className="text-[9px] text-muted-foreground tabular-nums">
           {firstDay} à {lastDayStr}
         </p>
       </div>
@@ -165,7 +165,7 @@ const MetaGaugeCard = ({
           style={{ left: 0, right: 0, top: h * 0.42, height: h * 0.32 }}
         >
           <motion.span
-            className="text-2xl font-bold text-foreground tabular-nums"
+            className="text-lg font-bold text-foreground tabular-nums"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, delay: duration * 0.7 }}
