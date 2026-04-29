@@ -35,9 +35,13 @@ interface NavGroup {
 
 const CadastrosPage = () => {
   useScrollRestore();
-  const { tab } = useParams();
+  const { tab, credorId } = useParams();
   const navigate = useNavigate();
-  const active = tab || "credores";
+  const location = useLocation();
+  // Quando estamos numa rota /cadastros/credores/:credorId/... ou /cadastros/credores/novo,
+  // o segmento "tab" não vem nos params — forçamos "credores" para o menu lateral.
+  const isCredorRoute = location.pathname.startsWith("/cadastros/credores/");
+  const active = isCredorRoute ? "credores" : (tab || "credores");
   const setActive = (key: string) => navigate(`/cadastros/${key}`, { replace: true });
   const [search, setSearch] = useState("");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
