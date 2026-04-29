@@ -3,8 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Copy, Code2, BookOpen, Zap, Shield, CreditCard, Handshake, Globe, MessageSquare, Bell, Settings2, AlertTriangle, Server } from "lucide-react";
+import { CheckCircle2, Copy, Code2, BookOpen, Zap, Shield, CreditCard, Handshake, Globe, MessageSquare, Bell, Settings2, AlertTriangle, Server, FileJson } from "lucide-react";
 import McpServerTab from "@/components/api-docs/McpServerTab";
+import ApiReference from "@/components/api-docs/ApiReference";
 
 const BASE_URL = "https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api";
 
