@@ -1,18 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchRanking, RankingEntry } from "@/services/gamificationService";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenant } from "@/hooks/useTenant";
+import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/formatters";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
 
 const medals = ["🥇", "🥈", "🥉"];
+const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 const RankingTab = () => {
   const { profile } = useAuth();
+  const { tenant } = useTenant();
+  const queryClient = useQueryClient();
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -20,7 +25,24 @@ const RankingTab = () => {
   const { data: ranking = [], isLoading } = useQuery({
     queryKey: ["ranking", selectedYear, selectedMonth],
     queryFn: () => fetchRanking(selectedYear, selectedMonth),
+    refetchOnWindowFocus: true,
   });
+
+  // Realtime: invalidate when operator_points changes for this tenant
+  useEffect(() => {
+    if (!tenant?.id) return;
+    const channel = supabase
+      .channel(`operator-points-${tenant.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "operator_points", filter: `tenant_id=eq.${tenant.id}` },
+        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenant?.id, selectedYear, selectedMonth, queryClient]);
 
   const maxPoints = ranking[0]?.points || 1;
 
