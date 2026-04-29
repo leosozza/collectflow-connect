@@ -68,9 +68,23 @@ const FORMATTING_TOOLS = [
   { icon: Type, label: "Texto Grande", prefix: "### ", suffix: "" },
 ];
 
+const VALID_SECTIONS = ["dados", "bancario", "negociacao", "regua", "personalizacao", "assinatura", "portal"] as const;
+type CredorSection = typeof VALID_SECTIONS[number];
+
 const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const { tenant, tenantUser } = useTenant();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { credorId, section: sectionParam } = useParams<{ credorId?: string; section?: string }>();
+  const activeSection: CredorSection = (VALID_SECTIONS as readonly string[]).includes(sectionParam || "")
+    ? (sectionParam as CredorSection)
+    : "dados";
+
+  const handleSectionChange = (next: string) => {
+    if (!VALID_SECTIONS.includes(next as CredorSection)) return;
+    const idSegment = credorId || (editing?.id ?? "novo");
+    navigate(`/cadastros/credores/${idSegment}/${next}`, { replace: true });
+  };
 
   const [form, setForm] = useState<any>({});
   const [honorarios, setHonorarios] = useState<any[]>([]);
