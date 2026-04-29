@@ -105,6 +105,18 @@ const CadastrosPage = () => {
     .flatMap((g) => g.items)
     .find((i) => i.key === active)?.label;
 
+  // Estado do formulário de credor controlado pela URL
+  const isNewCredor = location.pathname === "/cadastros/credores/novo";
+  const credorFormOpen = isCredorRoute && (!!credorId || isNewCredor);
+  const editingCredor = useMemo(
+    () => (credorId ? credores?.find((c: any) => c.id === credorId) ?? null : null),
+    [credorId, credores]
+  );
+
+  const handleCredorFormOpenChange = (open: boolean) => {
+    if (!open) navigate("/cadastros/credores");
+  };
+
   return (
     <div className="flex gap-6 animate-fade-in">
       {/* Sub-navegação lateral */}
