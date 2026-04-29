@@ -14,24 +14,21 @@ interface MetaRadialCardProps {
 }
 
 /**
- * Meta do mês com radial chart animado (gradiente laranja → vermelho).
- * Lado esquerdo: meta, realizado e período.
- * Lado direito: arco semicircular animado com %.
+ * Meta do mês: meta no topo + radial chart centralizado.
  */
 const MetaRadialCard = ({
   percent,
-  received,
   goal,
   year,
   month,
-  size = 170,
+  size = 240,
   duration = 1.4,
 }: MetaRadialCardProps) => {
   const uid = useId().replace(/:/g, "");
   const clampedPct = Math.min(100, Math.max(0, percent));
 
-  const strokeWidth = Math.max(10, size * 0.085);
-  const radius = size * 0.36;
+  const strokeWidth = Math.max(14, size * 0.09);
+  const radius = size * 0.38;
   const center = size / 2;
   const circumference = Math.PI * radius;
 
@@ -47,10 +44,9 @@ const MetaRadialCard = ({
     return controls.stop;
   }, [clampedPct, animatedValue, duration]);
 
-  const fontSize = Math.max(18, size * 0.14);
-  const labelFontSize = Math.max(9, size * 0.055);
+  const fontSize = Math.max(28, size * 0.2);
+  const labelFontSize = Math.max(10, size * 0.05);
 
-  // Period label
   const ref = year && month ? new Date(year, month - 1, 1) : new Date();
   const m = ref.getMonth();
   const y = ref.getFullYear();
@@ -61,31 +57,21 @@ const MetaRadialCard = ({
   const chartH = size * 0.62;
 
   return (
-    <div className="flex items-center justify-between gap-2 w-full h-full">
-      {/* Left: meta / realizado / período */}
-      <div className="flex flex-col gap-1.5 min-w-0 shrink-0">
-        <div>
-          <p className="text-sm font-bold text-foreground tabular-nums leading-tight">
-            {formatCurrency(goal)}
-          </p>
-          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-            Meta Recebimento
-          </p>
-        </div>
-        <div>
-          <p className="text-sm font-bold text-foreground tabular-nums leading-tight">
-            {formatCurrency(received)}
-          </p>
-          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-            Realizado
-          </p>
-        </div>
-        <p className="text-[9px] text-muted-foreground tabular-nums">
+    <div className="flex flex-col items-center justify-center gap-2 w-full h-full">
+      {/* Top: meta */}
+      <div className="text-center">
+        <p className="text-[10px] text-muted-foreground leading-tight uppercase tracking-wide">
+          Meta Recebimento
+        </p>
+        <p className="text-lg font-bold text-foreground tabular-nums leading-tight mt-0.5">
+          {formatCurrency(goal)}
+        </p>
+        <p className="text-[9px] text-muted-foreground tabular-nums mt-0.5">
           {firstDay} à {lastDayStr}
         </p>
       </div>
 
-      {/* Right: animated radial */}
+      {/* Radial centralizado */}
       <div className="relative shrink-0" style={{ width: size, height: chartH }}>
         <svg
           width={size}
@@ -100,7 +86,6 @@ const MetaRadialCard = ({
             </linearGradient>
           </defs>
 
-          {/* Track */}
           <path
             d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
             fill="none"
@@ -110,7 +95,6 @@ const MetaRadialCard = ({
             opacity={0.6}
           />
 
-          {/* Progress */}
           <motion.path
             d={`M ${center - radius} ${center} A ${radius} ${radius} 0 0 1 ${center + radius} ${center}`}
             fill="none"
@@ -122,10 +106,9 @@ const MetaRadialCard = ({
           />
         </svg>
 
-        {/* % center */}
         <div
-          className="absolute inset-0 flex items-end justify-center pb-1"
-          style={{ paddingBottom: chartH * 0.08 }}
+          className="absolute inset-0 flex items-end justify-center"
+          style={{ paddingBottom: chartH * 0.06 }}
         >
           <motion.div
             className="font-bold tracking-tight text-foreground tabular-nums"
@@ -138,7 +121,6 @@ const MetaRadialCard = ({
           </motion.div>
         </div>
 
-        {/* 0% / 100% labels */}
         <div
           className="absolute text-muted-foreground font-medium tabular-nums"
           style={{
@@ -153,7 +135,7 @@ const MetaRadialCard = ({
           className="absolute text-muted-foreground font-medium tabular-nums"
           style={{
             fontSize: `${labelFontSize}px`,
-            left: center + radius - labelFontSize * 1.6,
+            left: center + radius - labelFontSize * 1.8,
             top: center + strokeWidth * 0.4,
           }}
         >

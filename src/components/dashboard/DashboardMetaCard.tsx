@@ -97,7 +97,7 @@ const DashboardMetaCard = ({
             monthLabel={monthLabel}
             year={year}
             month={month}
-            size={160}
+            size={230}
             duration={1.4}
           />
         )}
