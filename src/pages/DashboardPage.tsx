@@ -29,6 +29,7 @@ import ParcelasProgramadasCard, {
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
+import KpisOperacionaisCard from "@/components/dashboard/KpisOperacionaisCard";
 import SortableCard from "@/components/dashboard/SortableCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
