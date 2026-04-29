@@ -564,6 +564,93 @@ export const fetchAllCarteiraIds = async (
 };
 
 /**
+ * Fetches the first N unique CPFs (and their installment IDs) matching the
+ * current filters, in the same order used by the grouped listing.
+ * Stops paginating as soon as N CPFs have been collected.
+ */
+export const fetchFirstNCarteiraSelection = async (
+  tenantId: string,
+  limit: number,
+  filters: CarteiraFilters = {},
+  sortField = "created_at",
+  sortDir = "desc"
+): Promise<{ ids: string[]; cpfs: string[] }> => {
+  try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+    if (!limit || limit <= 0) return { ids: [], cpfs: [] };
+
+    let scoreMin: number | null = null;
+    let scoreMax: number | null = null;
+    if (filters.scoreRange) {
+      const ranges = filters.scoreRange.split(",");
+      let min = 100, max = 0;
+      for (const r of ranges) {
+        if (r === "bom") { min = Math.min(min, 75); max = Math.max(max, 100); }
+        if (r === "medio") { min = Math.min(min, 50); max = Math.max(max, 74); }
+        if (r === "ruim") { min = Math.min(min, 0); max = Math.max(max, 49); }
+      }
+      if (ranges.length > 0) { scoreMin = min; scoreMax = max; }
+    }
+
+    const ids: string[] = [];
+    const cpfs: string[] = [];
+    const seenCpfs = new Set<string>();
+    let page = 1;
+    const pageSize = Math.min(1000, Math.max(limit, 100));
+
+    while (seenCpfs.size < limit) {
+      const params: Record<string, any> = {
+        _tenant_id: tenantId,
+        _page: page,
+        _page_size: pageSize,
+        _sort_field: sortField,
+        _sort_dir: sortDir,
+      };
+
+      if (filters.search?.trim()) params._search = filters.search.trim();
+      if (filters.credor && filters.credor !== "todos") params._credor = filters.credor;
+      if (filters.dateFrom) params._date_from = filters.dateFrom;
+      if (filters.dateTo) params._date_to = filters.dateTo;
+      if (filters.statusCobrancaId) params._status_cobranca_ids = filters.statusCobrancaId.split(",").filter(Boolean);
+      if (filters.tipoDevedorId) params._tipo_devedor_ids = filters.tipoDevedorId.split(",").filter(Boolean);
+      if (filters.tipoDividaId) params._tipo_divida_ids = filters.tipoDividaId.split(",").filter(Boolean);
+      if (filters.debtorProfile) params._debtor_profiles = filters.debtorProfile.split(",").filter(Boolean);
+      if (filters.operatorId) params._operator_id = filters.operatorId;
+      if (filters.semAcordo) params._sem_acordo = true;
+      if (filters.cadastroDe) params._cadastro_de = filters.cadastroDe;
+      if (filters.cadastroAte) params._cadastro_ate = filters.cadastroAte;
+      if (filters.semWhatsapp) params._sem_whatsapp = true;
+      if (filters.primeiraParcelaDe) params._primeira_parcela_de = filters.primeiraParcelaDe;
+      if (filters.primeiraParcelaAte) params._primeira_parcela_ate = filters.primeiraParcelaAte;
+      if (scoreMin !== null) params._score_min = scoreMin;
+      if (scoreMax !== null) params._score_max = scoreMax;
+
+      const { data, error } = await supabase.rpc("get_carteira_grouped" as any, params);
+      if (error) throw error;
+
+      const rows = (data || []) as any[];
+      for (const r of rows) {
+        const cpf = String(r.cpf || "").replace(/\D/g, "");
+        if (!cpf || seenCpfs.has(cpf)) continue;
+        seenCpfs.add(cpf);
+        cpfs.push(cpf);
+        const rowIds = r.all_ids || [r.representative_id];
+        for (const id of rowIds) ids.push(id);
+        if (seenCpfs.size >= limit) break;
+      }
+
+      if (rows.length < pageSize) break;
+      page++;
+    }
+
+    logger.info(MODULE, "fetchFirstNCarteiraSelection", { requested: limit, cpfs: cpfs.length, ids: ids.length });
+    return { ids, cpfs };
+  } catch (error) {
+    handleServiceError(error, MODULE);
+  }
+};
+
+/**
  * Fetches ALL grouped clients matching filters (paginated loop).
  * Used when selectAllFiltered is true and we need full client data for bulk actions.
  */
