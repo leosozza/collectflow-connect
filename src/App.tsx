@@ -113,6 +113,8 @@ const App = () => (
               <Route path="carteira/:cpf" element={<ClientDetailPage />} />
               <Route path="cadastro" element={<CadastroPage />} />
               <Route path="cadastros/:tab?" element={<CadastrosPage />} />
+              <Route path="cadastros/credores/novo" element={<CadastrosPage />} />
+              <Route path="cadastros/credores/:credorId/:section?" element={<CadastrosPage />} />
               <Route path="usuarios" element={<UsersPage />} />
               <Route path="configuracoes" element={<ConfiguracoesPage />}>
                 <Route index element={<Navigate to="integracao" replace />} />
