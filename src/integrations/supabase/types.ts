@@ -2193,6 +2193,7 @@ export type Database = {
           contato_responsavel: string | null
           created_at: string
           desconto_maximo: number | null
+          document_logo_url: string | null
           email: string | null
           endereco: string | null
           entrada_minima_tipo: string | null
@@ -2248,6 +2249,7 @@ export type Database = {
           contato_responsavel?: string | null
           created_at?: string
           desconto_maximo?: number | null
+          document_logo_url?: string | null
           email?: string | null
           endereco?: string | null
           entrada_minima_tipo?: string | null
@@ -2303,6 +2305,7 @@ export type Database = {
           contato_responsavel?: string | null
           created_at?: string
           desconto_maximo?: number | null
+          document_logo_url?: string | null
           email?: string | null
           endereco?: string | null
           entrada_minima_tipo?: string | null

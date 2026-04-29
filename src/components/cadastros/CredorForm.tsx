@@ -77,6 +77,8 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const [enderecoOpen, setEnderecoOpen] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingDocLogo, setUploadingDocLogo] = useState(false);
+  const docLogoInputRef = useRef<HTMLInputElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // Captura o prazo original ao abrir, para detectar reduções no save
@@ -363,6 +365,94 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 </div>
               </CollapsibleContent>
             </Collapsible>
+
+            {/* Logo dos Documentos — usado no cabeçalho de TODOS os documentos gerados (cartas, recibos etc.) */}
+            <div className="border-t border-border pt-4">
+              <p className="text-sm font-medium text-foreground mb-1">Logo dos Documentos</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Aparece no canto superior esquerdo de todos os documentos gerados (~20mm). Recomendado: PNG transparente.
+              </p>
+              <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
+                <div
+                  className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors overflow-hidden shrink-0 bg-white"
+                  onClick={() => docLogoInputRef.current?.click()}
+                >
+                  {form.document_logo_url ? (
+                    <img src={form.document_logo_url} alt="Logo do documento" className="w-full h-full object-contain" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      <FileText className="w-5 h-5" />
+                      <span className="text-[9px]">Doc Logo</span>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <input
+                    ref={docLogoInputRef}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.svg,.webp"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) {
+                        toast.error("Imagem deve ter no máximo 2MB");
+                        return;
+                      }
+                      setUploadingDocLogo(true);
+                      try {
+                        const cId = editing?.id || "new";
+                        const ext = file.name.split(".").pop();
+                        const path = `credor-doc-logos/${cId}/${Date.now()}.${ext}`;
+                        const { error: uploadError } = await supabase.storage
+                          .from("avatars")
+                          .upload(path, file, { upsert: true });
+                        if (uploadError) throw uploadError;
+                        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+                        set("document_logo_url", urlData.publicUrl);
+                        toast.success("Logo do documento enviado!");
+                      } catch (err) {
+                        console.error(err);
+                        toast.error("Erro ao enviar logo");
+                      } finally {
+                        setUploadingDocLogo(false);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={uploadingDocLogo}
+                      onClick={() => docLogoInputRef.current?.click()}
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      {uploadingDocLogo ? "Enviando..." : "Upload"}
+                    </Button>
+                    <Input
+                      value={form.document_logo_url || ""}
+                      onChange={(e) => set("document_logo_url", e.target.value)}
+                      placeholder="Ou cole a URL do logo..."
+                      className="text-xs flex-1"
+                    />
+                    {form.document_logo_url && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => set("document_logo_url", "")}
+                      >
+                        Remover
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
 
           </TabsContent>
 

@@ -1,0 +1,1 @@
+ALTER TABLE public.credores ADD COLUMN IF NOT EXISTS document_logo_url text;

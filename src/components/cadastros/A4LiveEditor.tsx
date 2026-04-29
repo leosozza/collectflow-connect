@@ -148,11 +148,11 @@ const A4LiveEditor = forwardRef<A4LiveEditorHandle, A4LiveEditorProps>(
         </div>
 
         {/* Live A4 page */}
-        <div className="rounded-lg border border-border bg-muted/30 p-4 overflow-auto max-h-[640px]">
+        <div className="rounded-lg border border-border bg-muted/30 p-4 overflow-auto">
           <div
             ref={containerRef}
             className="shadow-md mx-auto"
-            style={{ transform: "scale(0.85)", transformOrigin: "top center" }}
+            style={{ transform: "scale(0.78)", transformOrigin: "top center", marginBottom: "-22%" }}
           />
         </div>
       </div>
