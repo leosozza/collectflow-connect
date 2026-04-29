@@ -227,6 +227,105 @@ export const recalculateCampaignScores = async (
     _campaign_id: campaignId,
   });
 
-  if (error) throw error;
-  return { updated: Number((data as any)?.updated || 0) };
+  if (!error) return { updated: Number((data as any)?.updated || 0) };
+  console.warn("recalculate_campaign_scores unavailable, using client fallback:", error);
+  return recalculateCampaignScoresFallback(campaignId);
 };
+
+async function recalculateCampaignScoresFallback(campaignId: string): Promise<{ updated: number }> {
+  const { data: campaign, error: campErr } = await supabase
+    .from("gamification_campaigns")
+    .select("id, tenant_id, metric, start_date, end_date")
+    .eq("id", campaignId)
+    .single();
+  if (campErr) throw campErr;
+  if (!campaign) throw new Error("Campanha não encontrada");
+
+  const tenantId = (campaign as any).tenant_id as string;
+  const metric = (campaign as any).metric as string;
+  const startDate = (campaign as any).start_date as string;
+  const endDate = (campaign as any).end_date as string;
+  const endExclusive = new Date(endDate + "T00:00:00");
+  endExclusive.setDate(endExclusive.getDate() + 1);
+  const endExclusiveStr = endExclusive.toISOString().slice(0, 10);
+
+  const { data: campaignCredores } = await supabase
+    .from("campaign_credores")
+    .select("credor_id")
+    .eq("campaign_id", campaignId)
+    .eq("tenant_id", tenantId);
+
+  let credorNames: string[] | null = null;
+  if (campaignCredores && campaignCredores.length > 0) {
+    const { data: credores } = await supabase
+      .from("credores")
+      .select("razao_social")
+      .in("id", campaignCredores.map((cc: any) => cc.credor_id));
+    credorNames = (credores || []).map((c: any) => c.razao_social).filter(Boolean);
+    if (credorNames.length === 0) credorNames = null;
+  }
+
+  const { data: participants } = await supabase
+    .from("campaign_participants")
+    .select("id, operator_id")
+    .eq("campaign_id", campaignId)
+    .eq("tenant_id", tenantId);
+  if (!participants || participants.length === 0) return { updated: 0 };
+
+  const { data: profilesData } = await supabase
+    .from("profiles")
+    .select("id, user_id")
+    .eq("tenant_id", tenantId)
+    .in("id", participants.map((p: any) => p.operator_id));
+  const authUidMap = new Map<string, string>((profilesData || []).map((p: any) => [p.id, p.user_id || p.id]));
+
+  let updated = 0;
+  for (const p of participants as any[]) {
+    const authUid = authUidMap.get(p.operator_id) || p.operator_id;
+    const score = await computeCampaignScoreFallback({ metric, tenantId, authUid, startDate, endExclusiveStr, credorNames });
+    const { error: upErr } = await supabase
+      .from("campaign_participants")
+      .update({ score, updated_at: new Date().toISOString() } as any)
+      .eq("campaign_id", campaignId)
+      .eq("operator_id", p.operator_id);
+    if (!upErr) updated += 1;
+  }
+
+  return { updated };
+}
+
+async function computeCampaignScoreFallback(params: {
+  metric: string;
+  tenantId: string;
+  authUid: string;
+  startDate: string;
+  endExclusiveStr: string;
+  credorNames: string[] | null;
+}): Promise<number> {
+  const { metric, tenantId, authUid, startDate, endExclusiveStr, credorNames } = params;
+  const addCredor = <T extends any>(q: T): T => (credorNames ? (q as any).in("credor", credorNames) : q);
+
+  if (metric === "maior_valor_recebido") {
+    const [manual, portal, negociarie] = await Promise.all([
+      supabase.from("manual_payments").select("amount_paid, agreements!inner(created_by, credor)").eq("tenant_id", tenantId).in("status", ["confirmed", "approved"] as any).eq("agreements.created_by", authUid).gte("payment_date", startDate).lt("payment_date", endExclusiveStr),
+      supabase.from("portal_payments").select("amount, agreements!inner(created_by, credor)").eq("tenant_id", tenantId).eq("status", "paid").eq("agreements.created_by", authUid).gte("updated_at", startDate).lt("updated_at", endExclusiveStr),
+      supabase.from("negociarie_cobrancas").select("valor_pago, agreements!inner(created_by, credor)").eq("tenant_id", tenantId).eq("status", "pago").eq("agreements.created_by", authUid).gte("data_pagamento", startDate).lt("data_pagamento", endExclusiveStr),
+    ]);
+    const allowed = (row: any) => !credorNames || credorNames.includes(row.agreements?.credor);
+    return (manual.data || []).filter(allowed).reduce((s: number, r: any) => s + Number(r.amount_paid || 0), 0)
+      + (portal.data || []).filter(allowed).reduce((s: number, r: any) => s + Number(r.amount || 0), 0)
+      + (negociarie.data || []).filter(allowed).reduce((s: number, r: any) => s + Number(r.valor_pago || 0), 0);
+  }
+
+  if (metric === "maior_qtd_acordos") {
+    const { count } = await addCredor(supabase.from("agreements").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("created_by", authUid).not("status", "in", "(rejected,cancelled)").gte("created_at", startDate).lt("created_at", endExclusiveStr));
+    return count || 0;
+  }
+
+  if (metric === "maior_valor_promessas") {
+    const { data } = await addCredor(supabase.from("agreements").select("proposed_total").eq("tenant_id", tenantId).eq("created_by", authUid).in("status", ["pending", "approved"] as any).gte("created_at", startDate).lt("created_at", endExclusiveStr));
+    return (data || []).reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
+  }
+
+  return 0;
+}
