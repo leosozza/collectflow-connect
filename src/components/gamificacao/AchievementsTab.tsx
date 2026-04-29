@@ -61,7 +61,8 @@ const AchievementsTab = ({ isAdmin = false }: AchievementsTabProps) => {
                 <p className="text-sm font-semibold text-foreground">{a.title}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{a.description}</p>
                 <p className="text-[10px] text-primary mt-1.5">
-                  👤 {a.profiles?.full_name || "—"} · {format(parseISO(a.earned_at), "dd/MM/yyyy", { locale: ptBR })}
+                  👤 {a.profiles?.full_name || "—"}
+                  {a.earned_at ? ` · ${format(parseISO(a.earned_at), "dd/MM/yyyy", { locale: ptBR })}` : ""}
                 </p>
               </div>
             </div>
