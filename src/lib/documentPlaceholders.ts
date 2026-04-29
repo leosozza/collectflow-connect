@@ -56,6 +56,11 @@ export const PLACEHOLDER_CATEGORIES = [
 export const SAMPLE_DATA: Record<string, string> = {
   "{razao_social_credor}": "Empresa Exemplo Ltda",
   "{cnpj_credor}": "12.345.678/0001-90",
+  "{endereco_completo_credor}": "Av. Paulista, 1000 - Sala 1201 - Bela Vista, São Paulo/SP - CEP 01310-100",
+  "{cidade_credor}": "São Paulo",
+  "{uf_credor}": "SP",
+  "{cep_credor}": "01310-100",
+  "{email_credor}": "contato@exemplo.com.br",
   "{nome_devedor}": "João da Silva",
   "{cpf_devedor}": "123.456.789-00",
   "{endereco_devedor}": "Rua das Flores, 123 - Centro - São Paulo/SP",
