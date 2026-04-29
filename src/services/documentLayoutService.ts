@@ -8,6 +8,7 @@ export interface CredorLayoutInfo {
   nome_fantasia?: string | null;
   cnpj?: string | null;
   portal_logo_url?: string | null;
+  document_logo_url?: string | null;
   endereco?: string | null;
   numero?: string | null;
   complemento?: string | null;
