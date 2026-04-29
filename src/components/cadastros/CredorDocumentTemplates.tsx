@@ -256,9 +256,10 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
                                 {p.key}
                               </button>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[200px]">
+                            <TooltipContent side="top" className="max-w-[220px]">
                               <p className="font-medium text-xs">{p.label}</p>
                               <p className="text-xs text-muted-foreground">{p.description}</p>
+                              <p className="text-[10px] text-muted-foreground mt-1 italic">Clique para copiar e cole no editor</p>
                             </TooltipContent>
                           </Tooltip>
                         ))}
