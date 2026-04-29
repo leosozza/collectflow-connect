@@ -12,6 +12,21 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Plus, Pencil, Trash2, Trophy, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { differenceInDays, parseISO } from "date-fns";
+
+const isValidDate = (s?: string | null) => {
+  if (!s) return false;
+  const ts = Date.parse(s);
+  if (isNaN(ts)) return false;
+  const y = new Date(ts).getFullYear();
+  return y >= 2000 && y <= 2100;
+};
+
+const isCampaignActive = (campaign: Campaign) => {
+  if (campaign.status !== "ativa") return false;
+  if (!isValidDate(campaign.start_date) || !isValidDate(campaign.end_date)) return false;
+  return differenceInDays(parseISO(campaign.end_date), new Date()) >= 0;
+};
 
 const CampaignsManagementTab = () => {
   const { tenant } = useTenant();
@@ -75,8 +90,8 @@ const CampaignsManagementTab = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const activeCampaigns = campaigns.filter((c) => c.status === "ativa");
-  const otherCampaigns = campaigns.filter((c) => c.status !== "ativa");
+  const activeCampaigns = campaigns.filter(isCampaignActive);
+  const otherCampaigns = campaigns.filter((c) => !isCampaignActive(c));
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
