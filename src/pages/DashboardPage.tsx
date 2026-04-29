@@ -30,6 +30,8 @@ import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout
 import {
   DndContext,
   DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
   PointerSensor,
   KeyboardSensor,
   useSensor,
