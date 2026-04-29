@@ -48,13 +48,13 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={dist.data || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="score_band" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+              <XAxis dataKey="bucket" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <RTooltip
                 contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
                 formatter={(v: number, _: string, ctx: any) => [`${v} clientes (${Number(ctx.payload.pct || 0).toFixed(1)}%)`, "Qtd"]}
               />
-              <Bar dataKey="qtd_clientes" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="qtd" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -72,23 +72,23 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
               <TableRow className="bg-muted/50">
                 <TableHead className="text-xs">Faixa</TableHead>
                 <TableHead className="text-xs text-center">Clientes</TableHead>
-                <TableHead className="text-xs text-center">Acordos</TableHead>
-                <TableHead className="text-xs text-center">Quebras</TableHead>
-                <TableHead className="text-xs text-right">Conversão</TableHead>
-                <TableHead className="text-xs text-right">Taxa Quebra</TableHead>
+                <TableHead className="text-xs text-center">Com Acordo</TableHead>
+                <TableHead className="text-xs text-right">Taxa Acordo</TableHead>
+                <TableHead className="text-xs text-center">Pagos</TableHead>
+                <TableHead className="text-xs text-right">Taxa Pagamento</TableHead>
                 <TableHead className="text-xs text-right">Recebido</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(vsResult.data || []).map((r: any, i: number) => (
                 <TableRow key={i}>
-                  <TableCell className="text-xs font-medium">{r.score_band}</TableCell>
+                  <TableCell className="text-xs font-medium">{r.bucket}</TableCell>
                   <TableCell className="text-xs text-center">{r.qtd_clientes}</TableCell>
-                  <TableCell className="text-xs text-center">{r.qtd_acordos}</TableCell>
-                  <TableCell className="text-xs text-center">{r.qtd_quebras}</TableCell>
-                  <TableCell className="text-xs text-right">{Number(r.taxa_conversao || 0).toFixed(2)}%</TableCell>
-                  <TableCell className="text-xs text-right text-destructive">{Number(r.taxa_quebra || 0).toFixed(2)}%</TableCell>
-                  <TableCell className="text-xs text-right text-success">{formatCurrency(Number(r.total_recebido || 0))}</TableCell>
+                  <TableCell className="text-xs text-center">{r.qtd_com_acordo}</TableCell>
+                  <TableCell className="text-xs text-right">{Number(r.taxa_acordo || 0).toFixed(2)}%</TableCell>
+                  <TableCell className="text-xs text-center">{r.qtd_pagos}</TableCell>
+                  <TableCell className="text-xs text-right">{Number(r.taxa_pagamento || 0).toFixed(2)}%</TableCell>
+                  <TableCell className="text-xs text-right text-success">{formatCurrency(Number(r.valor_recebido || 0))}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -120,10 +120,10 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
                   <TableCell className="text-xs tabular-nums">{r.cpf}</TableCell>
                   <TableCell className="text-xs font-medium max-w-[200px] truncate">{r.nome}</TableCell>
                   <TableCell className="text-xs max-w-[200px] truncate">{r.credor}</TableCell>
-                  <TableCell className="text-xs text-center font-bold text-primary">{r.score}</TableCell>
-                  <TableCell className="text-xs text-right text-destructive">{formatCurrency(Number(r.valor_em_aberto || 0))}</TableCell>
+                  <TableCell className="text-xs text-center font-bold text-primary">{r.propensity_score}</TableCell>
+                  <TableCell className="text-xs text-right text-destructive">{formatCurrency(Number(r.valor_atualizado || 0))}</TableCell>
                   <TableCell className="text-xs text-right text-muted-foreground">
-                    {r.ultimo_contato_at ? format(parseISO(r.ultimo_contato_at), "dd/MM/yyyy") : "—"}
+                    {r.ultimo_contato ? format(parseISO(r.ultimo_contato), "dd/MM/yyyy") : "—"}
                   </TableCell>
                 </TableRow>
               ))}
