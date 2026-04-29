@@ -10,7 +10,7 @@ export type DashboardBlockId =
 
 export interface DashboardLayout {
   visible: Record<DashboardBlockId, boolean>;
-  /** Linear order of all blocks in the unified drag-and-drop grid. */
+  /** Preserved for compatibility with saved preferences; visual placement is fixed. */
   order: DashboardBlockId[];
 }
 
@@ -30,9 +30,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
     metas: true,
     agendamentos: true,
   },
-  // Approximates the previous 3-column visual: meta+agendamentos on left,
-  // totalRecebido+parcelas in the center, KPIs on the right.
-  order: ["metas", "totalRecebido", "kpisTop", "agendamentos", "parcelas"],
+  order: ["totalRecebido", "kpisTop", "agendamentos", "parcelas", "metas"],
 };
 
 const STORAGE_PREFIX = "rivo:dashboard-layout:v2";

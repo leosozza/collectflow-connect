@@ -11,8 +11,8 @@ interface Props {
 
 export default function AgendamentosHojeCard({ callbacks, showOperator }: Props) {
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm w-full flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+    <div className="bg-card rounded-lg border border-border/80 shadow-sm w-full h-full min-h-0 flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2">
           <CalendarCheck className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Agendamentos para Hoje</h2>
@@ -23,7 +23,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
       </div>
 
       {callbacks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-center px-5 py-6 text-muted-foreground">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center px-5 py-6 text-muted-foreground">
           <div className="w-10 h-10 rounded-full bg-muted/40 flex items-center justify-center mb-2">
             <CalendarCheck className="w-4 h-4 text-muted-foreground/70" />
           </div>
@@ -31,9 +31,9 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">para hoje</p>
         </div>
       ) : (
-        <div className="overflow-auto max-h-[200px]">
+        <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="border-b border-border hover:bg-transparent">
                 <TableHead className="h-8 px-4 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Nome do Cliente
@@ -47,7 +47,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
               </TableRow>
             </TableHeader>
             <TableBody>
-              {callbacks.slice(0, 8).map((cb) => {
+              {callbacks.map((cb) => {
                 const cbTime = new Date(cb.scheduled_callback);
                 const cpf = cb.client_cpf?.replace(/\D/g, "") || "";
                 return (
@@ -83,7 +83,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
         </div>
       )}
 
-      <div className="px-4 py-2 border-t border-border">
+      <div className="px-4 py-2 border-t border-border shrink-0">
         <Link to="/atendimento" className="text-xs text-primary hover:underline font-medium">
           Ver todos
         </Link>

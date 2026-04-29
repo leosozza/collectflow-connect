@@ -43,7 +43,7 @@ export default function ParcelasProgramadasCard({
   ).length;
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full flex flex-col">
+    <div className="bg-card rounded-lg border border-border/80 overflow-hidden shadow-sm w-full h-full min-h-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -120,7 +120,7 @@ export default function ParcelasProgramadasCard({
       </div>
 
       {vencimentos.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-5 py-10 text-muted-foreground">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center px-5 py-6 text-muted-foreground">
           <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mb-3">
             <CalendarClock className="w-5 h-5 text-muted-foreground/70" />
           </div>
@@ -128,9 +128,9 @@ export default function ParcelasProgramadasCard({
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">para esta data</p>
         </div>
       ) : (
-        <div className="overflow-auto max-h-[420px]">
+        <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="border-b border-border hover:bg-transparent">
                 <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Nome
@@ -163,7 +163,7 @@ export default function ParcelasProgramadasCard({
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
                     className="border-b border-border/30 hover:bg-muted/30 transition-colors"
                   >
-                    <TableCell className="py-2.5 px-4 text-sm font-medium">
+                    <TableCell className="py-2 px-4 text-sm font-medium">
                       <Link
                         to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
                         className="text-primary hover:underline underline-offset-2"
@@ -171,13 +171,13 @@ export default function ParcelasProgramadasCard({
                         {v.client_name}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-2.5 px-4 text-sm text-muted-foreground">
+                    <TableCell className="py-2 px-4 text-sm text-muted-foreground">
                       {credorShort}
                     </TableCell>
-                    <TableCell className="py-2.5 px-4 text-sm text-right text-foreground tabular-nums">
+                    <TableCell className="py-2 px-4 text-sm text-right text-foreground tabular-nums">
                       {formatCurrency(Number(v.valor_parcela))}
                     </TableCell>
-                    <TableCell className="py-2.5 px-4 text-center">
+                    <TableCell className="py-2 px-4 text-center">
                       <span
                         className={`inline-flex items-center justify-center min-w-[96px] rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusClass}`}
                       >

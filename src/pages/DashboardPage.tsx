@@ -7,12 +7,9 @@ import {
   BarChart3,
   FileText,
   Phone,
-  FileCheck,
   CalendarCheck,
   Settings2,
   Handshake,
-  TrendingDown,
-  Hourglass,
   Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -29,24 +26,8 @@ import ParcelasProgramadasCard, {
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
-import SortableCard from "@/components/dashboard/SortableCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
-import {
-  DndContext,
-  DragEndEvent,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  rectSortingStrategy,
-  sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -78,6 +59,12 @@ interface DashboardStats {
   total_pendente_mes_anterior: number;
 }
 
+type TicketAgreementRow = {
+  entrada_value: number | null;
+  new_installment_value: number | null;
+  custom_installment_values: unknown;
+};
+
 // Calcula variação percentual entre período atual e anterior.
 // Retorna { value, isPositive } ou null quando não houver base de comparação.
 // `invert=true` para métricas onde queda é positiva (Quebra, Pendentes).
@@ -100,6 +87,33 @@ function pctDelta(
     value: `${sign}${rounded}%`,
     isPositive: invert ? !isUp : isUp,
   };
+}
+
+function parseCurrencyLike(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getCustomInstallmentValue(
+  customValues: unknown,
+  key: "entrada" | "1"
+): number | null {
+  if (!customValues || typeof customValues !== "object" || Array.isArray(customValues)) {
+    return null;
+  }
+  return parseCurrencyLike((customValues as Record<string, unknown>)[key]);
+}
+
+function getAgreementTicketBase(row: TicketAgreementRow): number {
+  const entradaValue = Number(row.entrada_value || 0);
+  if (entradaValue > 0) {
+    return getCustomInstallmentValue(row.custom_installment_values, "entrada") ?? entradaValue;
+  }
+  return (
+    getCustomInstallmentValue(row.custom_installment_values, "1") ??
+    Number(row.new_installment_value || 0)
+  );
 }
 
 const DashboardPage = () => {
@@ -192,6 +206,35 @@ const DashboardPage = () => {
     },
   });
 
+  const todayKey = format(now, "yyyy-MM-dd");
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const { data: ticketMedioDia = 0 } = useQuery({
+    queryKey: ["dashboard-ticket-medio-dia", todayKey, rpcUserId, rpcUserIdsKey, profile?.tenant_id],
+    queryFn: async () => {
+      let query = supabase
+        .from("agreements")
+        .select("entrada_value, new_installment_value, custom_installment_values")
+        .eq("tenant_id", profile!.tenant_id!)
+        .not("status", "in", "(cancelled,rejected)")
+        .gte("created_at", todayStart.toISOString())
+        .lt("created_at", tomorrowStart.toISOString());
+
+      if (rpcUserIds) query = query.in("created_by", rpcUserIds);
+      else if (rpcUserId) query = query.eq("created_by", rpcUserId);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const rows = (data || []) as TicketAgreementRow[];
+      if (rows.length === 0) return 0;
+      const total = rows.reduce((sum, row) => sum + getAgreementTicketBase(row), 0);
+      return total / rows.length;
+    },
+    enabled: !!profile?.tenant_id,
+    refetchInterval: 60_000,
+  });
+
   const yearOptions = useMemo(
     () => generateYearOptions().map((y) => ({ value: y.toString(), label: y.toString() })),
     []
@@ -209,134 +252,88 @@ const DashboardPage = () => {
     });
   };
 
-  // Span (Tailwind classes) per block — defines its preferred width on lg+ screens.
-  const SPAN_CLASS: Record<DashboardBlockId, string> = {
-    kpisTop: "col-span-1 lg:col-span-3",
-    metas: "col-span-1 lg:col-span-3",
-    agendamentos: "col-span-1 lg:col-span-3",
-    totalRecebido: "col-span-1 lg:col-span-6",
-    parcelas: "col-span-1 lg:col-span-6",
-  };
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = layout.order.indexOf(active.id as DashboardBlockId);
-    const newIndex = layout.order.indexOf(over.id as DashboardBlockId);
-    if (oldIndex < 0 || newIndex < 0) return;
-    setLayout({ ...layout, order: arrayMove(layout.order, oldIndex, newIndex) });
-  };
-
   const trendAcionados = stats ? pctDelta(acionadosHoje, stats.acionados_ontem ?? 0) : null;
   const trendAcordosDia = stats ? pctDelta(stats.acordos_dia ?? 0, stats.acordos_dia_anterior ?? 0) : null;
   const trendAcordosMes = stats ? pctDelta(stats.acordos_mes ?? 0, stats.acordos_mes_anterior ?? 0) : null;
-  const trendNegociadoMes = stats ? pctDelta(stats.total_negociado_mes ?? 0, stats.total_negociado_mes_anterior ?? 0) : null;
-  const trendQuebra = stats ? pctDelta(stats.total_quebra ?? 0, stats.total_quebra_mes_anterior ?? 0, true) : null;
-  const trendPendentes = stats ? pctDelta(stats.total_pendente ?? 0, stats.total_pendente_mes_anterior ?? 0, true) : null;
 
   const kpis = [
     {
       label: "Acionados Hoje",
       value: String(acionadosHoje),
       Icon: Phone,
-      iconColor: "text-orange-500",
-      iconBg: "bg-orange-500/10",
+      colorClass: "bg-gradient-to-br from-blue-500 to-blue-600",
       trend: trendAcionados ? { ...trendAcionados, text: "vs ontem" } : undefined,
     },
     {
-      label: "Acordos do Dia",
+      label: "Acordos Dia",
       value: String(stats?.acordos_dia ?? 0),
-      Icon: FileText,
-      iconColor: "text-green-500",
-      iconBg: "bg-green-500/10",
+      Icon: Handshake,
+      colorClass: "bg-gradient-to-br from-emerald-500 to-green-600",
       trend: trendAcordosDia ? { ...trendAcordosDia, text: "vs ontem" } : undefined,
     },
     {
-      label: "Acordos do Mês",
+      label: "Acordos Mês",
       value: String(stats?.acordos_mes ?? 0),
       Icon: CalendarCheck,
-      iconColor: "text-blue-500",
-      iconBg: "bg-blue-500/10",
+      colorClass: "bg-gradient-to-br from-orange-500 to-primary",
       trend: trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : undefined,
     },
     {
-      label: "Total de Quebra",
-      value: formatCurrency(stats?.total_quebra ?? 0),
-      Icon: TrendingDown,
-      iconColor: "text-red-500",
-      iconBg: "bg-red-500/10",
-      trend: trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : undefined,
-    },
-    {
-      label: "Pendentes",
-      value: formatCurrency(stats?.total_pendente ?? 0),
-      Icon: Hourglass,
-      iconColor: "text-amber-500",
-      iconBg: "bg-amber-500/10",
-      trend: trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : undefined,
-    },
-    {
-      label: "Colchão de Acordos",
-      value: formatCurrency(stats?.total_projetado ?? 0),
+      label: "Ticket Médio Dia",
+      value: formatCurrency(ticketMedioDia),
       Icon: Wallet,
-      iconColor: "text-indigo-500",
-      iconBg: "bg-indigo-500/10",
+      colorClass: "bg-gradient-to-br from-cyan-500 to-teal-600",
       trend: undefined as { value: string; text: string; isPositive: boolean } | undefined,
     },
   ];
+
+  const isVisible = (id: DashboardBlockId) => layout.visible[id];
 
   // Renders the inner content for each block id.
   const renderBlock = (id: DashboardBlockId) => {
     switch (id) {
       case "kpisTop":
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-2 gap-3 h-full min-h-0">
             {kpis.map((item) => {
               const ItemIcon = item.Icon;
               const isMoney = item.value.startsWith("R$");
               return (
                 <div
                   key={item.label}
-                  className="bg-card rounded-xl border border-border shadow-sm px-3 py-2.5 flex flex-col justify-between min-w-0"
+                  className={cn(
+                    "relative overflow-hidden rounded-lg shadow-sm px-3 py-2.5 flex flex-col justify-between min-w-0 text-white",
+                    item.colorClass
+                  )}
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
-                        <ItemIcon className={cn("w-3.5 h-3.5", item.iconColor)} />
-                      </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="rounded-md bg-white/20 p-1.5 shrink-0">
+                      <ItemIcon className="w-4 h-4 text-white" />
                     </div>
-                    <p className="text-[10px] text-muted-foreground font-medium leading-tight mb-1 break-words">
+                    {item.trend && (
+                      <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-bold leading-none">
+                        {item.trend.value}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold leading-tight text-white/80 break-words">
                       {item.label}
                     </p>
                     <p
                       className={cn(
-                        "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
-                        isMoney ? "text-sm" : "text-lg"
+                        "font-extrabold text-white tabular-nums leading-tight break-words mt-1",
+                        isMoney ? "text-[19px]" : "text-2xl"
                       )}
                     >
                       {item.value}
                     </p>
-                  </div>
-                  {item.trend && (
-                    <div className="mt-1.5 text-[9.5px] flex items-center gap-1 flex-wrap leading-tight">
-                      <span
-                        className={cn(
-                          "font-bold tracking-tight",
-                          item.trend.isPositive ? "text-success" : "text-destructive"
-                        )}
-                      >
-                        {item.trend.value}
-                      </span>
-                      <span className="text-muted-foreground font-medium truncate">
+                    {item.trend && (
+                      <p className="mt-1 text-[9px] leading-tight text-white/75 truncate">
                         {item.trend.text}
-                      </span>
-                    </div>
-                  )}
+                      </p>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -381,15 +378,13 @@ const DashboardPage = () => {
     }
   };
 
-  const visibleOrder = layout.order.filter((id) => layout.visible[id]);
-
   return (
-    <div className="flex flex-col gap-4 animate-fade-in h-full min-h-0">
+    <div className="flex flex-col gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
       {/* Header with filters */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">
             Bem-vindo, {profile?.full_name || "Operador"}
           </p>
         </div>
@@ -398,7 +393,7 @@ const DashboardPage = () => {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10"
+              className="gap-1.5 h-8 text-xs border-primary/40 text-primary hover:bg-primary/10"
               onClick={() => navigate("/relatorios")}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -408,7 +403,7 @@ const DashboardPage = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10"
+            className="gap-1.5 h-8 text-xs border-primary/40 text-primary hover:bg-primary/10"
             onClick={() => navigate("/analytics")}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -442,7 +437,7 @@ const DashboardPage = () => {
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 h-9 text-xs text-muted-foreground hover:text-foreground"
+            className="gap-1.5 h-8 text-xs text-muted-foreground hover:text-foreground"
             onClick={() => setCustomizeOpen(true)}
             title="Personalizar Dashboard"
           >
@@ -452,25 +447,33 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Drag-and-drop grid: cards reorder freely; layout persists per user */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
-          <div
-            className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start"
-            style={{ gridAutoFlow: "dense" }}
-          >
-            {visibleOrder.map((id) => (
-              <SortableCard key={id} id={id} spanClassName={SPAN_CLASS[id]}>
-                {renderBlock(id)}
-              </SortableCard>
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 md:grid-cols-2 xl:grid-cols-12 xl:grid-rows-[minmax(0,0.82fr)_minmax(0,1.18fr)] gap-3">
+        {isVisible("totalRecebido") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-8 xl:row-start-1">
+            {renderBlock("totalRecebido")}
+          </section>
+        )}
+        {isVisible("kpisTop") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-9 xl:row-start-1">
+            {renderBlock("kpisTop")}
+          </section>
+        )}
+        {isVisible("agendamentos") && (
+          <section className="min-h-0 h-full xl:col-span-4 xl:row-start-2">
+            {renderBlock("agendamentos")}
+          </section>
+        )}
+        {isVisible("parcelas") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-5 xl:row-start-2">
+            {renderBlock("parcelas")}
+          </section>
+        )}
+        {isVisible("metas") && (
+          <section className="min-h-0 h-full xl:col-span-4 xl:col-start-9 xl:row-start-2">
+            {renderBlock("metas")}
+          </section>
+        )}
+      </div>
 
       <CustomizeDashboardDialog
         open={customizeOpen}

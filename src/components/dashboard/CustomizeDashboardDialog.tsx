@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RotateCcw, GripVertical } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -63,8 +63,7 @@ export default function CustomizeDashboardDialog({
         <DialogHeader>
           <DialogTitle>Personalizar Dashboard</DialogTitle>
           <DialogDescription>
-            Escolha quais blocos exibir. Para reordenar, basta arrastar os cards
-            diretamente no Dashboard pelo ícone <GripVertical className="inline w-3 h-3 align-text-bottom" />.
+            Escolha quais blocos exibir no Dashboard.
           </DialogDescription>
         </DialogHeader>
 
