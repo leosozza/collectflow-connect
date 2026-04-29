@@ -29,6 +29,7 @@ import ParcelasProgramadasCard, {
 import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
+import KpisOperacionaisCard from "@/components/dashboard/KpisOperacionaisCard";
 import SortableCard from "@/components/dashboard/SortableCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { cn } from "@/lib/utils";
@@ -216,11 +217,9 @@ const DashboardPage = () => {
   const SPAN_CLASS: Record<DashboardBlockId, string> = {
     metas: "col-span-1 row-span-1",
     totalRecebido: "col-span-1 row-span-1 lg:row-span-2",
-    acionadosHoje: "col-span-1 row-span-1",
+    kpisOperacionais: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
     agendamentos: "col-span-1 row-span-1",
-    acordosDia: "col-span-1 row-span-1",
     parcelas: "col-span-1 md:col-span-2 row-span-1",
-    acordosMes: "col-span-1 row-span-1",
     totalQuebra: "col-span-1 row-span-1",
     pendentes: "col-span-1 row-span-1",
     colchaoAcordos: "col-span-1 row-span-1",
@@ -257,30 +256,6 @@ const DashboardPage = () => {
   };
 
   const kpiMap: Partial<Record<DashboardBlockId, KpiSpec>> = {
-    acionadosHoje: {
-      label: "Acionados Hoje",
-      value: String(acionadosHoje),
-      Icon: Phone,
-      iconColor: "text-orange-500",
-      iconBg: "bg-orange-500/10",
-      trend: trendAcionados ? { ...trendAcionados, text: "vs ontem" } : undefined,
-    },
-    acordosDia: {
-      label: "Acordos do Dia",
-      value: String(stats?.acordos_dia ?? 0),
-      Icon: FileText,
-      iconColor: "text-green-500",
-      iconBg: "bg-green-500/10",
-      trend: trendAcordosDia ? { ...trendAcordosDia, text: "vs ontem" } : undefined,
-    },
-    acordosMes: {
-      label: "Acordos do Mês",
-      value: String(stats?.acordos_mes ?? 0),
-      Icon: CalendarCheck,
-      iconColor: "text-blue-500",
-      iconBg: "bg-blue-500/10",
-      trend: trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : undefined,
-    },
     totalQuebra: {
       label: "Total de Quebra",
       value: formatCurrency(stats?.total_quebra ?? 0),
@@ -354,6 +329,17 @@ const DashboardPage = () => {
     if (kpi) return renderKpiTile(kpi);
 
     switch (id) {
+      case "kpisOperacionais":
+        return (
+          <KpisOperacionaisCard
+            acionadosHoje={acionadosHoje}
+            acordosDia={stats?.acordos_dia ?? 0}
+            acordosMes={stats?.acordos_mes ?? 0}
+            trendAcionados={trendAcionados}
+            trendAcordosDia={trendAcordosDia}
+            trendAcordosMes={trendAcordosMes}
+          />
+        );
       case "metas":
         return (
           <DashboardMetaCard

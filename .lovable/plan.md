@@ -1,82 +1,65 @@
-# Refatoração do Grid do Dashboard
+## Objetivo
 
-## Contexto atual
+Agrupar os 3 KPIs (Acionados Hoje, Acordos do Dia, Acordos do Mês) em **um único card maior** que ocupa **uma posição no grid**, contendo internamente **3 tiles lado a lado** (horizontal):
 
-Hoje o Dashboard tem **5 blocos arrastáveis** (`useDashboardLayout`):
-- `kpisTop` — bloco único agrupando 6 mini-KPIs (Acionados Hoje, Acordos do Dia, Acordos do Mês, Total de Quebra, Pendentes, Colchão de Acordos)
-- `metas`, `agendamentos`, `totalRecebido`, `parcelas`
+- **Acionados Hoje** — tile inteiro **azul**
+- **Acordos do Dia** — tile inteiro **verde**
+- **Acordos do Mês** — tile inteiro **laranja**
 
-O grid usa `grid-cols-12` com `SortableContext` + `rectSortingStrategy` (dnd-kit) e `gridAutoFlow: "dense"`.
+Os números nunca podem ser cortados — fontes responsivas e `min-w-0` + `truncate` controlado para garantir enquadramento.
 
-A nova especificação trata cada KPI como **card independente**, totalizando **10 cards** com spans próprios.
-
-## Nova lista de blocos (10)
-
-| ID                  | Título               | col-span | row-span |
-|---------------------|----------------------|----------|----------|
-| `metas`             | Meta do Mês          | 1        | 1        |
-| `totalRecebido`     | Total Recebido       | 1        | 2        |
-| `acionadosHoje`     | Acionados Hoje       | 1        | 1        |
-| `agendamentos`      | Agendamentos Hoje    | 1        | 1        |
-| `acordosDia`        | Acordos do Dia       | 1        | 1        |
-| `parcelas`          | Parcelas Programadas | 2        | 1        |
-| `acordosMes`        | Acordos do Mês       | 1        | 1        |
-| `totalQuebra`       | Total de Quebra      | 1        | 1        |
-| `pendentes`         | Pendentes            | 1        | 1        |
-| `colchaoAcordos`    | Colchão de Acordos   | 1        | 1        |
-
-Ordem inicial (linear, com `gridAutoFlow: dense` posicionando conforme spans):
-
-```
-[Meta]            [TotalRecebido▼]   [AcionadosHoje]
-[AgendHoje]       [TotalRecebido ]   [AcordosDia]
-[Parcelas    ━━]                     [AcordosMes]
-[— livre ━━━━━]                      [TotalQuebra]
-                                     [Pendentes]
-                                     [Colchão]
-```
-
-A linearização para o array `order` será:
-`["metas", "totalRecebido", "acionadosHoje", "agendamentos", "acordosDia", "parcelas", "acordosMes", "totalQuebra", "pendentes", "colchaoAcordos"]`
-
-## Alterações
+## Mudanças
 
 ### 1. `src/hooks/useDashboardLayout.ts`
-- Atualizar `DashboardBlockId` para os 10 IDs novos.
-- Atualizar `ALL_DASHBOARD_BLOCKS`, `DEFAULT_DASHBOARD_LAYOUT.visible` e `.order`.
-- Bumpar `STORAGE_PREFIX` para `v3` (invalida layout salvo, evita IDs órfãos).
-- `sanitize()` permanece igual (já filtra IDs desconhecidos e adiciona faltantes).
+- Substituir os 3 IDs (`acionadosHoje`, `acordosDia`, `acordosMes`) por um único ID novo: **`kpisOperacionais`**.
+- Atualizar `ALL_DASHBOARD_BLOCKS`, `DEFAULT_DASHBOARD_LAYOUT.visible` e `DEFAULT_DASHBOARD_LAYOUT.order` (entra na primeira linha onde estavam os KPIs).
+- Bump da versão de storage: `v3` → `v4` para invalidar layouts antigos no localStorage.
 
-### 2. `src/pages/DashboardPage.tsx`
-- Substituir o grid `lg:grid-cols-12` por `lg:grid-cols-3` mantendo `grid-auto-rows: minmax(...)` para altura base consistente e `gridAutoFlow: "dense"`.
-- Substituir `SPAN_CLASS` por mapa que define **col-span e row-span** Tailwind por id:
-  - `parcelas`: `lg:col-span-2`
-  - `totalRecebido`: `lg:row-span-2`
-  - demais: `col-span-1 row-span-1`
-- Responsivo:
-  - Mobile (`grid-cols-1`): forçar `row-span-1` em todos (`max-lg:row-span-1 max-lg:col-span-1`).
-  - Tablet (`md:grid-cols-2`): `parcelas` ocupa `md:col-span-2`; resto col-span-1; row-span-2 mantido só em `lg`.
-- Refatorar `renderBlock(id)` para retornar **um card por KPI individual** reutilizando o mesmo visual do mini-KPI atual (componente local `KpiTile` com label, valor, ícone, trend).
-- Remover o sub-grid `kpisTop` interno; cada KPI vira `<SortableCard>` próprio.
-- `TotalRecebidoCard` precisa ocupar 100% da altura (row-span-2) — adicionar `h-full` no wrapper interno; verificar se o gráfico se adapta (já é responsivo via container).
+### 2. Novo componente `src/components/dashboard/KpisOperacionaisCard.tsx`
+Card único com 3 tiles **lado a lado** preenchendo toda a largura e altura do slot:
 
-### 3. `src/components/dashboard/SortableCard.tsx`
-- Atualizar default `spanClassName` e garantir `h-full` no wrapper para que cards com `row-span-2` se estiquem.
-- Sem mudança de lógica de drag.
+```text
+┌────────────────────────────────────────────────────────┐
+│ ┌──────────┐ ┌──────────┐ ┌──────────┐                 │
+│ │ AZUL     │ │ VERDE    │ │ LARANJA  │                 │
+│ │ Acionad. │ │ Acordos  │ │ Acordos  │                 │
+│ │ Hoje     │ │ do Dia   │ │ do Mês   │                 │
+│ │ 142      │ │ 8        │ │ 87       │                 │
+│ │ +12% ↑   │ │ +5% ↑    │ │ -3% ↓    │                 │
+│ └──────────┘ └──────────┘ └──────────┘                 │
+└────────────────────────────────────────────────────────┘
+```
+
+**Layout interno:**
+- Container: `grid grid-cols-3 gap-2 h-full p-2` (3 tiles uniformes lado a lado).
+- Cada tile: `rounded-lg p-3 flex flex-col justify-between min-w-0 overflow-hidden`.
+
+**Cores sólidas (gradiente sutil para manter identidade visual):**
+- Azul: `bg-gradient-to-br from-blue-500 to-blue-600 text-white`
+- Verde: `bg-gradient-to-br from-green-500 to-green-600 text-white`
+- Laranja: `bg-gradient-to-br from-orange-500 to-orange-600 text-white`
+
+**Anti-corte de números:**
+- Valor principal: `text-xl md:text-2xl font-bold tabular-nums leading-tight tracking-tight break-words`.
+- Label menor: `text-[10px] md:text-[11px] font-medium leading-tight opacity-90` (sem truncate — pode quebrar em 2 linhas).
+- Ícones em badge `bg-white/20 rounded-md p-1.5` no topo.
+- Trends embaixo em texto `text-[10px] opacity-90` com seta colorida em branco/transparência.
+
+### 3. `src/pages/DashboardPage.tsx`
+- Remover entradas `acionadosHoje`, `acordosDia`, `acordosMes` do `kpiMap` e do `SPAN_CLASS`.
+- Adicionar `kpisOperacionais: "col-span-1 md:col-span-2 row-span-1"` ao `SPAN_CLASS` — ocupa **2 colunas** (necessário para acomodar 3 tiles horizontais sem cortar números). No mobile vira 1 coluna empilhando internamente em scroll horizontal ou grid 3 ainda, mas com fonte menor. Ajuste fino: usar `col-span-1 md:col-span-2 lg:col-span-2 row-span-1`.
+- No `renderBlock`, adicionar case `kpisOperacionais` que renderiza `<KpisOperacionaisCard />` recebendo: `acionadosHoje`, `acordosDia` (`stats?.acordos_dia`), `acordosMes` (`stats?.acordos_mes`) e os 3 trends já calculados (`trendAcionados`, `trendAcordosDia`, `trendAcordosMes`).
+- Manter cálculos de trends e queries inalterados.
 
 ### 4. `src/components/dashboard/CustomizeDashboardDialog.tsx`
-- Atualizar `LABELS` e `DESCRIPTIONS` para os 10 novos IDs.
+- Remover `acionadosHoje`, `acordosDia`, `acordosMes` dos mapas `LABELS` e `DESCRIPTIONS`.
+- Adicionar:
+  - `kpisOperacionais: "KPIs Operacionais"`
+  - descrição: `"Acionados hoje, acordos do dia e do mês"`
 
-## Drag & Drop
-- Mantido 100%: `DndContext` + `SortableContext` com `rectSortingStrategy` já suporta grids com spans variados e `gridAutoFlow: dense` rearranja sem sobreposição.
-- `arrayMove` continua válido (reordena array linear; CSS grid recoloca conforme spans).
+## Resultado esperado
 
-## Restrições respeitadas
-- Nenhuma query, RPC, filtro ou cálculo de KPI é alterado — apenas como são renderizados.
-- Identidade visual (bordas, sombras, cores dos ícones) preservada reutilizando classes existentes.
-
-## Arquivos a editar
-- `src/hooks/useDashboardLayout.ts`
-- `src/pages/DashboardPage.tsx`
-- `src/components/dashboard/SortableCard.tsx`
-- `src/components/dashboard/CustomizeDashboardDialog.tsx`
+- Grid passa de 10 para 8 blocos.
+- Novo bloco agrupado é arrastável como uma única peça e ocupa 2 slots horizontais (1 no mobile).
+- Os 3 tiles internos são vibrantes (azul/verde/laranja), exibidos lado a lado, com números totalmente visíveis.
+- Nenhuma alteração em lógica de dados, RPCs ou trends — apenas reorganização visual.
