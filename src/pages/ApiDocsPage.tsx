@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Key, Plus, Copy, ShieldX, CheckCircle2, AlertCircle, Code2, BookOpen, Zap, Loader2, ExternalLink, Link2, FileSpreadsheet, Handshake, CreditCard, Globe, Settings2, Plug } from "lucide-react";
+import { Key, Plus, Copy, ShieldX, CheckCircle2, AlertCircle, Code2, BookOpen, Zap, Loader2, ExternalLink, Link2, FileSpreadsheet, Handshake, CreditCard, Globe, Settings2, Plug, FileJson } from "lucide-react";
+import ApiReference from "@/components/api-docs/ApiReference";
 
 const BASE_URL = `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`;
 
@@ -244,8 +245,9 @@ export default function ApiDocsPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="keys">
+      <Tabs defaultValue="reference">
         <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="reference" className="flex items-center gap-1.5 text-xs"><FileJson className="w-3.5 h-3.5" />Referência</TabsTrigger>
           <TabsTrigger value="keys" className="flex items-center gap-1.5 text-xs"><Key className="w-3.5 h-3.5" />API Keys</TabsTrigger>
           <TabsTrigger value="clients" className="flex items-center gap-1.5 text-xs"><BookOpen className="w-3.5 h-3.5" />Clientes</TabsTrigger>
           <TabsTrigger value="agreements" className="flex items-center gap-1.5 text-xs"><Handshake className="w-3.5 h-3.5" />Acordos</TabsTrigger>
@@ -255,6 +257,10 @@ export default function ApiDocsPage() {
           <TabsTrigger value="integrations" className="flex items-center gap-1.5 text-xs"><Plug className="w-3.5 h-3.5" />Integração</TabsTrigger>
           <TabsTrigger value="imports" className="flex items-center gap-1.5 text-xs"><FileSpreadsheet className="w-3.5 h-3.5" />Importações</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="reference" className="mt-4">
+          <ApiReference />
+        </TabsContent>
 
         {/* ── API Keys ── */}
         <TabsContent value="keys" className="space-y-4 mt-4">

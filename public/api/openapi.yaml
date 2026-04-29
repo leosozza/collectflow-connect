@@ -1,0 +1,541 @@
+openapi: 3.1.0
+info:
+  title: Rivo Connect API
+  description: |
+    API REST para integração com a plataforma RIVO CONNECT — gestão de cobranças,
+    acordos, pagamentos (PIX, Cartão, Boleto), portal do devedor e omnichannel.
+    Documentação interativa: https://rivoconnect.com/api-docs/public
+  version: "2.0.0"
+  contact:
+    name: Rivo Connect
+    url: https://rivoconnect.com
+servers:
+  - url: https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api
+    description: Produção e Sandbox (isolamento por tenant)
+security:
+  - ApiKeyAuth: []
+tags:
+  - name: Health
+  - name: Clients
+  - name: Agreements
+  - name: Payments
+  - name: Portal
+  - name: Cadastros
+  - name: Webhooks
+  - name: WhatsApp
+  - name: Propensity
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Status da API
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  version: { type: string, example: "2.0.0" }
+                  timestamp: { type: string, format: date-time }
+
+  /clients:
+    get:
+      tags: [Clients]
+      summary: Listar clientes
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: limit, schema: { type: integer, default: 100, maximum: 500 } }
+        - { in: query, name: status, schema: { type: string, enum: [pendente, pago, quebrado] } }
+        - { in: query, name: credor, schema: { type: string } }
+        - { in: query, name: cpf, schema: { type: string } }
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginatedClients" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Clients]
+      summary: Criar/atualizar cliente (upsert)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientInput" }
+      responses:
+        "201": { description: Criado, content: { application/json: { schema: { $ref: "#/components/schemas/ClientResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /clients/bulk:
+    post:
+      tags: [Clients]
+      summary: Inserção em massa (até 500 registros)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [records]
+              properties:
+                records:
+                  type: array
+                  maxItems: 500
+                  items: { $ref: "#/components/schemas/ClientInput" }
+                upsert: { type: boolean, default: true }
+                upsert_key: { type: string, enum: [external_id, cpf], default: external_id }
+                mapping_id: { type: string, format: uuid, description: "ID de field mapping customizado" }
+      responses:
+        "200":
+          description: Resultado parcial (válidos gravados, inválidos retornam em errors[])
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  inserted: { type: integer }
+                  updated: { type: integer }
+                  skipped: { type: integer }
+                  total: { type: integer }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index: { type: integer }
+                        external_id: { type: string }
+                        cpf: { type: string }
+                        error: { type: string }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /clients/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Clients]
+      summary: Detalhe do cliente
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ClientResponse" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Clients]
+      summary: Atualizar cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientInput" }
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Clients]
+      summary: Remover cliente
+      responses:
+        "200": { description: OK }
+
+  /clients/by-external/{external_id}:
+    parameters:
+      - { in: path, name: external_id, required: true, schema: { type: string } }
+    put:
+      tags: [Clients]
+      summary: Atualizar por external_id
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses: { "200": { description: OK } }
+
+  /clients/by-cpf/{cpf}:
+    parameters:
+      - { in: path, name: cpf, required: true, schema: { type: string } }
+    delete:
+      tags: [Clients]
+      summary: Remover todos do CPF
+      responses: { "200": { description: OK } }
+
+  /clients/{id}/status:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [Clients]
+      summary: Atualizar status de cobrança
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status_cobranca_id]
+              properties:
+                status_cobranca_id: { type: string, format: uuid }
+      responses: { "200": { description: OK } }
+
+  /agreements:
+    get:
+      tags: [Agreements]
+      summary: Listar acordos
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: limit, schema: { type: integer, default: 50, maximum: 200 } }
+        - { in: query, name: status, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { in: query, name: cpf, schema: { type: string } }
+        - { in: query, name: credor, schema: { type: string } }
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Agreements]
+      summary: Criar proposta de acordo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgreementInput" }
+      responses:
+        "201": { description: Criado }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /agreements/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Agreements]
+      summary: Detalhe do acordo
+      responses: { "200": { description: OK }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /agreements/{id}/approve:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [Agreements]
+      summary: Aprovar acordo
+      responses: { "200": { description: OK } }
+
+  /agreements/{id}/reject:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [Agreements]
+      summary: Rejeitar acordo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { reason: { type: string } }
+      responses: { "200": { description: OK } }
+
+  /payments:
+    get:
+      tags: [Payments]
+      summary: Listar pagamentos
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: limit, schema: { type: integer, default: 50, maximum: 200 } }
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: client_id, schema: { type: string, format: uuid } }
+        - { in: query, name: tipo, schema: { type: string, enum: [pix, cartao, boleto] } }
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Payments]
+      summary: Gerar cobrança (tipo via body)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentInput" }
+      responses:
+        "201": { description: Criada }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /payments/methods:
+    get:
+      tags: [Payments]
+      summary: Listar meios de pagamento (nativos + customizados)
+      parameters:
+        - { in: query, name: credor_id, schema: { type: string, format: uuid } }
+      responses: { "200": { description: OK } }
+
+  /payments/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Payments]
+      summary: Status da cobrança
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /payments/pix:
+    post:
+      tags: [Payments]
+      summary: Gerar cobrança PIX
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentSimpleInput" }
+      responses: { "201": { description: Criada } }
+  /payments/cartao:
+    post:
+      tags: [Payments]
+      summary: Gerar cobrança Cartão de Crédito
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentSimpleInput" }
+      responses: { "201": { description: Criada } }
+  /payments/boleto:
+    post:
+      tags: [Payments]
+      summary: Gerar cobrança Boleto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentSimpleInput" }
+      responses: { "201": { description: Criada } }
+
+  /portal/lookup:
+    post:
+      tags: [Portal]
+      summary: Consultar dívidas por CPF
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cpf]
+              properties: { cpf: { type: string } }
+      responses: { "200": { description: OK } }
+
+  /portal/agreement:
+    post:
+      tags: [Portal]
+      summary: Criar proposta via portal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgreementInput" }
+      responses: { "201": { description: Criada } }
+
+  /credores:
+    get:
+      tags: [Cadastros]
+      summary: Listar credores ativos
+      responses: { "200": { description: OK } }
+
+  /status-types:
+    get:
+      tags: [Cadastros]
+      summary: Listar tipos de status do funil
+      responses: { "200": { description: OK } }
+
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: Configuração atual de webhook
+      responses: { "200": { description: OK } }
+
+  /webhooks/configure:
+    post:
+      tags: [Webhooks]
+      summary: Registrar URL de callback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [agreement.approved, agreement.rejected, payment.confirmed, payment.expired, client.updated]
+      responses: { "200": { description: OK } }
+
+  /whatsapp/send:
+    post:
+      tags: [WhatsApp]
+      summary: Enviar mensagem individual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, message]
+              properties:
+                phone: { type: string }
+                message: { type: string }
+      responses: { "200": { description: OK } }
+
+  /whatsapp/bulk:
+    post:
+      tags: [WhatsApp]
+      summary: Envio em massa (máx 200)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              properties:
+                messages:
+                  type: array
+                  maxItems: 200
+                  items:
+                    type: object
+                    properties:
+                      phone: { type: string }
+                      message: { type: string }
+      responses: { "200": { description: OK } }
+
+  /propensity/calculate:
+    post:
+      tags: [Propensity]
+      summary: Calcular score de propensão
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { type: object, required: [cpf], properties: { cpf: { type: string } } }
+                - { type: object, required: [cpfs], properties: { cpfs: { type: array, items: { type: string } } } }
+      responses: { "200": { description: OK } }
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "Formato: cf_xxxxxxxxxxxxx"
+
+  responses:
+    Unauthorized:
+      description: X-API-Key inválida ou ausente
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Credor fora do escopo da chave
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Recurso não encontrado
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ValidationError:
+      description: Validação falhou
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              errors:
+                type: array
+                items: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    ClientInput:
+      type: object
+      required: [credor, nome_completo, cpf, valor_parcela, data_vencimento]
+      properties:
+        credor: { type: string, description: "nome_fantasia do credor" }
+        nome_completo: { type: string, minLength: 2 }
+        cpf: { type: string, description: "Aceita CPF ou CNPJ, com ou sem máscara" }
+        external_id: { type: string }
+        cod_contrato: { type: string }
+        phone: { type: string }
+        phone2: { type: string }
+        phone3: { type: string }
+        email: { type: string, format: email }
+        endereco: { type: string }
+        cidade: { type: string }
+        uf: { type: string }
+        cep: { type: string }
+        observacoes: { type: string }
+        numero_parcela: { type: integer, default: 1 }
+        total_parcelas: { type: integer, default: 1 }
+        valor_parcela: { type: number, format: float, minimum: 0 }
+        valor_entrada: { type: number, format: float }
+        valor_atualizado: { type: number, format: float }
+        valor_saldo: { type: number, format: float }
+        valor_pago: { type: number, format: float }
+        data_vencimento:
+          type: string
+          description: "YYYY-MM-DD ou DD/MM/YYYY (auto-convertido)"
+        data_pagamento: { type: string }
+        status: { type: string, enum: [pendente, pago, quebrado], default: pendente }
+        status_cobranca_id: { type: string, format: uuid }
+
+    ClientResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          allOf:
+            - { $ref: "#/components/schemas/ClientInput" }
+            - type: object
+              properties:
+                id: { type: string, format: uuid }
+                tenant_id: { type: string, format: uuid }
+                created_at: { type: string, format: date-time }
+                updated_at: { type: string, format: date-time }
+
+    PaginatedClients:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/ClientResponse" } }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+        pages: { type: integer }
+
+    AgreementInput:
+      type: object
+      required: [client_cpf, client_name, credor, original_total, proposed_total, new_installments, new_installment_value, first_due_date]
+      properties:
+        client_cpf: { type: string }
+        client_name: { type: string }
+        credor: { type: string }
+        original_total: { type: number, format: float }
+        proposed_total: { type: number, format: float }
+        new_installments: { type: integer, minimum: 1 }
+        new_installment_value: { type: number, format: float }
+        first_due_date: { type: string, format: date }
+        discount_percent: { type: number, default: 0 }
+        notes: { type: string }
+
+    PaymentInput:
+      type: object
+      required: [client_id, valor, data_vencimento, tipo]
+      properties:
+        client_id: { type: string, format: uuid }
+        valor: { type: number, format: float }
+        data_vencimento: { type: string, format: date }
+        tipo: { type: string, enum: [pix, cartao, boleto] }
+
+    PaymentSimpleInput:
+      type: object
+      required: [client_id, valor, data_vencimento]
+      properties:
+        client_id: { type: string, format: uuid }
+        valor: { type: number, format: float }
+        data_vencimento: { type: string, format: date }

@@ -1,46 +1,97 @@
-## Diagnosticar e corrigir erro ao editar mensagem do WhatsApp
 
-O toast mostra apenas `"Edge Function returned a non-2xx status code"`, que é a mensagem genérica do SDK do Supabase quando a edge function retorna 4xx/5xx. **Essa mensagem não é o erro real** — ela esconde a causa.
+# Melhoria da Documentação da API Rivo Connect
 
-Os logs mais recentes da função `manage-chat-message` só mostram `shutdown` (sem `[manage-chat-message] fatal`, sem chamadas de `console.error`), e o analytics não retornou execuções dela na última hora — ou seja, ou ela está respondendo com erro **antes** de qualquer log custom (pouco provável), ou o front está engolindo o erro sem expor o `body.error` retornado pela função.
+Objetivo: transformar a página `ApiDocs` (interna e pública) em uma referência técnica completa, alinhada ao contrato real do edge function `clients-api`, respondendo a todos os 10 blocos do questionário enviado pelo time da Y Brasil.
 
-### Causas prováveis (ordenadas)
+## Diagnóstico
 
-1. **Evolution `/chat/updateMessage/{instance}` retornou erro** (HTTP 400/500) — comum quando:
-   - A mensagem original tem mais de 15 minutos no WhatsApp (mesmo passando na nossa checagem de 15 min em `created_at`, o WhatsApp pode rejeitar).
-   - O `provider_message_id`/`external_id` da mensagem foi gravado com formato diferente do esperado pela Evolution (ex.: prefix de remoteJid, JID com sufixo `_alt`).
-   - A instância está em `connecting`/desconectada.
-2. **Mensagem é `template/interactive`** mas marcada como `text`, ou foi enviada via **Gupshup** (oficial) — `editByProvider` retorna explicitamente "Edição de mensagem não é suportada pela API oficial (Gupshup/Meta).". O texto `Ok` cabe nas duas hipóteses.
-3. **`extractFunctionError` no front falha** ao ler `error.context.response` (o SDK do Supabase nem sempre expõe `clone()` corretamente para erros HTTP), então o usuário só vê a string genérica.
+A documentação atual (`src/pages/ApiDocsPage.tsx` e `ApiDocsPublicPage.tsx`) cobre apenas exemplos rápidos por endpoint. **Não responde** os pontos críticos cobrados pelo cliente:
+- Não há seção de autenticação detalhada (rotação, sandbox, base URL única).
+- Schemas de request/response não estão formalizados (pt-BR vs en, tipos, formatos).
+- Códigos de erro não estão tabulados.
+- Webhooks, idempotência, rate-limit e bulk-limits não aparecem.
+- Não existe OpenAPI/Swagger nem Postman exportável.
 
-### Mudanças
+## Escopo
 
-1. **Frontend — exibir o erro real (`src/services/conversationService.ts`)**
-   - Refatorar `extractFunctionError` para aguardar `error?.context?.text()` / `error?.context?.json()` (formato moderno do `FunctionsHttpError`) **antes** de cair no `error.message`.
-   - Tentar nesta ordem: `data.error` → `error.context.json()` (resp body como JSON) → `error.context.text()` → `error.message` → fallback.
-   - Resultado: o toast passa a mostrar exatamente o motivo (ex.: "Edição permitida apenas nos primeiros 15 minutos", "Edição não suportada pela API oficial", "HTTP 400 do provider", etc.).
+### 1. Reescrita da `ApiDocsPage.tsx` com novas seções (em abas)
 
-2. **Edge function — logs detalhados (`supabase/functions/manage-chat-message/index.ts`)**
-   - Adicionar `console.log("[manage-chat-message] start", { messageId, action })` no início.
-   - Logar o resultado do provider em caso de falha: `console.error("[manage-chat-message] provider error", { provider, error, providerMessageId })`.
-   - Logar `console.log("[manage-chat-message] success", { provider, action })` ao final.
-   - Assim conseguimos ver no painel de logs o que a Evolution respondeu na próxima tentativa.
+Substituir as abas atuais por uma estrutura que segue o questionário do cliente:
 
-3. **Edge function — incluir status HTTP do provider no payload de erro (`_shared/whatsapp-sender.ts`)**
-   - Em `editByProvider`, anexar `httpStatus` ao retorno em caso de erro Evolution/WuzAPI: `{ ok: false, error, httpStatus: resp.status, providerBody: result }`.
-   - Em `index.ts`, ao retornar 502, propagar esse contexto: `json({ error: providerResult.error, provider: providerResult.provider, httpStatus: providerResult.httpStatus, providerBody: providerResult.result }, 502)`.
-   - O front (após mudança 1) vai exibir esse JSON ou string.
+```text
+[Início] [Auth] [Endpoints] [Schemas] [Webhooks] [Erros] [Limites] [Multi-credor] [Sandbox] [Downloads]
+                                                                                    ↓
+                                                                        OpenAPI / Postman / MCP
+```
 
-4. **UI — desativar botão "Editar" quando provider é Gupshup (oficial)**
-   - Em `src/components/contact-center/whatsapp/ChatMessage.tsx`, na flag `canEdit`, considerar a propriedade do provider da conversa/instância (já temos no contexto). Se for Gupshup, esconder a opção do menu e o ícone de edição, evitando o erro.
-   - Se a info de provider não está disponível ali, expor via `useConversationContext`/prop e propagar.
+Conteúdo por aba:
 
-### Resultado esperado
+- **Início**: visão geral, base URL única (`https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api`), ambientes (produção/sandbox compartilham URL — sandbox controlado pelo `tenant_id` da chave), versão (`v2.0.0`), changelog resumido.
+- **Auth**: método (`X-API-Key` SHA-256 hash), header exato, prefixo `cf_`, como gerar/revogar (link para aba "API Keys"), escopo por credor (chave restrita a um credor força filtro automático em todas operações), CORS habilitado.
+- **Endpoints**: lista completa extraída do código fonte (`clients-api/index.ts`):
+  - `/health` (GET)
+  - `/clients` (GET, POST), `/clients/bulk` (POST), `/clients/:id` (GET/PUT/DELETE), `/clients/by-external/:id` (PUT), `/clients/by-cpf/:cpf` (DELETE), `/clients/:id/status` (PUT)
+  - `/agreements` (GET, POST), `/agreements/:id` (GET), `/agreements/:id/approve` (PUT), `/agreements/:id/reject` (PUT)
+  - `/payments` (GET, POST), `/payments/methods` (GET), `/payments/:id` (GET), `/payments/pix` (POST), `/payments/cartao` (POST), `/payments/boleto` (POST)
+  - `/portal/lookup` (POST), `/portal/agreement` (POST)
+  - `/credores` (GET), `/status-types` (GET)
+  - `/propensity/calculate` (POST)
+  - Cada endpoint com: método, caminho, parâmetros, exemplo `curl` + JSON request + JSON response real + códigos HTTP possíveis.
+- **Schemas**: tabela formal por entidade (Client, Agreement, Payment, Credor) com nome do campo, tipo, formato, obrigatório, descrição, valores aceitos. Inclui:
+  - Aliases de mailing (`NOME_DEVEDOR` → `nome_completo`, etc.) — extrair do `normalizeRecord` do edge.
+  - CPF/CNPJ: aceita com ou sem máscara.
+  - Datas: `YYYY-MM-DD` (ISO) ou `DD/MM/YYYY` (auto-convertido).
+  - Valores: decimal em reais (não centavos).
+  - Status válidos: `pendente | pago | quebrado` (clients), `pending | approved | rejected` (agreements).
+  - Tipos de pagamento: `pix | cartao | boleto` (+ meios customizados via `/payments/methods`).
+- **Webhooks**: documentar o estado atual (ainda não exposto via `clients-api`) e a recomendação operacional — polling em `GET /payments/:id` até confirmar status. Sinalizar como "roadmap" se não houver hoje.
+- **Erros**: tabela com todos os HTTP retornados pelo edge:
+  - `400` body inválido, `401` X-API-Key inválida/ausente, `403` credor fora de escopo, `404` recurso inexistente, `422` validação (campos faltando/erros listados em `errors[]`), `500` erro interno.
+  - Formato canônico: `{ "error": "...", "errors": [...] }`.
+- **Limites**:
+  - Bulk: máx **500 registros** por chamada `/clients/bulk` (extraído do código).
+  - Paginação: `limit` máx 500 (clients) / 200 (agreements/payments), default 100/50.
+  - Rate-limit: documentar política atual (Supabase Edge default) e indicar header `Retry-After` se aplicado.
+- **Multi-credor**: como funciona escopo de chave, listar credores via `GET /credores`, qual valor usar em `credor` (string = `nome_fantasia` ou `razao_social`), regra de `enforceCredor` que sobrescreve.
+- **Sandbox**: instruções para criar chave de teste (mesma URL, tenant separado), CPFs de teste sugeridos, como simular conclusão de pagamento (UPDATE manual no painel — admin).
+- **Downloads**: 3 botões → OpenAPI 3.1 YAML, Coleção Postman v2.1, link MCP server (`supabase/functions/mcp-server`).
 
-- Próxima tentativa: o usuário verá no toast uma mensagem real (ex.: `"WhatsApp respondeu HTTP 400: messageId expired"` ou similar), e teremos logs de servidor para fechar o diagnóstico.
-- Se a causa for Gupshup, a opção nem aparece mais no menu.
-- Se a causa for Evolution recusando a edição, fica claro qual o motivo (janela do WhatsApp, JID inválido, instância offline) e pode ser tratado pontualmente.
+### 2. Geração de OpenAPI 3.1
 
-### Fora de escopo
-- Não vamos mudar o limite de 15 min (já é regra do produto).
-- Não vamos implementar uma forma alternativa de "edição" (envio de nova mensagem citando) sem o usuário pedir.
+Criar arquivo estático `public/api/openapi.yaml` cobrindo todos os endpoints, schemas e respostas. Endpoint público para baixar: `https://rivoconnect.com/api/openapi.yaml`. Botão "Download" e "Abrir no Swagger UI" (`https://editor.swagger.io/?url=...`).
+
+### 3. Coleção Postman
+
+Criar `public/api/rivo-connect.postman_collection.json` com variáveis `{{baseUrl}}` e `{{apiKey}}` e exemplos de cada endpoint.
+
+### 4. Atualizar `ApiDocsPublicPage.tsx`
+
+Refletir as mesmas seções (sem aba de gerenciamento de chaves nem logs de importação) — é a página linkável para devs externos.
+
+### 5. Email pronto para o cliente
+
+Bloco copiável dentro da aba "Início" com **resposta consolidada** ao questionário recebido, para que o usuário possa enviar diretamente ao time da Y Brasil sem reescrever.
+
+## Arquivos a alterar / criar
+
+- `src/pages/ApiDocsPage.tsx` — reestruturar abas e conteúdo.
+- `src/pages/ApiDocsPublicPage.tsx` — espelhar conteúdo público.
+- `src/components/api-docs/SchemaTable.tsx` (novo) — componente reutilizável para tabela de schemas.
+- `src/components/api-docs/ErrorTable.tsx` (novo) — tabela de erros.
+- `src/components/api-docs/EndpointReference.tsx` (novo) — card de endpoint com request/response/erros, evolução do `EndpointCard` atual.
+- `public/api/openapi.yaml` (novo).
+- `public/api/rivo-connect.postman_collection.json` (novo).
+- `docs/API_REFERENCE.md` (novo) — markdown idêntico ao da página, para versionar.
+
+## Detalhes técnicos
+
+- Base URL exibida: `https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api` (já hardcoded em `BASE_URL`).
+- Schemas extraídos diretamente de `clients-api/index.ts` (validators `validateClientRecord`, `buildClientRow`) para evitar drift.
+- OpenAPI usará `securitySchemes.ApiKeyAuth` com `in: header, name: X-API-Key`.
+- Respeitar tema RIVO (laranja primário) e padrão dos componentes shadcn já em uso.
+
+## Fora de escopo
+
+- Implementar webhooks de pagamento (apenas documentar estado atual / roadmap).
+- Endpoints de cancelamento de cobrança (`POST /payments/:id/cancel`) — não existem hoje; serão marcados como "Em breve".
+- Implementar idempotency-key real (será marcado como "use `external_id` ou `cod_contrato` como chave funcional de idempotência" — comportamento atual de upsert).

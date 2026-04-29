@@ -3,8 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Copy, Code2, BookOpen, Zap, Shield, CreditCard, Handshake, Globe, MessageSquare, Bell, Settings2, AlertTriangle, Server } from "lucide-react";
+import { CheckCircle2, Copy, Code2, BookOpen, Zap, Shield, CreditCard, Handshake, Globe, MessageSquare, Bell, Settings2, AlertTriangle, Server, FileJson } from "lucide-react";
 import McpServerTab from "@/components/api-docs/McpServerTab";
+import ApiReference from "@/components/api-docs/ApiReference";
 
 const BASE_URL = "https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api";
 
@@ -71,11 +72,16 @@ export default function ApiDocsPublicPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        <Tabs defaultValue="rest" className="space-y-4">
+        <Tabs defaultValue="reference" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="reference" className="gap-2"><FileJson className="w-4 h-4" /> Referência</TabsTrigger>
             <TabsTrigger value="rest" className="gap-2"><Code2 className="w-4 h-4" /> REST API</TabsTrigger>
             <TabsTrigger value="mcp" className="gap-2"><Server className="w-4 h-4" /> MCP Server</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="reference">
+            <ApiReference />
+          </TabsContent>
 
           <TabsContent value="rest" className="space-y-2">
         {/* URL Base */}
