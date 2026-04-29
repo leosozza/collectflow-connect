@@ -41,26 +41,27 @@ const AchievementsTab = ({ isAdmin = false }: AchievementsTabProps) => {
   const earned = isAdmin ? allEarned : myEarned;
   const isLoading = isAdmin ? loadingAll : loadingMy;
 
+  const [operatorFilter, setOperatorFilter] = useState<string>("all");
+  const operators = useMemo(() => {
+    const map = new Map<string, string>();
+    (earned as any[]).forEach((a) => {
+      if (a.profile_id) map.set(a.profile_id, a.profiles?.full_name || "—");
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [earned]);
+
   if (isLoading) {
     return <div className="text-center py-12 text-muted-foreground text-sm">Carregando conquistas...</div>;
   }
 
   // Admin: show list with operator names + filter by operator
   if (isAdmin) {
-    const operators = useMemo(() => {
-      const map = new Map<string, string>();
-      (earned as any[]).forEach((a) => {
-        if (a.profile_id) map.set(a.profile_id, a.profiles?.full_name || "—");
-      });
-      return Array.from(map.entries())
-        .map(([id, name]) => ({ id, name }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-    }, [earned]);
-
-    const [operatorFilter, setOperatorFilter] = useState<string>("all");
     const filtered = operatorFilter === "all"
       ? earned
       : (earned as any[]).filter((a) => a.profile_id === operatorFilter);
+
 
     return (
       <div className="space-y-4">
