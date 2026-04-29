@@ -617,7 +617,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             <FileText className="w-3 h-3" /> Parcelas do Acordo
           </p>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{paidCount}/{totalInstallments} pagas</span>
+            <span className="text-xs text-muted-foreground">{paidCount}/{activeInstallmentsCount} pagas</span>
             <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
           </div>
         </button>
@@ -629,7 +629,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           style={{ width: `${progressPercent}%` }}
         />
         <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground mix-blend-difference">
-          {paidCount}/{totalInstallments} pagas
+          {paidCount}/{activeInstallmentsCount} pagas
         </span>
       </div>
 
