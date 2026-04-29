@@ -43,7 +43,7 @@ export default function ParcelasProgramadasCard({
   ).length;
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full flex flex-col">
+    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full h-full flex flex-col min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -128,7 +128,7 @@ export default function ParcelasProgramadasCard({
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">para esta data</p>
         </div>
       ) : (
-        <div className="overflow-auto max-h-[420px]">
+        <div className="flex-1 min-h-0 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border hover:bg-transparent">
