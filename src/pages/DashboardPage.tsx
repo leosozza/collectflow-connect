@@ -458,7 +458,7 @@ const DashboardPage = () => {
       >
         <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(140px,auto)] items-stretch"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(200px,auto)] items-stretch"
             style={{ gridAutoFlow: "dense" }}
           >
             {visibleOrder.map((id) => (
