@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -8,42 +7,53 @@ interface SortableCardProps {
   id: string;
   /** Tailwind col-span classes (e.g. "lg:col-span-6"). Defaults to full width. */
   spanClassName?: string;
+  /** When true, the original card slot is shown as an empty placeholder (the active item is rendered in DragOverlay). */
+  isPlaceholder?: boolean;
   children: ReactNode;
 }
 
 /**
  * Generic drag-and-drop wrapper used by the Dashboard grid.
- * Renders a small grab handle in the top-right corner (visible on hover).
+ *
+ * Visual stability: while a card is being dragged, the OTHER cards in the grid
+ * stay completely still — no transforms are applied to siblings. The active
+ * card itself is replaced by a subtle dashed placeholder, and the actual
+ * preview is rendered through `DragOverlay` (handled by the parent).
+ *
+ * The slot under the cursor receives a soft ring highlight so the user can
+ * see exactly where the card will land on drop.
  */
 export default function SortableCard({
   id,
   spanClassName = "col-span-1",
+  isPlaceholder = false,
   children,
 }: SortableCardProps) {
   const {
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
     isDragging,
+    isOver,
   } = useSortable({ id });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      // Intentionally NO transform/transition: we don't want neighbors to
+      // shuffle while the user is dragging. Reordering happens once on drop.
       className={cn(
-        "relative group min-w-0 h-full [&>*]:h-full",
+        "relative group min-w-0 h-full min-h-0 [&>*]:h-full",
         spanClassName,
-        isDragging && "z-50 opacity-80"
+        isOver && !isDragging && "ring-2 ring-primary/50 rounded-xl transition-shadow",
       )}
     >
+      {isPlaceholder || isDragging ? (
+        <div className="h-full w-full rounded-xl border-2 border-dashed border-primary/40 bg-primary/5" />
+      ) : (
+        children
+      )}
+
       {/* Drag handle — visible on hover, placed on the left to avoid header action overlap */}
       <button
         type="button"
@@ -59,7 +69,6 @@ export default function SortableCard({
       >
         <GripVertical className="w-3 h-3" />
       </button>
-      {children}
     </div>
   );
 }

@@ -46,7 +46,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v6";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v7";
 
 function sanitize(raw: any): DashboardLayout {
   try {

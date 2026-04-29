@@ -157,7 +157,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   const isPositive = diffPct !== null && diffPct >= 0;
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm w-full flex flex-col overflow-hidden">
+    <div className="bg-card rounded-xl border border-border shadow-sm w-full h-full flex flex-col overflow-hidden min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
@@ -216,7 +216,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
         </div>
       </div>
 
-      <div className="h-[90px] sm:h-[110px] w-full px-1 pb-2">
+      <div className="flex-1 min-h-0 w-full px-1 pb-2">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={series} margin={{ top: 10, right: 8, left: 8, bottom: 0 }}>
             <defs>

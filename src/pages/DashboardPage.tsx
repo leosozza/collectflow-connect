@@ -30,6 +30,8 @@ import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout
 import {
   DndContext,
   DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
   PointerSensor,
   KeyboardSensor,
   useSensor,
@@ -251,11 +253,18 @@ const DashboardPage = () => {
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const [activeId, setActiveId] = useState<DashboardBlockId | null>(null);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as DashboardBlockId);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = layout.order.indexOf(active.id as DashboardBlockId);
@@ -263,6 +272,8 @@ const DashboardPage = () => {
     if (oldIndex < 0 || newIndex < 0) return;
     setLayout({ ...layout, order: arrayMove(layout.order, oldIndex, newIndex) });
   };
+
+  const handleDragCancel = () => setActiveId(null);
 
   const trendAcionados = stats ? pctDelta(acionadosHoje, stats.acionados_ontem ?? 0) : null;
   const trendAcordosDia = stats ? pctDelta(stats.acordos_dia ?? 0, stats.acordos_dia_anterior ?? 0) : null;
@@ -338,7 +349,7 @@ const DashboardPage = () => {
   const visibleOrder = layout.order.filter((id) => layout.visible[id]);
 
   return (
-    <div className="flex flex-col gap-4 animate-fade-in h-full min-h-0">
+    <div className="flex flex-col gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
       {/* Header with filters */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
@@ -410,20 +421,34 @@ const DashboardPage = () => {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 auto-rows-[minmax(220px,auto)] items-stretch"
-            style={{ gridAutoFlow: "dense" }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 flex-1 min-h-0 items-stretch"
+            style={{ gridTemplateRows: "repeat(2, minmax(0, 1fr))" }}
           >
             {visibleOrder.map((id) => (
-              <SortableCard key={id} id={id} spanClassName={SPAN_CLASS[id]}>
+              <SortableCard
+                key={id}
+                id={id}
+                spanClassName={SPAN_CLASS[id]}
+                isPlaceholder={activeId === id}
+              >
                 {renderBlock(id)}
               </SortableCard>
             ))}
           </div>
         </SortableContext>
+        <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+          {activeId ? (
+            <div className="h-full w-full opacity-95 shadow-2xl rounded-xl ring-2 ring-primary/50 pointer-events-none">
+              {renderBlock(activeId)}
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
 
       <CustomizeDashboardDialog
