@@ -947,6 +947,7 @@ export const reopenAgreement = async (
       await supabase
         .from("clients")
         .update(updatePayload)
+        .eq("tenant_id", agreement.tenant_id)
         .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
         .eq("credor", agreement.credor)
         .in("status", ["pendente", "vencido", "quebrado"]);
