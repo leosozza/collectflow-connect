@@ -70,13 +70,21 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
   const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (isInternalMode && onSendInternalNote) {
+    // Limpa imediatamente para liberar a UI — o envio é fire-and-forget
+    // (o pai já implementa optimistic UI, então a mensagem aparece na hora).
+    setText("");
+    const wasInternal = isInternalMode;
+    setIsInternalMode(false);
+    if (wasInternal && onSendInternalNote) {
       onSendInternalNote(trimmed);
     } else {
       onSend(trimmed);
     }
-    setText("");
-    setIsInternalMode(false);
+    // Mantém o foco no textarea para que o operador possa digitar a próxima
+    // mensagem sem precisar clicar de novo.
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

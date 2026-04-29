@@ -1,82 +1,95 @@
 ## Problema
 
-A operadora **Sabrina** (role `operador`, tenant Maxfama) entra em **Financeiro → Acordos** e vê **"Nenhum acordo encontrado"**, mesmo tendo **13 acordos criados** (11 ativos) no banco.
+Ao enviar mensagem no WhatsApp do Contact Center:
 
-## Diagnóstico
+1. **Demora ~3s perceptíveis** entre apertar Enter e a mensagem "sumir" do campo de digitação.
+2. **Foco é perdido**: o operador precisa clicar de novo no textarea para escrever a próxima mensagem.
 
-Confirmei via banco:
-- Sabrina: `user_id=7766f9ab…`, `tenant_id=39a450f8…`, role `operador`.
-- 13 acordos com `created_by = user_id dela` (Adriana, Núbia, Mariana, Líbia, Letícia, Vanessa, Samara, Valdenia, Josiane, etc.).
-- RLS de `agreements` permite `tenant_id = get_my_tenant_id()` ✓.
+## Causa raiz
 
-A consulta do servidor está correta. O problema está no **filtro client-side da página `AcordosPage`**:
+No `WhatsAppChatLayout.tsx → handleSend`:
+```ts
+setSending(true);
+try {
+  await sendTextMessage(...)  // ~3s aguardando edge function + WhatsApp API
+} finally {
+  setSending(false);
+}
+```
 
-1. O default é `selectedMonth = mês atual` + aba `vigentes`.
-2. Em modo mês, a aba "Vigentes" só mostra acordos cuja **parcela do mês selecionado** é classificada como `vigente` (não vencida, não paga).
-3. Vários acordos da Sabrina têm `first_due_date` em datas como 15/04, 17/04, 18/04 — hoje (29/04) já estão **vencidos** → caem na aba "Vencidos", não "Vigentes".
-4. Outros têm `first_due_date` em 30/04 ou maio — caem em "vigentes" só se a busca incluir maio.
-5. Acordos com status global `pending` (a maioria dos dela) **só aparecem na aba "Vigentes" quando `selectedMonth = "todos"`**; em modo mês, vira critério por parcela.
-6. Resultado: ela vê 0 acordos nas abas, especialmente se nenhuma parcela cair exatamente no mês corrente como "vigente".
+Esse `sending=true` é propagado até `ChatInput`:
+```tsx
+<ChatInput disabled={sending || conversation.status === "waiting"} ... />
+```
 
-Há também um problema de **descoberta**: ela não tem indicação visual de quantos acordos existem em outras abas/meses, então conclui que "não tem nada".
+E o `<Textarea disabled={disabled}>` faz o navegador **remover o foco** do input enquanto está desabilitado. Quando libera, o foco não volta sozinho.
+
+Já existe **optimistic UI** (a mensagem aparece imediatamente no chat com status "sending"), então **não há motivo para bloquear o input** enquanto a edge function processa em segundo plano.
+
+Adicionalmente, o `ChatInput.handleSend` limpa o texto **depois** de chamar `onSend`, e como a chamada é assíncrona no caminho real, há um pequeno delay extra antes do textarea ficar vazio.
 
 ## Solução
 
-### 1. Mostrar contadores por aba (status filter)
+### 1. `ChatInput.tsx`
 
-Calcular e exibir o número de acordos em cada aba (Pagos / Vigentes / Vencidos / Aguardando Liberação / Cancelados / Confirmação) usando o conjunto já filtrado por credor + operador + busca + período. Assim Sabrina vê imediatamente "Vencidos (5)" ou "Vigentes (3)" e não fica perdida.
+- **Limpar o texto e voltar o foco imediatamente**, antes de invocar `onSend`. Como o envio é fire-and-forget pela ótica do componente, a UI fica responsiva instantaneamente.
+- Adicionar `requestAnimationFrame` + `textareaRef.current?.focus()` após o envio para garantir que o cursor permaneça no campo (Enter já está dentro do textarea, mas após o disabled toggling do pai o foco era perdido).
 
-### 2. Botão "Ver todos os meses" quando lista vier vazia
+```tsx
+const handleSend = () => {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  setText("");                         // limpa AGORA
+  const wasInternal = isInternalMode;
+  setIsInternalMode(false);
+  if (wasInternal && onSendInternalNote) onSendInternalNote(trimmed);
+  else onSend(trimmed);
+  requestAnimationFrame(() => textareaRef.current?.focus());
+};
+```
 
-Quando `filteredAgreements.length === 0` mas `agreements.length > 0`, exibir uma mensagem amigável:
-> "Você tem N acordos, mas nenhum corresponde aos filtros atuais."
-> [Botão: "Ver todos os meses"] que faz `setSelectedMonth("todos")`.
+### 2. `ChatPanel.tsx` — desacoplar `disabled` do `sending`
 
-### 3. Aba "Vigentes" inclusiva no modo mês
+Hoje:
+```tsx
+<ChatInput disabled={sending || conversation.status === "waiting"} ... />
+```
 
-Hoje, em modo mês, "Vigentes" só mostra parcelas com `cls === "vigente"`. Ajuste:
-- Continuar mostrando parcelas vigentes do mês.
-- **Adicionalmente**, mostrar acordos com status global `pending` cuja **primeira parcela ainda não venceu** (ou que não têm nenhuma parcela vencida ainda) — para que acordos recém-criados apareçam mesmo sem parcela exatamente no mês.
+Como há optimistic UI, **não precisamos travar o input durante o `sending`**. Basta travar quando a conversa está em `waiting` (estado real onde o operador não pode responder). Mantemos o `sending` apenas para outros indicadores (ex.: spinner em botões de mídia, se houver).
 
-Alternativa mais simples e segura: alterar o default de `selectedMonth` para `"todos"` (inicial), e a partir daí ela navega por meses se quiser. Isso evita confusão para todos os operadores.
+```tsx
+<ChatInput disabled={conversation.status === "waiting"} ... />
+```
 
-### 4. Indicação visual do escopo
+Botões de anexo/áudio podem continuar usando `sending` se necessário, mas isso é separado e pode ser mantido como está sem impacto no campo de texto.
 
-Acima da lista, mostrar uma linha:
-> "Mostrando seus acordos" (não-admin) ou "Mostrando todos os acordos do tenant" (admin).
+### 3. `WhatsAppChatLayout.tsx → handleSend` — não aguardar bloqueando UX
 
-Assim a Sabrina entende que está vendo só os dela e o admin entende que vê tudo.
+A função continua `async` (precisamos do `try/catch` para marcar mensagem como falha), mas removemos `setSending(true/false)` do redor da chamada de texto. O estado de erro é refletido na própria mensagem otimista (status `failed`), que é o padrão do WhatsApp.
 
-## Arquivos afetados
-
-- `src/pages/AcordosPage.tsx` — adicionar contadores nas abas, mensagem de vazio com CTA, alterar default de `selectedMonth` para `"todos"`, badge de escopo.
-- `src/components/acordos/AgreementsList.tsx` — opcionalmente, melhorar o estado vazio com instrução.
-
-## Detalhe técnico
+Para mídia/áudio (que dependem de upload e não têm UI otimista equivalente), `setSending` permanece — esses fluxos justificam o bloqueio temporário.
 
 ```ts
-// Contadores por aba
-const counts = useMemo(() => {
-  const c = { vigentes: 0, approved: 0, overdue: 0, pending_approval: 0, cancelled: 0, payment_confirmation: 0 };
-  for (const a of classifiedAgreements) {
-    const cls = (a as any)._installmentClass;
-    if (a.status === "pending_approval") c.pending_approval++;
-    else if (a.status === "cancelled") c.cancelled++;
-    else if (cls === "pago" || a.status === "approved") c.approved++;
-    else if (cls === "vencido" || a.status === "overdue") c.overdue++;
-    else if (cls === "pending_confirmation") c.payment_confirmation++;
-    else c.vigentes++;
+const handleSend = async (text, replyToMessageId) => {
+  // ... constrói optimisticMsg e adiciona ao state
+  try {
+    await sendTextMessage(...);
+  } catch (err) {
+    setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: "failed" } : m));
+    toast.error(err.message || "Erro ao enviar mensagem");
   }
-  return c;
-}, [classifiedAgreements]);
-
-// Default mês
-const [selectedMonth, setSelectedMonth] = useUrlState("month", "todos");
+  // sem setSending
+};
 ```
 
 ## Resultado esperado
 
-Sabrina abre Financeiro → Acordos:
-- Vê imediatamente todos os 11 acordos ativos dela (default "todos os meses").
-- Cada aba mostra o contador, evidenciando onde cada acordo está.
-- Se filtrar por mês e zerar, vê CTA para voltar a "todos".
+- Pressionar Enter: o texto desaparece do campo **imediatamente**, a mensagem aparece no chat com status "sending" (relógio), e o cursor permanece no textarea pronto para a próxima mensagem.
+- O envio real à edge function continua acontecendo em background; quando o Realtime entrega a confirmação, a mensagem otimista é substituída pela real (status "sent"/"delivered").
+- Se falhar, a mensagem otimista vira "failed" no chat e um toast aparece.
+
+## Arquivos afetados
+
+- `src/components/contact-center/whatsapp/ChatInput.tsx` — limpar texto + focus antes do `onSend`.
+- `src/components/contact-center/whatsapp/ChatPanel.tsx` — remover `sending` do `disabled` do `ChatInput`.
+- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` — remover `setSending(true/false)` em `handleSend` (apenas no envio de texto). Manter para mídia e áudio.
