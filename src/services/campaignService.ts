@@ -188,18 +188,66 @@ export const fetchCampaignParticipants = async (campaignId: string): Promise<Cam
   const operatorIds = [...new Set(data.map((p: any) => p.operator_id))];
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, full_name, avatar_url, role")
+    .select("id, user_id, full_name, avatar_url, role")
     .in("role", ["operador"] as any)
     .in("id", operatorIds);
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-  return (data as CampaignParticipant[]).filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
+  const entries = (data as CampaignParticipant[]).filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
     ...entry,
     rank: idx + 1,
     profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
   }));
+
+  return attachLiveCampaignScores(campaignId, entries, profiles || []);
 };
+
+async function attachLiveCampaignScores(
+  campaignId: string,
+  entries: CampaignParticipant[],
+  profiles: unknown[]
+): Promise<CampaignParticipant[]> {
+  try {
+    const { data: campaign } = await supabase
+      .from("gamification_campaigns")
+      .select("id, tenant_id, metric, start_date, end_date")
+      .eq("id", campaignId)
+      .single();
+    if (!campaign) return entries;
+
+    const tenantId = (campaign as { tenant_id: string }).tenant_id;
+    const metric = (campaign as { metric: string }).metric;
+    const startDate = (campaign as { start_date: string }).start_date;
+    const endDate = (campaign as { end_date: string }).end_date;
+    const endExclusive = new Date(endDate + "T00:00:00");
+    endExclusive.setDate(endExclusive.getDate() + 1);
+    const endExclusiveStr = endExclusive.toISOString().slice(0, 10);
+    const credorNames = await fetchCampaignCredorNames(campaignId, tenantId);
+    const authUidMap = new Map<string, string>(
+      (profiles as Array<{ id: string; user_id?: string | null }>).map((p) => [p.id, p.user_id || p.id])
+    );
+
+    const scored = await Promise.all(entries.map(async (entry) => ({
+      ...entry,
+      score: await computeCampaignScoreFallback({
+        metric,
+        tenantId,
+        authUid: authUidMap.get(entry.operator_id) || entry.operator_id,
+        startDate,
+        endExclusiveStr,
+        credorNames,
+      }),
+    })));
+
+    return scored
+      .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+      .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+  } catch (error) {
+    console.warn("Erro ao calcular placar ao vivo da campanha", campaignId, error);
+    return entries;
+  }
+}
 
 export const upsertParticipantScore = async (params: {
   campaign_id: string;
