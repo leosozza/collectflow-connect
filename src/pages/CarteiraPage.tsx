@@ -494,12 +494,22 @@ const CarteiraPage = () => {
   // preservando seleções feitas em outras páginas.
   const toggleSelectAll = () => {
     const next = new Set(selectedIds);
+    const nextCpfs = new Set(selectedCpfs);
     if (allCurrentPageSelected) {
       allClientIds.forEach((id) => next.delete(id));
+      displayClients.forEach((c: any) => {
+        const cpf = (c.cpf || "").replace(/\D/g, "");
+        if (cpf) nextCpfs.delete(cpf);
+      });
     } else {
       allClientIds.forEach((id) => next.add(id));
+      displayClients.forEach((c: any) => {
+        const cpf = (c.cpf || "").replace(/\D/g, "");
+        if (cpf) nextCpfs.add(cpf);
+      });
     }
     setSelectedIds(next);
+    setSelectedCpfs(nextCpfs);
     setSelectAllFiltered(false);
     setBulkClients(null);
   };
@@ -529,6 +539,8 @@ const CarteiraPage = () => {
     try {
       const allFilteredIds = await fetchAllCarteiraIds(tenant.id, rpcFilters, sortField, sortDir);
       setSelectedIds(new Set(allFilteredIds));
+      // Não tentamos enumerar CPFs aqui: quando selectAllFiltered=true, os
+      // rótulos usam `totalCount` (que já é a contagem de CPFs vinda da RPC).
       setSelectAllFiltered(true);
       setBulkClients(null);
     } catch (err: any) {
@@ -540,14 +552,19 @@ const CarteiraPage = () => {
 
   const toggleSelect = (groupClient: any) => {
     const ids: string[] = groupClient.allIds || [groupClient.id];
+    const cpf = (groupClient.cpf || "").replace(/\D/g, "");
     const next = new Set(selectedIds);
+    const nextCpfs = new Set(selectedCpfs);
     const allSelected = ids.every((id: string) => next.has(id));
     if (allSelected) {
       ids.forEach((id: string) => next.delete(id));
+      if (cpf) nextCpfs.delete(cpf);
     } else {
       ids.forEach((id: string) => next.add(id));
+      if (cpf) nextCpfs.add(cpf);
     }
     setSelectedIds(next);
+    setSelectedCpfs(nextCpfs);
     setBulkClients(null);
   };
 
