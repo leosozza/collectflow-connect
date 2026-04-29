@@ -204,19 +204,17 @@ const DashboardPage = () => {
     });
   };
 
-  // Span (Tailwind classes) per block — col & row spans for the 3-column grid.
-  // Mobile (default): 1 col, 1 row stacking.
-  // Tablet (md, 2 cols): parcelas spans 2 cols.
-  // Desktop (lg, 3 cols): full spec applies.
+  // Span (Tailwind classes) per block — grid 6 colunas no desktop.
+  // Linha 1 (topo): KPIs Operacionais (3 cols) | KPIs Financeiros (3 cols)
+  // Linha 2 (base): Agendamentos (2) | Parcelas (2) | Metas (2)
+  // Linha 3 (extra): Total Recebido (6 cols)
   const SPAN_CLASS: Record<DashboardBlockId, string> = {
-    metas: "col-span-1 row-span-1",
-    totalRecebido: "col-span-1 row-span-1",
-    kpisOperacionais: "col-span-1 row-span-1",
-    agendamentos: "col-span-1 row-span-1",
-    parcelas: "col-span-1 row-span-1",
-    totalQuebra: "col-span-1 row-span-1",
-    pendentes: "col-span-1 row-span-1",
-    colchaoAcordos: "col-span-1 row-span-1",
+    kpisOperacionais: "col-span-1 md:col-span-2 lg:col-span-3 row-span-1",
+    kpisFinanceiros: "col-span-1 md:col-span-2 lg:col-span-3 row-span-1",
+    agendamentos: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
+    parcelas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
+    metas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
+    totalRecebido: "col-span-1 md:col-span-2 lg:col-span-6 row-span-1",
   };
 
   const sensors = useSensors(
@@ -240,88 +238,8 @@ const DashboardPage = () => {
   const trendQuebra = stats ? pctDelta(stats.total_quebra ?? 0, stats.total_quebra_mes_anterior ?? 0, true) : null;
   const trendPendentes = stats ? pctDelta(stats.total_pendente ?? 0, stats.total_pendente_mes_anterior ?? 0, true) : null;
 
-  type KpiSpec = {
-    label: string;
-    value: string;
-    Icon: React.ElementType;
-    iconColor: string;
-    iconBg: string;
-    trend?: { value: string; text: string; isPositive: boolean };
-  };
-
-  const kpiMap: Partial<Record<DashboardBlockId, KpiSpec>> = {
-    totalQuebra: {
-      label: "Total de Quebra",
-      value: formatCurrency(stats?.total_quebra ?? 0),
-      Icon: TrendingDown,
-      iconColor: "text-red-500",
-      iconBg: "bg-red-500/10",
-      trend: trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : undefined,
-    },
-    pendentes: {
-      label: "Pendentes",
-      value: formatCurrency(stats?.total_pendente ?? 0),
-      Icon: Hourglass,
-      iconColor: "text-amber-500",
-      iconBg: "bg-amber-500/10",
-      trend: trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : undefined,
-    },
-    colchaoAcordos: {
-      label: "Colchão de Acordos",
-      value: formatCurrency(stats?.total_projetado ?? 0),
-      Icon: Wallet,
-      iconColor: "text-indigo-500",
-      iconBg: "bg-indigo-500/10",
-    },
-  };
-
-  const renderKpiTile = (item: KpiSpec) => {
-    const ItemIcon = item.Icon;
-    const isMoney = item.value.startsWith("R$");
-    return (
-      <div className="bg-card rounded-xl border border-border shadow-sm px-4 py-3 flex flex-col justify-between min-w-0 h-full">
-        <div className="min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className={cn("rounded-md p-1.5 shrink-0", item.iconBg)}>
-              <ItemIcon className={cn("w-4 h-4", item.iconColor)} />
-            </div>
-          </div>
-          <p className="text-[11px] text-muted-foreground font-medium leading-tight mb-1 break-words">
-            {item.label}
-          </p>
-          <p
-            className={cn(
-              "font-bold text-foreground tabular-nums leading-tight tracking-tight break-words",
-              isMoney ? "text-base" : "text-xl"
-            )}
-          >
-            {item.value}
-          </p>
-        </div>
-        {item.trend && (
-          <div className="mt-2 text-[10px] flex items-center gap-1 flex-wrap leading-tight">
-            <span
-              className={cn(
-                "font-bold tracking-tight",
-                item.trend.isPositive ? "text-success" : "text-destructive"
-              )}
-            >
-              {item.trend.value}
-            </span>
-            <span className="text-muted-foreground font-medium truncate">
-              {item.trend.text}
-            </span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // Renders the inner content for each block id.
   const renderBlock = (id: DashboardBlockId) => {
-    const kpi = kpiMap[id];
-    if (kpi) return renderKpiTile(kpi);
-
     switch (id) {
       case "kpisOperacionais":
         return (
@@ -329,9 +247,20 @@ const DashboardPage = () => {
             acionadosHoje={acionadosHoje}
             acordosDia={stats?.acordos_dia ?? 0}
             acordosMes={stats?.acordos_mes ?? 0}
+            ticketMedioDia={ticketMedioDia}
             trendAcionados={trendAcionados}
             trendAcordosDia={trendAcordosDia}
             trendAcordosMes={trendAcordosMes}
+          />
+        );
+      case "kpisFinanceiros":
+        return (
+          <KpisFinanceirosCard
+            quebra={stats?.total_quebra ?? 0}
+            pendentes={stats?.total_pendente ?? 0}
+            colchao={stats?.total_projetado ?? 0}
+            trendQuebra={trendQuebra}
+            trendPendentes={trendPendentes}
           />
         );
       case "metas":
