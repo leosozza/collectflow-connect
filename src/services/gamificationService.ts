@@ -71,13 +71,14 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
 
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, full_name, avatar_url")
+    .select("id, full_name, avatar_url, role")
     .eq("tenant_id", tenantId)
+    .in("role", ["operador", "supervisor", "gerente"] as any)
     .in("id", operatorIds);
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-  return filteredPoints.map((entry, idx) => ({
+  return filteredPoints.filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
     ...entry,
     profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
     position: idx + 1,
