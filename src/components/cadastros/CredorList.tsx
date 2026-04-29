@@ -13,10 +13,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 const CredorList = () => {
   const { tenant } = useTenant();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
 
   const { data: credores = [], isLoading } = useQuery({
     queryKey: ["credores", tenant?.id],
