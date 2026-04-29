@@ -97,10 +97,9 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
-  const [editorTab, setEditorTab] = useState<string>("editor");
   const [confirmSaveInvalid, setConfirmSaveInvalid] = useState(false);
   const [invalidKeys, setInvalidKeys] = useState<string[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<A4LiveEditorHandle>(null);
 
   const { data: tenantTemplates } = useQuery({
     queryKey: ["document-templates-fallback", tenantId],
