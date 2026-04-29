@@ -268,6 +268,7 @@ export type Database = {
           approved_by: string | null
           boleto_pendente: boolean
           cancellation_type: string | null
+          cancelled_installments: Json
           checkout_token: string | null
           client_cpf: string
           client_name: string
@@ -303,6 +304,7 @@ export type Database = {
           approved_by?: string | null
           boleto_pendente?: boolean
           cancellation_type?: string | null
+          cancelled_installments?: Json
           checkout_token?: string | null
           client_cpf: string
           client_name: string
@@ -338,6 +340,7 @@ export type Database = {
           approved_by?: string | null
           boleto_pendente?: boolean
           cancellation_type?: string | null
+          cancelled_installments?: Json
           checkout_token?: string | null
           client_cpf?: string
           client_name?: string
