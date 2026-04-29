@@ -7086,6 +7086,7 @@ export type Database = {
           credor: string
           effective_status: string
           numero_parcela: number
+          total_parcelas: number
           valor_parcela: number
         }[]
       }
