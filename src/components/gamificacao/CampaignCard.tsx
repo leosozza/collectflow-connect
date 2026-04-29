@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { forwardRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,7 @@ const isValidDateString = (s?: string | null): boolean => {
   return y >= 2000 && y <= 2100;
 };
 
-const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
+const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, currentUserId }, ref) => {
   const queryClient = useQueryClient();
 
   const { data: participants = [] } = useQuery({
@@ -67,7 +67,7 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
   const isActive = datesValid && campaign.status === "ativa" && daysLeft >= 0;
 
   return (
-    <Card className="border-border">
+    <Card ref={ref} className="border-border">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -159,6 +159,8 @@ const CampaignCard = ({ campaign, currentUserId }: CampaignCardProps) => {
       </CardContent>
     </Card>
   );
-};
+});
+
+CampaignCard.displayName = "CampaignCard";
 
 export default CampaignCard;
