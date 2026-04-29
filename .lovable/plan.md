@@ -1,70 +1,138 @@
 ## Objetivo
 
-Reorganizar a primeira linha do Dashboard para ficar **exatamente** como na imagem de referência: 3 cards lado a lado com larguras/alturas iguais — **Agendamentos** (esq), **Parcelas Programadas** (centro), **Meta do Mês** (dir) — e refazer o gráfico de Meta como um **velocímetro tricolor** (vermelho → amarelo → verde) com ponteiro animado.
+Reorganizar o Dashboard num grid **6 colunas × 2 linhas**:
 
-Os demais cards (KPIs, Total Recebido, Quebra, Pendentes, Colchão) **mantêm o visual atual**, apenas ajustam-se para caber no novo padrão de altura do grid.
+- **Linha 1 (topo)**: KPIs operacionais (4 tiles coloridos) + card consolidado Quebra/Pendentes/Colchão.
+- **Linha 2 (base)**: Agendamentos (esq) | Parcelas Programadas (centro) | Meta (dir) — cada um ocupando 2 colunas.
+
+Criar novo KPI **Ticket Médio dos Acordos do Dia** e consolidar Quebra+Pendentes+Colchão num card único de 3 tiles internos.
 
 ## Layout do grid
 
-### Linha 1 (referência da imagem) — 3 colunas iguais
 ```text
-┌──────────────────┬──────────────────┬──────────────────┐
-│ Agendamentos     │ Parcelas Progr.  │ Meta do Mês      │
-│ para Hoje        │ (HOJE / nav)     │ (gauge tricolor) │
-└──────────────────┴──────────────────┴──────────────────┘
+Linha 1 (topo):
+┌──────────────────────────┬──────────────────────────┐
+│ KPIs Operacionais        │ Quebra | Pend. | Colchão │
+│ 4 tiles coloridos        │ 3 tiles num card         │
+│ (Acionados | Ac.Dia |    │                          │
+│  Ac.Mês | Ticket Médio)  │                          │
+│ 3 cols × 1 row           │ 3 cols × 1 row           │
+├──────────────┬───────────┴────────┬─────────────────┤
+│ Agendamentos │ Parcelas           │ Meta (gauge)    │
+│ Hoje         │ Programadas        │ altura fixa     │
+│ 2 cols × 1   │ 2 cols × 1         │ 2 cols × 1      │
+└──────────────┴────────────────────┴─────────────────┘
+Linha 2 (base)
 ```
 
-- Cada um ocupa **1 coluna × 1 linha** (3 slots horizontais).
-- Altura fixa do slot: aumentar `auto-rows` para `minmax(180px, auto)` (hoje é 140px) para acomodar o gauge confortavelmente, igual à imagem.
+Tailwind: `grid-cols-1 md:grid-cols-2 lg:grid-cols-6` com `auto-rows-[minmax(220px,auto)]`.
 
-### Linhas seguintes
-- Demais blocos (KPIs Operacionais, Total Recebido, Quebra, Pendentes, Colchão) seguem o grid 3-col existente — **mesmo visual atual**, apenas respeitando a nova altura mínima do slot.
+Spans (desktop `lg`):
+- `kpisOperacionais`: `lg:col-span-3 lg:row-span-1`
+- `kpisFinanceiros`: `lg:col-span-3 lg:row-span-1`
+- `agendamentos`: `lg:col-span-2 lg:row-span-1`
+- `parcelas`: `lg:col-span-2 lg:row-span-1`
+- `metas`: `lg:col-span-2 lg:row-span-1`
+- `totalRecebido` (gráfico): `lg:col-span-6 lg:row-span-2` (linha extra abaixo, opcional — mantém visível mas não obrigatório no topo).
+
+Comportamento de altura:
+- **Meta**: `max-h-[220px]` no card raiz. Não cresce mesmo se reposicionado.
+- **Agendamentos**: cresce até a altura da linha (mesma do Parcelas), com `overflow-auto` interno na lista quando excede.
+- **Parcelas**: mantém altura referência atual.
+- **KPIs Operacionais (4 tiles) e KPIs Financeiros (3 tiles)**: altura compacta da linha 1 (~220px), tiles preenchem `h-full`.
 
 ## Mudanças por arquivo
 
 ### 1. `src/hooks/useDashboardLayout.ts`
-- Reordenar `DEFAULT_DASHBOARD_LAYOUT.order` para que a primeira linha seja exatamente: `agendamentos`, `parcelas`, `metas`.
-- Bump versão storage: `v4` → `v5` para invalidar layouts salvos e aplicar a nova ordem padrão.
+- Substituir IDs `totalQuebra`, `pendentes`, `colchaoAcordos` por **um único** `kpisFinanceiros`.
+- Nova ordem padrão (topo → base):
+  ```
+  ["kpisOperacionais", "kpisFinanceiros", "agendamentos", "parcelas", "metas", "totalRecebido"]
+  ```
+- Atualizar `ALL_DASHBOARD_BLOCKS` e `visible` defaults.
+- Bump versão storage: `v5` → `v6` para invalidar layouts antigos.
 
 ### 2. `src/pages/DashboardPage.tsx`
-- `SPAN_CLASS`:
-  - `agendamentos`: `col-span-1 row-span-1`
-  - `parcelas`: **mudar de `md:col-span-2`** para `col-span-1 row-span-1` (uniforme com os outros dois).
-  - `metas`: `col-span-1 row-span-1`
-  - Demais permanecem como estão.
-- Container do grid: aumentar altura mínima das linhas → `auto-rows-[minmax(180px,auto)]`.
+- Mudar grid para `grid-cols-1 md:grid-cols-2 lg:grid-cols-6` com `auto-rows-[minmax(220px,auto)]`.
+- Atualizar `SPAN_CLASS` conforme tabela acima.
+- Adicionar query nova para ticket médio do dia (ver snippet abaixo).
+- Remover entradas antigas `totalQuebra`/`pendentes`/`colchaoAcordos` do `kpiMap` e do `renderBlock`.
+- Adicionar caso `kpisFinanceiros` no `renderBlock` retornando `<KpisFinanceirosCard ... />`.
+- Passar `ticketMedioDia` para `<KpisOperacionaisCard />`.
 
-### 3. `src/components/dashboard/MetaGaugeCard.tsx` (refatoração visual completa)
-Substituir o gauge atual (radial laranja com gradiente) por **velocímetro tricolor** semelhante ao da imagem:
+### 3. `src/components/dashboard/KpisOperacionaisCard.tsx`
+- Mudar de `grid-cols-3` para `grid-cols-4`.
+- Adicionar 4º tile: **Ticket Médio Dia** (gradient teal/cyan: `from-teal-500 to-cyan-600`, ícone `Receipt`).
+- Aceitar nova prop `ticketMedioDia: number` e formatar com `formatCurrency`.
 
-- **Semicírculo** com 3 segmentos contíguos:
-  - Vermelho (`hsl(var(--destructive))`) de 0% a 33,33%
-  - Amarelo (`hsl(48 96% 53%)`) de 33,33% a 66,66%
-  - Verde (`hsl(142 71% 45%)`) de 66,66% a 100%
-- **Ponteiro** preto/foreground triangular animado com `framer-motion`, gira de -90° (esquerda) a +90° (direita) conforme o `percent`.
-- **Hub central** circular com furo interno (estilo relógio).
-- **% no centro** abaixo do gauge.
-- **Lado esquerdo** do componente: bloco textual com:
-  - `R$ XX.XXX,XX` em destaque + label "Meta Recebimento"
-  - `R$ XX.XXX,XX` em destaque + label "Realizado"
-  - Linha pequena: `01/MM/AA à DD/MM/AA`
-- Layout: `flex items-center justify-between` — texto à esquerda, gauge à direita, ocupando toda a largura/altura do card.
+### 4. `src/components/dashboard/KpisFinanceirosCard.tsx` (NOVO)
+- Card único `bg-card rounded-xl border border-border shadow-sm h-full p-1.5`.
+- `grid-cols-3 gap-1.5 h-full` contendo 3 tiles internos no mesmo padrão visual atual:
+  - **Total de Quebra** (vermelho) — ícone `TrendingDown`
+  - **Pendentes** (âmbar) — ícone `Hourglass`
+  - **Colchão de Acordos** (índigo) — ícone `Wallet`
+- Usar mesmo estilo de tile usado em `renderKpiTile` atual (label, valor, trend opcional).
+- Props: `quebra`, `pendentes`, `colchao`, `trendQuebra`, `trendPendentes`.
 
-### 4. `src/components/dashboard/DashboardMetaCard.tsx`
-- Remover o header com ícone Trophy (a imagem mostra só "Metas" como título sutil).
-- Adicionar header simples: "**Metas**" no canto superior esquerdo, padding reduzido.
-- O `MetaGaugeCard` ocupa o restante do card (`flex-1`).
-- Reduzir `size` do gauge para se adequar ao slot (~`size={160}`).
-- Manter toda a lógica de busca de meta (operador vs admin, `myGoal`/`allGoals`/`selectedProfile`) **inalterada**.
+### 5. `src/components/dashboard/MetaGaugeCard.tsx` + `DashboardMetaCard.tsx`
+- Reduzir `size` default do gauge para `150`.
+- Adicionar `max-h-[220px] overflow-hidden` no card raiz do `DashboardMetaCard`.
+- Layout interno mantido (esquerda: Meta/Realizado/período; direita: gauge).
+
+### 6. `src/components/dashboard/AgendamentosHojeCard.tsx`
+- Container raiz: `flex flex-col h-full max-h-full`.
+- Substituir `max-h-[200px]` da lista por `flex-1 overflow-auto min-h-0` (scroll quando exceder altura disponível, cresce até o limite da linha).
+
+### 7. `src/components/dashboard/CustomizeDashboardDialog.tsx`
+- Atualizar lista de blocos: remover `totalQuebra/pendentes/colchaoAcordos`, adicionar `kpisFinanceiros` e `kpisOperacionais` (se ainda não estiver).
+
+## Novo KPI: Ticket Médio dos Acordos do Dia
+
+Calculado client-side (sem migration) em `DashboardPage.tsx`:
+
+```typescript
+const { data: ticketMedioDia = 0 } = useQuery({
+  queryKey: ["dashboard-ticket-medio-dia", rpcUserId, rpcUserIdsKey, profile?.tenant_id],
+  queryFn: async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    let q = supabase
+      .from("agreements")
+      .select("entrada_value, new_installment_value, custom_installment_values, created_by")
+      .eq("tenant_id", profile!.tenant_id!)
+      .gte("created_at", `${today}T00:00:00Z`)
+      .lte("created_at", `${today}T23:59:59Z`)
+      .not("status", "in", "(cancelled,rejected)");
+    if (rpcUserIds) q = q.in("created_by", rpcUserIds);
+    else if (rpcUserId) q = q.eq("created_by", rpcUserId);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data?.length) return 0;
+    const total = data.reduce((acc, a: any) => {
+      const civ = a.custom_installment_values || {};
+      const v = a.entrada_value > 0
+        ? Number(civ.entrada ?? a.entrada_value)
+        : Number(civ["1"] ?? a.new_installment_value ?? 0);
+      return acc + v;
+    }, 0);
+    return total / data.length;
+  },
+  enabled: !!profile?.tenant_id,
+  refetchInterval: 60_000,
+});
+```
+
+(Mesma lógica do RPC `get_dashboard_stats` para `_negociado`, restrita a hoje.)
 
 ## Resultado esperado
 
-- Primeira linha do dashboard idêntica à referência: 3 cards retangulares de mesmo tamanho.
-- Meta do Mês passa a exibir velocímetro tricolor com ponteiro animado, valores `Meta Recebimento` e `Realizado` à esquerda e período abaixo.
-- Demais cards mantêm visual original — apenas ganham altura mínima maior (180px) para uniformidade visual.
-- Drag-and-drop continua funcionando; layouts antigos do localStorage são invalidados pelo bump `v4 → v5`.
+- Grid 6×2 fixo: linha de cima com KPIs Operacionais (4 tiles) + KPIs Financeiros (Quebra/Pendentes/Colchão num card só); linha de baixo com Agendamentos | Parcelas | Meta, cada um 2 colunas.
+- 4 KPIs operacionais com mesmo padrão de cards coloridos com gradiente, incluindo o novo **Ticket Médio Dia**.
+- Card Meta nunca cresce além de 220px de altura.
+- Agendamentos cresce até a altura da linha de baixo, com scroll interno quando excede.
+- Drag-and-drop continua funcional; bump `v5 → v6` invalida layouts antigos.
 
 ## Restrições
 
-- **Nenhuma** mudança em RPCs, queries, lógica de dados ou cálculo de percentual da meta.
-- KPIs Operacionais (card 3-em-1 azul/verde/laranja) e demais blocos: **visual intacto**.
+- **Sem migration** de banco — Ticket Médio do Dia calculado via query client-side adicional.
+- Lógica de meta, RPCs e demais cálculos **inalterados**.
+- Visual interno dos cards Agendamentos, Parcelas e Meta permanece como já implementado, apenas ajustes de altura/largura.
