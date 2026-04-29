@@ -64,8 +64,7 @@ const DocumentPreviewDialog = ({
 
         <div className="flex-1 overflow-auto bg-muted/30 p-6 flex justify-center">
           <div
-            className="bg-white shadow-lg border border-border/50 w-full max-w-[210mm] min-h-[297mm] p-[25mm_20mm] font-serif text-[13px] leading-[1.7] text-[#1a1a1a]"
-            style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}
+            className="shadow-lg border border-border/50"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </div>
