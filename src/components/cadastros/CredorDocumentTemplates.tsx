@@ -282,7 +282,7 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
 
               <TabsContent value="preview" className="mt-3">
                 <div className="rounded-lg border border-border bg-muted/30 p-4 overflow-auto max-h-[500px]">
-                  <EditorPreview content={editContent} />
+                  <EditorPreview content={editContent} title={editingDocType?.label || "Documento"} credor={form} />
                 </div>
                 <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                   <Info className="w-3 h-3" /> Variáveis substituídas por dados fictícios.
