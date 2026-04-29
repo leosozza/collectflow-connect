@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { formatWhatsAppText, stripWhatsAppMarkers } from "@/lib/whatsappFormat";
