@@ -236,14 +236,15 @@ export const createAgreement = async (
         updatePayload.status_cobranca_id = acordoStatus.id;
       }
 
-      const rawCpf = data.client_cpf.replace(/\D/g, "");
-      const fmtCpf = rawCpf.length === 11
-        ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
-        : rawCpf;
+      const rawCpf2 = data.client_cpf.replace(/\D/g, "");
+      const fmtCpf2 = rawCpf2.length === 11
+        ? `${rawCpf2.slice(0,3)}.${rawCpf2.slice(3,6)}.${rawCpf2.slice(6,9)}-${rawCpf2.slice(9)}`
+        : rawCpf2;
       await supabase
         .from("clients")
         .update(updatePayload)
-        .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
+        .eq("tenant_id", tenantId)
+        .or(`cpf.eq.${rawCpf2},cpf.eq.${fmtCpf2}`)
         .eq("credor", data.credor)
         .in("status", ["pendente", "vencido", "quebrado"]);
     } catch (e) {
@@ -255,10 +256,15 @@ export const createAgreement = async (
       const { data: creatorProfile } = await supabase
         .from("profiles").select("id").eq("user_id", userId).single();
       if (creatorProfile) {
+        const rawCpf3 = data.client_cpf.replace(/\D/g, "");
+        const fmtCpf3 = rawCpf3.length === 11
+          ? `${rawCpf3.slice(0,3)}.${rawCpf3.slice(3,6)}.${rawCpf3.slice(6,9)}-${rawCpf3.slice(9)}`
+          : rawCpf3;
         await supabase
           .from("clients")
           .update({ operator_id: creatorProfile.id } as any)
-          .eq("cpf", data.client_cpf)
+          .eq("tenant_id", tenantId)
+          .or(`cpf.eq.${rawCpf3},cpf.eq.${fmtCpf3}`)
           .eq("credor", data.credor);
       }
     } catch (e) {
@@ -534,14 +540,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
     if (agreement) {
       try {
         const today = new Date().toISOString().split("T")[0];
-        // Lookup do tenant_id via primeiro client encontrado
-        const { data: refClient } = await supabase
-          .from("clients")
-          .select("tenant_id")
-          .eq("credor", agreement.credor)
-          .limit(1)
-          .maybeSingle();
-        const tenantIdLookup = refClient?.tenant_id;
+        const tenantIdLookup = agreement.tenant_id;
 
         const fetchByPapel = async (papel: string, fallbackNome: string) => {
           if (!tenantIdLookup) return null;
@@ -566,6 +565,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
         await supabase
           .from("clients")
           .update({ status: "pendente" } as any)
+          .eq("tenant_id", agreement.tenant_id)
           .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
           .eq("credor", agreement.credor)
           .eq("status", "em_acordo");
@@ -574,6 +574,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
           await supabase
             .from("clients")
             .update({ status_cobranca_id: emDiaStatus.id } as any)
+            .eq("tenant_id", agreement.tenant_id)
             .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
             .eq("credor", agreement.credor)
             .eq("status", "pendente")
@@ -583,6 +584,7 @@ export const cancelAgreement = async (id: string): Promise<void> => {
           await supabase
             .from("clients")
             .update({ status_cobranca_id: aguardandoStatus.id } as any)
+            .eq("tenant_id", agreement.tenant_id)
             .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
             .eq("credor", agreement.credor)
             .eq("status", "pendente")
@@ -945,6 +947,7 @@ export const reopenAgreement = async (
       await supabase
         .from("clients")
         .update(updatePayload)
+        .eq("tenant_id", agreement.tenant_id)
         .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
         .eq("credor", agreement.credor)
         .in("status", ["pendente", "vencido", "quebrado"]);
@@ -991,13 +994,21 @@ export const reopenAgreement = async (
 export const registerAgreementPayment = async (
   cpf: string,
   credor: string,
-  valor: number
+  valor: number,
+  tenantId: string,
 ): Promise<void> => {
   try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
+    const rawCpf = (cpf || "").replace(/\D/g, "");
+    const fmtCpf = rawCpf.length === 11
+      ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+      : rawCpf;
+
     const { data: titles, error } = await supabase
       .from("clients")
       .select("*")
-      .eq("cpf", cpf)
+      .eq("tenant_id", tenantId)
+      .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
       .eq("credor", credor)
       .eq("status", "pendente")
       .order("data_vencimento", { ascending: true });
@@ -1026,6 +1037,7 @@ export const registerAgreementPayment = async (
       const { error: updateError } = await supabase
         .from("clients")
         .update(updateData)
+        .eq("tenant_id", tenantId)
         .eq("id", title.id);
 
       if (updateError) throw updateError;
@@ -1048,15 +1060,23 @@ export const registerAgreementPayment = async (
 export const reverseAgreementPayment = async (
   cpf: string,
   credor: string,
-  valor: number
+  valor: number,
+  tenantId: string,
 ): Promise<void> => {
   try {
+    if (!tenantId) throw new Error("tenant_id é obrigatório");
     if (valor <= 0) return;
+
+    const rawCpf = (cpf || "").replace(/\D/g, "");
+    const fmtCpf = rawCpf.length === 11
+      ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+      : rawCpf;
 
     const { data: titles, error } = await supabase
       .from("clients")
       .select("*")
-      .eq("cpf", cpf)
+      .eq("tenant_id", tenantId)
+      .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
       .eq("credor", credor)
       .gt("valor_pago", 0)
       .order("data_quitacao", { ascending: false, nullsFirst: false })
@@ -1086,6 +1106,7 @@ export const reverseAgreementPayment = async (
       const { error: updateError } = await supabase
         .from("clients")
         .update(updateData)
+        .eq("tenant_id", tenantId)
         .eq("id", title.id);
 
       if (updateError) throw updateError;

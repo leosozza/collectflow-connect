@@ -93,9 +93,9 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
         const agr = editDialog.agreement;
         if (agr && Math.abs(delta) > 0.001) {
           if (delta > 0) {
-            await registerAgreementPayment(agr.client_cpf, agr.credor, delta);
+            await registerAgreementPayment(agr.client_cpf, agr.credor, delta, editDialog.tenant_id);
           } else {
-            await reverseAgreementPayment(agr.client_cpf, agr.credor, Math.abs(delta));
+            await reverseAgreementPayment(agr.client_cpf, agr.credor, Math.abs(delta), editDialog.tenant_id);
           }
         }
 

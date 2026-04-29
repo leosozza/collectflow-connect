@@ -56,7 +56,7 @@ async function syncTenant(supabase: any, tenant_id: string) {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("agreements")
-      .select("id, client_cpf, credor, status")
+      .select("id, client_cpf, credor, status, created_at, updated_at")
       .eq("tenant_id", tenant_id)
       .neq("status", "rejected")
       .range(from, from + PAGE - 1);
@@ -129,7 +129,11 @@ async function syncTenant(supabase: any, tenant_id: string) {
     }
 
     if (!targetStatusId && quebraAcordoId) {
-      const sortedAgreements = [...agreements].sort((a, b) => (b.id > a.id ? 1 : -1));
+      const sortedAgreements = [...agreements].sort((a, b) => {
+        const da = new Date(a.updated_at || a.created_at || 0).getTime();
+        const db = new Date(b.updated_at || b.created_at || 0).getTime();
+        return db - da;
+      });
       if (sortedAgreements.length > 0 && sortedAgreements[0].status === "cancelled") {
         targetStatusId = quebraAcordoId;
         countQuebraAcordo += clients.length;
@@ -176,8 +180,12 @@ async function syncTenant(supabase: any, tenant_id: string) {
     if (!data || data.length === 0) break;
 
     let cur: any[] = carry;
+    const normCpf = (s: any) => (s || "").toString().replace(/\D/g, "");
     for (const c of data) {
-      if (cur.length === 0 || (cur[0].cpf === c.cpf && cur[0].credor === c.credor)) {
+      if (
+        cur.length === 0 ||
+        (normCpf(cur[0].cpf) === normCpf(c.cpf) && cur[0].credor === c.credor)
+      ) {
         cur.push(c);
       } else {
         processGroup(cur);
@@ -278,8 +286,49 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // SINGLE-TENANT MODE
+    // SINGLE-TENANT MODE: requires authorization
     if (tenant_id) {
+      const authHeader = req.headers.get("Authorization") || "";
+      const apikeyHeader = req.headers.get("apikey") || "";
+      const isServiceRole =
+        authHeader === `Bearer ${serviceRoleKey}` || apikeyHeader === serviceRoleKey;
+
+      let authorized = isServiceRole;
+
+      if (!authorized && authHeader.startsWith("Bearer ")) {
+        const jwt = authHeader.replace("Bearer ", "");
+        const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY") || serviceRoleKey, {
+          global: { headers: { Authorization: `Bearer ${jwt}` } },
+        });
+        const { data: userData } = await userClient.auth.getUser();
+        const user = userData?.user;
+        if (user) {
+          // Super admin global
+          const { data: isAdmin } = await supabase.rpc("has_role", {
+            _user_id: user.id,
+            _role: "admin",
+          });
+          if (isAdmin) authorized = true;
+          if (!authorized) {
+            const { data: tu } = await supabase
+              .from("tenant_users")
+              .select("role")
+              .eq("user_id", user.id)
+              .eq("tenant_id", tenant_id)
+              .in("role", ["admin", "gerente", "supervisor"])
+              .maybeSingle();
+            if (tu) authorized = true;
+          }
+        }
+      }
+
+      if (!authorized) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const result = await syncTenant(supabase, tenant_id);
       return new Response(
         JSON.stringify({ success: true, ...result }),
@@ -287,11 +336,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // CRON / MULTI-TENANT MODE: iterate over all tenants
+    // CRON / MULTI-TENANT MODE: only active tenants
     const { data: tenants, error: tenantsErr } = await supabase
       .from("tenants")
       .select("id, name, status")
-      .neq("status", "inactive");
+      .eq("status", "active");
 
     if (tenantsErr) {
       return new Response(

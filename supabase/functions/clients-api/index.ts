@@ -883,10 +883,36 @@ Deno.serve(async (req: Request) => {
   // WHATSAPP ROUTES
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Helper: validar phones contra clients do credor escopado
+  const validatePhonesByCredor = async (phones: string[]): Promise<{ valid: Set<string>; invalid: string[] }> => {
+    const norm = (p: string) => (p || "").replace(/\D/g, "");
+    const normalized = phones.map(norm).filter(Boolean);
+    if (!auth.credorNome || normalized.length === 0) {
+      return { valid: new Set(normalized), invalid: [] };
+    }
+    const { data } = await supabaseAdmin
+      .from("clients")
+      .select("phone")
+      .eq("tenant_id", tenantId)
+      .eq("credor", auth.credorNome)
+      .in("phone", normalized);
+    const valid = new Set((data || []).map((r: any) => norm(r.phone)));
+    const invalid = normalized.filter((p) => !valid.has(p));
+    return { valid, invalid };
+  };
+
   // POST /whatsapp/send
   if (segments[0] === "whatsapp" && segments[1] === "send" && method === "POST") {
     const body = await req.json() as Record<string, unknown>;
     if (!body.phone || !body.message) return json({ error: "Campos obrigatórios: phone, message" }, 422);
+
+    // Se a API key for escopada por credor, valida que o phone pertence
+    if (auth.credorId) {
+      const { invalid } = await validatePhonesByCredor([String(body.phone)]);
+      if (invalid.length > 0) {
+        return json({ error: "Telefone não pertence ao credor desta API key", phone: invalid[0] }, 403);
+      }
+    }
 
     // Get tenant's WhatsApp instance
     const { data: instances } = await supabaseAdmin.from("whatsapp_instances")
@@ -925,6 +951,20 @@ Deno.serve(async (req: Request) => {
     }
     if (messages.length > 200) {
       return json({ error: "Máximo 200 mensagens por chamada" }, 422);
+    }
+
+    // Se a API key for escopada por credor, rejeita lote inteiro se houver phone fora do credor
+    if (auth.credorId) {
+      const { invalid } = await validatePhonesByCredor(messages.map((m) => m.phone));
+      if (invalid.length > 0) {
+        return json(
+          {
+            error: "Lote rejeitado: existem telefones que não pertencem ao credor desta API key",
+            invalid_phones: invalid,
+          },
+          403,
+        );
+      }
     }
 
     try {
