@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
+import CredorForm from "@/components/cadastros/CredorForm";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
 import TipoDividaList from "@/components/cadastros/TipoDividaList";
