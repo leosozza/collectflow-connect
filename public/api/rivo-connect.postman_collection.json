@@ -1,0 +1,183 @@
+{
+  "info": {
+    "name": "Rivo Connect API",
+    "description": "Coleção oficial para integração com a API Rivo Connect (v2.0.0). Auth via X-API-Key.\n\nDocumentação: https://rivoconnect.com/api-docs/public",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "rivo-connect-2-0-0"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "X-API-Key", "type": "string" },
+      { "key": "value", "value": "{{apiKey}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://hulwcntfioqifopyjcvv.supabase.co/functions/v1/clients-api" },
+    { "key": "apiKey", "value": "cf_REPLACE_ME" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        { "name": "GET /health", "request": { "method": "GET", "url": "{{baseUrl}}/health" } }
+      ]
+    },
+    {
+      "name": "Clients",
+      "item": [
+        { "name": "GET /clients", "request": { "method": "GET", "url": "{{baseUrl}}/clients?page=1&limit=100" } },
+        { "name": "GET /clients/:id", "request": { "method": "GET", "url": "{{baseUrl}}/clients/:id" } },
+        { "name": "POST /clients", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/clients",
+            "body": { "mode": "raw", "raw": "{\n  \"credor\": \"Y Brasil\",\n  \"nome_completo\": \"João Silva\",\n  \"cpf\": \"123.456.789-00\",\n  \"external_id\": \"YB-001\",\n  \"valor_parcela\": 350.00,\n  \"data_vencimento\": \"2026-05-01\"\n}" }
+        }},
+        { "name": "POST /clients/bulk", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/clients/bulk",
+            "body": { "mode": "raw", "raw": "{\n  \"records\": [\n    { \"credor\": \"Y Brasil\", \"nome_completo\": \"Maria\", \"cpf\": \"111.111.111-11\", \"external_id\": \"YB-002\", \"valor_parcela\": 200, \"data_vencimento\": \"2026-05-15\" }\n  ],\n  \"upsert\": true,\n  \"upsert_key\": \"external_id\"\n}" }
+        }},
+        { "name": "PUT /clients/:id", "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/clients/:id",
+            "body": { "mode": "raw", "raw": "{ \"status\": \"pago\", \"valor_pago\": 350 }" }
+        }},
+        { "name": "PUT /clients/by-external/:external_id", "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/clients/by-external/:external_id",
+            "body": { "mode": "raw", "raw": "{ \"status\": \"pago\" }" }
+        }},
+        { "name": "PUT /clients/:id/status", "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/clients/:id/status",
+            "body": { "mode": "raw", "raw": "{ \"status_cobranca_id\": \"uuid-do-status\" }" }
+        }},
+        { "name": "DELETE /clients/:id", "request": { "method": "DELETE", "url": "{{baseUrl}}/clients/:id" } },
+        { "name": "DELETE /clients/by-cpf/:cpf", "request": { "method": "DELETE", "url": "{{baseUrl}}/clients/by-cpf/:cpf" } }
+      ]
+    },
+    {
+      "name": "Agreements",
+      "item": [
+        { "name": "GET /agreements", "request": { "method": "GET", "url": "{{baseUrl}}/agreements?status=pending" } },
+        { "name": "GET /agreements/:id", "request": { "method": "GET", "url": "{{baseUrl}}/agreements/:id" } },
+        { "name": "POST /agreements", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/agreements",
+            "body": { "mode": "raw", "raw": "{\n  \"client_cpf\": \"123.456.789-00\",\n  \"client_name\": \"João Silva\",\n  \"credor\": \"Y Brasil\",\n  \"original_total\": 5000,\n  \"proposed_total\": 3500,\n  \"new_installments\": 10,\n  \"new_installment_value\": 350,\n  \"first_due_date\": \"2026-05-01\"\n}" }
+        }},
+        { "name": "PUT /agreements/:id/approve", "request": { "method": "PUT", "url": "{{baseUrl}}/agreements/:id/approve" } },
+        { "name": "PUT /agreements/:id/reject", "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/agreements/:id/reject",
+            "body": { "mode": "raw", "raw": "{ \"reason\": \"Valor abaixo do mínimo\" }" }
+        }}
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        { "name": "GET /payments", "request": { "method": "GET", "url": "{{baseUrl}}/payments?status=pendente" } },
+        { "name": "GET /payments/methods", "request": { "method": "GET", "url": "{{baseUrl}}/payments/methods" } },
+        { "name": "GET /payments/:id", "request": { "method": "GET", "url": "{{baseUrl}}/payments/:id" } },
+        { "name": "POST /payments (genérico)", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/payments",
+            "body": { "mode": "raw", "raw": "{ \"tipo\": \"pix\", \"client_id\": \"uuid\", \"valor\": 350.00, \"data_vencimento\": \"2026-05-01\" }" }
+        }},
+        { "name": "POST /payments/pix", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/payments/pix",
+            "body": { "mode": "raw", "raw": "{ \"client_id\": \"uuid\", \"valor\": 350.00, \"data_vencimento\": \"2026-05-01\" }" }
+        }},
+        { "name": "POST /payments/cartao", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/payments/cartao",
+            "body": { "mode": "raw", "raw": "{ \"client_id\": \"uuid\", \"valor\": 350.00, \"data_vencimento\": \"2026-05-01\" }" }
+        }},
+        { "name": "POST /payments/boleto", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/payments/boleto",
+            "body": { "mode": "raw", "raw": "{ \"client_id\": \"uuid\", \"valor\": 350.00, \"data_vencimento\": \"2026-05-01\" }" }
+        }}
+      ]
+    },
+    {
+      "name": "Portal",
+      "item": [
+        { "name": "POST /portal/lookup", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/lookup",
+            "body": { "mode": "raw", "raw": "{ \"cpf\": \"123.456.789-00\" }" }
+        }},
+        { "name": "POST /portal/agreement", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/portal/agreement",
+            "body": { "mode": "raw", "raw": "{\n  \"client_cpf\": \"123.456.789-00\",\n  \"client_name\": \"João\",\n  \"credor\": \"Y Brasil\",\n  \"original_total\": 5000,\n  \"proposed_total\": 3500,\n  \"new_installments\": 10,\n  \"new_installment_value\": 350,\n  \"first_due_date\": \"2026-05-01\"\n}" }
+        }}
+      ]
+    },
+    {
+      "name": "Cadastros",
+      "item": [
+        { "name": "GET /credores", "request": { "method": "GET", "url": "{{baseUrl}}/credores" } },
+        { "name": "GET /status-types", "request": { "method": "GET", "url": "{{baseUrl}}/status-types" } }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        { "name": "GET /webhooks", "request": { "method": "GET", "url": "{{baseUrl}}/webhooks" } },
+        { "name": "POST /webhooks/configure", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/webhooks/configure",
+            "body": { "mode": "raw", "raw": "{\n  \"url\": \"https://seu-sistema.com/rivo-webhook\",\n  \"events\": [\"agreement.approved\", \"payment.confirmed\", \"client.updated\"]\n}" }
+        }}
+      ]
+    },
+    {
+      "name": "WhatsApp",
+      "item": [
+        { "name": "POST /whatsapp/send", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/whatsapp/send",
+            "body": { "mode": "raw", "raw": "{ \"phone\": \"5511999990000\", \"message\": \"Olá!\" }" }
+        }},
+        { "name": "POST /whatsapp/bulk", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/whatsapp/bulk",
+            "body": { "mode": "raw", "raw": "{ \"messages\": [ { \"phone\": \"5511999990000\", \"message\": \"Msg 1\" } ] }" }
+        }}
+      ]
+    },
+    {
+      "name": "Propensity",
+      "item": [
+        { "name": "POST /propensity/calculate", "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/propensity/calculate",
+            "body": { "mode": "raw", "raw": "{ \"cpfs\": [\"123.456.789-00\"] }" }
+        }}
+      ]
+    }
+  ]
+}
