@@ -16,6 +16,7 @@ export interface OperatorPoints {
 export interface RankingEntry extends OperatorPoints {
   profile?: { full_name: string; avatar_url: string | null };
   position?: number;
+  agreements_count?: number;
 }
 
 export const calculatePoints = (paymentsCount: number, totalReceived: number, breaksCount: number, achievementsCount: number, goalReached: boolean): number => {
@@ -78,10 +79,27 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
+  // Fetch agreements count per operator for the period
+  const startDate = new Date(year, month - 1, 1).toISOString();
+  const endDate = new Date(year, month, 1).toISOString();
+  const { data: agreementsData } = await supabase
+    .from("agreements")
+    .select("created_by")
+    .eq("tenant_id", tenantId)
+    .in("created_by", operatorIds)
+    .gte("created_at", startDate)
+    .lt("created_at", endDate);
+
+  const agreementsCountMap = new Map<string, number>();
+  (agreementsData || []).forEach((a: any) => {
+    agreementsCountMap.set(a.created_by, (agreementsCountMap.get(a.created_by) || 0) + 1);
+  });
+
   return filteredPoints.filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
     ...entry,
     profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
     position: idx + 1,
+    agreements_count: agreementsCountMap.get(entry.operator_id) || 0,
   }));
 };
 

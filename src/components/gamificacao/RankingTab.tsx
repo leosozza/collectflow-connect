@@ -158,7 +158,7 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
 
               <div className="flex items-center gap-2 flex-wrap mb-3">
                 <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
-                  🎯 {receiveRate}% taxa
+                  🤝 {entry.agreements_count ?? 0} acordos
                 </Badge>
                 <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
                   💰 {entry.payments_count} pagos
@@ -168,6 +168,9 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
                     ⚠️ {entry.breaks_count} quebras
                   </Badge>
                 )}
+                <Badge variant="outline" className="text-xs h-6 px-2 font-semibold bg-background/50">
+                  🎯 {receiveRate}% taxa
+                </Badge>
               </div>
 
               <div className="relative pt-4">
