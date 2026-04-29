@@ -155,13 +155,21 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
   };
 
   const handleInsertPlaceholder = async (key: string) => {
+    // 1) Insert at the caret inside the live editor (preferred behaviour now).
+    if (editorRef.current) {
+      try {
+        editorRef.current.insertAtCaret(key);
+      } catch {
+        // ignore — falls back to clipboard
+      }
+    }
+    // 2) Always copy to clipboard as well, so the user can paste anywhere.
     try {
       await navigator.clipboard.writeText(key);
-      toast.success(`Variável copiada: ${key}`, {
-        description: "Cole (Ctrl+V) onde desejar no editor.",
+      toast.success(`Variável inserida: ${key}`, {
+        description: "Também copiada para a área de transferência.",
       });
     } catch {
-      // Fallback: legacy execCommand
       const ta = document.createElement("textarea");
       ta.value = key;
       ta.style.position = "fixed";
@@ -170,9 +178,8 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
       ta.select();
       try {
         document.execCommand("copy");
-        toast.success(`Variável copiada: ${key}`);
       } catch {
-        toast.error("Não foi possível copiar a variável");
+        // ignore
       }
       document.body.removeChild(ta);
     }
