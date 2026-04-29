@@ -369,7 +369,7 @@ export async function deleteByProvider(
         body: JSON.stringify({ phone: `${phone}@s.whatsapp.net`, messageId: providerMessageId, fromMe: true }),
       });
       const result = await resp.json().catch(() => ({}));
-      return { ok: resp.ok, result, provider, error: resp.ok ? undefined : (result?.error || `HTTP ${resp.status}`) };
+      return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
     } catch (err) {
       return { ok: false, result: null, provider, error: `Falha de rede WuzAPI: ${(err as Error).message}` };
     }
