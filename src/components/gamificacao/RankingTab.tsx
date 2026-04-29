@@ -41,6 +41,11 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
         { event: "*", schema: "public", table: "operator_points", filter: `tenant_id=eq.${tenant.id}` },
         () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth] }),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agreements", filter: `tenant_id=eq.${tenant.id}` },
+        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth] }),
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);

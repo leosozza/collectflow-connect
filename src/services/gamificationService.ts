@@ -72,23 +72,35 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
 
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, full_name, avatar_url, role")
+    .select("id, user_id, full_name, avatar_url, role")
     .eq("tenant_id", tenantId)
     .in("role", ["operador"] as any)
     .in("id", operatorIds);
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+  const authUidByProfileId = new Map<string, string>();
+  const profileIdByAuthUid = new Map<string, string>();
+  (profiles || []).forEach((p: any) => {
+    const authUid = p.user_id || p.id;
+    authUidByProfileId.set(p.id, authUid);
+    profileIdByAuthUid.set(authUid, p.id);
+  });
+  const operatorAuthUids = operatorIds
+    .map((id) => authUidByProfileId.get(id))
+    .filter(Boolean) as string[];
 
   // Fetch agreements created in the period per operator
   const startDate = new Date(year, month - 1, 1).toISOString();
   const endDate = new Date(year, month, 1).toISOString();
-  const { data: agreementsData } = await supabase
-    .from("agreements")
-    .select("id, created_by")
-    .eq("tenant_id", tenantId)
-    .in("created_by", operatorIds)
-    .gte("created_at", startDate)
-    .lt("created_at", endDate);
+  const { data: agreementsData } = operatorAuthUids.length > 0
+    ? await supabase
+        .from("agreements")
+        .select("id, created_by")
+        .eq("tenant_id", tenantId)
+        .in("created_by", operatorAuthUids)
+        .gte("created_at", startDate)
+        .lt("created_at", endDate)
+    : { data: [] } as any;
 
   // Identify self-cancelled agreements (operator cancelled their own) via audit_logs
   const agreementIds = (agreementsData || []).map((a: any) => a.id);
@@ -103,18 +115,21 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
       .in("entity_id", agreementIds);
 
     const creatorByAgreement = new Map<string, string>();
-    (agreementsData || []).forEach((a: any) => creatorByAgreement.set(a.id, a.created_by));
+    (agreementsData || []).forEach((a: any) => creatorByAgreement.set(String(a.id), a.created_by));
     (cancelLogs || []).forEach((log: any) => {
-      if (log.entity_id && creatorByAgreement.get(log.entity_id) === log.user_id) {
-        selfCancelledIds.add(log.entity_id);
+      const agreementId = String(log.entity_id || "");
+      if (agreementId && creatorByAgreement.get(agreementId) === log.user_id) {
+        selfCancelledIds.add(agreementId);
       }
     });
   }
 
   const agreementsCountMap = new Map<string, number>();
   (agreementsData || []).forEach((a: any) => {
-    if (selfCancelledIds.has(a.id)) return;
-    agreementsCountMap.set(a.created_by, (agreementsCountMap.get(a.created_by) || 0) + 1);
+    if (selfCancelledIds.has(String(a.id))) return;
+    const profileId = profileIdByAuthUid.get(a.created_by);
+    if (!profileId) return;
+    agreementsCountMap.set(profileId, (agreementsCountMap.get(profileId) || 0) + 1);
   });
 
   return filteredPoints.filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
