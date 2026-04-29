@@ -77,6 +77,8 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const [enderecoOpen, setEnderecoOpen] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingDocLogo, setUploadingDocLogo] = useState(false);
+  const docLogoInputRef = useRef<HTMLInputElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // Captura o prazo original ao abrir, para detectar reduções no save
