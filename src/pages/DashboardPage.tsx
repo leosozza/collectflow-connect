@@ -329,6 +329,17 @@ const DashboardPage = () => {
     if (kpi) return renderKpiTile(kpi);
 
     switch (id) {
+      case "kpisOperacionais":
+        return (
+          <KpisOperacionaisCard
+            acionadosHoje={acionadosHoje}
+            acordosDia={stats?.acordos_dia ?? 0}
+            acordosMes={stats?.acordos_mes ?? 0}
+            trendAcionados={trendAcionados}
+            trendAcordosDia={trendAcordosDia}
+            trendAcordosMes={trendAcordosMes}
+          />
+        );
       case "metas":
         return (
           <DashboardMetaCard
