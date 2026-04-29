@@ -19,6 +19,7 @@ const CampaignsManagementTab = () => {
   const qc = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Campaign | null>(null);
+  const [othersOpen, setOthersOpen] = useState(false);
 
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["campaigns", tenant?.id],
