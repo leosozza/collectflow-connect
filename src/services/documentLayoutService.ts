@@ -77,9 +77,17 @@ function stripDuplicateTitle(bodyHtml: string, title: string): string {
   });
 }
 
-export function wrapDocumentInA4Page({ bodyHtml, title, credor }: WrapInput): string {
+export interface WrapOptions {
+  /** Optional HTML to inject in the body slot in place of cleanBody (used by the live editor for the editable region). */
+  bodyOverrideHtml?: string;
+}
+
+export function wrapDocumentInA4Page(
+  { bodyHtml, title, credor }: WrapInput,
+  options: WrapOptions = {}
+): string {
   const cleanBody = stripDuplicateTitle(bodyHtml, title);
-  const footerText = buildFooterText(credor);
+  const { line1: footerLine1, line2: footerLine2 } = buildFooterLines(credor);
   const logoUrl = credor?.portal_logo_url?.trim() || "";
   const credorName = credor?.razao_social || credor?.nome_fantasia || "";
 
@@ -88,6 +96,8 @@ export function wrapDocumentInA4Page({ bodyHtml, title, credor }: WrapInput): st
     : credorName
       ? `<div style="font-family:'Georgia','Times New Roman',serif;font-size:11pt;font-weight:600;color:#1a1a1a;letter-spacing:.3px">${escapeHtml(credorName)}</div>`
       : "";
+
+  const mainContent = options.bodyOverrideHtml ?? cleanBody;
 
   return `
 <div class="rivo-doc-page" style="
@@ -115,6 +125,17 @@ export function wrapDocumentInA4Page({ bodyHtml, title, credor }: WrapInput): st
     .rivo-doc-page em { font-style: italic; }
     .rivo-doc-page table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
     .rivo-doc-page .mdl-spacer { height: 6pt; }
+    .rivo-doc-page .rivo-var-chip {
+      display: inline-block;
+      padding: 0 4px;
+      background: hsl(24 95% 53% / 0.12);
+      border: 1px solid hsl(24 95% 53% / 0.35);
+      border-radius: 4px;
+      color: hsl(24 95% 35%);
+      font-family: 'Menlo','Consolas',monospace;
+      font-size: 0.92em;
+      line-height: 1.3;
+    }
   </style>
 
   <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:10mm;">
@@ -127,11 +148,12 @@ export function wrapDocumentInA4Page({ bodyHtml, title, credor }: WrapInput): st
   </div>
 
   <main style="flex:1 1 auto;">
-    ${cleanBody}
+    ${mainContent}
   </main>
 
   <footer style="margin-top:12mm;padding-top:6mm;border-top:1px solid #d4d4d4;text-align:center;font-family:'Helvetica','Arial',sans-serif;font-size:8.5pt;line-height:1.5;color:#666;">
-    ${escapeHtml(footerText)}
+    ${footerLine1 ? `<div style="font-weight:600;color:#333;margin-bottom:2pt">${escapeHtml(footerLine1)}</div>` : ""}
+    ${footerLine2 ? `<div style="color:#666">${escapeHtml(footerLine2)}</div>` : ""}
   </footer>
 </div>
 `.trim();
