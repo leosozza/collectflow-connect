@@ -129,7 +129,11 @@ async function syncTenant(supabase: any, tenant_id: string) {
     }
 
     if (!targetStatusId && quebraAcordoId) {
-      const sortedAgreements = [...agreements].sort((a, b) => (b.id > a.id ? 1 : -1));
+      const sortedAgreements = [...agreements].sort((a, b) => {
+        const da = new Date(a.updated_at || a.created_at || 0).getTime();
+        const db = new Date(b.updated_at || b.created_at || 0).getTime();
+        return db - da;
+      });
       if (sortedAgreements.length > 0 && sortedAgreements[0].status === "cancelled") {
         targetStatusId = quebraAcordoId;
         countQuebraAcordo += clients.length;
