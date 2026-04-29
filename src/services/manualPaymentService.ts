@@ -282,7 +282,8 @@ export const manualPaymentService = {
       await registerAgreementPayment(
         (agr as any).client_cpf,
         (agr as any).credor,
-        mp.amount_paid
+        mp.amount_paid,
+        (agr as any).tenant_id || mp.tenant_id,
       );
 
       // Update manual_payment status
