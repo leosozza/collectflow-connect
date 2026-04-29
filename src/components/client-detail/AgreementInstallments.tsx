@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { negociarieService } from "@/services/negociarieService";
-import { updateInstallmentDate, updateInstallmentValue } from "@/services/agreementService";
+import { updateInstallmentDate, updateInstallmentValue, cancelInstallment, reactivateInstallment } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
 import { getClientProfile, upsertClientProfile } from "@/services/clientProfileService";
 import { logAction } from "@/services/auditService";
@@ -24,7 +24,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ExternalLink, FileText, ClipboardCopy,
   CheckCircle2, Clock, AlertTriangle, Loader2, FileBarChart, DollarSign, Pencil, FileCheck, ChevronDown,
+  Trash2, RotateCcw, XCircle,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -51,6 +56,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number; key: string; label: string } | null>(null);
   const [unconfirmingIdx, setUnconfirmingIdx] = useState<number | null>(null);
   const [cancellingIdx, setCancellingIdx] = useState<number | null>(null);
+  const [cancelInstallmentDialog, setCancelInstallmentDialog] = useState<{ inst: any; idx: number } | null>(null);
+  const [cancellingInstallmentIdx, setCancellingInstallmentIdx] = useState<number | null>(null);
 
   // Boleto pendente states
   const [generatingAllBoletos, setGeneratingAllBoletos] = useState(false);
@@ -142,6 +149,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
+  const cancelledMap: Record<string, any> = (agreement as any).cancelled_installments || {};
 
   const hasEntrada = agreement.entrada_value > 0;
   const installments: any[] = [];
@@ -211,13 +219,20 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   }
 
   const totalInstallments = installments.length;
+  const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
   let remainingPaid = totalPaidFromClients;
   const installmentsWithStatus = installments.map((inst) => {
+    const isCancelled = !!cancelledMap[inst.customKey];
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
     const isOverdue = dueDay < today;
     const instValue = Number(inst.value);
+
+    if (isCancelled) {
+      return { ...inst, status: "cancelled", isOverdue: false, pendingManual: undefined, isCancelled: true };
+    }
+
     let isPaidManually = false;
     if (remainingPaid >= instValue) {
       isPaidManually = true;
@@ -225,7 +240,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     } else {
       remainingPaid = 0;
     }
-    // Match manual_payments by installment_key (canonical) or fallback to installment_number (legacy)
     const matchesInst = (mp: any) =>
       (mp.installment_key && mp.installment_key === inst.customKey) ||
       (!mp.installment_key && mp.installment_number === inst.number);
@@ -246,11 +260,11 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       : isPaidByManual
       ? "pago"
       : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-    return { ...inst, status, isOverdue, pendingManual };
+    return { ...inst, status, isOverdue, pendingManual, isCancelled: false };
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
-  const progressPercent = totalInstallments > 0 ? Math.round((paidCount / totalInstallments) * 100) : 0;
+  const progressPercent = activeInstallmentsCount > 0 ? Math.round((paidCount / activeInstallmentsCount) * 100) : 0;
 
   const handleGenerateBoleto = async (inst: any, idx: number) => {
     if (!tenantId) {
@@ -483,6 +497,69 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
     }
   };
 
+  const handleConfirmCancelInstallment = async () => {
+    if (!cancelInstallmentDialog) return;
+    const { inst, idx } = cancelInstallmentDialog;
+    setCancellingInstallmentIdx(idx);
+    try {
+      await cancelInstallment(agreementId, inst.customKey);
+      try {
+        await supabase.from("client_events").insert({
+          tenant_id: tenantId,
+          client_cpf: cpf,
+          event_source: "operator",
+          event_type: "installment_cancelled",
+          metadata: {
+            agreement_id: agreementId,
+            installment_key: inst.customKey,
+            installment_label: inst.isEntrada
+              ? (inst.entradaCount > 1 ? `Entrada ${inst.entradaIndex + 1}` : "Entrada")
+              : `Parcela ${inst.displayNumber}/${totalInstallments}`,
+            valor: Number(inst.value),
+            cancelled_by: profile?.id,
+          },
+        } as any);
+      } catch {}
+      toast({ title: "Parcela cancelada", description: "A parcela foi marcada como cancelada." });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      onRefresh?.();
+      setCancelInstallmentDialog(null);
+    } catch (err: any) {
+      toast({ title: "Erro ao cancelar parcela", description: err.message, variant: "destructive" });
+    } finally {
+      setCancellingInstallmentIdx(null);
+    }
+  };
+
+  const handleReactivateInstallment = async (inst: any, idx: number) => {
+    setCancellingInstallmentIdx(idx);
+    try {
+      await reactivateInstallment(agreementId, inst.customKey);
+      try {
+        await supabase.from("client_events").insert({
+          tenant_id: tenantId,
+          client_cpf: cpf,
+          event_source: "operator",
+          event_type: "installment_reactivated",
+          metadata: {
+            agreement_id: agreementId,
+            installment_key: inst.customKey,
+            reactivated_by: profile?.id,
+          },
+        } as any);
+      } catch {}
+      toast({ title: "Parcela reativada" });
+      queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      onRefresh?.();
+    } catch (err: any) {
+      toast({ title: "Erro ao reativar parcela", description: err.message, variant: "destructive" });
+    } finally {
+      setCancellingInstallmentIdx(null);
+    }
+  };
+
   const statusIcon = (status: string) => {
     if (status === "pago") return <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />;
     if (status === "vencido") return <AlertTriangle className="w-3.5 h-3.5 text-destructive" />;
@@ -603,7 +680,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             <FileText className="w-3 h-3" /> Parcelas do Acordo
           </p>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{paidCount}/{totalInstallments} pagas</span>
+            <span className="text-xs text-muted-foreground">{paidCount}/{activeInstallmentsCount} pagas</span>
             <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
           </div>
         </button>
@@ -615,7 +692,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           style={{ width: `${progressPercent}%` }}
         />
         <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground mix-blend-difference">
-          {paidCount}/{totalInstallments} pagas
+          {paidCount}/{activeInstallmentsCount} pagas
         </span>
       </div>
 
@@ -654,14 +731,19 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
         </TableHeader>
         <TableBody>
           {installmentsWithStatus.map((inst, idx) => {
+            const isCancelled = !!inst.isCancelled;
             const hasBoleto = inst.cobranca?.link_boleto;
             const hasLinhaDigitavel = inst.cobranca?.linha_digitavel;
             const hasPix = inst.cobranca?.pix_copia_cola;
             const isPaid = inst.status === "pago";
-            const canEdit = !isPaid && inst.status !== "pending_confirmation";
+            const canEdit = !isPaid && !isCancelled && inst.status !== "pending_confirmation";
+            const hasActiveBoleto = !!inst.cobranca && !["cancelado", "substituido", "estornado"].includes(inst.cobranca.status);
+            const isOnlyEntrada = inst.isEntrada && inst.entradaCount === 1;
+            const canCancel = !isPaid && !isCancelled && inst.status !== "pending_confirmation"
+              && !hasActiveBoleto && !isOnlyEntrada;
 
             return (
-              <TableRow key={idx}>
+              <TableRow key={idx} className={cn(isCancelled && "opacity-60 [&_td]:line-through [&_td]:decoration-muted-foreground")}>
                 <TableCell className="font-medium text-xs">
                   {inst.isEntrada
                     ? (inst.entradaCount > 1 ? `Entrada ${inst.displayNumber}` : "Entrada")
@@ -732,17 +814,23 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                 </TableCell>
 
                 {/* Status */}
-                <TableCell className="text-center">
-                  <Badge variant="outline" className={cn(
-                    "gap-1 text-[10px]",
-                    inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
-                    inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
-                    inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
-                    "bg-warning/10 text-warning border-warning/30"
-                  )}>
-                    {statusIcon(inst.status)}
-                    {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
-                  </Badge>
+                <TableCell className="text-center no-underline [text-decoration:none]">
+                  {isCancelled ? (
+                    <Badge variant="outline" className="gap-1 text-[10px] bg-muted text-muted-foreground border-border no-underline [text-decoration:none]">
+                      <XCircle className="w-3.5 h-3.5" /> Cancelada
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className={cn(
+                      "gap-1 text-[10px]",
+                      inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
+                      inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                      inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
+                      "bg-warning/10 text-warning border-warning/30"
+                    )}>
+                      {statusIcon(inst.status)}
+                      {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
+                    </Badge>
+                  )}
                 </TableCell>
 
                 {/* Inline action icons */}
@@ -922,6 +1010,50 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="top"><p>Baixar Recibo</p></TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {/* Cancelar parcela */}
+                      {canCancel && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              disabled={cancellingInstallmentIdx === idx}
+                              onClick={() => setCancelInstallmentDialog({ inst, idx })}
+                            >
+                              {cancellingInstallmentIdx === idx ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Cancelar Parcela</p></TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {/* Reativar parcela cancelada */}
+                      {isCancelled && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                              disabled={cancellingInstallmentIdx === idx}
+                              onClick={() => handleReactivateInstallment(inst, idx)}
+                            >
+                              {cancellingInstallmentIdx === idx ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <RotateCcw className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p>Reativar Parcela</p></TooltipContent>
                         </Tooltip>
                       )}
                     </TooltipProvider>
