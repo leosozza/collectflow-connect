@@ -96,8 +96,13 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     if (result.missingPlaceholders.length > 0) {
       console.warn("Placeholders não resolvidos:", result.missingPlaceholders);
     }
+    const wrappedHtml = wrapDocumentInA4Page({
+      bodyHtml: result.html,
+      title: label,
+      credor,
+    });
     setPreview({
-      html: result.html,
+      html: wrappedHtml,
       label,
       docType,
       templateSource: result.templateSource,
