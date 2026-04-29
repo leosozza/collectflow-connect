@@ -198,6 +198,13 @@ const CadastrosPage = () => {
         {(active === "tabulacoes" || active === "tabulacao_chamada") && <DispositionTabsWrapper />}
         
       </div>
+
+      {/* Formulário de credor controlado pela URL */}
+      <CredorForm
+        open={credorFormOpen}
+        onOpenChange={handleCredorFormOpenChange}
+        editing={editingCredor}
+      />
     </div>
   );
 };
