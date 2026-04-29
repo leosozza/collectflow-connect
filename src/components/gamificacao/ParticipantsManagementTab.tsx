@@ -19,7 +19,7 @@ const ParticipantsManagementTab = () => {
         .from("profiles")
         .select("id, full_name, role, avatar_url")
         .eq("tenant_id", tenant!.id)
-        .in("role", ["operador", "supervisor", "gerente"] as any)
+        .in("role", ["operador"] as any)
         .order("full_name");
       return data || [];
     },
@@ -58,7 +58,7 @@ const ParticipantsManagementTab = () => {
 
   const enableAllOperators = useMutation({
     mutationFn: async () => {
-      const operatorProfiles = profiles.filter((p: any) => ["operador", "supervisor", "gerente"].includes(p.role));
+      const operatorProfiles = profiles.filter((p: any) => ["operador"].includes(p.role));
       for (const op of operatorProfiles) {
         await supabase
           .from("gamification_participants")

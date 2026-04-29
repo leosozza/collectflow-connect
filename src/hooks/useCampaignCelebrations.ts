@@ -13,7 +13,7 @@ export const useCampaignCelebrations = () => {
   const { tenant, tenantUser, isTenantAdmin } = useTenant();
   const [queue, setQueue] = useState<CelebrationPayload[]>([]);
   const [current, setCurrent] = useState<CelebrationPayload | null>(null);
-  const isOperationalParticipant = ["operador", "supervisor", "gerente"].includes(tenantUser?.role || "");
+  const isOperationalParticipant = ["operador"].includes(tenantUser?.role || "");
 
   const loadPending = useCallback(async () => {
     if (isTenantAdmin || !isOperationalParticipant || !profile?.id || !tenant?.id) return;
@@ -68,7 +68,7 @@ export const useCampaignCelebrations = () => {
         .from("profiles")
         .select("id, role")
         .in("id", operatorIds)
-        .in("role", ["operador", "supervisor", "gerente"] as any);
+        .in("role", ["operador"] as any);
       const eligibleIds = new Set((profiles || []).map((p: any) => p.id));
       const eligibleRows = rows.filter((r) => eligibleIds.has(r.operator_id));
       const idx = eligibleRows.findIndex((r) => r.operator_id === profile.id);
