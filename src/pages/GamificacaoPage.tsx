@@ -138,10 +138,54 @@ const GamificacaoPage = () => {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Gamificação</h1>
-        <p className="text-muted-foreground text-sm">Seu desempenho e ranking do mês</p>
+        <p className="text-muted-foreground text-sm">
+          {isTenantAdmin ? "Visão geral da equipe e gestão da gamificação" : "Seu desempenho e ranking do mês"}
+        </p>
       </div>
 
-      {/* My stats hero */}
+      {isTenantAdmin ? (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Target className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{adminParticipantsCount.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Participantes ranqueados</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Trophy className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{adminPointsTotal.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Pontos da equipe</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <Star className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{adminAchievementsCount.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Conquistas concedidas</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardContent className="p-4 text-center">
+              <BarChart3 className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{formatCurrency(adminReceivedTotal)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Recebido da equipe</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4 text-center">
+              <Flame className="w-6 h-6 text-primary mx-auto mb-1" />
+              <p className="text-2xl font-bold text-foreground">{activeCampaignsCount.toLocaleString("pt-BR")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Campanhas ativas</p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <Card className="border-border">
           <CardContent className="p-4 text-center">
@@ -217,9 +261,10 @@ const GamificacaoPage = () => {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Tabs */}
-      <Tabs defaultValue={urlTab || (isTenantAdmin ? "ranking" : "goals")} onValueChange={setUrlTab} value={urlTab || undefined}>
+      <Tabs defaultValue={defaultTab} onValueChange={setUrlTab} value={currentTab}>
         <TabsList className="w-full sm:w-auto flex-wrap">
           <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
             <Trophy className="w-3.5 h-3.5" /> Ranking
