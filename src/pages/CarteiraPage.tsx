@@ -287,6 +287,7 @@ const CarteiraPage = () => {
   useEffect(() => {
     setUrlPage(1);
     setSelectedIds(new Set());
+    setSelectedCpfs(new Set());
     setSelectAllFiltered(false);
     setBulkClients(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
