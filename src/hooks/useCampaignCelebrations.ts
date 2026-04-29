@@ -10,12 +10,12 @@ import type { CelebrationPayload } from "@/components/gamificacao/CampaignCelebr
  */
 export const useCampaignCelebrations = () => {
   const { profile } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin } = useTenant();
   const [queue, setQueue] = useState<CelebrationPayload[]>([]);
   const [current, setCurrent] = useState<CelebrationPayload | null>(null);
 
   const loadPending = useCallback(async () => {
-    if (!profile?.id || !tenant?.id) return;
+    if (isTenantAdmin || !profile?.id || !tenant?.id) return;
 
     // Recently closed campaigns (last 30 days)
     const since = new Date();
@@ -81,7 +81,7 @@ export const useCampaignCelebrations = () => {
         return merged;
       });
     }
-  }, [profile?.id, tenant?.id]);
+  }, [isTenantAdmin, profile?.id, tenant?.id]);
 
   // Initial load + on tenant/profile ready
   useEffect(() => {
@@ -90,7 +90,7 @@ export const useCampaignCelebrations = () => {
 
   // Realtime: re-check when a campaign auto-closes for this tenant
   useEffect(() => {
-    if (!tenant?.id) return;
+    if (isTenantAdmin || !tenant?.id) return;
     const channel = supabase
       .channel(`celebration-watch-${tenant.id}`)
       .on(
@@ -111,7 +111,7 @@ export const useCampaignCelebrations = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenant?.id, loadPending]);
+  }, [isTenantAdmin, tenant?.id, loadPending]);
 
   // Promote head of queue to current
   useEffect(() => {
@@ -124,7 +124,7 @@ export const useCampaignCelebrations = () => {
     const closing = current;
     setCurrent(null);
     setQueue((q) => q.slice(1));
-    if (!closing || !profile?.id || !tenant?.id) return;
+    if (isTenantAdmin || !closing || !profile?.id || !tenant?.id) return;
     try {
       await supabase.from("campaign_celebration_views").insert({
         tenant_id: tenant.id,
@@ -135,7 +135,7 @@ export const useCampaignCelebrations = () => {
       // unique violation = already seen, ignore
       console.warn("celebration mark seen error:", err);
     }
-  }, [current, profile?.id, tenant?.id]);
+  }, [current, isTenantAdmin, profile?.id, tenant?.id]);
 
   return { current, dismiss, open: !!current };
 };
