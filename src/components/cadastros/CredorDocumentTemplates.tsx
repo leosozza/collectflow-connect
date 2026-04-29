@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { DOCUMENT_TYPES, TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
 import { DOCUMENT_PLACEHOLDERS, PLACEHOLDER_CATEGORIES, SAMPLE_DATA } from "@/lib/documentPlaceholders";
 import { markdownToHtml } from "@/lib/markdownLight";
+import { wrapDocumentInA4Page, SAMPLE_CREDOR } from "@/services/documentLayoutService";
 
 interface CredorDocumentTemplatesProps {
   form: any;
@@ -31,7 +32,7 @@ const replaceVars = (text: string, vars: Record<string, string>) => {
   return result;
 };
 
-const EditorPreview = ({ content }: { content: string }) => {
+const EditorPreview = ({ content, title, credor }: { content: string; title: string; credor: any }) => {
   const resolved = replaceVars(content, SAMPLE_DATA);
   const htmlBlocks: string[] = [];
   let textForMd = resolved.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
@@ -43,29 +44,32 @@ const EditorPreview = ({ content }: { content: string }) => {
     html = html.replace(`<!--HTML_BLOCK_${i}-->`, block);
   });
 
+  const wrapped = wrapDocumentInA4Page({
+    bodyHtml: html,
+    title: title || "Documento",
+    credor: {
+      ...SAMPLE_CREDOR,
+      razao_social: credor?.razao_social || SAMPLE_CREDOR.razao_social,
+      nome_fantasia: credor?.nome_fantasia || SAMPLE_CREDOR.nome_fantasia,
+      cnpj: credor?.cnpj || SAMPLE_CREDOR.cnpj,
+      portal_logo_url: credor?.portal_logo_url || SAMPLE_CREDOR.portal_logo_url,
+      endereco: credor?.endereco || SAMPLE_CREDOR.endereco,
+      numero: credor?.numero || SAMPLE_CREDOR.numero,
+      complemento: credor?.complemento || SAMPLE_CREDOR.complemento,
+      bairro: credor?.bairro || SAMPLE_CREDOR.bairro,
+      cidade: credor?.cidade || SAMPLE_CREDOR.cidade,
+      uf: credor?.uf || SAMPLE_CREDOR.uf,
+      cep: credor?.cep || SAMPLE_CREDOR.cep,
+    },
+  });
+
   return (
-    <div
-      className="mx-auto bg-white rounded-lg border border-border shadow-sm"
-      style={{
-        maxWidth: "210mm",
-        minHeight: "400px",
-        padding: "20mm 18mm",
-        fontFamily: "'Georgia', 'Times New Roman', serif",
-        fontSize: "11pt",
-        lineHeight: "1.7",
-        color: "#1a1a1a",
-      }}
-    >
-      <style>{`
-        .ep-body h2 { font-size: 15pt; font-weight: 700; margin: 0 0 8pt; text-align: center; }
-        .ep-body h3 { font-size: 12pt; font-weight: 600; margin: 10pt 0 4pt; }
-        .ep-body p { margin: 0 0 5pt; text-align: justify; }
-        .ep-body ul { margin: 4pt 0 8pt 16pt; }
-        .ep-body li { margin-bottom: 2pt; }
-        .ep-body hr { border: none; border-top: 1px solid #ddd; margin: 10pt 0; }
-        .ep-body .mdl-spacer { height: 5pt; }
-      `}</style>
-      <div className="ep-body" dangerouslySetInnerHTML={{ __html: html }} />
+    <div className="flex justify-center">
+      <div
+        className="shadow-md border border-border/50"
+        style={{ transform: "scale(0.85)", transformOrigin: "top center" }}
+        dangerouslySetInnerHTML={{ __html: wrapped }}
+      />
     </div>
   );
 };
@@ -278,7 +282,7 @@ const CredorDocumentTemplates = ({ form, set, credorId }: CredorDocumentTemplate
 
               <TabsContent value="preview" className="mt-3">
                 <div className="rounded-lg border border-border bg-muted/30 p-4 overflow-auto max-h-[500px]">
-                  <EditorPreview content={editContent} />
+                  <EditorPreview content={editContent} title={editingDocType?.label || "Documento"} credor={form} />
                 </div>
                 <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                   <Info className="w-3 h-3" /> Variáveis substituídas por dados fictícios.

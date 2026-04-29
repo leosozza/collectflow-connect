@@ -9,6 +9,7 @@ import { resolveDocumentData } from "@/services/documentDataResolver";
 import { renderDocument } from "@/services/documentRenderer";
 import { validateDocumentGeneration, type ValidationResult } from "@/services/documentValidationService";
 import { downloadPdf } from "@/services/documentPdfService";
+import { wrapDocumentInA4Page } from "@/services/documentLayoutService";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import DocumentPreviewDialog from "./DocumentPreviewDialog";
 import { useState } from "react";
@@ -39,7 +40,7 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     queryFn: async () => {
       const { data } = await supabase
         .from("credores")
-        .select("razao_social, nome_fantasia, cnpj, template_acordo, template_recibo, template_quitacao, template_descricao_divida, template_notificacao_extrajudicial")
+        .select("razao_social, nome_fantasia, cnpj, portal_logo_url, endereco, numero, complemento, bairro, cidade, uf, cep, email, template_acordo, template_recibo, template_quitacao, template_descricao_divida, template_notificacao_extrajudicial")
         .or(`razao_social.eq.${client.credor},nome_fantasia.eq.${client.credor}`)
         .limit(1)
         .maybeSingle();
@@ -95,8 +96,13 @@ const ClientDocuments = ({ client, clients, cpf, totalAberto, lastAgreement }: C
     if (result.missingPlaceholders.length > 0) {
       console.warn("Placeholders não resolvidos:", result.missingPlaceholders);
     }
+    const wrappedHtml = wrapDocumentInA4Page({
+      bodyHtml: result.html,
+      title: label,
+      credor,
+    });
     setPreview({
-      html: result.html,
+      html: wrappedHtml,
       label,
       docType,
       templateSource: result.templateSource,
