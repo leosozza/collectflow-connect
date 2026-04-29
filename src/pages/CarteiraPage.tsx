@@ -608,20 +608,10 @@ const CarteiraPage = () => {
   const selectedClients = displayClients.filter((c) =>
     (c.allIds || [c.id]).some((id: string) => selectedIds.has(id))
   );
-  // Contagem exibida nos botões de ação:
-  // - selectAllFiltered → total filtrado no servidor
-  // - Toda a seleção está na página atual → CPFs únicos da página
-  // - Há seleção acumulada de outras páginas → total real de IDs selecionados
-  const allSelectedAreOnCurrentPage =
-    selectedClients.reduce((sum, c) => {
-      const ids = (c.allIds || [c.id]) as string[];
-      return sum + ids.filter((id) => selectedIds.has(id)).length;
-    }, 0) === selectedIds.size;
-  const selectedCount = selectAllFiltered
-    ? totalCount
-    : allSelectedAreOnCurrentPage
-      ? new Set(selectedClients.map(c => c.cpf.replace(/\D/g, ""))).size
-      : selectedIds.size;
+  // Contagem exibida nos botões/banners: sempre em CPFs (clientes), nunca em
+  // parcelas. Quando "Selecionar todos" foi acionado, usamos `totalCount`
+  // que já vem da RPC agrupada por CPF.
+  const selectedCount = selectAllFiltered ? totalCount : selectedCpfs.size;
 
   // Dedup por CPF: 1 representante por pessoa para disparo WhatsApp
   const uniqueSelectedClients = useMemo(() => {
