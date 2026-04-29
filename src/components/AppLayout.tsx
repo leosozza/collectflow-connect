@@ -394,6 +394,12 @@ const AppLayout = () => {
         onDismiss={dismissCelebration}
       />
 
+      <CampaignCelebrationModal
+        open={campaignCelebration.open}
+        data={campaignCelebration.current}
+        onClose={campaignCelebration.dismiss}
+      />
+
       <SupportFloatingButton />
     </div>
   );
