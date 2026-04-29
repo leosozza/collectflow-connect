@@ -3,11 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 
 import { Button } from "@/components/ui/button";
-import {
-  BarChart3,
-  FileText,
-  Settings2,
-} from "lucide-react";
+import { BarChart3, FileText, Settings2 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -24,26 +20,7 @@ import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
 import KpisOperacionaisCard from "@/components/dashboard/KpisOperacionaisCard";
 import KpisFinanceirosCard from "@/components/dashboard/KpisFinanceirosCard";
-import SortableCard from "@/components/dashboard/SortableCard";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
-
-import {
-  DndContext,
-  DragEndEvent,
-  DragStartEvent,
-  DragOverlay,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  rectSortingStrategy,
-  sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -75,9 +52,12 @@ interface DashboardStats {
   total_pendente_mes_anterior: number;
 }
 
-// Calcula variação percentual entre período atual e anterior.
-// Retorna { value, isPositive } ou null quando não houver base de comparação.
-// `invert=true` para métricas onde queda é positiva (Quebra, Pendentes).
+type TicketAgreementRow = {
+  entrada_value: number | null;
+  new_installment_value: number | null;
+  custom_installment_values: unknown;
+};
+
 function pctDelta(
   current: number,
   previous: number,
@@ -99,6 +79,33 @@ function pctDelta(
   };
 }
 
+function parseCurrencyLike(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getCustomInstallmentValue(
+  customValues: unknown,
+  key: "entrada" | "1"
+): number | null {
+  if (!customValues || typeof customValues !== "object" || Array.isArray(customValues)) {
+    return null;
+  }
+  return parseCurrencyLike((customValues as Record<string, unknown>)[key]);
+}
+
+function getAgreementTicketBase(row: TicketAgreementRow): number {
+  const entradaValue = Number(row.entrada_value || 0);
+  if (entradaValue > 0) {
+    return getCustomInstallmentValue(row.custom_installment_values, "entrada") ?? entradaValue;
+  }
+  return (
+    getCustomInstallmentValue(row.custom_installment_values, "1") ??
+    Number(row.new_installment_value || 0)
+  );
+}
+
 const DashboardPage = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -116,7 +123,6 @@ const DashboardPage = () => {
 
   const canViewAll = permissions.canViewAllDashboard;
 
-  // Fetch operators for admin filter
   const { data: operators = [] } = useQuery({
     queryKey: ["dashboard-operators", profile?.tenant_id],
     queryFn: async () => {
@@ -129,10 +135,6 @@ const DashboardPage = () => {
     enabled: !!profile?.tenant_id && canViewAll,
   });
 
-  // Determine filter params for RPCs
-  // - 0 operadores selecionados (canViewAll): null = todos
-  // - 1 operador: usa _user_id (compat)
-  // - 2+ operadores: usa _user_ids (array)
   const rpcUserIds: string[] | null =
     canViewAll && selectedOperators.length > 1 ? selectedOperators : null;
   const rpcUserId = canViewAll
@@ -142,7 +144,6 @@ const DashboardPage = () => {
   const filterYear = selectedYears.length === 1 ? parseInt(selectedYears[0]) : null;
   const filterMonth = selectedMonths.length === 1 ? parseInt(selectedMonths[0]) + 1 : null;
 
-  // Dashboard stats
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats", rpcUserId, rpcUserIdsKey, filterYear, filterMonth],
     queryFn: async () => {
@@ -159,7 +160,6 @@ const DashboardPage = () => {
     },
   });
 
-  // Acionados hoje
   const { data: acionadosHoje = 0 } = useQuery({
     queryKey: ["acionados-hoje", rpcUserId, rpcUserIdsKey, profile?.tenant_id],
     queryFn: async () => {
@@ -174,40 +174,35 @@ const DashboardPage = () => {
     refetchInterval: 60_000,
   });
 
-  // Ticket médio dos acordos do dia: total_negociado_dia / acordos_dia.
-  // Usa a mesma lógica do RPC get_dashboard_stats para `_negociado`,
-  // mas filtrando apenas os acordos criados HOJE.
+  const todayKey = format(now, "yyyy-MM-dd");
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const { data: ticketMedioDia = 0 } = useQuery({
-    queryKey: ["dashboard-ticket-medio-dia", rpcUserId, rpcUserIdsKey, profile?.tenant_id],
+    queryKey: ["dashboard-ticket-medio-dia", todayKey, rpcUserId, rpcUserIdsKey, profile?.tenant_id],
     queryFn: async () => {
-      if (!profile?.tenant_id) return 0;
-      const today = new Date().toISOString().slice(0, 10);
-      let q = supabase
+      let query = supabase
         .from("agreements")
-        .select("entrada_value, new_installment_value, custom_installment_values, created_by")
-        .eq("tenant_id", profile.tenant_id)
-        .gte("created_at", `${today}T00:00:00Z`)
-        .lte("created_at", `${today}T23:59:59Z`)
-        .not("status", "in", "(cancelled,rejected)");
-      if (rpcUserIds) q = q.in("created_by", rpcUserIds);
-      else if (rpcUserId) q = q.eq("created_by", rpcUserId);
-      const { data, error } = await q;
+        .select("entrada_value, new_installment_value, custom_installment_values")
+        .eq("tenant_id", profile!.tenant_id!)
+        .not("status", "in", "(cancelled,rejected)")
+        .gte("created_at", todayStart.toISOString())
+        .lt("created_at", tomorrowStart.toISOString());
+
+      if (rpcUserIds) query = query.in("created_by", rpcUserIds);
+      else if (rpcUserId) query = query.eq("created_by", rpcUserId);
+
+      const { data, error } = await query;
       if (error) throw error;
-      if (!data?.length) return 0;
-      const total = data.reduce((acc, a: any) => {
-        const civ = a.custom_installment_values || {};
-        const v = Number(a.entrada_value) > 0
-          ? Number(civ.entrada ?? a.entrada_value)
-          : Number(civ["1"] ?? a.new_installment_value ?? 0);
-        return acc + (Number.isFinite(v) ? v : 0);
-      }, 0);
-      return total / data.length;
+
+      const rows = (data || []) as TicketAgreementRow[];
+      if (rows.length === 0) return 0;
+      const total = rows.reduce((sum, row) => sum + getAgreementTicketBase(row), 0);
+      return total / rows.length;
     },
     enabled: !!profile?.tenant_id,
     refetchInterval: 60_000,
   });
 
-  // Vencimentos
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
     queryKey: ["dashboard-vencimentos", browseDateStr, rpcUserId, rpcUserIdsKey],
@@ -239,50 +234,14 @@ const DashboardPage = () => {
     });
   };
 
-  // Span (Tailwind classes) per block — grid 6 colunas no desktop.
-  // Linha 1 (topo): KPIs Operacionais (3 cols) | KPIs Financeiros (3 cols)
-  // Linha 2 (base): Agendamentos (2) | Parcelas (2) | Metas (2)
-  // Linha 3 (extra): Total Recebido (6 cols)
-  const SPAN_CLASS: Record<DashboardBlockId, string> = {
-    kpisOperacionais: "col-span-1 md:col-span-2 lg:col-span-3 row-span-1",
-    kpisFinanceiros: "col-span-1 md:col-span-2 lg:col-span-3 row-span-1",
-    agendamentos: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
-    parcelas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
-    metas: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
-    totalRecebido: "col-span-1 md:col-span-2 lg:col-span-2 row-span-1",
-  };
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const [activeId, setActiveId] = useState<DashboardBlockId | null>(null);
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as DashboardBlockId);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveId(null);
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = layout.order.indexOf(active.id as DashboardBlockId);
-    const newIndex = layout.order.indexOf(over.id as DashboardBlockId);
-    if (oldIndex < 0 || newIndex < 0) return;
-    setLayout({ ...layout, order: arrayMove(layout.order, oldIndex, newIndex) });
-  };
-
-  const handleDragCancel = () => setActiveId(null);
-
   const trendAcionados = stats ? pctDelta(acionadosHoje, stats.acionados_ontem ?? 0) : null;
   const trendAcordosDia = stats ? pctDelta(stats.acordos_dia ?? 0, stats.acordos_dia_anterior ?? 0) : null;
   const trendAcordosMes = stats ? pctDelta(stats.acordos_mes ?? 0, stats.acordos_mes_anterior ?? 0) : null;
-  const trendNegociadoMes = stats ? pctDelta(stats.total_negociado_mes ?? 0, stats.total_negociado_mes_anterior ?? 0) : null;
   const trendQuebra = stats ? pctDelta(stats.total_quebra ?? 0, stats.total_quebra_mes_anterior ?? 0, true) : null;
   const trendPendentes = stats ? pctDelta(stats.total_pendente ?? 0, stats.total_pendente_mes_anterior ?? 0, true) : null;
 
-  // Renders the inner content for each block id.
+  const isVisible = (id: DashboardBlockId) => layout.visible[id];
+
   const renderBlock = (id: DashboardBlockId) => {
     switch (id) {
       case "kpisOperacionais":
@@ -346,15 +305,12 @@ const DashboardPage = () => {
     }
   };
 
-  const visibleOrder = layout.order.filter((id) => layout.visible[id]);
-
   return (
     <div className="flex flex-col gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
-      {/* Header with filters */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
         <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">
             Bem-vindo, {profile?.full_name || "Operador"}
           </p>
         </div>
@@ -363,7 +319,7 @@ const DashboardPage = () => {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10"
+              className="gap-1.5 h-8 text-xs border-primary/40 text-primary hover:bg-primary/10"
               onClick={() => navigate("/relatorios")}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -373,7 +329,7 @@ const DashboardPage = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 h-9 text-xs border-primary/40 text-primary hover:bg-primary/10"
+            className="gap-1.5 h-8 text-xs border-primary/40 text-primary hover:bg-primary/10"
             onClick={() => navigate("/analytics")}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -407,7 +363,7 @@ const DashboardPage = () => {
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 h-9 text-xs text-muted-foreground hover:text-foreground"
+            className="gap-1.5 h-8 text-xs text-muted-foreground hover:text-foreground"
             onClick={() => setCustomizeOpen(true)}
             title="Personalizar Dashboard"
           >
@@ -417,39 +373,38 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Drag-and-drop grid: cards reorder freely; layout persists per user */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-      >
-        <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
-          <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 flex-1 min-h-0 items-stretch"
-            style={{ gridTemplateRows: "repeat(2, minmax(0, 1fr))" }}
-          >
-            {visibleOrder.map((id) => (
-              <SortableCard
-                key={id}
-                id={id}
-                spanClassName={SPAN_CLASS[id]}
-                isPlaceholder={activeId === id}
-              >
-                {renderBlock(id)}
-              </SortableCard>
-            ))}
-          </div>
-        </SortableContext>
-        <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
-          {activeId ? (
-            <div className="h-full w-full opacity-95 shadow-2xl rounded-xl ring-2 ring-primary/50 pointer-events-none">
-              {renderBlock(activeId)}
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 md:grid-cols-2 xl:grid-cols-12 xl:grid-rows-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-3">
+        {isVisible("kpisOperacionais") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:row-start-1">
+            {renderBlock("kpisOperacionais")}
+          </section>
+        )}
+        {isVisible("kpisFinanceiros") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-5 xl:row-start-1">
+            {renderBlock("kpisFinanceiros")}
+          </section>
+        )}
+        {isVisible("totalRecebido") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-9 xl:row-start-1">
+            {renderBlock("totalRecebido")}
+          </section>
+        )}
+        {isVisible("agendamentos") && (
+          <section className="min-h-0 h-full xl:col-span-4 xl:row-start-2">
+            {renderBlock("agendamentos")}
+          </section>
+        )}
+        {isVisible("parcelas") && (
+          <section className="min-h-0 h-full md:col-span-2 xl:col-span-4 xl:col-start-5 xl:row-start-2">
+            {renderBlock("parcelas")}
+          </section>
+        )}
+        {isVisible("metas") && (
+          <section className="min-h-0 h-full xl:col-span-4 xl:col-start-9 xl:row-start-2">
+            {renderBlock("metas")}
+          </section>
+        )}
+      </div>
 
       <CustomizeDashboardDialog
         open={customizeOpen}

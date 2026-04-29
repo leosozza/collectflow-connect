@@ -74,12 +74,15 @@ const DashboardMetaCard = ({
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm w-full h-full max-h-[220px] flex flex-col">
-      <div className="px-4 pt-2 pb-0.5 shrink-0">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+    <div className="bg-card rounded-lg border border-border/80 overflow-hidden shadow-sm w-full h-full min-h-0 flex flex-col">
+      <div className="px-4 py-2.5 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <Trophy className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        </div>
       </div>
 
-      <div className="flex-1 px-3 pb-2 flex items-center justify-center min-h-0">
+      <div className="p-3 flex-1 min-h-0 flex items-center justify-center">
         {goal === 0 ? (
           <div className="text-center py-4 text-muted-foreground text-xs">
             Nenhuma meta definida para este período.

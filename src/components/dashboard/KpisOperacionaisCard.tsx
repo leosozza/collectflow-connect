@@ -64,10 +64,10 @@ const KpisOperacionaisCard = ({
   trendAcordosMes,
 }: Props) => {
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm p-1.5 h-full">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 h-full">
+    <div className="bg-card rounded-lg border border-border/80 shadow-sm p-2 h-full min-h-0">
+      <div className="grid grid-cols-2 gap-2 h-full min-h-0">
         <Tile
-          label="Acionados"
+          label="Acionados Hoje"
           value={acionadosHoje}
           Icon={Phone}
           gradient="bg-gradient-to-br from-blue-500 to-blue-600"

@@ -157,9 +157,9 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
   const isPositive = diffPct !== null && diffPct >= 0;
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm w-full h-full flex flex-col overflow-hidden min-h-0">
+    <div className="bg-card rounded-lg border border-border/80 shadow-sm w-full h-full min-h-0 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Total Recebido</h2>
@@ -177,7 +177,7 @@ export default function TotalRecebidoCard({ totalRecebido }: Props) {
         </div>
       </div>
 
-      <div className="px-4 pb-2">
+      <div className="px-4 pb-2 shrink-0">
         <div className="flex items-baseline gap-2 flex-wrap">
           <p className="text-2xl font-bold text-primary tabular-nums leading-tight">
             {formatCurrency(totalRecebido)}

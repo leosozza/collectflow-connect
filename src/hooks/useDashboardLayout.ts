@@ -11,7 +11,7 @@ export type DashboardBlockId =
 
 export interface DashboardLayout {
   visible: Record<DashboardBlockId, boolean>;
-  /** Linear order of all blocks in the unified drag-and-drop grid. */
+  /** Preserved for compatibility with saved preferences; visual placement is fixed. */
   order: DashboardBlockId[];
 }
 
@@ -33,16 +33,13 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
     metas: true,
     totalRecebido: true,
   },
-  // Linha 1 (topo): KPIs Operacionais | KPIs Financeiros
-  // Linha 2 (base): Agendamentos | Parcelas | Metas
-  // Linha 3 (extra): Total Recebido (gráfico)
   order: [
     "kpisOperacionais",
     "kpisFinanceiros",
+    "totalRecebido",
     "agendamentos",
     "parcelas",
     "metas",
-    "totalRecebido",
   ],
 };
 
