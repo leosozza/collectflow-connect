@@ -80,11 +80,11 @@ const AchievementsManagementTab = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("achievements")
-        .select("*, profiles!achievements_profile_id_fkey(full_name)")
+        .select("*, profiles!achievements_profile_id_fkey(full_name, role)")
         .eq("tenant_id", tenant!.id)
         .order("earned_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []).filter((a: any) => ["operador", "supervisor", "gerente"].includes(a.profiles?.role));
     },
     enabled: !!tenant?.id,
   });
