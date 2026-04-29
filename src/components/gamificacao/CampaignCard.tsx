@@ -113,9 +113,9 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
         </div>
 
         {isActive && datesValid && (
-          <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-primary/5 border border-primary/20 px-2 py-1.5">
-            <span className="text-[9px] uppercase tracking-wider text-primary font-bold">
-              ⏱ Termina em
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-gradient-to-br from-muted/40 to-muted/10 border border-border/50 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+              Termina em
             </span>
             <CampaignCountdown endDate={campaign.end_date} />
           </div>

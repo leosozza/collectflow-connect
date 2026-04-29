@@ -19,12 +19,12 @@ const calc = (target: Date) => {
 
 const Unit = ({ value, label }: { value: number; label: string }) => (
   <div className="flex flex-col items-center">
-    <div className="bg-gradient-to-b from-primary to-primary/80 rounded px-1.5 py-0.5 min-w-[1.75rem] text-center shadow-sm shadow-primary/30">
-      <span className="text-[11px] font-bold tabular-nums text-primary-foreground leading-tight">
+    <div className="bg-muted/60 border border-border rounded-md px-2 py-1 min-w-[2.25rem] text-center">
+      <span className="text-sm font-bold tabular-nums text-foreground">
         {String(value).padStart(2, "0")}
       </span>
     </div>
-    <span className="text-[8px] uppercase tracking-wider text-primary/80 font-semibold mt-0.5">
+    <span className="text-[9px] uppercase tracking-wider text-muted-foreground mt-0.5">
       {label}
     </span>
   </div>
@@ -41,21 +41,21 @@ const CampaignCountdown = ({ endDate }: CampaignCountdownProps) => {
 
   if (t.ended) {
     return (
-      <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+      <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
         Encerrada
-      </span>
+      </div>
     );
   }
 
   return (
-    <div className="flex items-end gap-1">
-      <Unit value={t.days} label="d" />
-      <span className="text-primary/60 text-[11px] font-bold pb-3.5">:</span>
-      <Unit value={t.hours} label="h" />
-      <span className="text-primary/60 text-[11px] font-bold pb-3.5">:</span>
-      <Unit value={t.minutes} label="m" />
-      <span className="text-primary/60 text-[11px] font-bold pb-3.5">:</span>
-      <Unit value={t.seconds} label="s" />
+    <div className="flex items-end gap-1.5">
+      <Unit value={t.days} label="dias" />
+      <span className="text-muted-foreground/50 text-sm pb-4">:</span>
+      <Unit value={t.hours} label="hrs" />
+      <span className="text-muted-foreground/50 text-sm pb-4">:</span>
+      <Unit value={t.minutes} label="min" />
+      <span className="text-muted-foreground/50 text-sm pb-4">:</span>
+      <Unit value={t.seconds} label="seg" />
     </div>
   );
 };
