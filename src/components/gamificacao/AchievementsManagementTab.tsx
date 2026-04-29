@@ -66,8 +66,9 @@ const AchievementsManagementTab = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name")
+        .select("id, full_name, role")
         .eq("tenant_id", tenant!.id)
+        .in("role", ["operador", "supervisor", "gerente"] as any)
         .order("full_name");
       return data || [];
     },
