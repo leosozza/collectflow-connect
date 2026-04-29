@@ -49,6 +49,8 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   const [editText, setEditText] = useState(message.content || "");
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const repliedMessage = message.reply_to_message_id
     ? allMessages.find((m) => m.id === message.reply_to_message_id) ?? null
@@ -65,20 +67,17 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   const isDeleted = !!message.deleted_for_recipient_at;
   const isEdited = !!message.edited_at;
   const isOptimistic = (message as any).__optimistic === true;
-  const ageMs = Date.now() - new Date(message.created_at).getTime();
+  const EDIT_WINDOW_MS = 15 * 60 * 1000;
+  const ageMs = now - new Date(message.created_at).getTime();
   const canEdit =
+    !isOfficialApi &&
     isOutbound &&
     !isInternal &&
     !isDeleted &&
     !isOptimistic &&
     message.message_type === "text" &&
     message.status !== "failed" &&
-    ageMs <= 15 * 60 * 1000;
-  const editDisabledReason = isOfficialApi
-    ? "Edição não suportada nas instâncias oficiais (Meta)"
-    : !canEdit && isOutbound && message.message_type === "text"
-      ? "Edição permitida apenas nos primeiros 15 minutos"
-      : null;
+    ageMs <= EDIT_WINDOW_MS;
   const canDelete =
     isOutbound &&
     !isInternal &&
@@ -87,6 +86,35 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     message.status !== "failed" &&
     (!!(message as any).provider_message_id || !!message.external_id);
   const showActionsMenu = isOutbound && !isInternal && !isOptimistic;
+
+  // Schedule a re-render exactly when the edit window expires, so the
+  // "Editar mensagem" item disappears from the menu and any open inline
+  // editor closes automatically.
+  useEffect(() => {
+    if (!isOutbound || isInternal || isDeleted || isOptimistic) return;
+    if (message.message_type !== "text") return;
+    const remaining = EDIT_WINDOW_MS - ageMs;
+    if (remaining <= 0) return;
+    const t = setTimeout(() => setNow(Date.now()), remaining + 250);
+    return () => clearTimeout(t);
+  }, [message.id, message.created_at, isOutbound, isInternal, isDeleted, isOptimistic, message.message_type, ageMs]);
+
+  // Auto-close inline editor if the window expires while it's open.
+  useEffect(() => {
+    if (editOpen && !canEdit) {
+      setEditOpen(false);
+    }
+  }, [editOpen, canEdit]);
+
+  // Auto-resize the inline textarea to grow with content.
+  useEffect(() => {
+    if (!editOpen) return;
+    const ta = editTextareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  }, [editText, editOpen]);
+
 
   const handleDocumentDownload = async (url: string, filename: string) => {
     try {
