@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useScrollRestore } from "@/hooks/useScrollRestore";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Building2, Users, UserCheck, FileText, Database, UserCog, Tags, Search, Headset } from "lucide-react";
 import CredorList from "@/components/cadastros/CredorList";
+import CredorForm from "@/components/cadastros/CredorForm";
 import EquipeList from "@/components/cadastros/EquipeList";
 import TipoDevedorList from "@/components/cadastros/TipoDevedorList";
 import TipoDividaList from "@/components/cadastros/TipoDividaList";
@@ -34,9 +35,13 @@ interface NavGroup {
 
 const CadastrosPage = () => {
   useScrollRestore();
-  const { tab } = useParams();
+  const { tab, credorId } = useParams();
   const navigate = useNavigate();
-  const active = tab || "credores";
+  const location = useLocation();
+  // Quando estamos numa rota /cadastros/credores/:credorId/... ou /cadastros/credores/novo,
+  // o segmento "tab" não vem nos params — forçamos "credores" para o menu lateral.
+  const isCredorRoute = location.pathname.startsWith("/cadastros/credores/");
+  const active = isCredorRoute ? "credores" : (tab || "credores");
   const setActive = (key: string) => navigate(`/cadastros/${key}`, { replace: true });
   const [search, setSearch] = useState("");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
@@ -99,6 +104,18 @@ const CadastrosPage = () => {
   const activeLabel = groups
     .flatMap((g) => g.items)
     .find((i) => i.key === active)?.label;
+
+  // Estado do formulário de credor controlado pela URL
+  const isNewCredor = location.pathname === "/cadastros/credores/novo";
+  const credorFormOpen = isCredorRoute && (!!credorId || isNewCredor);
+  const editingCredor = useMemo(
+    () => (credorId ? credores?.find((c: any) => c.id === credorId) ?? null : null),
+    [credorId, credores]
+  );
+
+  const handleCredorFormOpenChange = (open: boolean) => {
+    if (!open) navigate("/cadastros/credores");
+  };
 
   return (
     <div className="flex gap-6 animate-fade-in">
@@ -181,6 +198,13 @@ const CadastrosPage = () => {
         {(active === "tabulacoes" || active === "tabulacao_chamada") && <DispositionTabsWrapper />}
         
       </div>
+
+      {/* Formulário de credor controlado pela URL */}
+      <CredorForm
+        open={credorFormOpen}
+        onOpenChange={handleCredorFormOpenChange}
+        editing={editingCredor}
+      />
     </div>
   );
 };

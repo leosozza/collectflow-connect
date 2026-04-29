@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor, triggerExpireAgreementsForCredor } from "@/services/cadastrosService";
@@ -67,9 +68,23 @@ const FORMATTING_TOOLS = [
   { icon: Type, label: "Texto Grande", prefix: "### ", suffix: "" },
 ];
 
+const VALID_SECTIONS = ["dados", "bancario", "negociacao", "regua", "personalizacao", "assinatura", "portal"] as const;
+type CredorSection = typeof VALID_SECTIONS[number];
+
 const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
   const { tenant, tenantUser } = useTenant();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { credorId, section: sectionParam } = useParams<{ credorId?: string; section?: string }>();
+  const activeSection: CredorSection = (VALID_SECTIONS as readonly string[]).includes(sectionParam || "")
+    ? (sectionParam as CredorSection)
+    : "dados";
+
+  const handleSectionChange = (next: string) => {
+    if (!VALID_SECTIONS.includes(next as CredorSection)) return;
+    const idSegment = credorId || (editing?.id ?? "novo");
+    navigate(`/cadastros/credores/${idSegment}/${next}`, { replace: true });
+  };
 
   const [form, setForm] = useState<any>({});
   const [honorarios, setHonorarios] = useState<any[]>([]);
@@ -126,10 +141,16 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const saveMutation = useMutation({
     mutationFn: (data: any) => upsertCredor(data),
-    onSuccess: (_data, variables: any) => {
+    onSuccess: (data: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["credores"] });
+      queryClient.invalidateQueries({ queryKey: ["credores-count"] });
       toast.success("Credor salvo!");
       const newPrazo = parseInt(variables?.prazo_dias_acordo) || 30;
+      const newId = data?.id || data?.[0]?.id;
+      // Se acabou de criar (rota /novo) e há id retornado, atualizar URL para /:id/:section
+      if (!editing?.id && newId) {
+        navigate(`/cadastros/credores/${newId}/${activeSection}`, { replace: true });
+      }
       if (
         canApplyExpireNow &&
         editing?.id &&
@@ -319,7 +340,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           <SheetTitle>{editing ? "Editar Credor" : "Novo Credor"}</SheetTitle>
         </SheetHeader>
 
-        <Tabs defaultValue="dados" className="mt-4">
+        <Tabs value={activeSection} onValueChange={handleSectionChange} className="mt-4">
         <TabsList className="w-full flex-wrap">
             <TabsTrigger value="dados" className="flex-1">Dados</TabsTrigger>
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { fetchCredores, deleteCredor } from "@/services/cadastrosService";
@@ -9,14 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import CredorForm from "./CredorForm";
 
 const CredorList = () => {
   const { tenant } = useTenant();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
 
   const { data: credores = [], isLoading } = useQuery({
     queryKey: ["credores", tenant?.id],
@@ -30,8 +29,8 @@ const CredorList = () => {
     onError: () => toast.error("Erro ao excluir"),
   });
 
-  const openNew = () => { setEditing(null); setFormOpen(true); };
-  const openEdit = (c: any) => { setEditing(c); setFormOpen(true); };
+  const openNew = () => navigate("/cadastros/credores/novo");
+  const openEdit = (c: any) => navigate(`/cadastros/credores/${c.id}`);
 
   const filtered = credores.filter((c: any) =>
     c.razao_social?.toLowerCase().includes(search.toLowerCase()) ||
@@ -94,8 +93,6 @@ const CredorList = () => {
           </Table>
         )}
       </div>
-
-      <CredorForm open={formOpen} onOpenChange={setFormOpen} editing={editing} />
     </div>
   );
 };
