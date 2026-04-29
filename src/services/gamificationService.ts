@@ -79,19 +79,41 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-  // Fetch agreements count per operator for the period
+  // Fetch agreements created in the period per operator
   const startDate = new Date(year, month - 1, 1).toISOString();
   const endDate = new Date(year, month, 1).toISOString();
   const { data: agreementsData } = await supabase
     .from("agreements")
-    .select("created_by")
+    .select("id, created_by")
     .eq("tenant_id", tenantId)
     .in("created_by", operatorIds)
     .gte("created_at", startDate)
     .lt("created_at", endDate);
 
+  // Identify self-cancelled agreements (operator cancelled their own) via audit_logs
+  const agreementIds = (agreementsData || []).map((a: any) => a.id);
+  const selfCancelledIds = new Set<string>();
+  if (agreementIds.length > 0) {
+    const { data: cancelLogs } = await supabase
+      .from("audit_logs")
+      .select("entity_id, user_id")
+      .eq("tenant_id", tenantId)
+      .eq("entity_type", "agreement")
+      .eq("action", "cancel")
+      .in("entity_id", agreementIds);
+
+    const creatorByAgreement = new Map<string, string>();
+    (agreementsData || []).forEach((a: any) => creatorByAgreement.set(a.id, a.created_by));
+    (cancelLogs || []).forEach((log: any) => {
+      if (log.entity_id && creatorByAgreement.get(log.entity_id) === log.user_id) {
+        selfCancelledIds.add(log.entity_id);
+      }
+    });
+  }
+
   const agreementsCountMap = new Map<string, number>();
   (agreementsData || []).forEach((a: any) => {
+    if (selfCancelledIds.has(a.id)) return;
     agreementsCountMap.set(a.created_by, (agreementsCountMap.get(a.created_by) || 0) + 1);
   });
 

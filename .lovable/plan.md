@@ -1,31 +1,58 @@
-## Redesign do Ranking — Mais gamificado e denso
+## Ranking — contagem de acordos (excluindo auto-cancelados) e renomear "Taxa"
 
-Hoje cada operador ocupa uma linha esticada de ponta-a-ponta com fontes pequenas (10–12px) e medalhas minúsculas. Vou transformar em **cards de pódio** mais altos, em **grid de 2 colunas** no desktop, com tipografia destacada e elementos visuais de gamificação.
+### 1) `src/services/gamificationService.ts` — `fetchRanking`
 
-### Mudanças (`src/components/gamificacao/RankingTab.tsx`)
+Atualmente já existe a busca de `agreements` por período/operador. Vou:
 
-**Layout**
-- Trocar `space-y-3` (lista 1 coluna esticada) por `grid grid-cols-1 md:grid-cols-2 gap-3` — corta o "esticado".
-- Card maior: `rounded-2xl border-2 p-5` com hover sutil de scale.
+- Selecionar também o `id` do acordo (além de `created_by`).
+- Consultar `audit_logs` para esses `entity_id` com `action='cancel'` e `entity_type='agreement'`.
+- Considerar como **auto-cancelado** quando `audit_logs.user_id === agreements.created_by` (operador cancelou o próprio acordo) e **excluir da contagem**.
+- Demais cancelamentos (ex.: admin cancelou o acordo do operador) **continuam contando** como acordo realizado pelo operador.
 
-**Hierarquia visual**
-- Pontos em **3xl black** (`text-3xl font-black tracking-tight`) à direita — destaque principal.
-- Nome em **base bold** (era `text-sm`), valor recebido em `text-sm font-semibold`.
-- Avatar `w-14 h-14` com ring (era `w-9 h-9`).
-- Medalhas top-3 em `text-5xl` com drop-shadow (eram emoji pequeno).
-- Posição #4+ em círculo cinza com `#N` em `font-black`.
+Trecho-chave:
 
-**Gamificação**
-- Pódio top-3 com **gradiente temático** por posição:
-  - 1º: âmbar/dourado + glow shadow
-  - 2º: prata
-  - 3º: bronze/laranja
-- Número da posição **gigante semitransparente** (7xl, opacity 6%) no fundo do card como marca d'água.
-- Badges com emoji: 🎯 taxa, 💰 pagos, ⚠️ quebras — fonte `text-xs` (era 10px).
-- Selo "VOCÊ" colorido em vez do `(você)` discreto.
-- Barra de progresso `h-2.5` (era `h-1.5`) com `%` numérico em cima.
+```ts
+const { data: agreementsData } = await supabase
+  .from("agreements")
+  .select("id, created_by")
+  .eq("tenant_id", tenantId)
+  .in("created_by", operatorIds)
+  .gte("created_at", startDate)
+  .lt("created_at", endDate);
 
-**Tokens semânticos preservados**: `primary`, `foreground`, `muted-foreground`, `card`, `border`, `destructive`. Cores podium usam tints amber/slate/orange apenas para diferenciar medalhas.
+const agreementIds = (agreementsData || []).map((a: any) => a.id);
+const selfCancelledIds = new Set<string>();
+if (agreementIds.length > 0) {
+  const { data: cancelLogs } = await supabase
+    .from("audit_logs")
+    .select("entity_id, user_id")
+    .eq("tenant_id", tenantId)
+    .eq("entity_type", "agreement")
+    .eq("action", "cancel")
+    .in("entity_id", agreementIds);
 
-### Resultado
-Cards quadrados em pares, fontes maiores, medalhas grandes, glow no 1º lugar, destaque claro do "você". Não fica mais esticado e o visual fica mais "competição/jogo".
+  const creatorByAgreement = new Map<string, string>();
+  (agreementsData || []).forEach((a: any) => creatorByAgreement.set(a.id, a.created_by));
+  (cancelLogs || []).forEach((log: any) => {
+    if (creatorByAgreement.get(log.entity_id) === log.user_id) {
+      selfCancelledIds.add(log.entity_id);
+    }
+  });
+}
+
+const agreementsCountMap = new Map<string, number>();
+(agreementsData || []).forEach((a: any) => {
+  if (selfCancelledIds.has(a.id)) return;
+  agreementsCountMap.set(a.created_by, (agreementsCountMap.get(a.created_by) || 0) + 1);
+});
+```
+
+### 2) `src/components/gamificacao/RankingTab.tsx` — renomear badge
+
+Trocar o label do badge `🎯 {receiveRate}% taxa` por `🎯 {receiveRate}% Taxa de Conversão`.
+
+### Observações técnicas
+
+- Fonte da verdade do cancelamento por operador: `audit_logs` (action `cancel`, entity_type `agreement`). A tabela `agreements` não possui `cancelled_by`, então o audit log é o único caminho confiável.
+- Multi-tenant preservado: todas as queries continuam com `.eq('tenant_id', tenantId)`.
+- Sem mudanças de schema/migrações.
