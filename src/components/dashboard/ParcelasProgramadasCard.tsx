@@ -13,6 +13,7 @@ export interface VencimentoRow {
   client_name: string;
   credor: string;
   numero_parcela: number;
+  total_parcelas?: number;
   valor_parcela: number;
   agreement_status: string;
   effective_status?: string;
@@ -174,7 +175,14 @@ export default function ParcelasProgramadasCard({
                       </Link>
                     </TableCell>
                     <TableCell className="py-2 px-4 text-sm text-muted-foreground">
-                      {credorShort}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate">{credorShort}</span>
+                        {v.total_parcelas ? (
+                          <span className="shrink-0 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-foreground tabular-nums">
+                            {v.numero_parcela}/{v.total_parcelas}
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="py-2 px-4 text-sm text-right text-foreground tabular-nums">
                       {formatCurrency(Number(v.valor_parcela))}
