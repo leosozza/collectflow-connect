@@ -236,14 +236,15 @@ export const createAgreement = async (
         updatePayload.status_cobranca_id = acordoStatus.id;
       }
 
-      const rawCpf = data.client_cpf.replace(/\D/g, "");
-      const fmtCpf = rawCpf.length === 11
-        ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
-        : rawCpf;
+      const rawCpf2 = data.client_cpf.replace(/\D/g, "");
+      const fmtCpf2 = rawCpf2.length === 11
+        ? `${rawCpf2.slice(0,3)}.${rawCpf2.slice(3,6)}.${rawCpf2.slice(6,9)}-${rawCpf2.slice(9)}`
+        : rawCpf2;
       await supabase
         .from("clients")
         .update(updatePayload)
-        .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
+        .eq("tenant_id", tenantId)
+        .or(`cpf.eq.${rawCpf2},cpf.eq.${fmtCpf2}`)
         .eq("credor", data.credor)
         .in("status", ["pendente", "vencido", "quebrado"]);
     } catch (e) {
@@ -255,10 +256,15 @@ export const createAgreement = async (
       const { data: creatorProfile } = await supabase
         .from("profiles").select("id").eq("user_id", userId).single();
       if (creatorProfile) {
+        const rawCpf3 = data.client_cpf.replace(/\D/g, "");
+        const fmtCpf3 = rawCpf3.length === 11
+          ? `${rawCpf3.slice(0,3)}.${rawCpf3.slice(3,6)}.${rawCpf3.slice(6,9)}-${rawCpf3.slice(9)}`
+          : rawCpf3;
         await supabase
           .from("clients")
           .update({ operator_id: creatorProfile.id } as any)
-          .eq("cpf", data.client_cpf)
+          .eq("tenant_id", tenantId)
+          .or(`cpf.eq.${rawCpf3},cpf.eq.${fmtCpf3}`)
           .eq("credor", data.credor);
       }
     } catch (e) {
