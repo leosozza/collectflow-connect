@@ -395,7 +395,56 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
             )}
           </div>
         )}
-        {renderContent()}
+        {editOpen ? (
+          <div className="min-w-[260px] max-w-[480px]">
+            <div className="flex items-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => !busy && setEditOpen(false)}
+                disabled={busy}
+                aria-label="Cancelar edição"
+                className="shrink-0 w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/20 flex items-center justify-center transition-colors disabled:opacity-50"
+              >
+                <X className="w-4 h-4 text-[#667781] dark:text-[#aebac1]" />
+              </button>
+              <textarea
+                ref={editTextareaRef}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleConfirmEdit();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    if (!busy) setEditOpen(false);
+                  }
+                }}
+                disabled={busy}
+                rows={1}
+                autoFocus
+                className="flex-1 resize-none rounded-2xl bg-white dark:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] text-[14.5px] leading-[20px] px-3.5 py-2 outline-none focus:ring-2 focus:ring-[#25d366]/40 disabled:opacity-60 placeholder:text-[#8696a0]"
+                placeholder="Editar mensagem..."
+                style={{ minHeight: "36px", maxHeight: "160px" }}
+              />
+              <button
+                type="button"
+                onClick={handleConfirmEdit}
+                disabled={busy || !editText.trim() || editText.trim() === (message.content || "")}
+                aria-label="Salvar edição"
+                className="shrink-0 w-8 h-8 rounded-full bg-[#25d366] hover:bg-[#1ebe5d] flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {busy ? (
+                  <Loader2 className="w-4 h-4 text-white animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          renderContent()
+        )}
 
         {/* Footer: time, edited tag, deleted icon, status */}
         <div className={`flex items-center gap-1 justify-end mt-[2px] -mb-[2px] ${
