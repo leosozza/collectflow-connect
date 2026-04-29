@@ -29,8 +29,8 @@ const CredorList = () => {
     onError: () => toast.error("Erro ao excluir"),
   });
 
-  const openNew = () => { setEditing(null); setFormOpen(true); };
-  const openEdit = (c: any) => { setEditing(c); setFormOpen(true); };
+  const openNew = () => navigate("/cadastros/credores/novo");
+  const openEdit = (c: any) => navigate(`/cadastros/credores/${c.id}`);
 
   const filtered = credores.filter((c: any) =>
     c.razao_social?.toLowerCase().includes(search.toLowerCase()) ||
