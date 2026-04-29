@@ -1,89 +1,97 @@
-## Objetivo
+# Análise — Boleto da Cristiane abre 28/05 mas no sistema mostra 28/04
 
-1. Fazer o Dashboard caber inteiro na altura visível, sem barra de rolagem geral.
-2. Permitir o drag-and-drop reposicionar qualquer card livremente (incluindo "Total Recebido" indo para baixo de "Meta do Mês").
-3. Estabilizar o arrasto: enquanto um card é movido, os demais devem ficar parados — apenas o slot de destino realça, sem reembaralhar a grade inteira.
+## O que foi diagnosticado
 
----
+Acordo `f408e6a0...` (Cristiane da Penha Rocha):
 
-## 1. Tela fixa, sem scroll geral
+- `first_due_date` = 2026-04-28
+- `entrada_value` = 286,58 (paga em 02/04)
+- `new_installments` = 11
+- `custom_installment_dates` = `{ entrada: 2026-04-02, 2: 2026-04-28 }`
 
-Hoje a grade usa `auto-rows-[minmax(220px,auto)]`, o que deixa as linhas crescerem livremente e força scroll na página.
+Cobranças no Negociarie (`negociarie_cobrancas`):
 
-Mudanças em `src/pages/DashboardPage.tsx`:
+| installment_key | data_vencimento (DB / boleto) |
+|---|---|
+| `:1` | **28/04/2026** (paga) |
+| `:2` | **28/05/2026** ← exibido como "Parcela 2/12" mas a UI mostra 28/04 |
+| `:3` | 28/06/2026 |
+| `:4` | 28/07/2026 |
+| ... | ... |
+| `:11` | 28/02/2027 |
 
-- Container externo (`<div className="flex flex-col gap-4 ... h-full min-h-0">`) — manter `h-full` e `overflow-hidden` para travar a tela na altura da viewport.
-- Grid: trocar para 2 linhas com altura proporcional fixa, sem crescer:
-  - `grid grid-cols-6 gap-3 flex-1 min-h-0`
-  - `grid-template-rows: minmax(0,1fr) minmax(0,1fr)` (via `style` ou classe util)
-- Cada `SortableCard` recebe `h-full min-h-0 overflow-hidden` para nunca empurrar o layout.
-- Cards com listas internas (Agendamentos, Parcelas, Total Recebido) já precisam ter `overflow-auto` no corpo — confirmar/forçar isso para que o conteúdo role internamente em vez de estourar a célula.
-- Reduzir `gap` (de 4 para 3) e revisar paddings internos (`p-4` → `p-3` em headers/listas) para garantir folga em telas 1366×768.
+A UI calcula a data de cada parcela com `addMonths(first_due_date, i)` para `i = 0..10` e usa `instNum = (hasEntrada ? 1 : 0) + i + 1`, ou seja:
 
-Resultado: a tela inteira do Dashboard cabe sem scroll global; somente listas internas rolam.
+- "Parcela 2/12" → `instNum = 2`, `dueDate = 28/04` (i=0)
+- "Parcela 3/12" → `instNum = 3`, `dueDate = 28/05` (i=1)
 
-## 2. Drag-and-drop livre (Total Recebido podendo ir para qualquer posição)
+Mas o boleto que foi efetivamente gerado no Negociarie e gravado com `installment_key :2` está com **28/05**. Quando o usuário clica no link do boleto da "Parcela 2/12", abre o PDF com vencimento 28/05.
 
-O comportamento atual já reordena via `arrayMove`, mas a presença de `gridAutoFlow: "dense"` faz o navegador "puxar" cards para preencher buracos automaticamente, o que confunde a posição final do drop.
+## Causa raiz
 
-Mudanças:
+A numeração `installment_key:N` usada pela UI hoje está **deslocada em 1** em relação à numeração que foi usada quando os boletos da Cristiane foram gerados (16/04). Há indício de que a fórmula `instNum = (hasEntrada ? 1 : 0) + i + 1` foi alterada depois da geração — antes a 1ª parcela após a entrada era `:1` (28/04), agora a UI a chama de `:2` enquanto a cobrança 28/04 continua salva como `:1` no banco.
 
-- `src/pages/DashboardPage.tsx`: remover `style={{ gridAutoFlow: "dense" }}` do grid. A ordem passa a ser estritamente a definida em `layout.order`.
-- Manter `rectSortingStrategy` (já em uso) — funciona bem para grids de múltiplos tamanhos.
-- Em `useDashboardLayout.ts`: nada muda na estrutura — a ordem linear já é suficiente. Bumpar prefixo de storage para `v7` para limpar layouts antigos com `gridAutoFlow: dense` salvos.
+Resultado: a UI procura `:2` (28/05) e mostra como se fosse a parcela de 28/04. O boleto aberto tem a data correta do que foi gerado (28/05), divergindo do que a UI mostra (28/04).
 
-Com isso, ao soltar "Total Recebido" sobre o slot de "Meta do Mês", o array é reordenado e o card ocupa exatamente a posição alvo.
+Conferi outros acordos: dezenas têm a mesma divergência entre `installment_key :1` e `first_due_date`. **Não é caso isolado.**
 
-## 3. Arrasto estável (sem reembaralhar tudo durante o drag)
+O fato da entrada ter sido paga em atraso é circunstancial — não influencia a lógica das parcelas.
 
-Hoje, com `useSortable` + `rectSortingStrategy`, todos os cards aplicam `transform` em tempo real durante o hover, dando a sensação de que a grade inteira "balança". Para o usuário, isso parece que tudo está se movendo junto.
+## Plano de correção
 
-Mudanças em `src/components/dashboard/SortableCard.tsx`:
+### 1. Reconciliar numeração UI ↔ cobrança (canônico)
 
-- Usar `DragOverlay` do `@dnd-kit/core`: o card arrastado é renderizado num overlay flutuante e os cards originais **não** sofrem `transform` durante o arrasto.
-- Adicionar `onDragStart`/`onDragEnd` em `DashboardPage.tsx` controlando `activeId`. Enquanto `activeId` existir, renderizar `<DragOverlay>{renderBlock(activeId)}</DragOverlay>`.
-- No `SortableCard`, quando `isDragging === true`, manter apenas um placeholder com `opacity-30` no lugar original (sem aplicar `transform` aos vizinhos).
-- Trocar `rectSortingStrategy` por uma estratégia mais "estática": remover `strategy` (default) e mover a reordenação só no `onDragEnd`. Os outros cards permanecem visualmente parados; apenas o slot sob o cursor recebe um realce sutil (`ring-2 ring-primary/40`) via estado `overId`.
+Adotar como verdade única: **`installment_key:N` representa a parcela com `displayNumber = N`**, onde `N=0` é entrada e `N=1` é a primeira parcela após a entrada (com `dueDate = first_due_date`). Isso é o que a maioria dos boletos antigos no banco já segue.
 
-Resultado: ao arrastar um card, somente ele se move (no overlay) e o destino fica destacado. Os demais cards ficam imóveis até o drop ser confirmado.
+Em `src/components/client-detail/AgreementInstallments.tsx`:
 
----
+- Trocar `const instNum = (hasEntrada ? 1 : 0) + i + 1;` (linha 186) por `const instNum = i + 1;`.
+- Manter `displayNumber = instNum` para exibir "1/12, 2/12, ..." quando não há entrada e "Entrada, 1/N, 2/N, ..." quando há.
+- Ajustar `customKey` para continuar usando `String(instNum)` (mesma chave que `custom_installment_dates` e `custom_installment_values`).
+- O `expectedKey` para lookup de cobrança continua `${agreementId}:${instNum}`.
 
-## Detalhes técnicos
+Como `custom_installment_dates` da Cristiane usa a chave `2` para 28/04 (refletindo a UI atual), também é necessário **migrar `custom_installment_dates` e `custom_installment_values`** dos acordos existentes para o novo esquema (chave N → N-1 quando há entrada).
 
-Arquivos afetados:
+### 2. Migração de dados (SQL)
 
-- `src/pages/DashboardPage.tsx`
-  - Grid: `grid-cols-6` com `grid-template-rows: 1fr 1fr`, `flex-1 min-h-0`, sem `gridAutoFlow: dense`.
-  - Adicionar `activeId` state, `onDragStart`, `onDragOver` (para `overId`), `onDragEnd`.
-  - Renderizar `<DragOverlay>` com `renderBlock(activeId)` quando ativo.
-  - Container raiz: `h-full min-h-0 overflow-hidden`.
+Migration única que, para cada acordo com `entrada_value IS NOT NULL`:
 
-- `src/components/dashboard/SortableCard.tsx`
-  - Receber prop `isOver` (opcional) para aplicar realce de destino.
-  - Quando `isDragging`, ocultar conteúdo e mostrar placeholder; não aplicar `CSS.Transform`.
+- Decrementa em 1 as chaves numéricas em `custom_installment_dates` e `custom_installment_values` (chave `2` → `1`, `3` → `2`, etc.). Mantém intactas as chaves `entrada`, `entrada_*` e `entrada_method`.
+- **Não toca em `negociarie_cobrancas`** — os `installment_key :N` já estão corretos sob o novo esquema (`:1` = primeira após entrada).
 
-- `src/hooks/useDashboardLayout.ts`
-  - Bumpar `STORAGE_PREFIX` para `rivo:dashboard-layout:v7` (limpa layouts antigos).
+### 3. Detecção e reemissão dos boletos divergentes
 
-- Cards internos com listas (`AgendamentosHojeCard`, `ParcelasProgramadasCard`, `TotalRecebidoCard`)
-  - Garantir `flex flex-col h-full min-h-0` no card raiz e `overflow-auto min-h-0` no corpo da lista/gráfico.
+Mesmo após a renumeração, o boleto `:2` da Cristiane continua errado (28/05 em vez de 28/04 — porque 28/04 ficou em `:1`, que está pago). Especificamente: a parcela "2/12" exibida pela UI passa a ser `installment_key:2` com `defaultDate = 28/05` — que **bate** com o boleto gerado. ✓
 
-Sem mudanças de banco. Sem mudanças em RLS/edge functions.
+Ou seja: após a migração, a UI da Cristiane vai exibir corretamente "Parcela 2/12 — 28/05", "Parcela 3/12 — 28/06"... e cada link de boleto vai abrir um PDF com o vencimento idêntico. O comportamento do "cliente pagou em atraso" não muda nada — a entrada foi paga, e as 11 parcelas seguem o cronograma original (28/04, 28/05, ..., 28/02/2027).
 
-```text
-Layout final (6 col x 2 rows, altura fixa):
+Para acordos onde houve edição manual de data (`custom_installment_dates`) divergente do boleto já gerado, criar um utilitário (botão na UI) que detecte cobranças `pendente` cujo `data_vencimento` ≠ `dueDate` calculada e ofereça reemissão em massa via `negociarieService.generateSingleBoleto`. Escopo opcional para uma segunda iteração.
 
-+------------------+------------------+------------------+
-|  KPIs Operac.    |  KPIs Operac.    |  KPIs Financ.    |   row 1 (1fr)
-|  (col-span 3)    |                  |  (col-span 3)    |
-+--------+---------+---------+--------+---------+--------+
-| Agend. | Agend.  | Parcelas| Parc.  | Meta    | Meta   |   row 2 (1fr)
-| (2)    |         | (2)     |        | (2)     |        |
-+--------+---------+---------+--------+---------+--------+
+### 4. Componentes ajustados
 
-Total Recebido entra na grade só quando visível, ocupando 2 cols
-e empurrando outro card para fora da view (ou substituindo via drag).
-```
+- `src/components/client-detail/AgreementInstallments.tsx` — corrigir fórmula de `instNum`.
+- `src/components/client-detail/AgreementCalculator.tsx` — verificar se também usa o esquema antigo ao gravar `custom_installment_dates/values` para novos acordos (se sim, alinhar).
+- Migration SQL para reescrever `custom_installment_dates` e `custom_installment_values` dos acordos com entrada existentes.
 
-Observação sobre "Total Recebido": como agora ele tem `col-span-2` (largura igual a Meta), ele passa a fazer parte da rotação de 6 slots × 2 linhas. Se o usuário deixar todos os 6 cards visíveis (5 atuais + Total Recebido), serão exatamente 6 slots ocupando a tela inteira sem scroll.
+### 5. Casos sem entrada
+
+Sem `entrada_value`, a fórmula atual já produz `instNum = i + 1`, então nada muda.
+
+## Arquivos afetados
+
+- `src/components/client-detail/AgreementInstallments.tsx`
+- `src/components/client-detail/AgreementCalculator.tsx` (verificação)
+- Migration SQL (renumeração de chaves em `agreements.custom_installment_dates` e `custom_installment_values`)
+
+## Validação após implantação
+
+- Para Cristiane: parcela 2/12 deve mostrar 28/05 e abrir boleto com 28/05; parcela 3/12 → 28/06; etc.
+- Reabrir uma amostra de 5 acordos com entrada e conferir que todas as datas exibidas batem com os boletos.
+- Acordos sem entrada não devem mudar.
+
+## Observação importante
+
+Optei por **alinhar a UI ao banco** (que tem 11 boletos já registrados) em vez de **regerar os 11 boletos** para alinhar ao display atual. Motivos:
+- 11 boletos × dezenas de acordos = custo alto e risco de duplicidade no Negociarie.
+- O cronograma que está nos boletos é o cronograma comercial correto (entrada + 11 parcelas mensais consecutivas).
+- A migração só renumera chaves em JSONB nos acordos; não toca em cobranças.
