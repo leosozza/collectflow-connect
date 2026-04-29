@@ -15,6 +15,7 @@ import {
   fetchAllCarteiraIds,
   fetchAllCarteiraClients,
   fetchCarteiraClientsByIds,
+  fetchFirstNCarteiraSelection,
   createClient,
   updateClient,
   bulkCreateClients,
@@ -215,6 +216,8 @@ const CarteiraPage = () => {
   const [selectedCpfs, setSelectedCpfs] = useState<Set<string>>(new Set());
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [loadingAllIds, setLoadingAllIds] = useState(false);
+  const [selectNInput, setSelectNInput] = useState<string>("");
+  const [loadingSelectN, setLoadingSelectN] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
   const [whatsappOpen, setWhatsappOpen] = useState(false);
   const [calculatingScore, setCalculatingScore] = useState(false);
@@ -550,6 +553,32 @@ const CarteiraPage = () => {
     }
   };
 
+  const handleSelectFirstN = async () => {
+    if (!tenant?.id) return;
+    const n = parseInt(selectNInput, 10);
+    if (!n || n <= 0) {
+      toast.error("Informe uma quantidade válida");
+      return;
+    }
+    if (n > totalCount) {
+      toast.error(`Apenas ${totalCount.toLocaleString("pt-BR")} clientes disponíveis`);
+      return;
+    }
+    setLoadingSelectN(true);
+    try {
+      const { ids, cpfs } = await fetchFirstNCarteiraSelection(tenant.id, n, rpcFilters, sortField, sortDir);
+      setSelectedIds(new Set(ids));
+      setSelectedCpfs(new Set(cpfs));
+      setSelectAllFiltered(false);
+      setBulkClients(null);
+      toast.success(`${cpfs.length.toLocaleString("pt-BR")} cliente(s) selecionado(s)`);
+    } catch (err: any) {
+      toast.error("Erro ao selecionar clientes");
+    } finally {
+      setLoadingSelectN(false);
+    }
+  };
+
   const toggleSelect = (groupClient: any) => {
     const ids: string[] = groupClient.allIds || [groupClient.id];
     const cpf = (groupClient.cpf || "").replace(/\D/g, "");
@@ -755,6 +784,40 @@ const CarteiraPage = () => {
 
       <ClientFilters filters={filters} onChange={setFilters} onSearch={() => queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] })} showAdvancedFilters={permissions.canFilterCarteira} />
 
+      {/* Seletor por quantidade: digitar N e selecionar primeiros N CPFs filtrados */}
+      {hasActiveFilters && totalCount > 0 && !selectAllFiltered && (
+        <div className="bg-card border border-border rounded-lg p-3 flex flex-wrap items-center justify-center gap-2 text-sm">
+          <span className="text-muted-foreground">Selecionar os primeiros</span>
+          <Input
+            type="number"
+            min={1}
+            max={totalCount}
+            value={selectNInput}
+            onChange={(e) => setSelectNInput(e.target.value.replace(/\D/g, ""))}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSelectFirstN(); }}
+            placeholder="Ex: 50"
+            className="w-28 h-8"
+            disabled={loadingSelectN}
+          />
+          <span className="text-muted-foreground">
+            clientes (de {totalCount.toLocaleString("pt-BR")} filtrados)
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSelectFirstN}
+            disabled={loadingSelectN || !selectNInput}
+            className="gap-1.5"
+          >
+            {loadingSelectN ? (
+              <><Loader2 className="w-3 h-3 animate-spin" />Selecionando...</>
+            ) : (
+              "Selecionar"
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* Banner: seleção acumulada entre páginas + opção de selecionar tudo */}
       {selectedCpfs.size > 0 && totalCount > selectedCpfs.size && !selectAllFiltered && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center text-sm text-foreground">
@@ -778,7 +841,7 @@ const CarteiraPage = () => {
             variant="link"
             size="sm"
             className="text-muted-foreground font-medium px-1 h-auto"
-            onClick={() => { setSelectedIds(new Set()); setSelectedCpfs(new Set()); setSelectAllFiltered(false); setBulkClients(null); }}
+            onClick={() => { setSelectedIds(new Set()); setSelectedCpfs(new Set()); setSelectAllFiltered(false); setBulkClients(null); setSelectNInput(""); }}
           >
             Limpar seleção
           </Button>
