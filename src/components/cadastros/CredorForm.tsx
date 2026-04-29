@@ -334,7 +334,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           <SheetTitle>{editing ? "Editar Credor" : "Novo Credor"}</SheetTitle>
         </SheetHeader>
 
-        <Tabs defaultValue="dados" className="mt-4">
+        <Tabs value={activeSection} onValueChange={handleSectionChange} className="mt-4">
         <TabsList className="w-full flex-wrap">
             <TabsTrigger value="dados" className="flex-1">Dados</TabsTrigger>
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
