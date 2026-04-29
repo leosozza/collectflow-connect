@@ -39,19 +39,20 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
     pendentes: true,
     colchaoAcordos: true,
   },
+  // Linha 1 (referência): Agendamentos | Parcelas | Metas
   order: [
-    "metas",
-    "totalRecebido",
-    "kpisOperacionais",
     "agendamentos",
     "parcelas",
+    "metas",
+    "kpisOperacionais",
+    "totalRecebido",
     "totalQuebra",
     "pendentes",
     "colchaoAcordos",
   ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v4";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v5";
 
 function sanitize(raw: any): DashboardLayout {
   try {

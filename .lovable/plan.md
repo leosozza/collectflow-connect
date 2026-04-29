@@ -1,65 +1,70 @@
 ## Objetivo
 
-Agrupar os 3 KPIs (Acionados Hoje, Acordos do Dia, Acordos do Mês) em **um único card maior** que ocupa **uma posição no grid**, contendo internamente **3 tiles lado a lado** (horizontal):
+Reorganizar a primeira linha do Dashboard para ficar **exatamente** como na imagem de referência: 3 cards lado a lado com larguras/alturas iguais — **Agendamentos** (esq), **Parcelas Programadas** (centro), **Meta do Mês** (dir) — e refazer o gráfico de Meta como um **velocímetro tricolor** (vermelho → amarelo → verde) com ponteiro animado.
 
-- **Acionados Hoje** — tile inteiro **azul**
-- **Acordos do Dia** — tile inteiro **verde**
-- **Acordos do Mês** — tile inteiro **laranja**
+Os demais cards (KPIs, Total Recebido, Quebra, Pendentes, Colchão) **mantêm o visual atual**, apenas ajustam-se para caber no novo padrão de altura do grid.
 
-Os números nunca podem ser cortados — fontes responsivas e `min-w-0` + `truncate` controlado para garantir enquadramento.
+## Layout do grid
 
-## Mudanças
-
-### 1. `src/hooks/useDashboardLayout.ts`
-- Substituir os 3 IDs (`acionadosHoje`, `acordosDia`, `acordosMes`) por um único ID novo: **`kpisOperacionais`**.
-- Atualizar `ALL_DASHBOARD_BLOCKS`, `DEFAULT_DASHBOARD_LAYOUT.visible` e `DEFAULT_DASHBOARD_LAYOUT.order` (entra na primeira linha onde estavam os KPIs).
-- Bump da versão de storage: `v3` → `v4` para invalidar layouts antigos no localStorage.
-
-### 2. Novo componente `src/components/dashboard/KpisOperacionaisCard.tsx`
-Card único com 3 tiles **lado a lado** preenchendo toda a largura e altura do slot:
-
+### Linha 1 (referência da imagem) — 3 colunas iguais
 ```text
-┌────────────────────────────────────────────────────────┐
-│ ┌──────────┐ ┌──────────┐ ┌──────────┐                 │
-│ │ AZUL     │ │ VERDE    │ │ LARANJA  │                 │
-│ │ Acionad. │ │ Acordos  │ │ Acordos  │                 │
-│ │ Hoje     │ │ do Dia   │ │ do Mês   │                 │
-│ │ 142      │ │ 8        │ │ 87       │                 │
-│ │ +12% ↑   │ │ +5% ↑    │ │ -3% ↓    │                 │
-│ └──────────┘ └──────────┘ └──────────┘                 │
-└────────────────────────────────────────────────────────┘
+┌──────────────────┬──────────────────┬──────────────────┐
+│ Agendamentos     │ Parcelas Progr.  │ Meta do Mês      │
+│ para Hoje        │ (HOJE / nav)     │ (gauge tricolor) │
+└──────────────────┴──────────────────┴──────────────────┘
 ```
 
-**Layout interno:**
-- Container: `grid grid-cols-3 gap-2 h-full p-2` (3 tiles uniformes lado a lado).
-- Cada tile: `rounded-lg p-3 flex flex-col justify-between min-w-0 overflow-hidden`.
+- Cada um ocupa **1 coluna × 1 linha** (3 slots horizontais).
+- Altura fixa do slot: aumentar `auto-rows` para `minmax(180px, auto)` (hoje é 140px) para acomodar o gauge confortavelmente, igual à imagem.
 
-**Cores sólidas (gradiente sutil para manter identidade visual):**
-- Azul: `bg-gradient-to-br from-blue-500 to-blue-600 text-white`
-- Verde: `bg-gradient-to-br from-green-500 to-green-600 text-white`
-- Laranja: `bg-gradient-to-br from-orange-500 to-orange-600 text-white`
+### Linhas seguintes
+- Demais blocos (KPIs Operacionais, Total Recebido, Quebra, Pendentes, Colchão) seguem o grid 3-col existente — **mesmo visual atual**, apenas respeitando a nova altura mínima do slot.
 
-**Anti-corte de números:**
-- Valor principal: `text-xl md:text-2xl font-bold tabular-nums leading-tight tracking-tight break-words`.
-- Label menor: `text-[10px] md:text-[11px] font-medium leading-tight opacity-90` (sem truncate — pode quebrar em 2 linhas).
-- Ícones em badge `bg-white/20 rounded-md p-1.5` no topo.
-- Trends embaixo em texto `text-[10px] opacity-90` com seta colorida em branco/transparência.
+## Mudanças por arquivo
 
-### 3. `src/pages/DashboardPage.tsx`
-- Remover entradas `acionadosHoje`, `acordosDia`, `acordosMes` do `kpiMap` e do `SPAN_CLASS`.
-- Adicionar `kpisOperacionais: "col-span-1 md:col-span-2 row-span-1"` ao `SPAN_CLASS` — ocupa **2 colunas** (necessário para acomodar 3 tiles horizontais sem cortar números). No mobile vira 1 coluna empilhando internamente em scroll horizontal ou grid 3 ainda, mas com fonte menor. Ajuste fino: usar `col-span-1 md:col-span-2 lg:col-span-2 row-span-1`.
-- No `renderBlock`, adicionar case `kpisOperacionais` que renderiza `<KpisOperacionaisCard />` recebendo: `acionadosHoje`, `acordosDia` (`stats?.acordos_dia`), `acordosMes` (`stats?.acordos_mes`) e os 3 trends já calculados (`trendAcionados`, `trendAcordosDia`, `trendAcordosMes`).
-- Manter cálculos de trends e queries inalterados.
+### 1. `src/hooks/useDashboardLayout.ts`
+- Reordenar `DEFAULT_DASHBOARD_LAYOUT.order` para que a primeira linha seja exatamente: `agendamentos`, `parcelas`, `metas`.
+- Bump versão storage: `v4` → `v5` para invalidar layouts salvos e aplicar a nova ordem padrão.
 
-### 4. `src/components/dashboard/CustomizeDashboardDialog.tsx`
-- Remover `acionadosHoje`, `acordosDia`, `acordosMes` dos mapas `LABELS` e `DESCRIPTIONS`.
-- Adicionar:
-  - `kpisOperacionais: "KPIs Operacionais"`
-  - descrição: `"Acionados hoje, acordos do dia e do mês"`
+### 2. `src/pages/DashboardPage.tsx`
+- `SPAN_CLASS`:
+  - `agendamentos`: `col-span-1 row-span-1`
+  - `parcelas`: **mudar de `md:col-span-2`** para `col-span-1 row-span-1` (uniforme com os outros dois).
+  - `metas`: `col-span-1 row-span-1`
+  - Demais permanecem como estão.
+- Container do grid: aumentar altura mínima das linhas → `auto-rows-[minmax(180px,auto)]`.
+
+### 3. `src/components/dashboard/MetaGaugeCard.tsx` (refatoração visual completa)
+Substituir o gauge atual (radial laranja com gradiente) por **velocímetro tricolor** semelhante ao da imagem:
+
+- **Semicírculo** com 3 segmentos contíguos:
+  - Vermelho (`hsl(var(--destructive))`) de 0% a 33,33%
+  - Amarelo (`hsl(48 96% 53%)`) de 33,33% a 66,66%
+  - Verde (`hsl(142 71% 45%)`) de 66,66% a 100%
+- **Ponteiro** preto/foreground triangular animado com `framer-motion`, gira de -90° (esquerda) a +90° (direita) conforme o `percent`.
+- **Hub central** circular com furo interno (estilo relógio).
+- **% no centro** abaixo do gauge.
+- **Lado esquerdo** do componente: bloco textual com:
+  - `R$ XX.XXX,XX` em destaque + label "Meta Recebimento"
+  - `R$ XX.XXX,XX` em destaque + label "Realizado"
+  - Linha pequena: `01/MM/AA à DD/MM/AA`
+- Layout: `flex items-center justify-between` — texto à esquerda, gauge à direita, ocupando toda a largura/altura do card.
+
+### 4. `src/components/dashboard/DashboardMetaCard.tsx`
+- Remover o header com ícone Trophy (a imagem mostra só "Metas" como título sutil).
+- Adicionar header simples: "**Metas**" no canto superior esquerdo, padding reduzido.
+- O `MetaGaugeCard` ocupa o restante do card (`flex-1`).
+- Reduzir `size` do gauge para se adequar ao slot (~`size={160}`).
+- Manter toda a lógica de busca de meta (operador vs admin, `myGoal`/`allGoals`/`selectedProfile`) **inalterada**.
 
 ## Resultado esperado
 
-- Grid passa de 10 para 8 blocos.
-- Novo bloco agrupado é arrastável como uma única peça e ocupa 2 slots horizontais (1 no mobile).
-- Os 3 tiles internos são vibrantes (azul/verde/laranja), exibidos lado a lado, com números totalmente visíveis.
-- Nenhuma alteração em lógica de dados, RPCs ou trends — apenas reorganização visual.
+- Primeira linha do dashboard idêntica à referência: 3 cards retangulares de mesmo tamanho.
+- Meta do Mês passa a exibir velocímetro tricolor com ponteiro animado, valores `Meta Recebimento` e `Realizado` à esquerda e período abaixo.
+- Demais cards mantêm visual original — apenas ganham altura mínima maior (180px) para uniformidade visual.
+- Drag-and-drop continua funcionando; layouts antigos do localStorage são invalidados pelo bump `v4 → v5`.
+
+## Restrições
+
+- **Nenhuma** mudança em RPCs, queries, lógica de dados ou cálculo de percentual da meta.
+- KPIs Operacionais (card 3-em-1 azul/verde/laranja) e demais blocos: **visual intacto**.

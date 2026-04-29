@@ -216,10 +216,10 @@ const DashboardPage = () => {
   // Desktop (lg, 3 cols): full spec applies.
   const SPAN_CLASS: Record<DashboardBlockId, string> = {
     metas: "col-span-1 row-span-1",
-    totalRecebido: "col-span-1 row-span-1 lg:row-span-2",
+    totalRecebido: "col-span-1 row-span-1",
     kpisOperacionais: "col-span-1 row-span-1",
     agendamentos: "col-span-1 row-span-1",
-    parcelas: "col-span-1 md:col-span-2 row-span-1",
+    parcelas: "col-span-1 row-span-1",
     totalQuebra: "col-span-1 row-span-1",
     pendentes: "col-span-1 row-span-1",
     colchaoAcordos: "col-span-1 row-span-1",
@@ -458,7 +458,7 @@ const DashboardPage = () => {
       >
         <SortableContext items={visibleOrder} strategy={rectSortingStrategy}>
           <div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(140px,auto)] items-stretch"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(200px,auto)] items-stretch"
             style={{ gridAutoFlow: "dense" }}
           >
             {visibleOrder.map((id) => (
