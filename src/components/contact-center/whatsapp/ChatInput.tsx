@@ -39,8 +39,19 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
   const [filteredReplies, setFilteredReplies] = useState<QuickReply[]>([]);
   const [isInternalMode, setIsInternalMode] = useState(false);
   const [qrPopoverOpen, setQrPopoverOpen] = useState(false);
+  const [qrSearch, setQrSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const filteredQuickReplies = useMemo(() => {
+    const term = qrSearch.trim().toLowerCase();
+    if (!term) return quickReplies;
+    return quickReplies.filter((qr) =>
+      qr.shortcut.toLowerCase().includes(term) ||
+      (qr.category || "").toLowerCase().includes(term) ||
+      (qr.content || "").toLowerCase().includes(term)
+    );
+  }, [qrSearch, quickReplies]);
 
   // Auto-resize textarea like WhatsApp: grows up to ~6 lines, then scrolls.
   useEffect(() => {
