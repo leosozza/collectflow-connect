@@ -7452,6 +7452,12 @@ export type Database = {
           valor_parcela: number
         }[]
       }
+      get_distinct_credores: {
+        Args: { _tenant_id: string }
+        Returns: {
+          credor: string
+        }[]
+      }
       get_distinct_event_cpfs: {
         Args: { p_since: string; p_tenant_id: string }
         Returns: {
