@@ -175,6 +175,8 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   document_generated: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
   conversation_auto_closed: <MessageSquare className="w-3.5 h-3.5 text-violet-500" />,
   conversation_transferred: <ArrowRightLeft className="w-3.5 h-3.5 text-violet-500" />,
+  previous_agreement_credit_applied: <CreditCard className="w-3.5 h-3.5 text-blue-500" />,
+  credit_overflow: <AlertTriangle className="w-3.5 h-3.5 text-blue-500" />,
 };
 
 const FIELD_LABELS: Record<string, string> = {
