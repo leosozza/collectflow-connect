@@ -508,6 +508,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
             onChange={(e) => setCustomMessage(e.target.value)}
             placeholder="Olá {{nome}}, sua parcela de {{valor_parcela}} vence em {{data_vencimento}}..."
             rows={4}
+            className="resize-none max-h-48 overflow-y-auto"
           />
           <p className="text-xs text-muted-foreground">
             Variáveis: {"{{nome}}"}, {"{{cpf}}"}, {"{{valor_parcela}}"}, {"{{data_vencimento}}"}, {"{{credor}}"}
