@@ -476,11 +476,26 @@ const WhatsAppChatLayout = () => {
     }
     supabase
       .from("clients")
-      .select("nome_completo, valor_parcela, total_parcelas, numero_parcela, credor, cpf, data_vencimento")
+      .select("id, nome_completo, valor_parcela, total_parcelas, numero_parcela, credor, cpf, data_vencimento, debtor_profile")
       .eq("id", selectedConv.client_id)
       .eq("tenant_id", tenantId!)
       .single()
       .then(({ data }) => setClientInfo(data));
+
+    // Realtime: keep clientInfo (notably debtor_profile) in sync with sidebar edits.
+    const clientId = selectedConv.client_id;
+    const ch = supabase
+      .channel(`client-detail-${clientId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "clients", filter: `id=eq.${clientId}` },
+        (payload) => {
+          const next = payload.new as any;
+          setClientInfo((prev: any) => prev ? { ...prev, ...next } : next);
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, [selectedConv?.client_id, selectedConv?.id, tenantId]);
 
   // Realtime subscriptions
@@ -595,6 +610,18 @@ const WhatsAppChatLayout = () => {
       toast.error("Instância não encontrada");
       return;
     }
+
+    // Defensive gate (mirrors ChatPanel) — block if 5+ inbound and missing profile/disposition.
+    const inboundCount = messages.filter((m) => m.direction === "inbound" && !m.is_internal).length;
+    if (inboundCount >= 5 && selectedConv.client_id && clientInfo?.id) {
+      const hasDisp = dispositionAssignments.some((a) => a.conversation_id === selectedConv.id);
+      const hasProf = !!clientInfo?.debtor_profile;
+      if (!hasDisp || !hasProf) {
+        toast.error("Defina o Perfil do Devedor e selecione ao menos uma Tabulação para enviar mensagens.");
+        return;
+      }
+    }
+
     // Optimistic UI: show message immediately while the edge function works.
     const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const optimisticMsg: ChatMessage = {

@@ -1,37 +1,95 @@
-# Disparo WhatsApp em Lote — Rodapé sempre visível
+## Contexto da análise
 
-## Problema
-No `WhatsAppBulkDialog` (passo 1), quando o operador cola uma mensagem longa o `Textarea` cresce (resize nativo) e o bloco de Preview também aumenta, empurrando o `DialogFooter` (botões "Cancelar" / "Próximo") para fora da viewport. O `DialogContent` não tem altura máxima nem área de rolagem interna.
+### Como o `debtor_profile` é alimentado hoje
+- **Único ponto de escrita**: `DebtorProfileBadge` (`src/components/shared/DebtorProfileBadge.tsx`) — alteração 100% manual pelo operador.
+- **Tabulação WhatsApp** (`DispositionSelector.tsx`): grava em `conversation_disposition_assignments`. **Não toca em `clients.debtor_profile`**.
+- **Tabulação Discador** (`DispositionPanel.tsx` → `dispositionService.createDisposition`): grava em `call_dispositions`. **Não toca em `clients.debtor_profile`**.
 
-## Solução
-Tornar o `DialogContent` uma coluna flex com altura máxima (ex.: `max-h-[85vh]`), com header e footer fixos e o **conteúdo do passo** rolando internamente. Adicionalmente, travar o resize do `Textarea` e dar uma altura máxima para o bloco de Preview, para que o usuário role dentro do campo em vez de expandir o modal.
+**Conclusão da análise solicitada**: nem o WhatsApp nem o discador estão alimentando o perfil do devedor. Hoje "Aguardando definição de perfil" só sai do estado se o operador clicar manualmente no badge. Isso explica por que muitos clientes ficam eternamente sem perfil.
 
-## Mudanças (arquivo único)
-`src/components/carteira/WhatsAppBulkDialog.tsx`
+### Como o envio de mensagem funciona hoje
+- `WhatsAppChatLayout.handleSend` envia direto sem qualquer validação de perfil/tabulação.
+- `ChatInput` recebe um `disabled`, mas só é desligado por status de conversa — não há gate por perfil/tabulação.
 
-1. `DialogContent` (linha 883): adicionar `max-h-[85vh] flex flex-col p-0 overflow-hidden` e mover paddings para os filhos. Header e Footer ficam `shrink-0`; criar um wrapper rolável entre eles para o indicador de etapas, o badge de "X clientes selecionados" e os `renderStepN()`.
+---
 
-   Estrutura nova:
-   ```text
-   DialogContent (flex col, max-h-[85vh])
-     DialogHeader (shrink-0, px/pt)
-     div.flex-1.overflow-y-auto.px-6 (área rolável)
-       renderStepIndicator()
-       badge "N clientes selecionados"
-       renderStep1/2/3/4()
-     DialogFooter (shrink-0, px/pb, border-t)
-   ```
+## O que será implementado
 
-2. `Textarea` da mensagem personalizada (linha 506): adicionar `className="resize-none max-h-48"` e manter `rows={4}`. Assim o campo ganha rolagem interna em vez de empurrar o layout. (Tamanho continua confortável; a área já é rolável dentro do dialog também.)
+### 1. Auto-população do `debtor_profile` a partir de tabulações
+Mapear cada tabulação para um perfil sugerido e, ao registrar a tabulação (WhatsApp **ou** discador), atualizar `clients.debtor_profile` **somente se ainda estiver vazio** (não sobrescreve perfil já definido manualmente).
 
-3. Bloco de Preview (linha 531): adicionar `max-h-40 overflow-y-auto` para que mensagens muito longas no preview não estourem a área.
+Mapa proposto (chaves canônicas das `call_disposition_types` já existentes):
+
+| Tabulação (key) | Perfil sugerido |
+|---|---|
+| `wa_acordo_formalizado`, `wa_em_dia`, `wa_quitado` | `ocasional` |
+| `wa_em_negociacao`, `cpc`, `wa_cpc` | `ocasional` |
+| `wa_risco_processo`, `wa_sem_interesse_financeiro` | `resistente` |
+| `wa_sem_interesse_produto` | `insatisfeito` |
+| `wa_sem_contato`, `no_answer`, `voicemail`, `interrupted` | (não altera) |
+| `wrong_contact`, `wa_cpe` | (não altera — contato errado) |
+
+Regra: nunca sobrescreve um perfil já definido. Apenas preenche quando `debtor_profile IS NULL`.
+
+### 2. Bloqueio obrigatório no WhatsApp após 5 mensagens recebidas
+
+Em `ChatPanel.tsx`/`ChatInput.tsx`:
+
+- Contar mensagens do cliente (`direction = 'inbound'`, `is_internal = false`) na conversa atual.
+- Se `inboundCount >= 5` E (`debtor_profile` está nulo OU não existe nenhuma `conversation_disposition_assignments` para a conversa):
+  - Desabilitar o input de envio (mesma lógica visual de "aceitar conversa").
+  - Mostrar banner amarelo acima do input com checklist:
+    - ⚠️ "Defina o Perfil do Devedor para continuar" (link rola até o badge)
+    - ⚠️ "Selecione ao menos uma Tabulação" (link rola até o seletor)
+  - Toast ao tentar enviar via Enter: "Preencha o Perfil e a Tabulação para enviar mensagens".
+- Quando ambos forem preenchidos, libera automaticamente.
+
+### 3. Aplicação na tabulação do discador (Atendimento/Telefonia)
+- Em `DispositionPanel`, ao registrar tabulação, chamar a mesma helper que atualiza `debtor_profile` (vincular pelo `client_id` da sessão de atendimento).
+- Não há fluxo de "envio de mensagem" no discador, então o bloqueio do item 2 fica restrito ao WhatsApp (conforme o pedido).
+
+### 4. Helper centralizado
+Criar `src/services/debtorProfileAutoService.ts` com:
+- `inferDebtorProfileFromDisposition(key: string): string | null`
+- `applyAutoProfile(tenantId, cpf, dispositionKey)` — atualiza `clients.debtor_profile` apenas se nulo, registra `client_events` (`debtor_profile_changed` com `event_source: 'auto_disposition'`) e dispara `recalcScoreForCpf`.
+
+Chamado em:
+- `DispositionSelector.handleToggle` (após insert bem-sucedido).
+- `dispositionService.createDisposition` (após insert).
+
+---
 
 ## Detalhes técnicos
-- `DialogContent` do shadcn já é posicionado fixo e centralizado; aplicar `max-h-[85vh]` com `flex flex-col` é o padrão recomendado para modais com rodapé persistente.
-- Não há mudança em `renderStep2/3/4` além de herdarem o novo wrapper rolável — isso também corrige potenciais estouros em telas pequenas nos demais passos.
-- Sem alterações em estado, lógica de envio ou serviços. Mudança puramente visual/layout.
 
-## Critérios de aceite
-- Ao colar uma mensagem longa (centenas de linhas), o textarea passa a rolar internamente e o botão "Próximo" continua visível.
-- Em viewports pequenas (≤716px de altura, como o preview atual), o rodapé permanece fixo enquanto o conteúdo rola.
-- Nenhuma regressão visual nos passos 2, 3 e 4.
+**Arquivos a criar:**
+- `src/services/debtorProfileAutoService.ts`
+- `src/components/contact-center/whatsapp/WhatsAppGateBanner.tsx` (banner com checklist)
+
+**Arquivos a editar:**
+- `src/components/contact-center/whatsapp/DispositionSelector.tsx` — chamar `applyAutoProfile` após assign.
+- `src/components/contact-center/whatsapp/ChatPanel.tsx` — calcular `inboundCount`, derivar `mustGate`, passar `disabled` e renderizar banner; props novas `debtorProfile`, `dispositionAssignments` (já recebe).
+- `src/components/contact-center/whatsapp/ChatInput.tsx` — exibir mensagem de gate quando `disabled` por motivo `requires_profile_disposition`.
+- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` — passar `linkedClient.debtor_profile` para o `ChatPanel` e bloquear `handleSend` defensivamente.
+- `src/services/dispositionService.ts` — em `createDisposition`, após insert chamar `applyAutoProfile` (precisa do `cpf`; buscar via `clients.id`).
+- `src/components/atendimento/DispositionPanel.tsx` — sem mudança visual; o serviço cuida da automação.
+
+**Pseudocódigo do gate (ChatPanel):**
+```ts
+const inboundCount = messages.filter(
+  m => m.direction === "inbound" && !m.is_internal
+).length;
+
+const hasDisposition = dispositionAssignments.some(
+  a => a.conversation_id === conversation?.id
+);
+const hasProfile = !!clientInfo?.debtor_profile;
+
+const mustGate = inboundCount >= 5 && (!hasDisposition || !hasProfile);
+```
+
+**Banner**: aparece logo acima do `ChatInput`, com 2 itens (perfil / tabulação) marcados ✓ ou ✗, e botões "Definir perfil" / "Tabular" que abrem a sidebar (`onToggleSidebar`) caso esteja fechada e dão `scrollIntoView` nos respectivos cards.
+
+**Não-objetivos (fora do escopo deste plano)**
+- Não vamos forçar tabulação para conversas com menos de 5 mensagens.
+- Não vamos exigir perfil em mídia/áudio antes de 5 inbound (mesma regra aplica via `mustGate` — vale para todos os métodos de envio).
+- Não mexemos no fluxo de "aceitar conversa" existente.

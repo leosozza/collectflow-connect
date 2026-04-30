@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { useHasRivoAgreement } from "@/hooks/useHasRivoAgreement";
+import { applyAutoProfileFromDisposition } from "@/services/debtorProfileAutoService";
 
 interface DispositionType {
   id: string;
@@ -103,6 +104,16 @@ const DispositionSelector = ({ conversationId, tenantId, clientCpf }: Dispositio
             disposition_type_id: disposition.id,
             assigned_by: profile?.user_id || profile?.id,
           } as any);
+      }
+
+      // Auto-fill debtor profile (only if currently NULL) when assigning a disposition.
+      if (!isAssigned && clientCpf && tenantId) {
+        void applyAutoProfileFromDisposition({
+          tenantId,
+          cpf: clientCpf,
+          dispositionKey: disposition.key,
+          channel: "whatsapp",
+        });
       }
 
       await loadAssignments();

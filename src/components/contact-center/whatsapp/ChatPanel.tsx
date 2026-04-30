@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ChatMessageBubble from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import AISuggestion from "./AISuggestion";
+import WhatsAppGateBanner from "./WhatsAppGateBanner";
 import { Conversation, ChatMessage } from "@/services/conversationService";
 import { findOrCreateSession } from "@/services/atendimentoSessionService";
 import { useTenant } from "@/hooks/useTenant";
@@ -228,7 +229,25 @@ const ChatPanel = ({
     }
   };
 
+  // ====== Gate: 5+ inbound messages require profile + at least 1 disposition ======
+  const GATE_THRESHOLD = 5;
+  const inboundCount = useMemo(
+    () => messages.filter((m) => m.direction === "inbound" && !m.is_internal).length,
+    [messages]
+  );
+  const hasDisposition = useMemo(
+    () => dispositionAssignments.some((a) => a.conversation_id === conversation?.id),
+    [dispositionAssignments, conversation?.id]
+  );
+  const hasProfile = !!(clientInfo?.debtor_profile);
+  const mustGate =
+    inboundCount >= GATE_THRESHOLD && !!conversation && !!clientInfo?.id && (!hasDisposition || !hasProfile);
+
   const handleSend = (text: string) => {
+    if (mustGate) {
+      toast.error("Defina o Perfil do Devedor e selecione ao menos uma Tabulação para enviar mensagens.");
+      return;
+    }
     onSend(text, replyTo?.id || null);
     setReplyTo(null);
   };
@@ -558,14 +577,38 @@ const ChatPanel = ({
       })()}
 
 
+      {/* Gate banner — bloqueia envio até preencher Perfil + Tabulação */}
+      {mustGate && (
+        <WhatsAppGateBanner
+          hasProfile={hasProfile}
+          hasDisposition={hasDisposition}
+          inboundCount={inboundCount}
+          threshold={GATE_THRESHOLD}
+          onOpenSidebar={() => { if (!sidebarOpen) onToggleSidebar(); }}
+          sidebarOpen={sidebarOpen}
+        />
+      )}
+
       {/* Input - WhatsApp style */}
       <ChatInput
         onSend={handleSend}
-        onSendMedia={onSendMedia}
-        onSendAudio={onSendAudio}
+        onSendMedia={(file) => {
+          if (mustGate) {
+            toast.error("Defina o Perfil e a Tabulação para enviar mensagens.");
+            return;
+          }
+          onSendMedia(file);
+        }}
+        onSendAudio={(blob) => {
+          if (mustGate) {
+            toast.error("Defina o Perfil e a Tabulação para enviar mensagens.");
+            return;
+          }
+          onSendAudio(blob);
+        }}
         onSendInternalNote={onSendInternalNote}
         quickReplies={quickReplies}
-        disabled={conversation.status === "waiting"}
+        disabled={conversation.status === "waiting" || mustGate}
         clientInfo={clientInfo}
         operatorName={operatorName}
         replyTo={replyTo}

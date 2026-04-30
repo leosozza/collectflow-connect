@@ -364,6 +364,28 @@ export const createDisposition = async (params: {
     entity_id: params.client_id,
     details: { type: params.disposition_type, notes: params.notes, module: "atendimento" },
   });
+
+  // Auto-fill debtor profile (only if currently NULL) — fire-and-forget.
+  try {
+    const { data: clientRow } = await supabase
+      .from("clients")
+      .select("cpf")
+      .eq("id", params.client_id)
+      .maybeSingle();
+    const cpf = (clientRow as any)?.cpf;
+    if (cpf) {
+      const { applyAutoProfileFromDisposition } = await import("@/services/debtorProfileAutoService");
+      void applyAutoProfileFromDisposition({
+        tenantId: params.tenant_id,
+        cpf,
+        dispositionKey: params.disposition_type,
+        channel: "voice",
+      });
+    }
+  } catch (e) {
+    logger.error("dispositionService", "applyAutoProfileFromDisposition", e);
+  }
+
   return data as CallDisposition;
 };
 
