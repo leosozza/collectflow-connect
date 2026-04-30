@@ -1,67 +1,77 @@
-## Plano
+## Quebra em 2 estágios + cancelamento automático na Negociarie
 
-Duas mudanças independentes no Dashboard.
+### Parte 1 — Métrica de Quebra com 2 estágios
+
+**Total de Quebra** no Dashboard passa a somar parcelas em dois estágios:
+
+#### Estágio 1 — Quebra Provisória (reversível)
+- Vencimento dentro do mês alvo
+- Atraso entre **3 e 10 dias** (`due_date BETWEEN CURRENT_DATE - 10 AND CURRENT_DATE - 3`)
+- Acordo ainda **vivo** (`status IN ('pending','approved','overdue')`)
+- Sem pagamento confirmado
+
+Sai automaticamente quando:
+- Pagamento confirmado → vai para Total Recebido
+- Operador altera a data da parcela para o futuro → volta para Pendentes
+
+#### Estágio 2 — Quebra Definitiva (irreversível)
+- Acordo `cancelled` (`auto_expired` ou `manual`) com vencimento ≤ data de cancelamento, **OU**
+- Atraso > 10 dias, mesmo com acordo ainda não cancelado pelo job
+
+```text
+Vencimento futuro       → Pendentes
+Atraso 0-3 dias         → Pendentes
+Atraso 4-10 dias (vivo) → Quebra (provisória, reversível)
+Atraso >10 dias         → Quebra (definitiva)
+Acordo cancelado        → Quebra (definitiva)
+Pagamento confirmado    → Total Recebido
+```
+
+Sem mais gap. Pendentes e Quebra encostam em D+3.
 
 ---
 
-### 1. Tooltips explicativos em cada card (hover)
+### Parte 2 — Cancelar boletos na Negociarie ao cancelar acordo
 
-Adicionar tooltip (shadcn `Tooltip`) ao **título/ícone** de cada card, explicando exatamente o que ele soma.
+**Regra**: quando um acordo passa para `status = 'cancelled'` (auto ou manual), todas as parcelas/boletos ativos daquele acordo devem ser cancelados na Negociarie pra impedir o cliente de pagar um acordo já quebrado.
 
-**Textos propostos:**
+O proxy `negociarie-proxy` já tem a action `cancelar-cobranca` (PATCH idempotente, trata 404 como sucesso). Vamos usá-la em três pontos:
 
-| Card | Tooltip |
-|---|---|
-| **Acionados Hoje** | "Quantidade de CPFs únicos que tiveram interação registrada hoje (carteira ou atendimento) e ainda **não fecharam acordo**." |
-| **Acordos do Dia** | "Acordos criados hoje, excluindo os cancelados e rejeitados." |
-| **Acordos do Mês** | "Acordos criados no mês selecionado, excluindo os cancelados e rejeitados." |
-| **Total de Quebra** | "Soma das parcelas do mês com vencimento há mais de **10 dias** e não pagas. Considera tanto acordos cancelados (auto/manual) quanto acordos vivos com parcelas não pagas além do prazo de tolerância." |
-| **Pendentes** | "Parcelas do mês que ainda vão vencer ou venceram nos últimos 3 dias e não estão pagas. Após 3 dias de atraso, a parcela sai de Pendentes." |
-| **Colchão de Acordos** | "Soma das parcelas projetadas para o mês originadas de acordos criados em meses anteriores (entrada e parcelas mensais)." |
-| **Total Recebido** | "Soma de todos os pagamentos confirmados no mês — confirmações manuais, portal de pagamento e Negociarie." |
-| **Total Negociado (mês)** | "Valor total dos acordos criados no mês, somando entrada + 1ª parcela ou apenas a 1ª parcela quando não há entrada." |
-| **Total Projetado** | "Parcelas com vencimento no mês originadas de acordos vivos criados em meses anteriores." |
-| **Agendamentos Hoje** | "Callbacks/retornos agendados pelos operadores para a data de hoje." |
-| **Parcelas Programadas** | "Parcelas com vencimento futuro previsto, agrupadas por mês." |
-| **Meta / Gauge** | "Progresso do total recebido no mês frente à meta cadastrada." |
+#### 2.1. Edge function nova: `cancel-agreement-charges`
+Função utilitária reutilizável que:
+1. Recebe `agreement_id` (e `tenant_id` quando chamada via service_role).
+2. Busca todas as parcelas do acordo (entrada + 1..N) que ainda têm `id_parcela` na Negociarie e não estão pagas.
+3. Para cada parcela: chama `negociarie-proxy` action `cancelar-cobranca` com o `id_parcela`.
+4. Registra resultado em `client_events` (`type: 'agreement_charges_cancelled'`) com a lista de parcelas e status de cada cancelamento.
+5. Retorna `{ cancelled: number, failed: number, details: [] }`.
 
-Usar `<TooltipProvider>` + `<Tooltip>` com `<TooltipTrigger asChild>` envolvendo o ícone/título de cada Tile/Card. Cursor `cursor-help`. Sem alteração visual além de um leve `?` ou hover state já existente.
+#### 2.2. Acionada pelo job `auto-expire-agreements` (auto)
+Após marcar o acordo como `cancelled / auto_expired`, invoca `cancel-agreement-charges` para cada acordo recém-cancelado, em paralelo limitado (chunks de ~10) pra não estourar rate limit da Negociarie.
 
----
+#### 2.3. Acionada no cancelamento manual (UI)
+Em `agreementService.ts` linha 529 (`update status='cancelled', cancellation_type='manual'`), após o update bem-sucedido, dispara `supabase.functions.invoke('cancel-agreement-charges', { body: { agreement_id } })` em fire-and-forget (não bloqueia a UI). Toast informa "Boletos sendo cancelados na Negociarie em background".
 
-### 2. Quebra: tolerância de 10 dias (parcelas vencidas e não pagas)
-
-**Diagnóstico do estado atual**
-- `get_dashboard_stats` hoje só conta como **Quebra** parcelas de acordos com `status='cancelled'` (`auto_expired` ou `manual`).
-- Você reduziu o cadastro de `30 → 10 dias` para auto-cancelamento, mas o job só roda periodicamente. Resultado: parcelas que já passaram dos 10 dias de atraso ficam num limbo — saíram de "Pendentes" (regra de 3 dias) mas ainda **não** entraram em "Quebra" porque o agreement ainda não foi marcado `cancelled`.
-
-**Nova regra de Quebra (per-installment, dinâmica)**
-
-Uma parcela soma em Quebra do mês quando **todas** as condições abaixo são verdadeiras:
-
-1. Vencimento está dentro do mês alvo (entrada ou parcela 1..N).
-2. **Não está paga** (sem registro confirmado em `manual_payments` / `negociarie_cobrancas` para aquele `installment_key`).
-3. Pelo menos **uma** das duas condições:
-   - **(a)** Acordo está `cancelled` com `cancellation_type IN ('auto_expired','manual')` E vencimento ≤ data de cancelamento (lógica antiga, mantida para histórico). **OU**
-   - **(b)** Vencimento está atrasado há **mais de 10 dias** (ou seja, `due_date < CURRENT_DATE - 10`), independentemente do status do acordo (pega os casos onde o auto-cancel ainda não rodou ou o operador não cancelou manualmente).
-
-**Efeito**:
-- Parcelas de Abril com vencimento ≤ 20/abr não pagas entram em Quebra hoje (30/abr).
-- A regra fica consistente com Pendentes: vencimento futuro → Pendente; até 3 dias de atraso → Pendente; 4 a 10 dias de atraso → "limbo" (não conta em nenhum); >10 dias → Quebra.
-
-> Observação importante: existe um **gap de 4 a 10 dias** entre Pendentes (até 3 dias) e Quebra (após 10 dias). Se você quiser eliminar o gap, posso alinhar Pendentes para "até 10 dias de atraso" — me confirme depois.
-
-**Mês anterior (para variação +/-%)**: aplica a mesma regra usando `CURRENT_DATE` como referência (snapshot atual do passado).
-
-**Migration**: `CREATE OR REPLACE FUNCTION public.get_dashboard_stats(...)` ajustando apenas os blocos `_quebra` e `_quebra_mes_ant`. Demais métricas inalteradas.
+#### 2.4. Reativação (reversão)
+Se um acordo for reaberto (`status` voltando para `approved`, linha 981 do service), **não recriamos** os boletos automaticamente — os boletos cancelados ficam cancelados, e o operador precisa gerar novos via fluxo formal de regeneração. (Comportamento conservador: evita ressuscitar cobrança que cliente já achou que foi anulada.)
 
 ---
 
 ### Arquivos
 
-- `src/components/dashboard/KpisGridCard.tsx` — tooltips nos 6 tiles
-- `src/components/dashboard/TotalRecebidoCard.tsx` — tooltip no título
-- `src/components/dashboard/DashboardMetaCard.tsx` / `MetaGaugeCard.tsx` / `MetaRadialCard.tsx` — tooltip no título (apenas o que estiver em uso)
-- `src/components/dashboard/AgendamentosHojeCard.tsx` — tooltip no título
-- `src/components/dashboard/ParcelasProgramadasCard.tsx` — tooltip no título
-- `supabase/migrations/<timestamp>_dashboard_quebra_10day_tolerance.sql` — nova lógica de Quebra
+**Backend**
+- `supabase/migrations/<ts>_dashboard_quebra_two_stage.sql` — reescreve blocos `_quebra` e `_quebra_mes_ant` no `get_dashboard_stats` para a lógica de 2 estágios.
+- `supabase/functions/cancel-agreement-charges/index.ts` — nova função (verify_jwt=false; valida via JWT do operador OU service_role + tenant_id explícito).
+- `supabase/functions/auto-expire-agreements/index.ts` — após cancelar cada acordo, invoca `cancel-agreement-charges`.
+
+**Frontend**
+- `src/services/agreementService.ts` — após o update de cancelamento manual (linha ~529), invocar `cancel-agreement-charges`.
+- `src/components/dashboard/KpisGridCard.tsx` — atualizar tooltip de "Total de Quebra" descrevendo provisória vs definitiva.
+
+---
+
+### Pontos de atenção
+
+- **Idempotência**: o proxy já trata 404 como sucesso, então retentativas e múltiplas chamadas pra mesma parcela são seguras.
+- **Latência da UI no manual**: cancelamento dos boletos roda async — operador não precisa esperar. Em caso de falha parcial, fica registrada em `client_events` pra auditoria.
+- **Memória do projeto**: vou registrar a regra "Acordo cancelado → boletos Negociarie cancelados automaticamente" em `mem://features/billing/manual-payment-confirmation.md` (já existe) ou criar entrada dedicada quando implementar.
+- **Job `auto-break-overdue` e `auto-expire-agreements`**: precisamos confirmar qual dos dois é o canônico pra cancelamento por prazo. Pelo nome, `auto-expire-agreements` é o que muda `status=cancelled`; `auto-break-overdue` parece operar em `clients`. Vou verificar e plugar o cancelamento de boletos no job certo durante a implementação.
