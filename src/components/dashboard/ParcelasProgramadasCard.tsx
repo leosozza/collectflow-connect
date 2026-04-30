@@ -47,7 +47,10 @@ export default function ParcelasProgramadasCard({
     <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
+        <div
+          className="flex items-center gap-2 min-w-0 cursor-help"
+          title="Parcelas com vencimento na data selecionada. Use as setas e o calendário para navegar entre dias e ver o que está a receber e o que já foi pago."
+        >
           <div className="rounded-lg p-1.5 inline-flex bg-primary/10 shrink-0">
             <CalendarClock className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
           </div>
