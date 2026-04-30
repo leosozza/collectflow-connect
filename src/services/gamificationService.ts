@@ -44,23 +44,27 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
   const tenantId = await getMyTenantId();
   if (!tenantId) return [];
 
-  const { data: participants } = await supabase
-    .from("gamification_participants")
-    .select("profile_id")
-    .eq("tenant_id", tenantId)
-    .eq("enabled", true);
+  // Run independent queries in parallel.
+  const [{ data: participants }, pointsRes] = await Promise.all([
+    supabase
+      .from("gamification_participants")
+      .select("profile_id")
+      .eq("tenant_id", tenantId)
+      .eq("enabled", true),
+    supabase
+      .from("operator_points")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("year", year)
+      .eq("month", month)
+      .order("points", { ascending: false }),
+  ]);
+
+  if (pointsRes.error) throw pointsRes.error;
+  const points = pointsRes.data;
 
   const enabledIds = new Set((participants || []).map((p: any) => p.profile_id));
 
-  const { data: points, error } = await supabase
-    .from("operator_points")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("year", year)
-    .eq("month", month)
-    .order("points", { ascending: false });
-
-  if (error) throw error;
   if (!points || points.length === 0) return [];
 
   const filteredPoints = enabledIds.size > 0
