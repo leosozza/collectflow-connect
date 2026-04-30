@@ -764,7 +764,31 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Alert>
       )}
 
-      {draftRestoreOpen && draft && !draftDismissed && (
+      {previousAgreementCredit.total > 0 && (
+        <Alert className="border-blue-500/40 bg-blue-500/10">
+          <CheckCircle2 className="w-4 h-4 text-blue-600" />
+          <AlertDescription className="text-sm">
+            <div className="font-medium text-foreground">
+              Este cliente já pagou{" "}
+              <span className="text-blue-700 dark:text-blue-400 font-semibold">
+                {formatCurrency(previousAgreementCredit.total)}
+              </span>{" "}
+              em acordos anteriores que foram quebrados. Esse valor já foi abatido do saldo abaixo.
+            </div>
+            {previousAgreementCredit.breakdown.length > 0 && (
+              <ul className="mt-1.5 ml-1 space-y-0.5 text-xs text-muted-foreground">
+                {previousAgreementCredit.breakdown.map((b) => (
+                  <li key={b.source_agreement_id}>
+                    Acordo #{b.source_agreement_id.slice(0, 8)} — {formatCurrency(b.amount)}
+                    {b.applied_at ? ` em ${new Date(b.applied_at).toLocaleDateString("pt-BR")}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
         <Alert className="border-primary/40 bg-primary/5">
           <RotateCcw className="w-4 h-4" />
           <AlertDescription className="flex items-center justify-between gap-3 w-full">
