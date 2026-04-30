@@ -52,6 +52,22 @@ export interface AgreementFormData {
 
 const MODULE = "agreementService";
 
+/**
+ * Fire-and-forget: dispara recálculo do status_cobranca_id (Inadimplente/Acordo Vigente/etc.)
+ * para todo o tenant após mutação relevante em agreements. NUNCA bloqueia o fluxo principal
+ * — qualquer falha é só logada. Garante que o badge "Status do Cliente" reflita a hierarquia
+ * canônica (QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > QUEBRA > INADIMPLENTE > EM DIA)
+ * sem depender exclusivamente do cron.
+ */
+const triggerStatusSync = (tenantId: string | null | undefined) => {
+  if (!tenantId) return;
+  supabase.functions
+    .invoke("auto-status-sync", { body: { tenant_id: tenantId } })
+    .catch((e) => {
+      try { logger.error(MODULE, "trigger_status_sync", e); } catch {}
+    });
+};
+
 // Lean projection: only the columns the listing/classification needs.
 // Cuts payload by ~40% vs select("*") and avoids transferring unused JSONB.
 const AGREEMENT_LIST_COLUMNS = [
