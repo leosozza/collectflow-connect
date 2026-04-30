@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
+import { useMemo } from "react";
 import {
   fetchCampaigns, createCampaign, updateCampaign, deleteCampaign,
   saveCampaignCredores, saveCampaignParticipants, closeCampaignAndAward, Campaign,
@@ -13,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Plus, Pencil, Trash2, Trophy, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { isCampaignActive } from "./campaignTime";
+import { useRefreshActiveCampaignScores } from "./useRefreshActiveCampaignScores";
 
 const CampaignsManagementTab = () => {
   const { tenant } = useTenant();
@@ -76,8 +78,12 @@ const CampaignsManagementTab = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const activeCampaigns = campaigns.filter(isCampaignActive);
-  const otherCampaigns = campaigns.filter((c) => !isCampaignActive(c));
+  const activeCampaigns = useMemo(() => campaigns.filter(isCampaignActive), [campaigns]);
+  const otherCampaigns = useMemo(() => campaigns.filter((c) => !isCampaignActive(c)), [campaigns]);
+
+  // Mesma lógica da CampaignsTab: dispara recálculo server-side em background
+  // assim que a aba abre, fechando a janela de 30 min do cron.
+  useRefreshActiveCampaignScores(activeCampaigns);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 
