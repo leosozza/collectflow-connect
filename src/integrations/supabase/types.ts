@@ -1669,6 +1669,7 @@ export type Database = {
           valor_atualizado: number | null
           valor_entrada: number
           valor_pago: number
+          valor_pago_origem: Json
           valor_parcela: number
           valor_saldo: number | null
         }
@@ -1726,6 +1727,7 @@ export type Database = {
           valor_atualizado?: number | null
           valor_entrada?: number
           valor_pago?: number
+          valor_pago_origem?: Json
           valor_parcela?: number
           valor_saldo?: number | null
         }
@@ -1783,6 +1785,7 @@ export type Database = {
           valor_atualizado?: number | null
           valor_entrada?: number
           valor_pago?: number
+          valor_pago_origem?: Json
           valor_parcela?: number
           valor_saldo?: number | null
         }
