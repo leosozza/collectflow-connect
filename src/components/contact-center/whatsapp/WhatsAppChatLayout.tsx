@@ -748,11 +748,30 @@ const WhatsAppChatLayout = () => {
     if (!selectedConv || !tenantId) return;
     setSending(true);
     try {
-      const safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+      // Normaliza extensões problemáticas para WhatsApp.
+      // .jfif/.jpe/.pjpeg/.pjp são JPEG válidos mas o cliente WhatsApp do destinatário
+      // não os reconhece como imagem inline e a foto não é exibida (apenas status "sent",
+      // sem evoluir para "delivered"). Forçamos extensão segura sempre que o MIME for JPEG.
+      const normalizeImageName = (name: string, mimeType: string): string => {
+        if (!mimeType) return name;
+        const mt = mimeType.toLowerCase();
+        if (mt.startsWith("image/jpeg") || mt === "image/jpg" || mt === "image/pjpeg") {
+          return name.replace(/\.(jfif|jpe|pjpeg|pjp)$/i, ".jpg");
+        }
+        return name;
+      };
+
+      const rawSafe = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const safeName = normalizeImageName(rawSafe, file.type);
+      const safeFileName = normalizeImageName(file.name, file.type);
+
       const filePath = `${tenantId}/${selectedConv.id}/${Date.now()}_${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from("chat-media")
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          contentType: file.type || undefined,
+          upsert: false,
+        });
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from("chat-media").getPublicUrl(filePath);
@@ -763,7 +782,7 @@ const WhatsAppChatLayout = () => {
       else if (file.type.startsWith("video/")) mediaType = "video";
       else if (file.type.startsWith("audio/")) mediaType = "audio";
 
-      await sendMediaMessage(selectedConv.id, tenantId, mediaUrl, mediaType, file.type, file.name);
+      await sendMediaMessage(selectedConv.id, tenantId, mediaUrl, mediaType, file.type, safeFileName);
 
       if (selectedConv.status === "waiting") {
         setSelectedConv({ ...selectedConv, status: "open" as any });

@@ -1,69 +1,66 @@
-## Problema
+## Problema confirmado
 
-Cliente **Cleidson Gonçalves Rodrigues** (CPF `078.282.596-62`, credor `TESS MODELS`) aparece como **"Inadimplente"** no header (campo `Status do Cliente`), mas tem **acordo vigente** (`311f5d28`, status `pending`, criado em 16/04/2026).
+Operador enviou foto `edcbc178-5ac1-4072-9de1-0e31fd0dc39d.jfif` para Keite Raniele em **29/04 19:51** e novamente em **30/04 17:56**. Ambas ficaram com status apenas `sent` (1 ✓), nunca evoluiram para `delivered`/`read`. A cliente respondeu **"estou esperando desde ontem"** e só recebeu quando o operador reenviou a mesma imagem como `.png` (que ficou `read`, ✓✓ azul, 17:57).
 
 ### Causa raiz
 
-1. O grupo CPF+Credor possui 12 linhas em `clients` com `status_cobranca_id` desalinhados:
-   - 5× `Acordo Vigente`
-   - 2× `Quitado`
-   - **2× `Inadimplente`** (linha exibida na tela)
-   - 2× `Quebra de Acordo`
-2. A função `auto-status-sync` aplica a hierarquia por grupo `(cpf|credor)`, mas **não rodou** para esse cliente após a criação do acordo vigente (`updated_at` das linhas problemáticas é anterior ao acordo).
-3. Acordos atuais não disparam sincronização do `status_cobranca_id` automaticamente — depende de cron ou ação manual em `/clientes` e `/carteira`.
+O fluxo de upload em `WhatsAppChatLayout.handleSendMedia` (linhas 747–776) preserva a **extensão original** do arquivo (`.jfif`) ao salvar no bucket `chat-media`. O envio para o Evolution API usa essa URL/fileName com extensão `.jfif`. O cliente WhatsApp do destinatário **não considera `.jfif` extensão de imagem inline válida** — embora o conteúdo seja JPEG legítimo, a renderização falha silenciosamente. Mesma lógica afeta extensões obscuras (`.jpe`, `.pjpeg`, `.bmp` quando o tipo MIME indica imagem).
 
-## Correção (3 passos, sem impacto em produção)
+Adicionalmente, o upload não passa `contentType` explícito ao Supabase Storage; para `.jfif` o storage cai em `application/octet-stream`, o que agrava o problema.
 
-### Passo 1 — Hotfix imediato no cliente afetado
-Migration SQL única, idempotente, escopada por tenant+CPF+credor. Sobrescreve `status_cobranca_id` de **todas as 12 linhas** do grupo para `Acordo Vigente` (`9ffe808b-4346-4336-ba77-1fc9f56b7385`), pois há acordo `pending` ativo.
+## Correção (3 camadas defensivas, sem impacto em produção)
 
-```sql
-UPDATE public.clients
-SET status_cobranca_id = '9ffe808b-4346-4336-ba77-1fc9f56b7385',
-    updated_at = now()
-WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7'
-  AND regexp_replace(cpf, '\D', '', 'g') = '07828259662'
-  AND credor = 'TESS MODELS PRODUTOS FOTOGRAFICOS LTDA';
+### 1. Front-end — normalizar extensão e contentType no upload
+Arquivo: `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` (`handleSendMedia`).
+
+Antes do upload:
+- Se `file.type === "image/jpeg"` ou `file.type === "image/jpg"`, forçar a extensão do filename salvo no storage para `.jpg` (independente do nome original).
+- Aplicar mapa de normalização para outros formatos problemáticos: `.jfif`, `.jpe`, `.pjpeg`, `.pjp` → `.jpg`.
+- Passar `{ contentType: file.type, upsert: false }` no `.upload()` para evitar fallback genérico.
+- O `fileName` enviado ao Evolution API também passa pela mesma normalização (mantendo nome original do usuário, mas com extensão segura).
+
+Pseudo-código:
+```ts
+const PROBLEMATIC_IMAGE_EXTS = ["jfif", "jpe", "pjpeg", "pjp"];
+const normalizeImageName = (name: string, mimeType: string) => {
+  if (!mimeType.startsWith("image/jpeg") && !mimeType.startsWith("image/jpg")) return name;
+  return name.replace(/\.(jfif|jpe|pjpeg|pjp)$/i, ".jpg");
+};
+const safeName = normalizeImageName(rawSafe, file.type);
+// upload com contentType: file.type
 ```
 
-Risco: zero — afeta apenas 12 linhas de um único CPF/credor/tenant.
+### 2. Edge function — defesa em profundidade no `send-chat-message`
+Arquivo: `supabase/functions/send-chat-message/index.ts` (logo após linha 143, dentro do bloco `if (mediaUrl && mediaType)`).
 
-### Passo 2 — Reexecutar `auto-status-sync` para o tenant
-Disparar a edge function `auto-status-sync` em modo single-tenant (`{ tenant_id: '39a450f8-...' }`) para revalidar **todos os demais clientes** do tenant que possam estar com o mesmo desalinhamento (ex.: outros acordos criados sem cron desde a última execução).
+Mesma normalização aplicada à URL e ao `fileName` antes de enviar ao Evolution/Wuzapi:
+- Se `mediaType === "image"` e `mimeType` indica JPEG, garantir que `media.fileName` termine em `.jpg` (não `.jfif`).
+- Se a `mediaUrl` já está no storage como `.jfif`, gerar URL alternativa renomeando — **mas apenas reescrever o `fileName` enviado ao provider**, sem mover o arquivo (o Evolution baixa pela URL e respeita o `fileName` do payload para o WhatsApp). Não toca arquivos antigos.
 
-Operação read-then-write controlada pela própria função existente; segue lógica já em produção. Sem alteração de schema.
+Isso protege contra qualquer outra origem que chame essa função (campanhas em massa, automações).
 
-### Passo 3 — Prevenir reincidências (opcional, recomendado)
-Ajuste mínimo no fluxo de criação/aprovação/cancelamento de acordo para invocar `auto-status-sync({ tenant_id })` ao final, garantindo que o `status_cobranca_id` do grupo CPF/credor seja recalculado em tempo real.
-
-Ponto de inserção: serviço/edge que finaliza criação de `agreements` (`agreementService.ts` lado client e/ou edge `agreement-create` se existir). Chamada não-bloqueante (`.catch(() => {})`) para não impactar UX.
-
-## Validação pós-aplicação
-
-1. Recarregar a página `/clientes/{id}` — header deve exibir **"Acordo Vigente"**.
-2. Em `/financeiro/baixas` ou `/carteira`, filtrar pelo CPF — todas as 12 linhas com mesmo status.
-3. Verificar query:
-   ```sql
-   SELECT status_cobranca_id, count(*) FROM clients
-   WHERE cpf='07828259662' AND tenant_id='39a450f8-...'
-   GROUP BY 1;
-   ```
-   Esperado: 1 linha, 12 contagens, id `9ffe808b-...`.
+### 3. Migração leve do `safeName` no front (sem efeito retroativo)
+Mensagens já enviadas (`sent` mas não `delivered`) **não serão tocadas** — o histórico permanece como está. Só novos uploads são afetados.
 
 ## O que NÃO será mexido
 
-- Tabela `agreements` (acordo `311f5d28` permanece `pending`).
-- Tabela `manual_payments` (pagamentos do caso anterior permanecem).
-- RLS, RPCs, schema.
-- Lógica de revenue/dashboards.
-- Outros tenants.
+- Tabela `chat_messages` (mensagens antigas intactas).
+- Storage `chat-media` (arquivos `.jfif` antigos permanecem; ninguém precisa mais abrir).
+- Conversas em andamento — a funcionalidade segue idêntica para todos os outros formatos (`.png`, `.jpg`, `.mp4`, `.pdf`, `.ogg`).
+- Esquema de DB, RLS, RPCs.
+- `whatsapp-webhook` (recebimento de inbound). Não há regressão possível.
 
-## Detalhes técnicos
+## Validação pós-correção
 
-- Migração SQL: criada em `supabase/migrations/`.
-- Edge function: invocada via `supabase.functions.invoke('auto-status-sync', { body: { tenant_id } })` ou via tool de teste.
-- Hook de propagação (Passo 3): a definir após confirmação — inserir após `agreements.insert` e `agreements.update(status)`.
+1. Operador anexa imagem `.jfif` no chat → upload no storage cria `*.jpg` → Evolution recebe payload com `fileName="...jpg"`.
+2. WhatsApp do destinatário renderiza inline como foto.
+3. Status evolui de `sent` → `delivered` → `read` normalmente.
+4. Caso de fallback: imagens `.png`/`.jpg` continuam funcionando exatamente como antes (zero regressão).
 
-## Pergunta antes de executar
+## Recomendação adicional (apenas relatório, fora deste plano)
 
-Você quer que eu execute apenas **Passo 1 + Passo 2** (correção pontual + revarredura do tenant) ou também o **Passo 3** (hook de propagação automática para evitar que isso volte a acontecer com outros clientes)?
+- Adicionar uma flag de **alerta operacional**: se uma mensagem outbound ficar `sent` por > 30 minutos sem evoluir para `delivered`, marcar visualmente no chat (badge "⚠ Não confirmado"). Isso evita futuras situações em que o operador acha que entregou e o cliente não recebeu. Posso preparar separadamente caso queira.
+
+## Quer que eu execute?
+
+Correção pequena (1 arquivo do front + 1 ajuste defensivo no edge), zero risco para produção. Aguardo aprovação para aplicar.
