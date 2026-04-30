@@ -18,6 +18,11 @@ interface ContactSidebarProps {
   conversation: Conversation | null;
   messages: ChatMessage[];
   onClientLinked: () => void;
+  onDispositionAssignmentsChanged?: (
+    conversationId: string,
+    assignedDispositionTypeIds: string[]
+  ) => void;
+  onDebtorProfileChanged?: (clientId: string, profile: string | null) => void;
 }
 
 interface SimpleClient {
@@ -35,7 +40,7 @@ interface SimpleClient {
 }
 
 
-const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSidebarProps) => {
+const ContactSidebar = ({ conversation, messages, onClientLinked, onDispositionAssignmentsChanged, onDebtorProfileChanged }: ContactSidebarProps) => {
   const navigate = useNavigate();
   const { isTenantAdmin } = useTenant();
   const [linkedClient, setLinkedClient] = useState<SimpleClient | null>(null);
@@ -364,7 +369,10 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               clientCpf={linkedClient.cpf}
               tenantId={conversation.tenant_id || ""}
               currentProfile={linkedClient.debtor_profile}
-              onProfileChanged={(p) => setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev)}
+              onProfileChanged={(p) => {
+                setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev);
+                onDebtorProfileChanged?.(linkedClient.id, p);
+              }}
             />
           </div>
         )}
@@ -376,6 +384,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
               conversationId={conversation.id}
               tenantId={conversation.tenant_id || ""}
               clientCpf={linkedClient?.cpf || null}
+              onAssignmentsChanged={onDispositionAssignmentsChanged}
             />
           </div>
         )}

@@ -20,6 +20,11 @@ interface DispositionSelectorProps {
   conversationId: string;
   tenantId: string;
   clientCpf?: string | null;
+  /** Optimistic notify parent when local assignments change (add/remove). */
+  onAssignmentsChanged?: (
+    conversationId: string,
+    assignedDispositionTypeIds: string[]
+  ) => void;
 }
 
 const CPC_CPE_KEYS = ["cpc", "cpe"];
@@ -27,7 +32,7 @@ const EM_DIA_KEYS = ["em_dia", "wa_em_dia"];
 const EM_DIA_BLOCKED_TITLE =
   "Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais";
 
-const DispositionSelector = ({ conversationId, tenantId, clientCpf }: DispositionSelectorProps) => {
+const DispositionSelector = ({ conversationId, tenantId, clientCpf, onAssignmentsChanged }: DispositionSelectorProps) => {
   const { data: hasAgreement = false } = useHasRivoAgreement(clientCpf, tenantId);
   const { profile } = useAuth();
   const [dispositions, setDispositions] = useState<DispositionType[]>([]);
@@ -50,9 +55,11 @@ const DispositionSelector = ({ conversationId, tenantId, clientCpf }: Dispositio
       .from("conversation_disposition_assignments" as any)
       .select("disposition_type_id")
       .eq("conversation_id", conversationId);
-    const ids = new Set((data || []).map((d: any) => d.disposition_type_id as string));
+    const idArr = (data || []).map((d: any) => d.disposition_type_id as string);
+    const ids = new Set(idArr);
     setAssignedIds(ids);
-  }, [conversationId]);
+    onAssignmentsChanged?.(conversationId, idArr);
+  }, [conversationId, onAssignmentsChanged]);
 
   useEffect(() => {
     if (!tenantId) return;
