@@ -1,9 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useTenant } from "@/hooks/useTenant";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useEffectiveTenantId } from "@/hooks/useEffectiveTenantId";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, Filter, Users, MessageSquare, ShieldAlert, Brain } from "lucide-react";
+import { ArrowLeft, DollarSign, Filter, Users, MessageSquare, ShieldAlert, Brain, Headphones } from "lucide-react";
 import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
 import { AnalyticsFiltersBar } from "@/components/analytics/AnalyticsFiltersBar";
 import { RevenueTab } from "@/components/analytics/tabs/RevenueTab";
@@ -15,15 +16,19 @@ import { IntelligenceTab } from "@/components/analytics/tabs/IntelligenceTab";
 
 const AnalyticsPage = () => {
   const { profile } = useAuth();
-  const { tenant } = useTenant();
+  const { canViewAllAnalytics, canViewOwnAnalytics } = usePermissions();
+  const { tenantId, isSupportMode, supportTenantName } = useEffectiveTenantId();
   const navigate = useNavigate();
-  const isOperator = profile?.role !== "admin";
 
-  const f = useAnalyticsFilters(tenant?.id);
+  // Restrição real fica nas RPCs (can_access_tenant + filtro server-side).
+  // No frontend só decidimos o escopo de visão (próprio vs. todos do tenant).
+  const restrictToSelf = !canViewAllAnalytics && canViewOwnAnalytics;
+  const isOperator = restrictToSelf;
 
-  // Segurança: operador comum só vê os próprios dados, mesmo que o filtro de UI tente outros.
+  const f = useAnalyticsFilters(tenantId);
+
   const scopedRpcParams = f.rpcParams
-    ? (isOperator && profile?.user_id
+    ? (restrictToSelf && profile?.user_id
         ? { ...f.rpcParams, _operator_ids: [profile.user_id] }
         : f.rpcParams)
     : null;
