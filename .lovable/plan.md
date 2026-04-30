@@ -1,105 +1,184 @@
 
-# Abater pagamentos de acordos quebrados em renegociações (apenas novos casos)
+# Plano — Analytics, Super Admin (modo suporte) e regra de crédito de acordo quebrado
 
-## Problema
+## FASE 0 — Resumo da auditoria
 
-Quando um acordo é cancelado/quebrado, as baixas confirmadas (em `manual_payments` e `negociarie_cobrancas`) ficam órfãs: continuam vinculadas ao acordo antigo, mas **não voltam** para o saldo da dívida original em `clients.valor_pago`. Resultado: ao renegociar, o `AgreementCalculator` calcula a proposta sobre o saldo cheio, ignorando o que o cliente já pagou.
+Migrations recentes:
+- `20260430131040_*` — Reescreve `get_bi_revenue_summary` / `_by_period` somando `manual_payments (confirmed/approved)` + `portal_payments (paid)` + `negociarie_cobrancas (pago)` por **data de pagamento**. Receita está OK e segue como fonte de verdade.
+- `20260430163427_*` — RPCs auxiliares de BI (já usam `is_super_admin`).
+- `20260430171305_*` — RPCs `get_bi_channel_performance`, `get_bi_breakage_analysis`, `get_bi_breakage_by_operator`, `get_bi_recurrence_analysis`, `get_bi_response_time_by_channel`, `get_distinct_credores`. **Todas (exceto `response_time`) têm guard misto que aceita `profiles.role::text = 'super_admin'`.** `response_time` **não tem guard nenhum** — aceita `_tenant_id` arbitrário.
+- `20260430181818_*` — Apenas hotfix de 1 linha em `clients` (status_cobranca_id de um CPF). Sem impacto.
+- `20260430184537_*` — `get_dashboard_vencimentos` resolve `_tenant` via `tenant_users WHERE user_id = auth.uid() LIMIT 1`. Para Super Admin sem `tenant_users`, retorna vazio. Isso é OK por enquanto (Dashboard não está em escopo), mas registramos como limitação para o modo suporte.
+- `20260430191607_*` — Adiciona `clients.valor_pago_origem` (jsonb) + cancelamento credita pagamentos no original. Lógica em `agreementService.ts` (cliente) usa `manual_payments.status = 'confirmed'` apenas, e **não inclui `portal_payments`**. Idempotência depende de leitura prévia em `client_events` (sujeito a race).
 
-## Escopo
+Onde `profiles.role = 'super_admin'` ainda aparece: somente em `supabase/migrations/20260430171305_*.sql` (6 RPCs). **Não há ocorrência em `src/`.**
 
-- **Sem backfill.** Os 8 casos antigos (Y.BRASIL / TESS MODELS) **não serão alterados**. Os operadores continuarão fazendo o estorno manualmente nesses acordos.
-- A nova regra vale **somente para cancelamentos a partir do deploy**.
-- Cada abatimento será **claramente rotulado como vindo de um acordo anterior**, com rastreabilidade no banco e na UI.
+Canais — problemas confirmados em `get_bi_channel_performance`:
+- Acordos filtrados por `a.created_at` no período, mas pagamentos por `payment_date`. Acordo criado fora do período não atribui receita ao canal.
+- Atribuição de canal só usa eventos: `whatsapp_*`, `message_sent`, `message_deleted`, `atendimento_opened`, `conversation_auto_closed`, `disposition`, `call_hangup`. **Não inclui `call`.**
+- Eventos administrativos (`message_deleted`, `atendimento_opened`, `conversation_auto_closed`) inflam contagem de "interações" WhatsApp.
 
-## Mudanças
+Quebras por operador — confirmado: numerador (`updated_at`) vs denominador (`created_at`) em janelas diferentes.
 
-### 1. Migration — coluna de rastreabilidade
+## FASE 1 — Helper central `can_access_tenant`
+
+Migration nova criando:
 
 ```sql
-ALTER TABLE public.clients
-  ADD COLUMN IF NOT EXISTS valor_pago_origem jsonb DEFAULT '[]'::jsonb;
-
-COMMENT ON COLUMN public.clients.valor_pago_origem IS
-  'Histórico de origem dos pagamentos abatidos. Cada entrada:
-   { source: "agreement_credit"|"direct", source_agreement_id, amount, applied_at, applied_by, note }';
+CREATE OR REPLACE FUNCTION public.can_access_tenant(_tenant_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT
+    _tenant_id IS NOT NULL
+    AND (
+      public.is_super_admin(auth.uid())
+      OR EXISTS (
+        SELECT 1 FROM public.tenant_users tu
+        WHERE tu.tenant_id = _tenant_id AND tu.user_id = auth.uid()
+      )
+    );
+$$;
+GRANT EXECUTE ON FUNCTION public.can_access_tenant(uuid) TO authenticated;
 ```
 
-`valor_pago` continua sendo o total numérico (única fonte para o calculator). `valor_pago_origem` apenas documenta de onde veio cada parcela do crédito.
+Sem qualquer referência a `profiles.role`.
 
-### 2. Backend — `src/services/agreementService.ts`
+## FASE 2 — Reescrever guards das RPCs do Analytics
 
-**Nova função `creditPaymentsToOriginalDebt`** (não exportada para uso direto fora do service):
+Mesma migration (ou logo a seguir), `CREATE OR REPLACE` para as 6 RPCs preservando assinatura/retorno e **removendo o bloco `profiles.role::text = 'super_admin'`**:
 
-- Recebe `cpf, credor, totalCredit, tenantId, sourceAgreementId, breakdown`.
-- Distribui FIFO por `data_vencimento` nas parcelas `clients` `status = 'pendente'` (mesmo CPF + credor + tenant).
-- Para cada `clients` atualizado:
-  - Soma em `valor_pago`.
-  - Faz `append` em `valor_pago_origem` com `{ source: "agreement_credit", source_agreement_id, amount, applied_at, applied_by, note: "Abatimento de acordo quebrado" }`.
-  - Se atingir o valor da parcela, marca `status = 'pago'` e `data_quitacao`.
-- Se sobrar crédito (sem parcela pendente para abater), registra `client_events` `credit_overflow` (admin decide manualmente — não cria crédito automático).
+- `get_bi_channel_performance`
+- `get_bi_breakage_analysis`
+- `get_bi_breakage_by_operator`
+- `get_bi_recurrence_analysis`
+- `get_bi_response_time_by_channel` (adiciona guard que hoje não existe)
+- `get_distinct_credores`
 
-**Ajuste em `cancelAgreement`** (linha ~519):
+Padrão do guard:
+```sql
+IF _tenant_id IS NULL THEN RAISE EXCEPTION 'tenant_id obrigatório'; END IF;
+IF NOT public.can_access_tenant(_tenant_id) THEN
+  RAISE EXCEPTION 'forbidden tenant';
+END IF;
+```
 
-Após `update agreements set status='cancelled'` e antes do bloco que reverte status dos `clients`:
+Não alteramos a lógica interna nesta fase (exceto Canais e Quebras nas Fases 5/8).
 
-1. Calcular total recebido **somente deste acordo cancelado**:
-   - `manual_payments.amount_paid` onde `agreement_id = id` e `status = 'confirmed'`
-   - `negociarie_cobrancas.valor_pago` onde `agreement_id = id` e `status = 'pago'`
-2. **Idempotência**: checar `client_events` se já existe `previous_agreement_credit_applied` com `metadata->>source_agreement_id = id`. Se sim, abortar este passo (já creditado).
-3. Se `totalRecebido > 0`, chamar `creditPaymentsToOriginalDebt(...)`.
-4. Inserir `client_events`:
-   ```
-   event_type: "previous_agreement_credit_applied"
-   event_source: "operator"
-   metadata: {
-     source_agreement_id, total_credited,
-     breakdown: { manual: X, negociarie: Y },
-     applied_to_titles: [ { client_id, amount } ]
-   }
-   ```
-5. Inserir `audit_logs` (`action: "previous_agreement_credit"`, `entity_type: "agreement"`, `entity_id: id`).
+## FASE 3 — Escopo do Analytics no frontend
 
-A reversão de status dos `clients` que já existe (linhas 569-624) continua **depois** do crédito — assim, parcelas totalmente quitadas pelo crédito ficam `pago` em vez de voltarem para `pendente`.
+Em `src/pages/AnalyticsPage.tsx`, parar de derivar `isOperator` de `profile.role !== "admin"`. Trocar por `usePermissions()`:
 
-### 3. UI — `src/components/acordos/AgreementCalculator.tsx`
+```ts
+const { canViewAllAnalytics, canViewOwnAnalytics } = usePermissions();
+const restrictToSelf = !canViewAllAnalytics && canViewOwnAnalytics;
+const scopedRpcParams = f.rpcParams && restrictToSelf && profile?.user_id
+  ? { ...f.rpcParams, _operator_ids: [profile.user_id] }
+  : f.rpcParams;
+```
 
-Antes de renderizar o calculator, buscar via `clients` se algum título do CPF+credor tem `valor_pago_origem` contendo entrada com `source = 'agreement_credit'`:
+Em `AnalyticsFiltersBar`, esconder o filtro de operadores quando `!canViewAllAnalytics`. A segurança real fica nas RPCs (Fase 2).
 
-- **Banner azul informativo no topo:**
-  > "Este cliente já pagou R$ X,XX em acordos anteriores que foram quebrados. Esse valor já foi abatido do saldo abaixo."
-- **Tooltip no Saldo Devedor** com lista detalhada:
-  > Acordo #abc12345 quebrado em 12/03/2026 — R$ 200,00
-  > Acordo #def67890 quebrado em 05/04/2026 — R$ 150,00
+## FASE 4 — Modo suporte do Super Admin
 
-Não muda o cálculo (ele já lê `valor_parcela - valor_pago`); apenas torna o abatimento visível ao operador.
+Hoje o Super Admin não tem registro em `tenant_users` e o `useTenant()` cai em `/onboarding`. Estado atual: não há tenant switcher.
 
-### 4. UI — `src/components/atendimento/ClientTimeline.tsx`
+Implementação mínima (sem mexer em rotas existentes do `SuperAdminLayout`):
 
-Adicionar render para `event_type = "previous_agreement_credit_applied"`:
-> "Crédito de acordo anterior aplicado — R$ X,XX (acordo #abc12345 quebrado em DD/MM/AAAA)"
+1. Novo hook `useImpersonatedTenant()` armazena `support_tenant_id` em `sessionStorage` (apaga ao sair).
+2. Novo componente `SupportTenantSwitcher` no `SuperAdminLayout` — lista `tenants` (já acessível via RLS de super admin), permite escolher.
+3. Novo wrapper `useEffectiveTenantId()`:
+   - Se `isSuperAdmin && support_tenant_id` definido → retorna `support_tenant_id`.
+   - Senão → `tenant?.id`.
+4. `AnalyticsPage` (e demais páginas que entrarem no modo suporte) consome `useEffectiveTenantId()` em vez de `tenant?.id`.
+5. Banner persistente: "Modo suporte — visualizando tenant <NOME>. Sair do modo suporte" enquanto ativo.
+6. Auditoria: ao entrar em modo suporte e a cada mutação feita pelo super admin, gravar `audit_logs` com `action = 'support_mode_*'` e `tenant_id` alvo. (Já existe `auditService`; adicionar chamada nos pontos de entrada.)
+7. Super Admin **não** é inserido em `tenant_users` — `can_access_tenant` já libera por `is_super_admin`.
 
-Ícone neutro (azul), distinto de pagamentos diretos.
+Limitação documentada: `get_dashboard_vencimentos` continua usando `tenant_users LIMIT 1` (fora do escopo do Analytics; só anotamos para correção futura).
 
-### 5. Documentação
+## FASE 5 — Corrigir `get_bi_channel_performance`
 
-Atualizar `mem://logic/acordos/reconciliacao-pagamentos` com a nova regra: "Cancelamento de acordo com pagamentos confirmados gera crédito automático na dívida original via `valor_pago` + rastro em `valor_pago_origem`. Aplica-se somente a cancelamentos pós-deploy desta regra."
+Reescrita preservando assinatura e nomes de colunas:
 
-## Arquivos afetados
+1. **Atribuição de receita por canal desacoplada de `agreements.created_at`.** Para cada pagamento (`manual_payments`/`portal_payments`/`negociarie_cobrancas`) no período, buscar o `agreement_id` correspondente e atribuir o canal a partir do **último evento de canal do CPF do acordo, anterior à data de pagamento**. Se acordo nulo, ignora.
+2. **Filtro de credor/operador aplicado de forma uniforme** via JOIN com `agreements` (sem o `OR ap.agreement_id IS NULL` que vazava registros).
+3. **Conjunto de eventos contabilizados como interação real**:
+   - WhatsApp: `whatsapp_inbound`, `whatsapp_outbound`, `message_sent`.
+   - Voz: `disposition`, `call_hangup`, **`call`** (novo).
+   - Excluídos: `message_deleted`, `conversation_auto_closed`, `atendimento_opened`, `debtor_profile_changed`, qualquer evento de pagamento/boleto/pix/manual/negociarie, eventos de acordo/documento/telefone/score, **`previous_agreement_credit_applied`**, **`credit_overflow`**.
+4. Atribuição de canal de acordos (para taxa de conversão) usa o mesmo conjunto reduzido + `call`.
+5. Aplicar `_credor`/`_operator_ids` consistente em interações (via `client_events.metadata->>'credor'` quando disponível, senão pelo CPF→`agreements`) e em acordos/recebido.
 
-- `supabase/migrations/<timestamp>_clients_valor_pago_origem.sql` — nova coluna.
-- `src/services/agreementService.ts` — nova função `creditPaymentsToOriginalDebt`, ajuste em `cancelAgreement`.
-- `src/components/acordos/AgreementCalculator.tsx` — banner + tooltip.
-- `src/components/atendimento/ClientTimeline.tsx` — render do novo evento.
-- `mem://logic/acordos/reconciliacao-pagamentos` — atualização da regra.
+## FASE 6 — Receita não pode duplicar via crédito
 
-## Validação pós-deploy
+Validação (sem alteração de código necessária se passar):
 
-1. Em ambiente de teste: criar acordo, confirmar baixa manual de uma parcela, cancelar o acordo.
-2. Conferir em `clients`: o `valor_pago` da parcela mais antiga aumentou e `valor_pago_origem` contém a entrada com `source_agreement_id` correto.
-3. Abrir o `AgreementCalculator` para o mesmo CPF/credor: banner azul aparece, saldo já vem reduzido.
-4. Conferir `client_events` e `audit_logs`: evento e log gerados.
-5. Cancelar o mesmo acordo de novo (cenário absurdo, mas testa idempotência): nada novo deve ser creditado.
+- `get_bi_revenue_summary` soma somente `manual_payments`, `portal_payments`, `negociarie_cobrancas`. **Não lê `clients.valor_pago` nem `client_events`.** OK.
+- Garantir que `previous_agreement_credit_applied` e `credit_overflow` permaneçam fora de qualquer RPC de receita/canais (Fase 5 já exclui da agregação de canais).
+- Adicionar comentário SQL nas RPCs: "credito de acordo cancelado é abatimento, não receita".
 
-## Risco
+QA: comparar `get_bi_revenue_summary` com Dashboard (`get_dashboard_*`) antes/depois — devem permanecer iguais.
 
-Baixo. Mudança aditiva (coluna nova, função nova, eventos novos). Nada toca dados históricos. Nenhum dos 8 acordos antigos é alterado — o estorno deles continua manual, conforme decidido.
+## FASE 7 — Blindar regra de crédito (server-side)
+
+Mover a lógica de `creditPaymentsToOriginalDebt` + `cancelAgreement (credit branch)` para uma RPC transacional `apply_agreement_credit_on_cancel(_agreement_id uuid)`:
+
+```text
+BEGIN
+  SELECT ... FOR UPDATE  -- lock no agreement
+  IF já existe client_event 'previous_agreement_credit_applied' com source_agreement_id THEN RETURN
+  somar manual_payments WHERE status IN ('confirmed','approved')
+  somar portal_payments WHERE status = 'paid'
+  somar negociarie_cobrancas WHERE status = 'pago'
+  distribuir FIFO em clients (lock por linha) atualizando valor_pago + valor_pago_origem
+  inserir client_events 'previous_agreement_credit_applied' (+ 'credit_overflow' se aplicável)
+  inserir audit_logs
+  COMMIT
+END
+```
+
+Mudanças derivadas:
+- `agreementService.ts` → `cancelAgreement` apenas faz `UPDATE agreements SET status='cancelled'` e chama `supabase.rpc('apply_agreement_credit_on_cancel', { _agreement_id: id })`.
+- Fonte de pagamentos passa a usar `('confirmed','approved')` em `manual_payments` (alinhado a `get_bi_revenue_summary`) e inclui `portal_payments status='paid'`.
+- Idempotência real via `FOR UPDATE` + checagem dentro da transação.
+- Sem backfill — RPC só roda quando chamada por novo cancelamento.
+
+## FASE 8 — `get_bi_breakage_by_operator`
+
+Definir como "Quebras criadas no período / Acordos criados no período" com janela única:
+- Numerador: `agreements WHERE status='cancelled' AND created_at` no período (não `updated_at`).
+- Denominador: `agreements WHERE created_at` no período.
+- `valor_perdido` continua somando `proposed_total` dos cancelados.
+
+Mesma correção em `get_bi_breakage_analysis` (alinhar janela). Comentário na RPC explicando a regra.
+
+## FASE 9 — QA
+
+- `bun run build` (typecheck/lint disparados pela harness).
+- Smoke manual via `supabase--read_query`:
+  - `SELECT public.can_access_tenant('<tenant_alheio>')` como usuário comum → false.
+  - Receita pré/pós migration deve ser idêntica.
+  - Canais: ligações com `call` aparecem; `message_deleted` some.
+- Conferir `usePermissions` para `operador` força `_operator_ids = [self]`.
+- Conferir banner de modo suporte some quando super admin sai dele.
+
+## Arquivos a alterar/criar
+
+- `supabase/migrations/<novo>_can_access_tenant_and_bi_guards.sql` (Fases 1, 2, 5, 8 — RPCs e helper)
+- `supabase/migrations/<novo>_apply_agreement_credit_on_cancel.sql` (Fase 7)
+- `src/services/agreementService.ts` (Fase 7 — chamar RPC)
+- `src/pages/AnalyticsPage.tsx` (Fase 3 — usar `usePermissions` e `useEffectiveTenantId`)
+- `src/components/analytics/AnalyticsFiltersBar.tsx` (Fase 3 — esconder operador quando `!view_all`)
+- `src/hooks/useImpersonatedTenant.ts` (novo, Fase 4)
+- `src/hooks/useEffectiveTenantId.ts` (novo, Fase 4)
+- `src/components/SupportTenantSwitcher.tsx` (novo, Fase 4)
+- `src/components/SuperAdminLayout.tsx` (Fase 4 — montar switcher + banner)
+- `mem://` — atualizar memórias de Analytics e da regra de crédito.
+
+## Não-objetivos
+
+- Não tocar em Dashboard, Financeiro, Acordos UI, Baixas, WhatsApp, Discador.
+- Não mexer em `get_dashboard_vencimentos` agora (fica registrado como dívida).
+- Sem backfill dos 8 acordos antigos.
+- Sem alteração em `get_bi_revenue_summary` se a validação confirmar paridade com Dashboard.
