@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -58,7 +58,21 @@ const GamificacaoPage = () => {
   const month = now.getMonth() + 1;
 
   useEffect(() => {
-    triggerGamificationUpdate();
+    // Defer to idle so it doesn't compete with initial header queries.
+    const ric = (window as any).requestIdleCallback as
+      | ((cb: () => void, opts?: { timeout: number }) => number)
+      | undefined;
+    let handle: number | NodeJS.Timeout;
+    if (ric) {
+      handle = ric(() => triggerGamificationUpdate(), { timeout: 2000 });
+    } else {
+      handle = setTimeout(() => triggerGamificationUpdate(), 0);
+    }
+    return () => {
+      const cic = (window as any).cancelIdleCallback as ((h: number) => void) | undefined;
+      if (ric && cic) cic(handle as number);
+      else clearTimeout(handle as NodeJS.Timeout);
+    };
   }, [triggerGamificationUpdate]);
 
   const allowedTabs = isTenantAdmin ? adminTabs : operatorTabs;
