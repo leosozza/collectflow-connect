@@ -156,21 +156,40 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
     <div className="border-t border-border bg-[#f0f2f5] dark:bg-[#202c33] px-3 py-2 relative">
       {/* Quick replies dropdown (typing /) */}
       {showQuickReplies && (
-        <div className="absolute bottom-full left-0 right-0 mx-3 mb-1 bg-popover border border-border rounded-lg shadow-lg z-10">
-          <ScrollArea className="max-h-[200px]">
-            {filteredReplies.map((qr) => (
-              <button
-                key={qr.id}
-                onClick={() => selectQuickReply(qr)}
-                className="w-full text-left px-3 py-2 hover:bg-accent/50 transition-colors border-b border-border/30 last:border-0"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-primary">/{qr.shortcut}</span>
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 rounded">{qr.category}</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{qr.content}</p>
-              </button>
-            ))}
+        <div className="absolute bottom-full left-0 right-0 mx-3 mb-2 bg-popover border border-border rounded-xl shadow-xl ring-1 ring-primary/10 z-10 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-muted/40">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-semibold text-foreground">Respostas Rápidas</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground">
+              {filteredReplies.length} resultado{filteredReplies.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <ScrollArea className="h-[240px]">
+            <div className="py-1">
+              {filteredReplies.map((qr) => (
+                <button
+                  key={qr.id}
+                  onClick={() => selectQuickReply(qr)}
+                  className="group relative w-full text-left px-3 py-2.5 hover:bg-accent/40 transition-colors border-b border-border/30 last:border-0"
+                >
+                  <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary scale-y-0 group-hover:scale-y-100 transition-transform origin-center" />
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                      <Hash className="w-3 h-3" />
+                      {qr.shortcut}
+                    </span>
+                    {qr.category && (
+                      <span className="text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                        {qr.category}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-foreground/80 line-clamp-2 leading-relaxed">{qr.content}</p>
+                </button>
+              ))}
+            </div>
           </ScrollArea>
         </div>
       )}
