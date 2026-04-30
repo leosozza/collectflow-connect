@@ -376,4 +376,57 @@ const GamificacaoPage = () => {
   );
 };
 
+const ManageSubTabs = () => {
+  const [sub, setSub] = useState("manage-campaigns");
+  return (
+    <Tabs value={sub} onValueChange={setSub}>
+      <TabsList>
+        <TabsTrigger value="manage-campaigns" className="gap-1.5">
+          <Flame className="w-3.5 h-3.5" /> Campanhas
+        </TabsTrigger>
+        <TabsTrigger value="manage-achievements" className="gap-1.5">
+          <Star className="w-3.5 h-3.5" /> Conquistas
+        </TabsTrigger>
+        <TabsTrigger value="manage-goals" className="gap-1.5">
+          <Target className="w-3.5 h-3.5" /> Metas
+        </TabsTrigger>
+        <TabsTrigger value="manage-rankings" className="gap-1.5">
+          <Trophy className="w-3.5 h-3.5" /> Rankings
+        </TabsTrigger>
+        <TabsTrigger value="manage-shop" className="gap-1.5">
+          <ShoppingBag className="w-3.5 h-3.5" /> Loja
+        </TabsTrigger>
+        <TabsTrigger value="manage-participants" className="gap-1.5">
+          <Target className="w-3.5 h-3.5" /> Participantes
+        </TabsTrigger>
+        <TabsTrigger value="manage-scoring" className="gap-1.5">
+          <Calculator className="w-3.5 h-3.5" /> Pontuação
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="manage-campaigns" className="mt-4">
+        {sub === "manage-campaigns" && <CampaignsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-achievements" className="mt-4">
+        {sub === "manage-achievements" && <AchievementsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-goals" className="mt-4">
+        {sub === "manage-goals" && <GoalsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-rankings" className="mt-4">
+        {sub === "manage-rankings" && <RankingManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-shop" className="mt-4">
+        {sub === "manage-shop" && <ShopManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-participants" className="mt-4">
+        {sub === "manage-participants" && <ParticipantsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-scoring" className="mt-4">
+        {sub === "manage-scoring" && <ScoringRulesTab />}
+      </TabsContent>
+    </Tabs>
+  );
+};
+
 export default GamificacaoPage;
