@@ -364,6 +364,7 @@ const AppLayout = () => {
             })()}
           </div>
           <div className="flex items-center gap-2">
+            {isSuperAdmin && <SupportTenantSwitcher />}
             <UpdateButton />
             <NotificationBell />
             <button
@@ -383,6 +384,7 @@ const AppLayout = () => {
             </button>
           </div>
         </header>
+        {isSuperAdmin && <SupportModeAppBanner />}
 
         <main className={`flex-1 overflow-auto ${isFullBleedRoute ? "" : "p-4 lg:p-6"}`}>
           <Outlet />
