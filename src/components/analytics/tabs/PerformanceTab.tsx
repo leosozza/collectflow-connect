@@ -44,20 +44,42 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
   const effList = eff.data || [];
   const perfList = perf.data || [];
   const seen = new Set<string>();
-  const merged: any[] = [];
+  const mergedRaw: any[] = [];
   for (const p of perfList) {
     const e = effList.find((x: any) => x.operator_id === p.operator_id) || {};
-    merged.push({ ...e, ...p, ...{ talk_time_seconds: e.talk_time_seconds, conv_rate: e.conv_rate, qtd_chamadas: e.qtd_chamadas } });
+    mergedRaw.push({ ...e, ...p, ...{ talk_time_seconds: e.talk_time_seconds, conv_rate: e.conv_rate, qtd_chamadas: e.qtd_chamadas } });
     if (p.operator_id) seen.add(p.operator_id);
   }
   for (const e of effList) {
     if (e.operator_id && !seen.has(e.operator_id)) {
-      merged.push({ ...e, qtd_acordos: 0, total_recebido: 0, qtd_calls: e.qtd_chamadas, taxa_quebra: 0 });
+      mergedRaw.push({ ...e, qtd_acordos: 0, total_recebido: 0, qtd_calls: e.qtd_chamadas, taxa_quebra: 0 });
     }
   }
 
+  // Filtra linhas totalmente zeradas (sem atividade real no período).
+  const hasActivity = (r: any) =>
+    Number(r.qtd_acordos || 0) > 0 ||
+    Number(r.total_recebido || 0) > 0 ||
+    Number(r.qtd_chamadas || r.qtd_calls || 0) > 0 ||
+    Number(r.qtd_quebras || 0) > 0 ||
+    Number(r.talk_time_seconds || 0) > 0;
+  const merged = mergedRaw.filter(hasActivity);
+
+  // Operadores ativos = somente os que tiveram atividade real
+  const operadoresAtivos = merged.length;
+
+  // Acordos/hora médio: só faz sentido com base de talk-time
+  const totalActivityWithTalk = merged.filter((r: any) => Number(r.talk_time_seconds || 0) > 0);
+  const acordosHoraDisplay = totalActivityWithTalk.length > 0
+    ? (totalActivityWithTalk.reduce((s: number, r: any) => {
+        const tt = Number(r.talk_time_seconds || 0);
+        const acordos = Number(r.qtd_acordos || 0);
+        return s + (tt > 0 ? acordos / (tt / 3600) : 0);
+      }, 0) / totalActivityWithTalk.length).toFixed(2)
+    : "—";
+
   const isLoading = perf.isLoading || eff.isLoading;
-  const hasNoTelephony = !isLoading && totalTalk === 0 && (effList.length === 0 || effList.every((r: any) => Number(r.qtd_chamadas || 0) === 0));
+  const hasNoTelephony = !isLoading && totalTalk === 0;
 
   return (
     <div className="space-y-4">
