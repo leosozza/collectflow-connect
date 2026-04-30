@@ -1,150 +1,138 @@
-## FASE 0 — Auditoria (já concluída em modo leitura)
+## Fase 7 — Correções residuais do Analytics (cirúrgicas, sem afetar produção)
 
-Mapeamento das RPCs consumidas pelo Analytics e dos seus filtros:
-
-| RPC | Aba | Fonte de data | Filtro tenant | Filtro operador | Filtro credor | Filtro canal | Dedup |
-|---|---|---|---|---|---|---|---|
-| get_bi_revenue_summary / by_period / by_credor / comparison | Receita | data efetiva pgto (mp.payment_date, pp.updated_at, nc.data_pagamento) | OK | OK (a.created_by) | OK | — | por agreement_id |
-| get_bi_collection_funnel / funnel_dropoff | Funil | call_logs.called_at, chat_messages.created_at, sessions.opened_at, agreements.created_at, manual_payments.payment_date | OK | parcial (só agreements e dispositions têm operator) | OK | implícito | por (cpf, credor) |
-| get_bi_operator_performance | Operadores | a.created_at, cl.called_at, cd.created_at | OK | OK | OK | — | join por op |
-| get_bi_operator_efficiency | Operadores | cl.called_at, cd.created_at, a.created_at | OK | OK (no agreements) | OK | — | join por op |
-| **get_bi_channel_performance** | **Canais** | ce.created_at, a.created_at, mp/pp/nc por data efetiva | OK | OK (no agreements) | OK | OK (mas usa nomes errados) | por agreement_id |
-| get_bi_response_time_by_channel | Canais | chat_messages.created_at | OK | — | — | OK | — |
-| get_bi_breakage_analysis / by_operator | Quebras | **a.created_at (errado — deveria ser data da quebra)** | OK | OK | OK | — | — |
-| get_bi_recurrence_analysis | Quebras | a.created_at | OK | OK | OK | — | por client_cpf |
-| get_bi_score_distribution / score_vs_result | Score | clients.created_at (DISTINCT ON cpf,credor) | OK | OK (no agreements) | OK | — | por (cpf, credor) |
-| get_bi_top_opportunities | Score | clients | OK | — | OK | — | por (cpf, credor) |
-
-**Conclusões da auditoria:**
-1. Todas respeitam `tenant_id`. Sem mistura entre tenants.
-2. Receita já está correta (3 fontes por data efetiva). **Não será tocada.**
-3. **Canais (`get_bi_channel_performance`)** usa `client_events.event_channel` aberto. Hoje aparece `boleto` (payment_confirmed/agreement_completed) e o ruído de `debtor_profile_changed` cai em `whatsapp`. Eventos `whatsapp_outbound`/`message_sent` inflam interações com automações.
-4. **Operadores** mostra "Desconhecido" mesmo com tudo zero, e calcula `acordos_por_hora=0.00` quando não há talk-time.
-5. **Score**: chart inclui `sem_score` na mesma série, esmagando as faixas.
-6. **Quebras**: `get_bi_breakage_analysis` filtra por `created_at` do acordo (data de criação), não pela data efetiva da quebra.
-7. **Filtro de canal (UI)**: opções `voice`, `email`, `sms`, `portal` não existem em `client_events.event_channel` (DB tem `whatsapp`, `call`, `boleto`, NULL). `voice` jamais matcha.
+Escopo restrito a 3 problemas identificados no audit, sem tocar em Receita, Dashboard, Financeiro, Acordos, Baixas, WhatsApp, Discador, Funil, Score, Operadores, ou qualquer fluxo funcional. Cada fase é independente — se uma der problema, dá pra reverter sem afetar as outras.
 
 ---
 
-## FASE 1 — Canais (alvo principal)
+### Fase 7.1 (P0) — Guard de tenant tolerante a Super Admin global
 
-**Migration nova** (não desfaz nada da Receita):
+**Problema**
+As 3 RPCs alteradas em `20260430163427` (`get_bi_channel_performance`, `get_bi_breakage_analysis`, `get_bi_breakage_by_operator`) usam o guard:
 
-1. Recriar `get_bi_channel_performance` com:
-   - **Allowlist de event_type de comunicação**:
-     - WhatsApp: `whatsapp_inbound`, `whatsapp_outbound`, `message_sent`, `message_deleted`, `atendimento_opened`, `conversation_auto_closed`
-     - Voz: `disposition`, `call_hangup` (canal `call`)
-   - **Bloqueia explicitamente** `debtor_profile_changed`, `payment_confirmed`, `agreement_*`, `manual_payment_*`, `field_update`, `installment_value_synced`, `phone_*`, `document_*`, `observation_added` mesmo se tiverem `event_channel`.
-   - **Normalização de canal** num CASE:
-     - `whatsapp`/`wpp`/`WhatsApp` → `whatsapp` (label "WhatsApp")
-     - `call`/`voice`/`ligacao` → `voice` (label "Ligação")
-     - demais (`boleto`, `pix`, `manual`, `negociarie`, `payment`, `system`, `unknown`, NULL) → descartados
-   - Filtro `_channel` aplica sobre canal já normalizado.
-   - Atribuição de pagamento ao canal continua: último canal (whatsapp/voice) **antes** de `a.created_at`. Recebido continua somando as 3 fontes (preserva Receita).
+```sql
+IF NOT public.is_super_admin(auth.uid())
+   AND NOT EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = _tenant_id AND tu.user_id = auth.uid())
+THEN RAISE EXCEPTION 'forbidden tenant'; END IF;
+```
 
-2. Atualizar `CHANNEL_OPTIONS` em `AnalyticsFiltersBar.tsx` para usar os mesmos identificadores normalizados que o backend retorna:
-   - `whatsapp` → "WhatsApp"
-   - `voice` → "Ligação"
-   - (remover `email`, `sms`, `portal` — não são canais reais hoje)
-3. Atualizar `channelLabel` em `ChannelsTab.tsx` para refletir os 2 canais reais.
-4. `get_bi_response_time_by_channel`: já usa `chat_messages` (apenas WhatsApp). Não muda comportamento, só deixa retornar rótulo `whatsapp` consistente.
+`is_super_admin` só retorna true se houver linha com role `super_admin` em `tenant_users`. Para Super Admins de plataforma cuja role só está mapeada via `profiles.role='super_admin'` (ou via `is_owner`/SA permissions), a checagem falha → "forbidden tenant".
 
-**Validação**: tenant Y.BRASIL abril/2026 — `boleto` não aparece; `debtor_profile_changed` não infla WhatsApp; recebido por canal somado bate ≈ R$ 95.705,33 (mais o que não tem canal real — esse fica fora porque Canais é por canal real).
+**Correção**
+Recriar as 3 RPCs aceitando também Super Admin via `profiles.role`:
 
----
+```sql
+-- Helper inline no guard (sem nova função)
+IF NOT (
+     public.is_super_admin(auth.uid())
+  OR EXISTS (SELECT 1 FROM public.profiles p
+             WHERE p.user_id = auth.uid() AND p.role = 'super_admin')
+  OR EXISTS (SELECT 1 FROM public.tenant_users tu
+             WHERE tu.tenant_id = _tenant_id AND tu.user_id = auth.uid())
+)
+THEN RAISE EXCEPTION 'forbidden tenant'; END IF;
+```
 
-## FASE 2 — Operadores
+Lógica de negócio das RPCs (allowlist de canais, normalização, filtro por updated_at em quebras) **permanece idêntica** — só o bloco `IF NOT (...)` muda.
 
-**Front (`PerformanceTab.tsx`)**:
-1. Filtrar do `merged` qualquer linha onde **todos** os indicadores sejam zero (`qtd_acordos=0`, `total_recebido=0`, `qtd_chamadas=0`, `qtd_quebras=0`, `talk_time=0`).
-2. Linhas com dados reais sem profile vinculado: renomear `Desconhecido` → `Operador não vinculado` (somente quando há atividade).
-3. KPI "Operadores Ativos": contar apenas operadores com atividade real (mesma regra do filtro acima).
-4. Quando `totalTalk === 0` para todos: exibir "—" em vez de `0.00` para "Acordos/Hora (Média)" e mostrar legenda "sem base de chamadas no período".
-5. Coluna "Tempo Falado" e "Chamadas" continuam mostrando 0 quando não há dados (esperado), mas a coluna "Taxa de Conversão" / "Acordos/Hora" só preenche quando há base.
+**Migration nova** (não destrutiva — `CREATE OR REPLACE FUNCTION` mantém grants e assinatura):
+- `supabase/migrations/<ts>_bi_guard_super_admin_fallback.sql`
 
-**Backend**: nenhuma alteração em `get_bi_operator_performance`/`efficiency` — todos os totais e atribuições continuam iguais (preserva Receita por operador).
+**Arquivos**: 1 migration. Nenhum frontend.
 
----
-
-## FASE 3 — Score & Propensão
-
-**Front (`IntelligenceTab.tsx`)**:
-1. Separar `sem_score` do array antes de plotar.
-2. `BarChart` exibe somente as 5 faixas numéricas (`0-20`, `21-40`, `41-60`, `61-80`, `81-100`), em ordem fixa.
-3. Acima do gráfico, adicionar um KPI tile pequeno "Clientes sem score" com qtd e %.
-4. Tabela "Score vs Resultado": separar `sem_score` numa linha visualmente distinta (background levemente cinza, divider acima), depois das faixas numéricas.
-
-**Backend**: nenhuma alteração em `get_bi_score_distribution` / `get_bi_score_vs_result`. Não recalcula score, não toca em perfis.
+**Validação**:
+- Super Admin consegue abrir Analytics sem `forbidden tenant`.
+- Operador comum continua restrito (regra `_operator_ids` no front + RLS).
+- Admin de tenant continua passando (já estava em `tenant_users`).
 
 ---
 
-## FASE 4 — Quebras & Risco
+### Fase 7.2 (P1) — Outliers no tempo de resposta WhatsApp
 
-**Migration nova** — recriar `get_bi_breakage_analysis` e `get_bi_breakage_by_operator`:
+**Problema**
+`get_bi_response_time_by_channel` calcula tempo médio de resposta usando `chat_messages.created_at` sem clipping. Conversas com gaps de 2-3 dias (cliente respondeu depois do fim de semana) elevam a média para 12h+, distorcendo a aba Canais.
 
-1. Como não existe `cancelled_at`, filtrar por `a.updated_at::date` **somente quando** `a.status = 'cancelled'` (data efetiva da quebra ≈ updated_at do registro cancelado).
-2. Manter `WHERE a.status='cancelled'` (não conta `approved`/`pending`/`completed`/`overdue`).
-3. `get_bi_recurrence_analysis`: normalizar CPF com `regexp_replace(client_cpf,'\D','','g')` antes de agrupar.
-4. `valor_perdido`: continuar com `proposed_total` do acordo cancelado — consistente; documentar no SQL.
+**Correção**
+Recriar a RPC mantendo a estrutura, adicionando filtro `interval <= '4 hours'` no cálculo do gap inbound→outbound (gaps maiores são considerados "fora de janela operacional" e descartados — não somados nem contados).
 
-**Validação**: filtro de período passa a refletir quando o acordo foi efetivamente quebrado (não quando foi criado).
+```sql
+-- pseudo
+WHERE response_gap_seconds BETWEEN 0 AND 14400  -- 4h
+```
 
----
+Não muda payload, não muda assinatura, não muda nome.
 
-## FASE 5 — Segurança e tenant
+**Migration nova**:
+- `supabase/migrations/<ts>_bi_response_time_clip_outliers.sql`
 
-1. No frontend `AnalyticsPage.tsx`: quando `profile.role !== 'admin'`, **forçar** `_operator_ids = [profile.user_id]` no `rpcParams` (override sobre o que o filtro selecionar). Usuário comum só vê os próprios números.
-2. Nas migrations das RPCs alteradas (Fase 1 e 4), adicionar guard no início:
-   ```sql
-   IF _tenant_id IS NULL OR NOT EXISTS (
-     SELECT 1 FROM public.tenant_users tu
-     WHERE tu.tenant_id = _tenant_id AND tu.user_id = auth.uid()
-   ) AND NOT public.is_super_admin(auth.uid())
-   THEN RAISE EXCEPTION 'forbidden tenant'; END IF;
-   ```
-   (usar a função existente de super admin se houver; caso contrário, só checar `tenant_users`).
-3. Não alterar grants das RPCs de Receita / Funil / Score / Operadores nesta fase para evitar regressão. Se o tempo permitir, apenas as 3 RPCs tocadas (channel_performance, breakage_analysis, breakage_by_operator) recebem o guard como modelo; demais RPCs ficam como follow-up documentado.
+**Validação**: tempo médio cai para faixa realista (segundos a minutos). Aba Canais → "Tempo de Resposta" passa a ser interpretável.
 
 ---
 
-## FASE 6 — QA final
+### Fase 7.3 (P1) — Limite de credores no filtro
 
-Rodar com tenant Y.BRASIL, abril/2026:
-- [ ] Receita / Total Recebido = R$ 95.705,33 (dashboard e Analytics).
-- [ ] Aba Canais sem `boleto`/`pix`/`manual`/`negociarie`. Apenas WhatsApp e Ligação.
-- [ ] `debtor_profile_changed` não inflando interações.
-- [ ] Operadores: sem linhas zeradas "Desconhecido". `Acordos/Hora` mostra "—" se não houver talk-time.
-- [ ] Score: chart legível, `sem_score` em KPI separado.
-- [ ] Quebras: período usando `updated_at` em registros cancelados.
-- [ ] Filtros (período, credor, operador, canal, score) funcionando combinados.
-- [ ] Build/typecheck/lint OK.
-- [ ] Operador comum só vê os próprios números.
+**Problema**
+`AnalyticsFiltersBar.tsx` linha 53: `.limit(1000)` no lookup de credores distintos. Para tenants grandes, a lista é truncada e credores reais ficam fora do filtro.
 
----
+**Correção**
+Trocar a query atual (que faz `select('credor')` e dedup no JS) por uma RPC `SECURITY DEFINER` simples que retorna `DISTINCT credor` direto do servidor, sem o limite implícito de 1000 do PostgREST:
 
-## Arquivos a alterar
+```sql
+CREATE OR REPLACE FUNCTION public.get_distinct_credores(_tenant_id uuid)
+RETURNS TABLE(credor text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT DISTINCT credor FROM public.clients
+  WHERE tenant_id = _tenant_id AND credor IS NOT NULL
+  ORDER BY credor;
+$$;
+GRANT EXECUTE ON FUNCTION public.get_distinct_credores(uuid) TO authenticated;
+```
 
-**Migrations novas (2)**:
-- `supabase/migrations/<ts>_bi_channel_perf_allowlist.sql` — recria `get_bi_channel_performance` com allowlist e normalização + guard de tenant.
-- `supabase/migrations/<ts>_bi_breakage_dates.sql` — recria `get_bi_breakage_analysis`, `get_bi_breakage_by_operator`, `get_bi_recurrence_analysis` com data efetiva da quebra e CPF normalizado + guard.
+Frontend (`AnalyticsFiltersBar.tsx`) passa a chamar `supabase.rpc('get_distinct_credores', { _tenant_id })` em vez de `.from('clients').select('credor').limit(1000)`.
 
-**Frontend (4)**:
-- `src/components/analytics/AnalyticsFiltersBar.tsx` — `CHANNEL_OPTIONS` reduzido a `whatsapp` + `voice`.
-- `src/components/analytics/tabs/ChannelsTab.tsx` — `channelLabel` ajustado.
-- `src/components/analytics/tabs/PerformanceTab.tsx` — filtro de linhas zeradas, rename "Operador não vinculado", "—" em Acordos/Hora sem base.
-- `src/components/analytics/tabs/IntelligenceTab.tsx` — chart só com faixas numéricas, KPI separado para `sem_score`, separador na tabela.
-- `src/pages/AnalyticsPage.tsx` — força `_operator_ids = [profile.user_id]` para operadores não-admin.
+**Arquivos**:
+- 1 migration nova: `<ts>_bi_distinct_credores_rpc.sql`
+- `src/components/analytics/AnalyticsFiltersBar.tsx` (apenas o `useQuery` do credor, ~8 linhas)
 
-**Não tocar**:
-- Receita (RPCs e tab) — já validado.
-- Dashboard, Financeiro, Acordos, Baixas, WhatsApp/chat/ingest_channel_event, Discador, Super Admin.
-- `client_events`, `manual_payments`, `portal_payments`, `negociarie_cobrancas`.
-- Score: lógica/cálculo. Apenas apresentação.
+**Validação**: lista de credores no filtro mostra todos os credores reais do tenant.
 
 ---
 
-## Riscos residuais
+### Ordem de execução e segurança
 
-- Atribuição de canal a um pagamento depende de existir um evento `whatsapp_*` ou `disposition`/`call_hangup` antes de `a.created_at`. Acordos sem nenhum contato registrado terão `channel = NULL` e ficam fora da aba Canais (mas continuam contando na Receita). É o comportamento correto.
-- `get_bi_breakage_analysis` passa a usar `updated_at`. Se houve uma alteração no registro depois do cancelamento (raro), a data sai um pouco diferente da quebra real — é a melhor aproximação enquanto não houver coluna dedicada `cancelled_at`. Documentado.
-- Outras RPCs (revenue, funnel, score, operator perf/eff) continuam sem guard explícito de tenant nesta correção, dependendo da `auth.uid()` ser usada via filtro client-side. Recomenda-se hardening em uma fase posterior dedicada (fora deste escopo).
+Cada fase é uma migration `CREATE OR REPLACE` — idempotente e reversível por reaplicação da versão anterior. Nenhuma `DROP`, nenhuma alteração de schema, nenhum DML.
+
+```text
+7.1 (guard)  →  valida com Super Admin   →  ok?
+                          ↓
+7.2 (outliers tempo)  →  valida aba Canais  →  ok?
+                          ↓
+7.3 (credores RPC)  →  valida filtro  →  fim
+```
+
+**Não tocar nesta fase**:
+- Receita (RPCs e tab) — comprovadamente correto (R$ 97.448 = Dashboard).
+- Score / Funil / Operadores / Quality (sem alteração de código nem RPC).
+- Dashboard, Financeiro, Acordos, Baixas, WhatsApp, Discador, Super Admin.
+- `is_super_admin` / `is_tenant_admin` (não mexer — usado em todo o app).
+- RLS de `clients`, `agreements`, `client_events`.
+
+---
+
+### Arquivos alterados (resumo)
+
+**Migrations novas (3, todas `CREATE OR REPLACE`)**:
+1. `<ts>_bi_guard_super_admin_fallback.sql` — recria as 3 RPCs com guard tolerante.
+2. `<ts>_bi_response_time_clip_outliers.sql` — recria `get_bi_response_time_by_channel` com clip de 4h.
+3. `<ts>_bi_distinct_credores_rpc.sql` — cria `get_distinct_credores`.
+
+**Frontend (1 arquivo, ~8 linhas)**:
+- `src/components/analytics/AnalyticsFiltersBar.tsx` — troca query de credores por RPC.
+
+---
+
+### Riscos residuais
+
+- Clip de 4h em tempo de resposta é uma decisão de produto. Se o cliente quiser janela diferente (2h, 8h), basta uma migration trocando o intervalo. Documentado no comentário SQL.
+- O guard Fase 7.1 passa a aceitar Super Admin via `profiles.role` — isso é coerente com `useSAPermissions` e `useTenant`, que já tratam essa role como super admin global.
+- `get_distinct_credores` retorna todos os credores do tenant sem paginação. Para tenants com >50k credores distintos isto pode pesar — improvável no cenário atual, mas pode-se adicionar `LIMIT 5000` defensivo se preferir.
