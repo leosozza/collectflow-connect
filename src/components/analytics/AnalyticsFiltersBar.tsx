@@ -69,8 +69,37 @@ export const AnalyticsFiltersBar = (p: Props) => {
     enabled: !!p.tenantId && !p.isOperator,
   });
 
+  const ymd = (d: Date) => format(d, "yyyy-MM-dd");
+  const today = new Date();
+  const presets = [
+    { key: "7d", label: "7 dias", from: ymd(subDays(today, 6)), to: ymd(today) },
+    { key: "30d", label: "30 dias", from: ymd(subDays(today, 29)), to: ymd(today) },
+    { key: "90d", label: "90 dias", from: ymd(subDays(today, 89)), to: ymd(today) },
+    { key: "month", label: "Mês atual", from: ymd(startOfMonth(today)), to: ymd(today) },
+  ];
+  const activePreset = presets.find((pr) => pr.from === p.dateFrom && pr.to === p.dateTo)?.key;
+  const applyPreset = (pr: { from: string; to: string }) => {
+    p.setDateFrom(pr.from);
+    p.setDateTo(pr.to);
+  };
+
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm p-3 flex flex-wrap items-center gap-2">
+    <div className="bg-card rounded-xl border border-border shadow-sm p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-medium text-muted-foreground mr-1">Período rápido:</span>
+        {presets.map((pr) => (
+          <Button
+            key={pr.key}
+            size="sm"
+            variant={activePreset === pr.key ? "default" : "outline"}
+            className="h-7 px-2.5 text-xs"
+            onClick={() => applyPreset(pr)}
+          >
+            {pr.label}
+          </Button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
       {/* date from */}
       <Popover>
         <PopoverTrigger asChild>
