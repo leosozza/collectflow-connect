@@ -6888,6 +6888,11 @@ export type Database = {
           transaction_id: string
         }[]
       }
+      apply_agreement_credit_on_cancel: {
+        Args: { _agreement_id: string }
+        Returns: Json
+      }
+      can_access_tenant: { Args: { _tenant_id: string }; Returns: boolean }
       can_user_see_conversation: {
         Args: { _conv_id: string; _user_id: string }
         Returns: boolean
