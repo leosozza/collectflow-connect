@@ -68,7 +68,16 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   const isEdited = !!message.edited_at;
   const isOptimistic = (message as any).__optimistic === true;
   const EDIT_WINDOW_MS = 15 * 60 * 1000;
+  const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
   const ageMs = now - new Date(message.created_at).getTime();
+  const isStuckSent =
+    !isOfficialApi &&
+    isOutbound &&
+    !isInternal &&
+    !isDeleted &&
+    !isOptimistic &&
+    message.status === "sent" &&
+    ageMs > STUCK_THRESHOLD_MS;
   const canEdit =
     !isOfficialApi &&
     isOutbound &&
@@ -98,6 +107,19 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     const t = setTimeout(() => setNow(Date.now()), remaining + 250);
     return () => clearTimeout(t);
   }, [message.id, message.created_at, isOutbound, isInternal, isDeleted, isOptimistic, message.message_type, ageMs]);
+
+  // Schedule a re-render exactly when an outbound "sent" message crosses the
+  // 30-min stuck threshold, so the "⚠ Não confirmado" badge appears without
+  // any global polling.
+  useEffect(() => {
+    if (isOfficialApi) return;
+    if (!isOutbound || isInternal || isDeleted || isOptimistic) return;
+    if (message.status !== "sent") return;
+    const remaining = STUCK_THRESHOLD_MS - ageMs;
+    if (remaining <= 0) return;
+    const t = setTimeout(() => setNow(Date.now()), remaining + 250);
+    return () => clearTimeout(t);
+  }, [message.id, message.created_at, message.status, isOfficialApi, isOutbound, isInternal, isDeleted, isOptimistic, ageMs]);
 
   // Auto-close inline editor if the window expires while it's open.
   useEffect(() => {
@@ -492,6 +514,23 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
                   <TooltipContent side="top" className="max-w-[280px] text-xs">
                     <p className="font-medium text-destructive">Falha no envio</p>
                     <p className="text-muted-foreground mt-0.5 break-words">{errorTooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : isStuckSent ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-500 leading-none">
+                      <AlertCircle className="w-3 h-3" />
+                      Não confirmado
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-xs">
+                    <p className="font-medium">Entrega não confirmada</p>
+                    <p className="text-muted-foreground mt-0.5 break-words">
+                      A mensagem foi enviada ao WhatsApp, mas o aparelho do destinatário ainda não confirmou o recebimento há mais de 30 minutos. Pode indicar bloqueio, número inválido ou aparelho offline. Considere reenviar por outro canal.
+                    </p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
