@@ -78,7 +78,10 @@ const MetaGaugeCard = ({
   const hubRadius = Math.max(8, size * 0.05);
 
   return (
-    <div className="flex items-center justify-between gap-2 w-full h-full">
+    <div
+      className="flex items-center justify-between gap-2 w-full h-full cursor-help"
+      title="Progresso do Total Recebido no mês frente à meta de recebimento cadastrada para o período."
+    >
       {/* Left: meta / realizado / período */}
       <div className="flex flex-col gap-1.5 min-w-0 shrink-0">
         <div>
