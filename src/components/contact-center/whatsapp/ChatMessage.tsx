@@ -517,6 +517,23 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+            ) : isStuckSent ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-500 leading-none">
+                      <AlertCircle className="w-3 h-3" />
+                      Não confirmado
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-xs">
+                    <p className="font-medium">Entrega não confirmada</p>
+                    <p className="text-muted-foreground mt-0.5 break-words">
+                      A mensagem foi enviada ao WhatsApp, mas o aparelho do destinatário ainda não confirmou o recebimento há mais de 30 minutos. Pode indicar bloqueio, número inválido ou aparelho offline. Considere reenviar por outro canal.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ) : statusIcons[message.status]
           )}
         </div>
