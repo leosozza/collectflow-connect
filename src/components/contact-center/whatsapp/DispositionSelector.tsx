@@ -20,6 +20,11 @@ interface DispositionSelectorProps {
   conversationId: string;
   tenantId: string;
   clientCpf?: string | null;
+  /** Optimistic notify parent when local assignments change (add/remove). */
+  onAssignmentsChanged?: (
+    conversationId: string,
+    assignedDispositionTypeIds: string[]
+  ) => void;
 }
 
 const CPC_CPE_KEYS = ["cpc", "cpe"];
