@@ -88,9 +88,14 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
           <>{[0,1,2].map((i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)}</>
         ) : (
           <>
-            <KpiTile label="Operadores Ativos" value={(eff.data || []).length} icon={Trophy} />
+            <KpiTile label="Operadores Ativos" value={operadoresAtivos} icon={Trophy} />
             <KpiTile label="Talk-Time Total" value={formatHHMMSS(totalTalk)} icon={Clock} />
-            <KpiTile label="Acordos/Hora (Média)" value={avgAcordosHora.toFixed(2)} icon={Phone} />
+            <KpiTile
+              label="Acordos/Hora (Média)"
+              value={acordosHoraDisplay}
+              icon={Phone}
+              hint={acordosHoraDisplay === "—" ? "sem base de chamadas no período" : undefined}
+            />
           </>
         )}
       </div>
@@ -122,7 +127,7 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
                   return (
                     <TableRow key={r.operator_id || i}>
                       <TableCell className="text-xs font-bold text-primary">{i + 1}</TableCell>
-                      <TableCell className="text-xs font-medium">{r.operator_name || "Sem nome"}</TableCell>
+                      <TableCell className="text-xs font-medium">{r.operator_name && r.operator_name !== "Desconhecido" ? r.operator_name : "Operador não vinculado"}</TableCell>
                       <TableCell className="text-xs text-center">{r.qtd_acordos || 0}</TableCell>
                       <TableCell className="text-xs text-right text-success">{formatCurrency(Number(r.total_recebido || 0))}</TableCell>
                       <TableCell className="text-xs text-center">{chamadas}</TableCell>
