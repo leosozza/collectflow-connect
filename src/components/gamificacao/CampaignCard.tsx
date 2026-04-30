@@ -1,5 +1,5 @@
-import { forwardRef, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { forwardRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,7 +11,6 @@ import {
 } from "@/services/campaignService";
 import { differenceInDays, parseISO } from "date-fns";
 import { Trophy, Gift, Building2, AlertTriangle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import CampaignCountdown from "./CampaignCountdown";
 
 interface CampaignCardProps {
