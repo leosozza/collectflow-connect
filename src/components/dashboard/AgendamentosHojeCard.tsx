@@ -13,7 +13,10 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
   return (
     <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
-        <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2 cursor-help"
+          title="Callbacks/retornos agendados pelos operadores para a data de hoje."
+        >
           <div className="rounded-lg p-1.5 inline-flex bg-primary/10">
             <CalendarCheck className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
           </div>
