@@ -89,23 +89,27 @@ const GamificacaoPage = () => {
     queryKey: ["my-points", profile?.id, year, month],
     queryFn: () => fetchMyPoints(profile!.id, year, month),
     enabled: !isTenantAdmin && !!profile?.id,
+    staleTime: 60_000,
   });
 
   const { data: ranking = [] } = useQuery({
     queryKey: ["ranking", year, month],
     queryFn: () => fetchRanking(year, month),
+    staleTime: 60_000,
   });
 
   const { data: wallet } = useQuery({
     queryKey: ["rivocoin-wallet", profile?.id],
     queryFn: () => fetchMyWallet(profile!.id),
     enabled: !isTenantAdmin && !!profile?.id,
+    staleTime: 120_000,
   });
 
   const { data: earnedAchievements = [] } = useQuery({
     queryKey: ["achievements", profile?.id],
     queryFn: () => fetchAllAchievements(profile!.id),
     enabled: !isTenantAdmin && !!profile?.id,
+    staleTime: 120_000,
   });
 
   const { data: adminAchievementsCount = 0 } = useQuery({
@@ -128,17 +132,20 @@ const GamificacaoPage = () => {
       return count || 0;
     },
     enabled: isTenantAdmin && !!tenant?.id,
+    staleTime: 120_000,
   });
 
   const { data: adminCampaigns = [] } = useQuery({
     queryKey: ["campaigns", tenant?.id],
     queryFn: () => fetchCampaigns(tenant?.id),
     enabled: isTenantAdmin && !!tenant?.id,
+    staleTime: 60_000,
   });
 
   const { data: scoringRules = [] } = useQuery({
     queryKey: ["scoring-rules"],
     queryFn: fetchScoringRules,
+    staleTime: 300_000,
   });
 
   const myRankEntry = ranking.find(r => r.operator_id === profile?.id);
@@ -150,9 +157,18 @@ const GamificacaoPage = () => {
   const achievementsCount = earnedAchievements.length;
   const rivoBalance = wallet?.balance || 0;
   const adminParticipantsCount = ranking.length;
-  const adminPointsTotal = ranking.reduce((sum, entry) => sum + Number(entry.points || 0), 0);
-  const adminReceivedTotal = ranking.reduce((sum, entry) => sum + Number(entry.total_received || 0), 0);
-  const activeCampaignsCount = adminCampaigns.filter(isCampaignActive).length;
+  const adminPointsTotal = useMemo(
+    () => ranking.reduce((sum, entry) => sum + Number(entry.points || 0), 0),
+    [ranking],
+  );
+  const adminReceivedTotal = useMemo(
+    () => ranking.reduce((sum, entry) => sum + Number(entry.total_received || 0), 0),
+    [ranking],
+  );
+  const activeCampaignsCount = useMemo(
+    () => adminCampaigns.filter(isCampaignActive).length,
+    [adminCampaigns],
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
