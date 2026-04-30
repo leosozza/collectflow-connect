@@ -416,6 +416,8 @@ export const approveAgreement = async (
     logger.info(MODULE, "approve", { id: agreement.id });
     logAction({ action: "approve", entity_type: "agreement", entity_id: agreement.id, details: { cpf: agreement.client_cpf } });
 
+    triggerStatusSync(agreement.tenant_id);
+
     try {
       await autoCancelProtestsForCpf(agreement.client_cpf, agreement.tenant_id, userId);
     } catch (e) {
