@@ -1,36 +1,37 @@
-## Modernizar painel de Respostas Rápidas no WhatsApp
+# Disparo WhatsApp em Lote — Rodapé sempre visível
 
-Reformular o popover do botão Zap (Respostas Rápidas) e o dropdown que aparece ao digitar `/` no `ChatInput`, deixando-os com visual mais moderno e com **barra de rolagem funcional** — hoje o `ScrollArea` está com `max-h-*` mas sem altura fixa, então quando há muitos atalhos a rolagem não aparece corretamente.
+## Problema
+No `WhatsAppBulkDialog` (passo 1), quando o operador cola uma mensagem longa o `Textarea` cresce (resize nativo) e o bloco de Preview também aumenta, empurrando o `DialogFooter` (botões "Cancelar" / "Próximo") para fora da viewport. O `DialogContent` não tem altura máxima nem área de rolagem interna.
 
-### Mudanças no `src/components/contact-center/whatsapp/ChatInput.tsx`
+## Solução
+Tornar o `DialogContent` uma coluna flex com altura máxima (ex.: `max-h-[85vh]`), com header e footer fixos e o **conteúdo do passo** rolando internamente. Adicionalmente, travar o resize do `Textarea` e dar uma altura máxima para o bloco de Preview, para que o usuário role dentro do campo em vez de expandir o modal.
 
-**1. Popover do botão Zap (lista completa)**
-- Largura aumentada de `w-[300px]` para `w-[360px]`.
-- **Header moderno**: ícone `Sparkles` em fundo arredondado laranja (cor primária da marca), título "Respostas Rápidas" em destaque, contador discreto à direita ("12 atalhos").
-- **Campo de busca** com ícone `Search` para filtrar por atalho, categoria ou conteúdo. Estado `qrSearch` local, dedup com `useMemo`.
-- **ScrollArea com altura fixa** `h-[360px]` (em vez de `max-h-[250px]`), garantindo a barra de rolagem sempre que ultrapassar.
-- **Cards modernizados**:
-  - Hover com barra lateral colorida em `primary` (4px) que aparece ao passar o mouse.
-  - Atalho `/{shortcut}` em chip arredondado `bg-primary/10 text-primary` com ícone `Hash`.
-  - Categoria como badge minimalista `bg-muted/60 text-[10px]`.
-  - Conteúdo em `text-foreground/80` com `line-clamp-2`, espaçamento `py-2.5 px-3`.
-  - Separadores sutis (`border-border/40`).
-- **Empty state**: quando a busca não retorna nada, mostrar mensagem central "Nenhuma resposta encontrada".
-- **Footer**: dica discreta "Digite `/` no chat para acesso rápido".
+## Mudanças (arquivo único)
+`src/components/carteira/WhatsAppBulkDialog.tsx`
 
-**2. Dropdown inline ao digitar `/`**
-- Aplicar o **mesmo estilo de cards** do popover (chip do atalho, badge de categoria, line-clamp do conteúdo).
-- Trocar `max-h-[200px]` por `h-[240px]` para a barra de rolagem aparecer.
-- Adicionar header compacto "Respostas Rápidas · {n} resultado(s)".
-- Sombra mais elegante (`shadow-xl`) e borda com leve glow `ring-1 ring-primary/10`.
+1. `DialogContent` (linha 883): adicionar `max-h-[85vh] flex flex-col p-0 overflow-hidden` e mover paddings para os filhos. Header e Footer ficam `shrink-0`; criar um wrapper rolável entre eles para o indicador de etapas, o badge de "X clientes selecionados" e os `renderStepN()`.
 
-**3. Tokens semânticos**
-- Tudo usando tokens do design system (`primary`, `muted`, `foreground`, `border`, `accent`) — sem cores hardcoded. Compatível com dark mode automaticamente.
+   Estrutura nova:
+   ```text
+   DialogContent (flex col, max-h-[85vh])
+     DialogHeader (shrink-0, px/pt)
+     div.flex-1.overflow-y-auto.px-6 (área rolável)
+       renderStepIndicator()
+       badge "N clientes selecionados"
+       renderStep1/2/3/4()
+     DialogFooter (shrink-0, px/pb, border-t)
+   ```
 
-### Sem mudanças
-- Lógica de filtragem ao digitar `/`, seleção da resposta, inserção no textarea — preservadas.
-- Fonte de dados (`quickReplies` prop) — preservada.
-- Nenhuma alteração de schema/RLS.
+2. `Textarea` da mensagem personalizada (linha 506): adicionar `className="resize-none max-h-48"` e manter `rows={4}`. Assim o campo ganha rolagem interna em vez de empurrar o layout. (Tamanho continua confortável; a área já é rolável dentro do dialog também.)
 
-### Arquivo afetado
-- `src/components/contact-center/whatsapp/ChatInput.tsx`
+3. Bloco de Preview (linha 531): adicionar `max-h-40 overflow-y-auto` para que mensagens muito longas no preview não estourem a área.
+
+## Detalhes técnicos
+- `DialogContent` do shadcn já é posicionado fixo e centralizado; aplicar `max-h-[85vh]` com `flex flex-col` é o padrão recomendado para modais com rodapé persistente.
+- Não há mudança em `renderStep2/3/4` além de herdarem o novo wrapper rolável — isso também corrige potenciais estouros em telas pequenas nos demais passos.
+- Sem alterações em estado, lógica de envio ou serviços. Mudança puramente visual/layout.
+
+## Critérios de aceite
+- Ao colar uma mensagem longa (centenas de linhas), o textarea passa a rolar internamente e o botão "Próximo" continua visível.
+- Em viewports pequenas (≤716px de altura, como o preview atual), o rodapé permanece fixo enquanto o conteúdo rola.
+- Nenhuma regressão visual nos passos 2, 3 e 4.
