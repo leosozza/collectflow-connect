@@ -52,6 +52,22 @@ export interface AgreementFormData {
 
 const MODULE = "agreementService";
 
+/**
+ * Fire-and-forget: dispara recálculo do status_cobranca_id (Inadimplente/Acordo Vigente/etc.)
+ * para todo o tenant após mutação relevante em agreements. NUNCA bloqueia o fluxo principal
+ * — qualquer falha é só logada. Garante que o badge "Status do Cliente" reflita a hierarquia
+ * canônica (QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > QUEBRA > INADIMPLENTE > EM DIA)
+ * sem depender exclusivamente do cron.
+ */
+const triggerStatusSync = (tenantId: string | null | undefined) => {
+  if (!tenantId) return;
+  supabase.functions
+    .invoke("auto-status-sync", { body: { tenant_id: tenantId } })
+    .catch((e) => {
+      try { logger.error(MODULE, "trigger_status_sync", e); } catch {}
+    });
+};
+
 // Lean projection: only the columns the listing/classification needs.
 // Cuts payload by ~40% vs select("*") and avoids transferring unused JSONB.
 const AGREEMENT_LIST_COLUMNS = [
@@ -218,6 +234,9 @@ export const createAgreement = async (
     const agreement = result as Agreement;
     logger.info(MODULE, "create", { id: agreement.id, cpf: data.client_cpf, credor: data.credor });
     logAction({ action: "create", entity_type: "agreement", entity_id: agreement.id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
+
+    // Recalcula status_cobranca_id (hierarquia canônica) — não bloqueante
+    triggerStatusSync(tenantId);
 
     // Mark original titles as "em_acordo"
     try {
@@ -397,6 +416,8 @@ export const approveAgreement = async (
     logger.info(MODULE, "approve", { id: agreement.id });
     logAction({ action: "approve", entity_type: "agreement", entity_id: agreement.id, details: { cpf: agreement.client_cpf } });
 
+    triggerStatusSync(agreement.tenant_id);
+
     try {
       await autoCancelProtestsForCpf(agreement.client_cpf, agreement.tenant_id, userId);
     } catch (e) {
@@ -440,6 +461,12 @@ export const rejectAgreement = async (
   userId: string
 ): Promise<void> => {
   try {
+    const { data: agr } = await supabase
+      .from("agreements")
+      .select("tenant_id")
+      .eq("id", id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("agreements")
       .update({ status: "rejected", approved_by: userId } as any)
@@ -448,6 +475,8 @@ export const rejectAgreement = async (
     if (error) throw error;
     logger.info(MODULE, "reject", { id });
     logAction({ action: "reject", entity_type: "agreement", entity_id: id });
+
+    triggerStatusSync((agr as any)?.tenant_id);
   } catch (error) {
     handleServiceError(error, MODULE);
   }
@@ -597,6 +626,8 @@ export const cancelAgreement = async (id: string): Promise<void> => {
 
     logger.info(MODULE, "cancel", { id });
     logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
+
+    triggerStatusSync(agreement?.tenant_id);
 
     // Audit event in client_events timeline
     if (agreement?.tenant_id && agreement?.client_cpf) {
