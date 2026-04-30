@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isCampaignActive } from "./campaignTime";
+import { useRefreshActiveCampaignScores } from "./useRefreshActiveCampaignScores";
 
 interface CampaignsTabProps {
   highlightCurrentUser?: boolean;
@@ -61,9 +62,11 @@ const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
 
   const active = useMemo(() => campaigns.filter(isCampaignActive), [campaigns]);
   const others = useMemo(() => campaigns.filter((c) => !isCampaignActive(c)), [campaigns]);
-  // Campaign scores are kept up-to-date by `recalculate_my_full` (page mount)
-  // and the `gamification-recalc-tick` cron job. Avoid client-side fan-out
-  // recalculation here — it generated N heavy RPCs per tab mount.
+
+  // Trigger a server-side recalc of every active campaign on mount (idle,
+  // dedup'd 60s). Closes the gap between the 30-min cron `gamification-recalc-tick`
+  // and the live UI. Realtime then re-renders the cards once `score` changes.
+  useRefreshActiveCampaignScores(active);
 
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;

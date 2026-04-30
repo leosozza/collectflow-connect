@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
+import { useMemo } from "react";
 import {
   fetchCampaigns, createCampaign, updateCampaign, deleteCampaign,
   saveCampaignCredores, saveCampaignParticipants, closeCampaignAndAward, Campaign,
@@ -13,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Plus, Pencil, Trash2, Trophy, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { isCampaignActive } from "./campaignTime";
+import { useRefreshActiveCampaignScores } from "./useRefreshActiveCampaignScores";
 
 const CampaignsManagementTab = () => {
   const { tenant } = useTenant();
