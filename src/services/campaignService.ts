@@ -194,13 +194,18 @@ export const fetchCampaignParticipants = async (campaignId: string): Promise<Cam
 
   const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-  const entries = (data as CampaignParticipant[]).filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
-    ...entry,
-    rank: idx + 1,
-    profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
-  }));
-
-  return attachLiveCampaignScores(campaignId, entries, profiles || []);
+  // Use the persisted `score` column directly. It is kept up-to-date by the
+  // SQL function `recalculate_operator_full` (called on page mount) and by the
+  // `gamification-recalc-tick` cron job. This avoids running N×3 client-side
+  // queries (manual_payments + portal_payments + negociarie_cobrancas) per
+  // participant on every card mount.
+  return (data as CampaignParticipant[])
+    .filter((entry) => profileMap.has(entry.operator_id))
+    .map((entry, idx) => ({
+      ...entry,
+      rank: idx + 1,
+      profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
+    }));
 };
 
 async function attachLiveCampaignScores(
