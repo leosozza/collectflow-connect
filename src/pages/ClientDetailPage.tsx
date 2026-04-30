@@ -126,15 +126,15 @@ const ClientDetailPage = () => {
         else pendenteIds.push(id);
       }
 
-      const updates: Promise<any>[] = [];
+      const updates: Array<Promise<any>> = [];
       if (vencidoIds.length > 0) {
         updates.push(
-          supabase.from("clients").update({ status: "vencido", valor_pago: 0 } as any).in("id", vencidoIds)
+          Promise.resolve(supabase.from("clients").update({ status: "vencido", valor_pago: 0 } as any).in("id", vencidoIds))
         );
       }
       if (pendenteIds.length > 0) {
         updates.push(
-          supabase.from("clients").update({ status: "pendente", valor_pago: 0 } as any).in("id", pendenteIds)
+          Promise.resolve(supabase.from("clients").update({ status: "pendente", valor_pago: 0 } as any).in("id", pendenteIds))
         );
       }
       const results = await Promise.all(updates);
