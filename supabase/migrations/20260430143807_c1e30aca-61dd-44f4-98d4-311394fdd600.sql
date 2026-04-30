@@ -1,0 +1,300 @@
+-- Extend ingest_channel_event to accept reply_to_external_id and resolve it to chat_messages.id
+CREATE OR REPLACE FUNCTION public.ingest_channel_event(
+  _tenant_id uuid,
+  _endpoint_id uuid,
+  _channel_type text DEFAULT 'whatsapp'::text,
+  _provider text DEFAULT NULL::text,
+  _remote_phone text DEFAULT NULL::text,
+  _remote_name text DEFAULT NULL::text,
+  _direction text DEFAULT 'inbound'::text,
+  _message_type text DEFAULT 'text'::text,
+  _content text DEFAULT NULL::text,
+  _media_url text DEFAULT NULL::text,
+  _media_mime_type text DEFAULT NULL::text,
+  _external_id text DEFAULT NULL::text,
+  _provider_message_id text DEFAULT NULL::text,
+  _actor_type text DEFAULT 'human'::text,
+  _status text DEFAULT 'sent'::text,
+  _reply_to_external_id text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  _conv_id uuid;
+  _msg_id uuid;
+  _client_id uuid;
+  _client_cpf text;
+  _is_new_conv boolean := false;
+  _conv_status text;
+  _existing_client_id uuid;
+  _unread int;
+  _sla_minutes int;
+  _sla_deadline timestamptz;
+  _assigned_to uuid;
+  _raw_digits text;
+  _normalized_phone text;
+  _phone_last8 text;
+  _canonical_phone text;
+  _reply_to_msg_id uuid;
+  _now timestamptz := now();
+BEGIN
+  _raw_digits := regexp_replace(COALESCE(_remote_phone, ''), '\D', '', 'g');
+
+  IF _raw_digits = '' OR _raw_digits IS NULL THEN
+    RETURN jsonb_build_object('error', 'remote_phone is required');
+  END IF;
+
+  _normalized_phone := public.normalize_phone_br(_remote_phone);
+  _canonical_phone := COALESCE(_normalized_phone, _raw_digits);
+  _phone_last8 := RIGHT(_raw_digits, 8);
+
+  SELECT cp.client_id, cp.cpf
+  INTO _client_id, _client_cpf
+  FROM public.client_phones cp
+  WHERE cp.tenant_id = _tenant_id
+    AND (cp.phone_e164 = _canonical_phone OR cp.phone_last8 = _phone_last8)
+  ORDER BY
+    CASE WHEN cp.phone_e164 = _canonical_phone THEN 0 ELSE 1 END,
+    cp.priority ASC
+  LIMIT 1;
+
+  SELECT id, status, unread_count, client_id, assigned_to
+  INTO _conv_id, _conv_status, _unread, _existing_client_id, _assigned_to
+  FROM public.conversations
+  WHERE tenant_id = _tenant_id
+    AND (endpoint_id = _endpoint_id OR instance_id = _endpoint_id)
+    AND remote_phone = _canonical_phone
+  ORDER BY last_message_at DESC NULLS LAST
+  LIMIT 1;
+
+  IF _conv_id IS NULL AND _raw_digits <> _canonical_phone THEN
+    SELECT id, status, unread_count, client_id, assigned_to
+    INTO _conv_id, _conv_status, _unread, _existing_client_id, _assigned_to
+    FROM public.conversations
+    WHERE tenant_id = _tenant_id
+      AND (endpoint_id = _endpoint_id OR instance_id = _endpoint_id)
+      AND remote_phone = _raw_digits
+    ORDER BY last_message_at DESC NULLS LAST
+    LIMIT 1;
+  END IF;
+
+  IF _conv_id IS NULL THEN
+    SELECT id, status, unread_count, client_id, assigned_to
+    INTO _conv_id, _conv_status, _unread, _existing_client_id, _assigned_to
+    FROM public.conversations
+    WHERE tenant_id = _tenant_id
+      AND (endpoint_id = _endpoint_id OR instance_id = _endpoint_id)
+      AND RIGHT(regexp_replace(remote_phone, '\D', '', 'g'), 8) = _phone_last8
+    ORDER BY last_message_at DESC NULLS LAST
+    LIMIT 1;
+  END IF;
+
+  IF _conv_id IS NOT NULL THEN
+    _is_new_conv := false;
+
+    IF _existing_client_id IS NOT NULL THEN
+      _client_id := COALESCE(_client_id, _existing_client_id);
+    END IF;
+
+    IF _direction = 'inbound' THEN
+      IF _conv_status = 'closed' THEN
+        _conv_status := 'waiting';
+      END IF;
+      _unread := COALESCE(_unread, 0) + 1;
+    END IF;
+
+    IF _direction = 'inbound' THEN
+      _sla_minutes := 30;
+      IF _client_id IS NOT NULL THEN
+        SELECT cr.sla_hours * 60 INTO _sla_minutes
+        FROM public.clients cl
+        JOIN public.credores cr ON cr.tenant_id = _tenant_id AND cr.razao_social = cl.credor
+        WHERE cl.id = _client_id AND cr.sla_hours IS NOT NULL
+        LIMIT 1;
+      END IF;
+      IF _sla_minutes IS NULL OR _sla_minutes = 0 THEN
+        SELECT COALESCE((t.settings->>'sla_minutes')::int, 30) INTO _sla_minutes
+        FROM public.tenants t WHERE t.id = _tenant_id;
+        _sla_minutes := COALESCE(_sla_minutes, 30);
+      END IF;
+      _sla_deadline := _now + (_sla_minutes * interval '1 minute');
+    END IF;
+
+    UPDATE public.conversations SET
+      status = COALESCE(_conv_status, status),
+      unread_count = CASE WHEN _direction = 'inbound' THEN _unread ELSE unread_count END,
+      last_message_at = _now,
+      remote_phone = _canonical_phone,
+      remote_name = CASE WHEN _direction = 'inbound' AND _remote_name IS NOT NULL AND _remote_name <> '' THEN _remote_name ELSE remote_name END,
+      client_id = COALESCE(client_id, _client_id),
+      sla_deadline_at = CASE WHEN _direction = 'inbound' THEN _sla_deadline ELSE NULL END,
+      sla_notified_at = CASE WHEN _direction = 'inbound' THEN NULL ELSE sla_notified_at END,
+      updated_at = _now
+    WHERE id = _conv_id;
+
+  ELSE
+    _is_new_conv := true;
+
+    IF _direction = 'inbound' THEN
+      SELECT oi.profile_id INTO _assigned_to
+      FROM public.operator_instances oi
+      WHERE oi.instance_id = _endpoint_id AND oi.tenant_id = _tenant_id
+      ORDER BY (
+        SELECT COUNT(*) FROM public.conversations c
+        WHERE c.assigned_to = oi.profile_id AND c.tenant_id = _tenant_id AND c.status = 'open'
+      ) ASC
+      LIMIT 1;
+    END IF;
+
+    _sla_minutes := 30;
+    IF _direction = 'inbound' THEN
+      IF _client_id IS NOT NULL THEN
+        SELECT cr.sla_hours * 60 INTO _sla_minutes
+        FROM public.clients cl
+        JOIN public.credores cr ON cr.tenant_id = _tenant_id AND cr.razao_social = cl.credor
+        WHERE cl.id = _client_id AND cr.sla_hours IS NOT NULL
+        LIMIT 1;
+      END IF;
+      IF _sla_minutes IS NULL OR _sla_minutes = 0 THEN
+        SELECT COALESCE((t.settings->>'sla_minutes')::int, 30) INTO _sla_minutes
+        FROM public.tenants t WHERE t.id = _tenant_id;
+        _sla_minutes := COALESCE(_sla_minutes, 30);
+      END IF;
+      _sla_deadline := _now + (_sla_minutes * interval '1 minute');
+    END IF;
+
+    INSERT INTO public.conversations (
+      tenant_id, instance_id, endpoint_id, remote_phone, remote_name,
+      status, unread_count, last_message_at, assigned_to, client_id,
+      channel_type, provider, sla_deadline_at, created_at, updated_at
+    ) VALUES (
+      _tenant_id, _endpoint_id, _endpoint_id, _canonical_phone,
+      COALESCE(_remote_name, _canonical_phone),
+      CASE WHEN _direction = 'inbound' THEN 'waiting' ELSE 'open' END,
+      CASE WHEN _direction = 'inbound' THEN 1 ELSE 0 END,
+      _now, _assigned_to, _client_id,
+      _channel_type, _provider, _sla_deadline,
+      _now, _now
+    )
+    RETURNING id INTO _conv_id;
+  END IF;
+
+  -- Dedup by external_id
+  IF _external_id IS NOT NULL AND _external_id <> '' THEN
+    PERFORM 1 FROM public.chat_messages
+    WHERE tenant_id = _tenant_id AND external_id = _external_id
+    LIMIT 1;
+    IF FOUND THEN
+      RETURN jsonb_build_object(
+        'conversation_id', _conv_id,
+        'message_id', NULL,
+        'is_new_conversation', _is_new_conv,
+        'client_id', _client_id,
+        'skipped_duplicate', true
+      );
+    END IF;
+  END IF;
+
+  -- Resolve reply_to_external_id -> chat_messages.id (best-effort)
+  IF _reply_to_external_id IS NOT NULL AND _reply_to_external_id <> '' THEN
+    SELECT id INTO _reply_to_msg_id
+    FROM public.chat_messages
+    WHERE tenant_id = _tenant_id
+      AND external_id = _reply_to_external_id
+    ORDER BY created_at DESC
+    LIMIT 1;
+  END IF;
+
+  INSERT INTO public.chat_messages (
+    conversation_id, tenant_id, direction, message_type, content,
+    media_url, media_mime_type, status, external_id,
+    provider, provider_message_id, endpoint_id, actor_type,
+    is_internal, reply_to_message_id, created_at
+  ) VALUES (
+    _conv_id, _tenant_id, _direction, _message_type, _content,
+    _media_url, _media_mime_type, _status, _external_id,
+    _provider, _provider_message_id, _endpoint_id, _actor_type,
+    false, _reply_to_msg_id, _now
+  )
+  RETURNING id INTO _msg_id;
+
+  RETURN jsonb_build_object(
+    'conversation_id', _conv_id,
+    'message_id', _msg_id,
+    'is_new_conversation', _is_new_conv,
+    'client_id', _client_id,
+    'skipped_duplicate', false,
+    'reply_to_message_id', _reply_to_msg_id
+  );
+END;
+$function$;
+
+-- Update v2 wrapper to forward the new param
+CREATE OR REPLACE FUNCTION public.ingest_channel_event_v2(
+  _instance_name text DEFAULT NULL,
+  _channel_type text DEFAULT 'whatsapp',
+  _provider text DEFAULT NULL,
+  _remote_phone text DEFAULT NULL,
+  _remote_name text DEFAULT NULL,
+  _direction text DEFAULT 'inbound',
+  _message_type text DEFAULT 'text',
+  _content text DEFAULT NULL,
+  _media_url text DEFAULT NULL,
+  _media_mime_type text DEFAULT NULL,
+  _external_id text DEFAULT NULL,
+  _provider_message_id text DEFAULT NULL,
+  _actor_type text DEFAULT 'human',
+  _status text DEFAULT 'sent',
+  _reply_to_external_id text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  _tenant_id uuid;
+  _endpoint_id uuid;
+  _inst_provider text;
+BEGIN
+  IF _instance_name IS NOT NULL AND _instance_name <> '' THEN
+    SELECT id, tenant_id, provider
+    INTO _endpoint_id, _tenant_id, _inst_provider
+    FROM public.whatsapp_instances
+    WHERE instance_name = _instance_name
+    LIMIT 1;
+
+    IF _endpoint_id IS NULL THEN
+      RETURN jsonb_build_object('error', 'instance not found: ' || _instance_name);
+    END IF;
+
+    IF _provider IS NULL OR _provider = '' THEN
+      _provider := _inst_provider;
+    END IF;
+  ELSE
+    RETURN jsonb_build_object('error', 'instance_name is required');
+  END IF;
+
+  RETURN public.ingest_channel_event(
+    _tenant_id := _tenant_id,
+    _endpoint_id := _endpoint_id,
+    _channel_type := _channel_type,
+    _provider := _provider,
+    _remote_phone := _remote_phone,
+    _remote_name := _remote_name,
+    _direction := _direction,
+    _message_type := _message_type,
+    _content := _content,
+    _media_url := _media_url,
+    _media_mime_type := _media_mime_type,
+    _external_id := _external_id,
+    _provider_message_id := _provider_message_id,
+    _actor_type := _actor_type,
+    _status := _status,
+    _reply_to_external_id := _reply_to_external_id
+  );
+END;
+$$;
