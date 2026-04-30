@@ -108,6 +108,19 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     return () => clearTimeout(t);
   }, [message.id, message.created_at, isOutbound, isInternal, isDeleted, isOptimistic, message.message_type, ageMs]);
 
+  // Schedule a re-render exactly when an outbound "sent" message crosses the
+  // 30-min stuck threshold, so the "⚠ Não confirmado" badge appears without
+  // any global polling.
+  useEffect(() => {
+    if (isOfficialApi) return;
+    if (!isOutbound || isInternal || isDeleted || isOptimistic) return;
+    if (message.status !== "sent") return;
+    const remaining = STUCK_THRESHOLD_MS - ageMs;
+    if (remaining <= 0) return;
+    const t = setTimeout(() => setNow(Date.now()), remaining + 250);
+    return () => clearTimeout(t);
+  }, [message.id, message.created_at, message.status, isOfficialApi, isOutbound, isInternal, isDeleted, isOptimistic, ageMs]);
+
   // Auto-close inline editor if the window expires while it's open.
   useEffect(() => {
     if (editOpen && !canEdit) {
