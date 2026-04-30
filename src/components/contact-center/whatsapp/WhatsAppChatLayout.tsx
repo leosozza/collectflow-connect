@@ -610,6 +610,18 @@ const WhatsAppChatLayout = () => {
       toast.error("Instância não encontrada");
       return;
     }
+
+    // Defensive gate (mirrors ChatPanel) — block if 5+ inbound and missing profile/disposition.
+    const inboundCount = messages.filter((m) => m.direction === "inbound" && !m.is_internal).length;
+    if (inboundCount >= 5 && selectedConv.client_id && clientInfo?.id) {
+      const hasDisp = dispositionAssignments.some((a) => a.conversation_id === selectedConv.id);
+      const hasProf = !!clientInfo?.debtor_profile;
+      if (!hasDisp || !hasProf) {
+        toast.error("Defina o Perfil do Devedor e selecione ao menos uma Tabulação para enviar mensagens.");
+        return;
+      }
+    }
+
     // Optimistic UI: show message immediately while the edge function works.
     const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const optimisticMsg: ChatMessage = {
