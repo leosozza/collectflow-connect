@@ -358,7 +358,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
 
         {/* Perfil do Devedor */}
         {linkedClient && conversation && (
-          <div className="mb-3">
+          <div className="mb-3 rounded-md transition-shadow" data-gate-anchor="debtor-profile">
             <DebtorProfileBadge
               clientId={linkedClient.id}
               clientCpf={linkedClient.cpf}
@@ -371,11 +371,13 @@ const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSideb
 
         {/* Tabulação WhatsApp */}
         {conversation && (
-          <DispositionSelector
-            conversationId={conversation.id}
-            tenantId={conversation.tenant_id || ""}
-            clientCpf={linkedClient?.cpf || null}
-          />
+          <div data-gate-anchor="disposition" className="rounded-md transition-shadow">
+            <DispositionSelector
+              conversationId={conversation.id}
+              tenantId={conversation.tenant_id || ""}
+              clientCpf={linkedClient?.cpf || null}
+            />
+          </div>
         )}
 
         {/* Vincular cliente (somente quando não vinculado) */}
