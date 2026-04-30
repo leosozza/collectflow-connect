@@ -2,26 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchCampaigns, Campaign } from "@/services/campaignService";
+import { fetchCampaigns } from "@/services/campaignService";
 import CampaignCard from "./CampaignCard";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { differenceInDays, parseISO } from "date-fns";
-
-const isValidDate = (s?: string | null) => {
-  if (!s) return false;
-  const ts = Date.parse(s);
-  if (isNaN(ts)) return false;
-  const y = new Date(ts).getFullYear();
-  return y >= 2000 && y <= 2100;
-};
-
-const isCampaignActive = (c: Campaign) => {
-  if (c.status !== "ativa") return false;
-  if (!isValidDate(c.start_date) || !isValidDate(c.end_date)) return false;
-  return differenceInDays(parseISO(c.end_date), new Date()) >= 0;
-};
+import { isCampaignActive } from "./campaignTime";
 
 interface CampaignsTabProps {
   highlightCurrentUser?: boolean;
