@@ -529,7 +529,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       {getPreview() && (
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Preview (1º cliente):</Label>
-          <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap">{getPreview()}</div>
+          <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">{getPreview()}</div>
         </div>
       )}
     </div>
