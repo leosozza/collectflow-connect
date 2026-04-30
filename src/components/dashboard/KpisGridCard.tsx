@@ -29,10 +29,14 @@ interface TileProps {
   iconColor: string;
   iconBg: string;
   trend?: TrendData | null;
+  info?: string;
 }
 
-const Tile = ({ label, value, Icon, iconColor, iconBg, trend }: TileProps) => (
-  <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_2px_8px_-2px_rgb(0_0_0_/_0.08)] transition-shadow px-3 py-2.5 flex flex-col justify-between min-w-0 h-full overflow-hidden">
+const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps) => (
+  <div
+    title={info}
+    className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_2px_8px_-2px_rgb(0_0_0_/_0.08)] transition-shadow px-3 py-2.5 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help"
+  >
     <div className="min-w-0">
       <div className={cn("rounded-lg p-1.5 inline-flex shrink-0 mb-1.5", iconBg)}>
         <Icon className={cn("w-3.5 h-3.5", iconColor)} strokeWidth={2.25} />
