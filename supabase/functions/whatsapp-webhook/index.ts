@@ -155,6 +155,20 @@ Deno.serve(async (req) => {
         rawMediaUrl = msgData.mediaUrl || "";
       }
 
+      // Extract reply/quoted reference (WhatsApp contextInfo.stanzaId)
+      const ctxInfo =
+        msg?.extendedTextMessage?.contextInfo ||
+        msg?.imageMessage?.contextInfo ||
+        msg?.audioMessage?.contextInfo ||
+        msg?.videoMessage?.contextInfo ||
+        msg?.documentMessage?.contextInfo ||
+        msg?.stickerMessage?.contextInfo ||
+        null;
+      const replyToExternalId: string | null = ctxInfo?.stanzaId || null;
+      if (replyToExternalId) {
+        console.log(`[provider=unofficial] Reply detected, stanzaId=${replyToExternalId}`);
+      }
+
       console.log(`[provider=unofficial] Parsed: type=${messageType}, mime=${mediaMimeType}, hasMedia=${!!rawMediaUrl}, fromMe=${fromMe}`);
 
       // ===== Persist media to Storage =====
