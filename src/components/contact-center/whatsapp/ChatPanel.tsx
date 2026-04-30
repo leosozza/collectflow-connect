@@ -229,7 +229,25 @@ const ChatPanel = ({
     }
   };
 
+  // ====== Gate: 5+ inbound messages require profile + at least 1 disposition ======
+  const GATE_THRESHOLD = 5;
+  const inboundCount = useMemo(
+    () => messages.filter((m) => m.direction === "inbound" && !m.is_internal).length,
+    [messages]
+  );
+  const hasDisposition = useMemo(
+    () => dispositionAssignments.some((a) => a.conversation_id === conversation?.id),
+    [dispositionAssignments, conversation?.id]
+  );
+  const hasProfile = !!(clientInfo?.debtor_profile);
+  const mustGate =
+    inboundCount >= GATE_THRESHOLD && !!conversation && !!clientInfo?.id && (!hasDisposition || !hasProfile);
+
   const handleSend = (text: string) => {
+    if (mustGate) {
+      toast.error("Defina o Perfil do Devedor e selecione ao menos uma Tabulação para enviar mensagens.");
+      return;
+    }
     onSend(text, replyTo?.id || null);
     setReplyTo(null);
   };
