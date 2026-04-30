@@ -1,65 +1,62 @@
-## Objetivo
-Reduzir o tempo de abertura da `/gamificacao` sem alterar nada visualmente. Foco: cortar cascata de queries, evitar montagem de todas as abas de uma vez, deduplicar recálculos e diminuir roundtrips no Postgres.
+## Problema
 
-## Causas da lentidão (medidas)
+As campanhas "CAMPANHA MENSAL" e "CAMPANHA SEMANAL" estão configuradas com:
+- `end_date = 2026-04-30`
+- `end_time = 17:45:00` (fuso de São Paulo)
+- `status = ativa`
 
-1. **Todas as 7 abas montam no mount** (Radix `Tabs` monta cada `TabsContent`). Cada aba dispara queries + `supabase.channel(...).subscribe()` mesmo invisível.
-2. **`recalculate_my_full` é disparado no mount da página** e o `GoalsTab` ainda dispara um **segundo** recálculo (`recalculateMySnapshot/Tenant`) ao montar — trabalho duplicado.
-3. **`fetchRanking` faz 5 queries sequenciais** (participants → points → profiles → agreements → audit_logs) onde várias podem ser paralelas, e `audit_logs` é consultado mesmo quando o filtro pode ser feito numa única query.
-4. **`fetchCampaignParticipants` → `attachLiveCampaignScores`** roda `Promise.all` com **3 queries por participante** (manual_payments, portal_payments, negociarie_cobrancas) — N×3 roundtrips por card. Em `CampaignsTab` ainda há um loop chamando `recalculateCampaignScores` para cada campanha ativa, redundante (já existe cron tick a cada 30 min).
-5. **Realtime channels redundantes**: `RankingTab`, `CampaignsTab`, `GoalsTab` (indireto) e cada `CampaignCard` abrem channels — acumulam dezenas de subscribes em campanhas com vários cards.
-6. `closeMut` e mutations OK; o problema é só leitura.
+Agora são ~10:33 (BRT) de 2026-04-30, então elas deveriam aparecer como **Ativas** com countdown "00:07:11:xx". Em vez disso, aparecem como **Encerradas**.
 
-## Mudanças propostas (somente lógica/data fetching, **zero mudança visual**)
+## Causa Raiz
 
-### 1) Lazy-mount das abas via Radix
-Usar `forceMount` apenas quando necessário e renderizar o conteúdo da aba **somente quando ela é a `currentTab`** (early-return condicional dentro de cada `<TabsContent>`):
-```tsx
-<TabsContent value="ranking">
-  {currentTab === "ranking" && <RankingTab .../>}
-</TabsContent>
+A lógica `isCampaignActive` (em `CampaignsTab.tsx`, `CampaignsManagementTab.tsx` e `CampaignCard.tsx`) usa:
+
+```ts
+differenceInDays(parseISO(campaign.end_date), new Date()) >= 0
 ```
-Aplicar a todas as 7 abas + 7 sub-abas de "Gerenciar". Resultado: na primeira renderização só monta a aba ativa (Ranking para admin / Metas para operador). Queries das outras abas só rodam quando o usuário clica.
 
-### 2) Deduplicar recálculos
-- Remover `recalculateMySnapshot/recalculateTenantSnapshot` do `useEffect` do `GoalsTab` — o `useGamificationTrigger` da página já cobre, e o cron `gamification-recalc-tick` mantém atualizado.
-- Tornar o `triggerGamificationUpdate` da página **não-bloqueante visualmente**: já é `await`-free no JSX, mas garantir que ele rode em `requestIdleCallback` (fallback `setTimeout 0`) para não competir com as queries iniciais do header.
+Dois problemas:
+1. **Ignora `end_time`**: lê apenas `end_date` (data sem hora), perdendo o horário 17:45 configurado no formulário.
+2. **`differenceInDays` é truncado**: hoje vs hoje retorna `0`, mas se o relógio do navegador estiver alguns segundos à frente do início do dia em UTC vs BRT, pode dar `-1` e marcar como encerrada cedo. Pior: ele compara o `end_date` parseado como meia-noite UTC contra `new Date()` local — para um usuário em BRT (UTC-3), `parseISO("2026-04-30")` vira `2026-04-30 00:00 UTC` = `2026-04-29 21:00 BRT`, ou seja, na manhã de 30/04 BRT já são +13h passadas do "fim", devolvendo `-1` → **Encerrada**.
 
-### 3) Reduzir roundtrips em `fetchRanking`
-- Paralelizar com `Promise.all`: `participants`, `points` e `profiles` não dependem entre si (após termos o `tenantId`). Hoje são sequenciais.
-- A consulta de `audit_logs` para detectar `selfCancelledIds` pode virar um `LEFT JOIN`/subquery via uma RPC SQL `get_ranking_with_agreements(_year, _month)` que retorna ranking + agreements_count em **uma única query**. Como queremos minimizar mudanças, alternativa mais barata: trocar a busca de `audit_logs` por uma só chamada paralela com `agreements` (já é, mas hoje fica em série após o select de agreements). Manter equivalência funcional 1:1.
+O countdown (`CampaignCountdown.tsx`) também usa apenas `endDate` sem `end_time`, mas só é renderizado quando `isActive=true`, então o card simplesmente exibe o badge "Encerrada".
 
-### 4) Reduzir roundtrips em campanhas
-- **Remover o loop `active.forEach(recalculateCampaignScores)`** do `CampaignsTab.useEffect`. Esse recálculo client-side é redundante com o cron tick e com o que `recalculate_my_full` já faz; gera N RPCs pesadas por mount.
-- `attachLiveCampaignScores`: substituir os N×3 selects por uma única query agregada por campanha. Criar RPC `get_campaign_live_scores(_campaign_id uuid)` que devolve `[{operator_id, score}]` numa só ida ao banco usando o mesmo CTE `all_paid` já padronizado nas RPCs de BI. UI continua igual.
-- Se preferir não criar RPC nova nesta passagem, fallback: ler `campaign_participants.score` direto (já é mantido pelo cron e pelo `recalculate_my_full`), removendo `attachLiveCampaignScores` por padrão e mantendo-o apenas como fallback opcional.
+## Correção
 
-### 5) Consolidar Realtime
-- Em `CampaignsTab`, usar **um único channel** para a tabela `campaign_participants` filtrado por `tenant_id`, e invalidar todas as queries de participants de uma vez — em vez de um channel por `CampaignCard`.
-- Manter o channel de `RankingTab` apenas quando a aba está visível (graças à mudança 1, ele só monta quando ativo).
+Criar uma única função utilitária que combina `end_date + end_time` no fuso de São Paulo e compara com `Date.now()` em **milissegundos**, e usá-la em todos os lugares.
 
-### 6) Pequenos ganhos adicionais
-- `staleTime` mais generoso (60–120s) nas queries do header (`scoring-rules`, `rivocoin-wallet`, `achievements`, `campaigns`) para evitar refetch ao trocar de aba.
-- `fetchAllAchievements` e `fetchMyAchievements` retornam essencialmente os mesmos dados — reaproveitar `earnedAchievements` do header dentro do `AchievementsTab` (operador) via a mesma `queryKey` para evitar refetch.
-- Memoizar `adminPointsTotal`/`adminReceivedTotal` (`useMemo`) — minúsculo, mas evita re-cálculo a cada render.
+### Arquivos a alterar
 
-## O que NÃO muda
-- Nenhuma mudança em JSX visível, classes Tailwind, layout, copy, ícones, badges, animações.
-- Nenhuma mudança em regras de pontuação, conquistas, metas ou cálculo de score.
-- Nenhuma mudança em outras telas (Dashboard, Analytics, Carteira, etc.).
-- Nenhuma alteração nas RPCs existentes (apenas **adicionar** opcionalmente `get_campaign_live_scores` em uma migration). Se você preferir não criar RPC nova, item 4 cai no fallback (ler `score` da tabela), também sem mudança visual.
+**1. Novo helper `src/components/gamificacao/campaignTime.ts`** (utilitário compartilhado)
+- `getCampaignEndMs(campaign)`: retorna o timestamp (ms) do fim real, montando `YYYY-MM-DDTHH:mm:ss-03:00` (BRT). Se `end_time` for nulo, usa `23:59:59`.
+- `getCampaignStartMs(campaign)`: análogo, com `00:00:00-03:00` se faltar `start_time`.
+- `isCampaignActive(campaign)`: `status === "ativa" && datas válidas && getCampaignEndMs > Date.now()`.
 
-## Ordem de execução
-1. Lazy-mount das abas + remover recalc duplicado do `GoalsTab` + remover loop de `recalculateCampaignScores` no `CampaignsTab` (ganho imediato grande, zero risco).
-2. Paralelizar `fetchRanking`.
-3. Consolidar realtime de `CampaignsTab` (um channel só).
-4. Substituir `attachLiveCampaignScores` por leitura direta de `campaign_participants.score` (fallback) **ou** criar RPC `get_campaign_live_scores` se quiser manter "score ao vivo" sem cascata.
-5. Ajustar `staleTime`.
+Observação técnica sobre fuso: BRT atualmente não tem horário de verão (UTC-3 fixo), então o offset literal `-03:00` é correto e estável. É a mesma premissa já adotada na mensagem do form ("fuso de São Paulo").
 
-## Resultado esperado
-- Mount inicial: de ~6–10 queries + N×3 por campanha + N RPCs `recalculate_campaign_scores` para **2–3 queries** + 1 RPC `recalculate_my_full` em background.
-- Nº de WebSockets abertos no mount cai de 4–10 para 1.
-- Tempo de "primeiro pixel útil" deve cair significativamente (especialmente em tenants com várias campanhas/operadores).
-- Comportamento e UI idênticos.
+**2. `src/components/gamificacao/CampaignsTab.tsx`**
+- Remover o `isCampaignActive` local (que usa `differenceInDays`).
+- Importar `isCampaignActive` do helper novo.
 
-Confirma que posso executar nessa ordem? Se quiser pular o item 4 (RPC nova) eu uso o fallback de leitura direta da coluna `score`.
+**3. `src/components/gamificacao/CampaignsManagementTab.tsx`**
+- Mesma troca.
+
+**4. `src/components/gamificacao/CampaignCard.tsx`**
+- Substituir `daysLeft = differenceInDays(...)` + `isActive` por `isCampaignActive(campaign)` do helper.
+- Passar o timestamp de fim (em ms ou ISO completo com hora) para `<CampaignCountdown />` em vez de só `campaign.end_date`.
+
+**5. `src/components/gamificacao/CampaignCountdown.tsx`**
+- Mudar a prop para `endMs: number` (ou aceitar string ISO completa).
+- Manter o `setInterval` de 1s já existente.
+
+### Impacto colateral
+
+- Nada no front-end visual muda: badges, layout, cores e textos permanecem idênticos.
+- Não há mudanças de schema nem em RPCs. O backend (`gamification_campaigns.end_time`) já guarda o horário corretamente — o bug é puramente client-side.
+- O cron `gamification-recalc-tick` e o status persistido `encerrada` no banco continuam funcionando como hoje (a UI só estava interpretando errado campanhas com `status='ativa'`).
+
+### Validação após implementação
+
+- "CAMPANHA MENSAL" e "CAMPANHA SEMANAL" devem aparecer em **Campanhas Ativas** com countdown contando até 17:45 BRT.
+- Após 17:45, o card cai automaticamente para "Campanhas encerradas" no próximo tick (1s).
+- Campanhas com `status='encerrada'` no banco continuam aparecendo como encerradas independentemente do horário.

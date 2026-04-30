@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { parseISO } from "date-fns";
 
 interface CampaignCountdownProps {
-  endDate: string;
+  /** UTC timestamp (ms) when the campaign ends. */
+  endMs: number;
 }
 
-const calc = (target: Date) => {
-  const diff = target.getTime() - Date.now();
+const calc = (endMs: number) => {
+  const diff = endMs - Date.now();
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, ended: true };
   return {
     days: Math.floor(diff / (1000 * 60 * 60 * 24)),
@@ -30,14 +30,14 @@ const Unit = ({ value, label }: { value: number; label: string }) => (
   </div>
 );
 
-const CampaignCountdown = ({ endDate }: CampaignCountdownProps) => {
-  const target = parseISO(endDate);
-  const [t, setT] = useState(() => calc(target));
+const CampaignCountdown = ({ endMs }: CampaignCountdownProps) => {
+  const [t, setT] = useState(() => calc(endMs));
 
   useEffect(() => {
-    const id = setInterval(() => setT(calc(target)), 1000);
+    setT(calc(endMs));
+    const id = setInterval(() => setT(calc(endMs)), 1000);
     return () => clearInterval(id);
-  }, [endDate]);
+  }, [endMs]);
 
   if (t.ended) {
     return (

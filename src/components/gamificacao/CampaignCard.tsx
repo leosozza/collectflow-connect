@@ -9,9 +9,9 @@ import {
   METRIC_OPTIONS,
   PERIOD_OPTIONS,
 } from "@/services/campaignService";
-import { differenceInDays, parseISO } from "date-fns";
 import { Trophy, Gift, Building2, AlertTriangle } from "lucide-react";
 import CampaignCountdown from "./CampaignCountdown";
+import { hasValidCampaignDates, isCampaignActive, getCampaignEndMs } from "./campaignTime";
 
 interface CampaignCardProps {
   campaign: Campaign;
@@ -19,14 +19,6 @@ interface CampaignCardProps {
 }
 
 const medals = ["🥇", "🥈", "🥉"];
-
-const isValidDateString = (s?: string | null): boolean => {
-  if (!s) return false;
-  const ts = Date.parse(s);
-  if (isNaN(ts)) return false;
-  const y = new Date(ts).getFullYear();
-  return y >= 2000 && y <= 2100;
-};
 
 const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, currentUserId }, ref) => {
   const { data: participants = [] } = useQuery({
@@ -42,9 +34,9 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
   const metricLabel = METRIC_OPTIONS.find((m) => m.value === campaign.metric)?.label || campaign.metric;
   const periodLabel = PERIOD_OPTIONS.find((p) => p.value === campaign.period)?.label || campaign.period;
 
-  const datesValid = isValidDateString(campaign.start_date) && isValidDateString(campaign.end_date);
-  const daysLeft = datesValid ? differenceInDays(parseISO(campaign.end_date), new Date()) : 0;
-  const isActive = datesValid && campaign.status === "ativa" && daysLeft >= 0;
+  const datesValid = hasValidCampaignDates(campaign);
+  const isActive = isCampaignActive(campaign);
+  const endMs = datesValid ? getCampaignEndMs(campaign) : NaN;
 
   return (
     <Card ref={ref} className="border-border">
@@ -91,12 +83,12 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
           <Badge variant="outline" className="text-[10px]">{periodLabel}</Badge>
         </div>
 
-        {isActive && datesValid && (
+        {isActive && datesValid && !isNaN(endMs) && (
           <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-gradient-to-br from-muted/40 to-muted/10 border border-border/50 px-3 py-2">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
               Termina em
             </span>
-            <CampaignCountdown endDate={campaign.end_date} />
+            <CampaignCountdown endMs={endMs} />
           </div>
         )}
       </CardHeader>
