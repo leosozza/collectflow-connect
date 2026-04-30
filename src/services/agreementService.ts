@@ -235,6 +235,9 @@ export const createAgreement = async (
     logger.info(MODULE, "create", { id: agreement.id, cpf: data.client_cpf, credor: data.credor });
     logAction({ action: "create", entity_type: "agreement", entity_id: agreement.id, details: { cpf: data.client_cpf, credor: data.credor, requires_approval: options?.requiresApproval } });
 
+    // Recalcula status_cobranca_id (hierarquia canônica) — não bloqueante
+    triggerStatusSync(tenantId);
+
     // Mark original titles as "em_acordo"
     try {
       // Lookup por papel_sistema (preferencial) com fallback por nome
