@@ -60,9 +60,15 @@ const ProtectedRoute = ({ children, requireTenant = false }: ProtectedRouteProps
     return <Navigate to="/" replace />;
   }
 
-  // Super admin bypass: never require tenant, redirect to /admin
+  // Super admin: se há tenant em modo suporte selecionado, libera o render
+  // (acesso real é controlado por can_access_tenant nas RPCs).
+  // Caso contrário, redireciona para /admin (painel global do super admin).
   if (requireTenant && isSuperAdmin) {
-    return <Navigate to="/admin" replace />;
+    let supportTenantId: string | null = null;
+    try { supportTenantId = sessionStorage.getItem("support_tenant_id"); } catch {}
+    if (!supportTenantId) {
+      return <Navigate to="/admin" replace />;
+    }
   }
 
   // requireTenant routes: no tenant found → onboarding

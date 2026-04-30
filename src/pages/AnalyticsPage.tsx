@@ -20,9 +20,13 @@ const AnalyticsPage = () => {
   const { tenantId, isSupportMode, supportTenantName } = useEffectiveTenantId();
   const navigate = useNavigate();
 
-  // Restrição real fica nas RPCs (can_access_tenant + filtro server-side).
-  // No frontend só decidimos o escopo de visão (próprio vs. todos do tenant).
-  const restrictToSelf = !canViewAllAnalytics && canViewOwnAnalytics;
+  // Regra de escopo:
+  //  - Super admin em modo suporte → vê tudo do tenant alvo (sem _operator_ids).
+  //  - canViewAllAnalytics → vê tudo do tenant.
+  //  - canViewOwnAnalytics (sem all) → escopa em [profile.user_id].
+  //  - Sem nenhuma das duas e sem suporte → bloqueado.
+  const hasAccess = isSupportMode || canViewAllAnalytics || canViewOwnAnalytics;
+  const restrictToSelf = !isSupportMode && !canViewAllAnalytics && canViewOwnAnalytics;
   const isOperator = restrictToSelf;
 
   const f = useAnalyticsFilters(tenantId);
@@ -33,9 +37,29 @@ const AnalyticsPage = () => {
         : f.rpcParams)
     : null;
 
-  // Canal e Score visíveis apenas em abas relevantes
   const showChannel = ["funil", "performance", "canais"].includes(f.tab);
   const showScore = ["funil", "inteligencia"].includes(f.tab);
+
+  // Sem permissão alguma → tela bloqueada
+  if (!hasAccess) {
+    return (
+      <div className="space-y-5 animate-fade-in">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <h1 className="text-xl font-bold text-foreground">Analytics</h1>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-8 text-center">
+          <ShieldAlert className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm font-medium text-foreground mb-1">Sem permissão para Analytics</p>
+          <p className="text-xs text-muted-foreground">
+            Solicite ao seu administrador acesso a "Visualizar (Próprio)" ou "Visualizar (Todos)" no módulo Analytics.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!tenantId || !scopedRpcParams) {
     return (

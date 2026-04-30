@@ -1,184 +1,138 @@
 
-# Plano — Analytics, Super Admin (modo suporte) e regra de crédito de acordo quebrado
+# Correções de Analytics + Modo Suporte do Super Admin
 
-## FASE 0 — Resumo da auditoria
+Mudanças cirúrgicas em produção. Sem DROP, sem DML em massa, sem refator de telas. Dashboard/Receita validados ficam intocados (RPCs `get_bi_revenue_*` não serão alteradas).
 
-Migrations recentes:
-- `20260430131040_*` — Reescreve `get_bi_revenue_summary` / `_by_period` somando `manual_payments (confirmed/approved)` + `portal_payments (paid)` + `negociarie_cobrancas (pago)` por **data de pagamento**. Receita está OK e segue como fonte de verdade.
-- `20260430163427_*` — RPCs auxiliares de BI (já usam `is_super_admin`).
-- `20260430171305_*` — RPCs `get_bi_channel_performance`, `get_bi_breakage_analysis`, `get_bi_breakage_by_operator`, `get_bi_recurrence_analysis`, `get_bi_response_time_by_channel`, `get_distinct_credores`. **Todas (exceto `response_time`) têm guard misto que aceita `profiles.role::text = 'super_admin'`.** `response_time` **não tem guard nenhum** — aceita `_tenant_id` arbitrário.
-- `20260430181818_*` — Apenas hotfix de 1 linha em `clients` (status_cobranca_id de um CPF). Sem impacto.
-- `20260430184537_*` — `get_dashboard_vencimentos` resolve `_tenant` via `tenant_users WHERE user_id = auth.uid() LIMIT 1`. Para Super Admin sem `tenant_users`, retorna vazio. Isso é OK por enquanto (Dashboard não está em escopo), mas registramos como limitação para o modo suporte.
-- `20260430191607_*` — Adiciona `clients.valor_pago_origem` (jsonb) + cancelamento credita pagamentos no original. Lógica em `agreementService.ts` (cliente) usa `manual_payments.status = 'confirmed'` apenas, e **não inclui `portal_payments`**. Idempotência depende de leitura prévia em `client_events` (sujeito a race).
+## Fonte canônica do Super Admin (FASE 0)
 
-Onde `profiles.role = 'super_admin'` ainda aparece: somente em `supabase/migrations/20260430171305_*.sql` (6 RPCs). **Não há ocorrência em `src/`.**
+Confirmado durante a auditoria:
+- Fonte oficial: `public.is_super_admin(uid) = tenant_users.role='super_admin'` (já é assim no DB).
+- `can_access_tenant(_tid)` libera para super admin **OU** membro do tenant — correto.
+- Conflito atual: super admin **não tem** linha em `tenant_users` para um tenant alvo, então `useTenant.get_my_tenant_id()` retorna NULL e o `ProtectedRoute(requireTenant)` redireciona para `/admin`. Resultado: super admin **não consegue abrir `/analytics`** mesmo com tenant de suporte selecionado. Isso é o bug central do modo suporte e será corrigido na Fase 1.
 
-Canais — problemas confirmados em `get_bi_channel_performance`:
-- Acordos filtrados por `a.created_at` no período, mas pagamentos por `payment_date`. Acordo criado fora do período não atribui receita ao canal.
-- Atribuição de canal só usa eventos: `whatsapp_*`, `message_sent`, `message_deleted`, `atendimento_opened`, `conversation_auto_closed`, `disposition`, `call_hangup`. **Não inclui `call`.**
-- Eventos administrativos (`message_deleted`, `atendimento_opened`, `conversation_auto_closed`) inflam contagem de "interações" WhatsApp.
+Decisão: identificação do super admin global continua exclusivamente via `is_super_admin`. `useTenant.isSuperAdmin` segue como espelho dessa RPC. Não usar `profiles.role` em lugar nenhum.
 
-Quebras por operador — confirmado: numerador (`updated_at`) vs denominador (`created_at`) em janelas diferentes.
+---
 
-## FASE 1 — Helper central `can_access_tenant`
+## FASE 1 — Modo Suporte do Super Admin
 
-Migration nova criando:
+Arquivos: `src/components/ProtectedRoute.tsx`, `src/components/AppLayout.tsx` (apenas montar banner se super admin), `src/components/SupportTenantSwitcher.tsx` (já existe), `src/hooks/useImpersonatedTenant.ts` (já existe).
 
-```sql
-CREATE OR REPLACE FUNCTION public.can_access_tenant(_tenant_id uuid)
-RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT
-    _tenant_id IS NOT NULL
-    AND (
-      public.is_super_admin(auth.uid())
-      OR EXISTS (
-        SELECT 1 FROM public.tenant_users tu
-        WHERE tu.tenant_id = _tenant_id AND tu.user_id = auth.uid()
-      )
-    );
-$$;
-GRANT EXECUTE ON FUNCTION public.can_access_tenant(uuid) TO authenticated;
-```
+1. `ProtectedRoute`:
+   - Remover o redirect `if (requireTenant && isSuperAdmin) return <Navigate to="/admin" />`.
+   - Substituir por: se `requireTenant && isSuperAdmin`:
+     - se houver `support_tenant_id` na sessão → liberar render (modo suporte ativo).
+     - senão → redirecionar para `/admin` (comportamento atual).
+   - Usuário comum: lógica intacta. `support_tenant_id` em sessionStorage **não tem efeito** se `isSuperAdmin=false` (já garantido por `useEffectiveTenantId`, que só considera o impersonated id quando `isSuperAdmin`).
+2. `SupportTenantSwitcher` deve ficar visível também no `AppLayout` (não só no `SuperAdminLayout`) **somente** quando `isSuperAdmin=true`. Isso permite ao SA entrar/sair do modo suporte enquanto navega no app do tenant.
+3. Banner amber persistente: já existe em `AnalyticsPage` e `SuperAdminLayout`. Adicionar o mesmo banner no topo do `AppLayout` quando `isSuperAdmin && support_tenant_id` (visível em qualquer página tenant-scoped).
+4. Auditoria: `SupportTenantSwitcher` já chama `logAction({action:'support_mode_enter'/'support_mode_exit', entity_type:'tenant', entity_id, details})`. Vamos garantir que o `details` inclua `{ actor_user_id, target_tenant_id, mode:'support_admin_global' }`. `actor_user_id` o `auditService` já injeta via `auth.uid()`, mas adicionamos explicitamente em `details` para queryability.
+5. Não cria linha em `tenant_users` em momento algum. `useImpersonatedTenant` continua usando `sessionStorage` (escopo aba).
 
-Sem qualquer referência a `profiles.role`.
+## FASE 2 — Permissões do AnalyticsPage
 
-## FASE 2 — Reescrever guards das RPCs do Analytics
+Arquivo: `src/pages/AnalyticsPage.tsx`.
 
-Mesma migration (ou logo a seguir), `CREATE OR REPLACE` para as 6 RPCs preservando assinatura/retorno e **removendo o bloco `profiles.role::text = 'super_admin'`**:
-
-- `get_bi_channel_performance`
-- `get_bi_breakage_analysis`
-- `get_bi_breakage_by_operator`
-- `get_bi_recurrence_analysis`
-- `get_bi_response_time_by_channel` (adiciona guard que hoje não existe)
-- `get_distinct_credores`
-
-Padrão do guard:
-```sql
-IF _tenant_id IS NULL THEN RAISE EXCEPTION 'tenant_id obrigatório'; END IF;
-IF NOT public.can_access_tenant(_tenant_id) THEN
-  RAISE EXCEPTION 'forbidden tenant';
-END IF;
-```
-
-Não alteramos a lógica interna nesta fase (exceto Canais e Quebras nas Fases 5/8).
-
-## FASE 3 — Escopo do Analytics no frontend
-
-Em `src/pages/AnalyticsPage.tsx`, parar de derivar `isOperator` de `profile.role !== "admin"`. Trocar por `usePermissions()`:
-
-```ts
-const { canViewAllAnalytics, canViewOwnAnalytics } = usePermissions();
-const restrictToSelf = !canViewAllAnalytics && canViewOwnAnalytics;
-const scopedRpcParams = f.rpcParams && restrictToSelf && profile?.user_id
-  ? { ...f.rpcParams, _operator_ids: [profile.user_id] }
-  : f.rpcParams;
-```
-
-Em `AnalyticsFiltersBar`, esconder o filtro de operadores quando `!canViewAllAnalytics`. A segurança real fica nas RPCs (Fase 2).
-
-## FASE 4 — Modo suporte do Super Admin
-
-Hoje o Super Admin não tem registro em `tenant_users` e o `useTenant()` cai em `/onboarding`. Estado atual: não há tenant switcher.
-
-Implementação mínima (sem mexer em rotas existentes do `SuperAdminLayout`):
-
-1. Novo hook `useImpersonatedTenant()` armazena `support_tenant_id` em `sessionStorage` (apaga ao sair).
-2. Novo componente `SupportTenantSwitcher` no `SuperAdminLayout` — lista `tenants` (já acessível via RLS de super admin), permite escolher.
-3. Novo wrapper `useEffectiveTenantId()`:
-   - Se `isSuperAdmin && support_tenant_id` definido → retorna `support_tenant_id`.
-   - Senão → `tenant?.id`.
-4. `AnalyticsPage` (e demais páginas que entrarem no modo suporte) consome `useEffectiveTenantId()` em vez de `tenant?.id`.
-5. Banner persistente: "Modo suporte — visualizando tenant <NOME>. Sair do modo suporte" enquanto ativo.
-6. Auditoria: ao entrar em modo suporte e a cada mutação feita pelo super admin, gravar `audit_logs` com `action = 'support_mode_*'` e `tenant_id` alvo. (Já existe `auditService`; adicionar chamada nos pontos de entrada.)
-7. Super Admin **não** é inserido em `tenant_users` — `can_access_tenant` já libera por `is_super_admin`.
-
-Limitação documentada: `get_dashboard_vencimentos` continua usando `tenant_users LIMIT 1` (fora do escopo do Analytics; só anotamos para correção futura).
-
-## FASE 5 — Corrigir `get_bi_channel_performance`
-
-Reescrita preservando assinatura e nomes de colunas:
-
-1. **Atribuição de receita por canal desacoplada de `agreements.created_at`.** Para cada pagamento (`manual_payments`/`portal_payments`/`negociarie_cobrancas`) no período, buscar o `agreement_id` correspondente e atribuir o canal a partir do **último evento de canal do CPF do acordo, anterior à data de pagamento**. Se acordo nulo, ignora.
-2. **Filtro de credor/operador aplicado de forma uniforme** via JOIN com `agreements` (sem o `OR ap.agreement_id IS NULL` que vazava registros).
-3. **Conjunto de eventos contabilizados como interação real**:
-   - WhatsApp: `whatsapp_inbound`, `whatsapp_outbound`, `message_sent`.
-   - Voz: `disposition`, `call_hangup`, **`call`** (novo).
-   - Excluídos: `message_deleted`, `conversation_auto_closed`, `atendimento_opened`, `debtor_profile_changed`, qualquer evento de pagamento/boleto/pix/manual/negociarie, eventos de acordo/documento/telefone/score, **`previous_agreement_credit_applied`**, **`credit_overflow`**.
-4. Atribuição de canal de acordos (para taxa de conversão) usa o mesmo conjunto reduzido + `call`.
-5. Aplicar `_credor`/`_operator_ids` consistente em interações (via `client_events.metadata->>'credor'` quando disponível, senão pelo CPF→`agreements`) e em acordos/recebido.
-
-## FASE 6 — Receita não pode duplicar via crédito
-
-Validação (sem alteração de código necessária se passar):
-
-- `get_bi_revenue_summary` soma somente `manual_payments`, `portal_payments`, `negociarie_cobrancas`. **Não lê `clients.valor_pago` nem `client_events`.** OK.
-- Garantir que `previous_agreement_credit_applied` e `credit_overflow` permaneçam fora de qualquer RPC de receita/canais (Fase 5 já exclui da agregação de canais).
-- Adicionar comentário SQL nas RPCs: "credito de acordo cancelado é abatimento, não receita".
-
-QA: comparar `get_bi_revenue_summary` com Dashboard (`get_dashboard_*`) antes/depois — devem permanecer iguais.
-
-## FASE 7 — Blindar regra de crédito (server-side)
-
-Mover a lógica de `creditPaymentsToOriginalDebt` + `cancelAgreement (credit branch)` para uma RPC transacional `apply_agreement_credit_on_cancel(_agreement_id uuid)`:
+Lógica nova (substitui o cálculo atual de `restrictToSelf`):
 
 ```text
-BEGIN
-  SELECT ... FOR UPDATE  -- lock no agreement
-  IF já existe client_event 'previous_agreement_credit_applied' com source_agreement_id THEN RETURN
-  somar manual_payments WHERE status IN ('confirmed','approved')
-  somar portal_payments WHERE status = 'paid'
-  somar negociarie_cobrancas WHERE status = 'pago'
-  distribuir FIFO em clients (lock por linha) atualizando valor_pago + valor_pago_origem
-  inserir client_events 'previous_agreement_credit_applied' (+ 'credit_overflow' se aplicável)
-  inserir audit_logs
-  COMMIT
-END
+- Super admin com support_tenant_id selecionado → libera, escopo "todos do tenant" (sem _operator_ids).
+- Super admin sem suporte ativo → mostra mensagem "Selecione um tenant…" (já existe).
+- canViewAllAnalytics → libera, escopo "todos do tenant".
+- canViewOwnAnalytics (sem all) → libera, _operator_ids = [profile.user_id].
+- Sem all e sem own → renderiza tela de "Sem permissão para Analytics" (novo).
 ```
 
-Mudanças derivadas:
-- `agreementService.ts` → `cancelAgreement` apenas faz `UPDATE agreements SET status='cancelled'` e chama `supabase.rpc('apply_agreement_credit_on_cancel', { _agreement_id: id })`.
-- Fonte de pagamentos passa a usar `('confirmed','approved')` em `manual_payments` (alinhado a `get_bi_revenue_summary`) e inclui `portal_payments status='paid'`.
-- Idempotência real via `FOR UPDATE` + checagem dentro da transação.
-- Sem backfill — RPC só roda quando chamada por novo cancelamento.
+Nunca cair em "ver tudo" quando o usuário só tem `view_own`. Nunca liberar quem não tem nenhuma das duas.
 
-## FASE 8 — `get_bi_breakage_by_operator`
+## FASE 3 — Canais (Performance por Canal e Tempo de Resposta)
 
-Definir como "Quebras criadas no período / Acordos criados no período" com janela única:
-- Numerador: `agreements WHERE status='cancelled' AND created_at` no período (não `updated_at`).
-- Denominador: `agreements WHERE created_at` no período.
-- `valor_perdido` continua somando `proposed_total` dos cancelados.
+Migração: nova RPC versionada substituindo `get_bi_channel_performance` e `get_bi_response_time_by_channel` via `CREATE OR REPLACE` (mantém a mesma assinatura — sem DDL destrutiva, sem mudar contrato com o front).
 
-Mesma correção em `get_bi_breakage_analysis` (alinhar janela). Comentário na RPC explicando a regra.
+Correções:
 
-## FASE 9 — QA
+1. **Eliminar "boleto" como canal.** Canal é origem de interação comercial, não método de pagamento. Mapeamento final:
+   - `whatsapp_inbound`, `whatsapp_outbound`, `message_sent` → `whatsapp`
+   - `disposition`, `call_hangup`, `call` → `voice`
+   - Demais eventos administrativos → ignorados (já são).
+   - Nada de `boleto`/`pix`/`manual`/`portal` como canal. Hoje já não existe esse mapeamento direto, mas vamos travar isso no SQL e adicionar comentário; se aparecer no UI é porque o array `_channel` está vindo com esses valores — vamos sanitizar (ver item 5).
+2. **Atribuição de pagamento ao canal**: o último evento `whatsapp/voice` antes da data de pagamento. Mantido. Sem mudança de regra.
+3. **Filtro por operador** (corrige distorção):
+   - Hoje `(_operator_ids IS NULL OR evt_operator IS NULL OR evt_operator = ANY(_operator_ids))` deixa eventos sem operador entrarem no recorte do operador. Mudar para: quando `_operator_ids IS NOT NULL`, exigir `evt_operator = ANY(_operator_ids)` (sem o "OU NULL"). Eventos sem operador só entram quando `_operator_ids IS NULL` (visão geral).
+   - Mesma regra para a CTE `pay_filt` e `ag` (`a.created_by`): hoje já filtra duro por `a.created_by = ANY(_operator_ids)` — manter.
+4. **Coerência interações × clientes únicos × acordos × recebido**: garantir que todas as CTEs (interações, pagamentos, acordos) apliquem **o mesmo conjunto de filtros** (`_credor`, `_operator_ids`, `_channel`). Hoje `recebido`/`ag_ch` filtra por `_channel` mas a sub-query de atribuição busca em `ev_raw` sem o filtro de canal — isso é correto (atribuição precisa olhar todos eventos para escolher o último). Mantido.
+5. **Sanitização do parâmetro `_channel`** no início da função: `_channel := ARRAY(SELECT unnest WHERE unnest IN ('whatsapp','voice'))` quando não for NULL. Se sobrar vazio, tratar como NULL. Bloqueia `boleto/pix/cartao` na fonte.
+6. **Tempo de Resposta por Canal** (`get_bi_response_time_by_channel`): aplicar o mesmo filtro estrito de operador (`evt_operator = ANY(_operator_ids)` quando informado, sem fallback NULL). O resto da lógica fica igual.
+7. **Validação de coerência**: por construção, com o filtro estrito, a soma por operador ≤ total geral. Se quiser, deixar visão geral mostrar uma linha extra "Não atribuído" — **fora de escopo agora**, só remoção de boleto e ajuste de filtro.
 
-- `bun run build` (typecheck/lint disparados pela harness).
-- Smoke manual via `supabase--read_query`:
-  - `SELECT public.can_access_tenant('<tenant_alheio>')` como usuário comum → false.
-  - Receita pré/pós migration deve ser idêntica.
-  - Canais: ligações com `call` aparecem; `message_deleted` some.
-- Conferir `usePermissions` para `operador` força `_operator_ids = [self]`.
-- Conferir banner de modo suporte some quando super admin sai dele.
+UI (`ChannelsTab.tsx`): nenhuma mudança. Continua exibindo `whatsapp` e `voice` que vier da RPC.
 
-## Arquivos a alterar/criar
+## FASE 4 — Quebras & Risco
 
-- `supabase/migrations/<novo>_can_access_tenant_and_bi_guards.sql` (Fases 1, 2, 5, 8 — RPCs e helper)
-- `supabase/migrations/<novo>_apply_agreement_credit_on_cancel.sql` (Fase 7)
-- `src/services/agreementService.ts` (Fase 7 — chamar RPC)
-- `src/pages/AnalyticsPage.tsx` (Fase 3 — usar `usePermissions` e `useEffectiveTenantId`)
-- `src/components/analytics/AnalyticsFiltersBar.tsx` (Fase 3 — esconder operador quando `!view_all`)
-- `src/hooks/useImpersonatedTenant.ts` (novo, Fase 4)
-- `src/hooks/useEffectiveTenantId.ts` (novo, Fase 4)
-- `src/components/SupportTenantSwitcher.tsx` (novo, Fase 4)
-- `src/components/SuperAdminLayout.tsx` (Fase 4 — montar switcher + banner)
-- `mem://` — atualizar memórias de Analytics e da regra de crédito.
+Migração: `CREATE OR REPLACE FUNCTION get_bi_breakage_analysis(...)`.
 
-## Não-objetivos
+Hoje a função filtra `a.status='cancelled' AND created_at no período`. Isso é **safra** (cohort), não "quebras no período".
 
-- Não tocar em Dashboard, Financeiro, Acordos UI, Baixas, WhatsApp, Discador.
-- Não mexer em `get_dashboard_vencimentos` agora (fica registrado como dívida).
-- Sem backfill dos 8 acordos antigos.
-- Sem alteração em `get_bi_revenue_summary` se a validação confirmar paridade com Dashboard.
+Mudança:
+
+1. Renomear semanticamente: a função passa a usar a **data efetiva da quebra** = `a.cancelled_at` quando existir, senão `a.updated_at` (com `status='cancelled'`). Verificar antes da migração se a coluna `cancelled_at` existe; se não existir, usar `updated_at` e documentar no comentário do SQL: "data aproximada por updated_at filtrando status=cancelled".
+2. Filtro: `WHERE a.status='cancelled' AND COALESCE(a.cancelled_at, a.updated_at)::date BETWEEN _date_from AND _date_to`.
+3. Se a UI tiver outro card chamado "Cohort de acordos criados no período" — não existe hoje — pode ser criado depois. Por ora, só corrigir o significado de "quebras no período".
+
+Antes de aplicar a migração, vou rodar leitura em `pg_attribute` para checar se `agreements.cancelled_at` existe e ajustar o SQL conforme.
+
+## FASE 5 — `apply_agreement_credit_on_cancel` (crédito de cancelamento)
+
+Migração: `CREATE OR REPLACE` da função (assinatura mantida, idempotência preservada via `previous_agreement_credit_applied` em `client_events`).
+
+Mudanças mínimas:
+
+1. Loop FIFO atual: `status IN ('pendente','em_acordo')`. Alterar para `status IN ('pendente','em_acordo','vencido')`. Status `'pago'` continua excluído. Status `'quitado'` (caso exista em outros tenants) também ficará de fora — manter conjunto explícito.
+2. Ordenação `data_vencimento ASC` mantida. Vencido entra no FIFO junto com pendente.
+3. Idempotência: nada muda. Mesmo guard via `previous_agreement_credit_applied`.
+4. Não rodar nenhum cancelamento real. Validação por leitura: depois do deploy, faço `EXPLAIN`/`SELECT` simulado em uma CTE de teste read-only para um agreement já cancelado historicamente (sem executar a função), apenas para confirmar que a query de seleção pega títulos vencidos.
+
+## FASE 6 — Validações (read-only, antes de fechar)
+
+Vou rodar SELECTs (sem mutar nada):
+
+1. `get_bi_revenue_summary` para Y.BRASIL no período Abril → conferir Receita Total = R$ 95.705,33.
+2. Comparar `get_bi_channel_performance` antes/depois para o mesmo período Y.BRASIL: total recebido por canal ≤ receita total.
+3. Listar `DISTINCT channel` que sai da função: deve ser apenas `whatsapp` e `voice`.
+4. Para um operador específico do tenant: chamar `get_bi_channel_performance` com `_operator_ids=[uid]` e validar `qtd_interacoes <=` o total geral do mesmo período.
+5. `get_bi_breakage_analysis` para período onde houve cancelamentos depois do fim do período de criação → confirmar que entram (antes não entravam).
+6. Cross-tenant: chamar RPCs com `_tenant_id` de outro tenant usando token de operador comum → deve retornar `forbidden tenant`.
+7. Front: simular `sessionStorage.support_tenant_id='<outro>'` num usuário comum → `useEffectiveTenantId` ignora (já ignora por design). Confirmar.
+8. Super admin: selecionar tenant no switcher → conseguir abrir `/analytics` (Fase 1).
+9. Usuário sem `view_own` nem `view_all` em analytics → ver tela de "Sem permissão" (novo).
+
+## FASE 7 — Entrega
+
+No final, devolvo:
+- Lista de arquivos alterados.
+- Lista de RPCs alteradas com diff resumido.
+- O que foi corrigido em cada fase.
+- Resultado dos SELECTs de validação.
+- Riscos residuais (ex.: se `agreements.cancelled_at` não existir, a Fase 4 usa `updated_at` como aproximação, com nota no SQL).
+
+---
+
+## Resumo dos detalhes técnicos
+
+**Arquivos front a alterar:**
+- `src/components/ProtectedRoute.tsx` — liberar SA quando há `support_tenant_id`.
+- `src/components/AppLayout.tsx` — montar `SupportTenantSwitcher` + banner quando `isSuperAdmin`.
+- `src/pages/AnalyticsPage.tsx` — gating de permissão (all / own / sem permissão).
+- `src/components/SupportTenantSwitcher.tsx` — enriquecer `details` do audit log.
+
+**Migrações SQL (todas `CREATE OR REPLACE`, sem DROP, sem ALTER de tabela):**
+- `get_bi_channel_performance` — sanitiza `_channel`, filtro estrito por operador.
+- `get_bi_response_time_by_channel` — filtro estrito por operador.
+- `get_bi_breakage_analysis` — usa `COALESCE(cancelled_at, updated_at)` para a janela.
+- `apply_agreement_credit_on_cancel` — inclui `vencido` no FIFO.
+
+**Não mexer**: `get_bi_revenue_*` (Receita validada), Dashboard, schemas de tabela, RLS, WhatsApp/Financeiro/Acordos fora dos pontos acima.
+
+**Riscos residuais conhecidos:**
+- Se `agreements.cancelled_at` não existir, Fase 4 usará `updated_at` (validado contra `status='cancelled'`) — aproximação aceitável conforme orientação.
+- Mudança de filtro em Canais pode reduzir números exibidos quando filtra operador (comportamento correto, antes inflava com eventos sem operador).
