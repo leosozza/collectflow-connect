@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ChatMessageBubble from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import AISuggestion from "./AISuggestion";
+import WhatsAppGateBanner from "./WhatsAppGateBanner";
 import { Conversation, ChatMessage } from "@/services/conversationService";
 import { findOrCreateSession } from "@/services/atendimentoSessionService";
 import { useTenant } from "@/hooks/useTenant";
