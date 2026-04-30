@@ -183,6 +183,7 @@ export const AnalyticsFiltersBar = (p: Props) => {
           />
         </div>
       )}
+      </div>
     </div>
   );
 };
