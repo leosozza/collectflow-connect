@@ -106,6 +106,16 @@ const DispositionSelector = ({ conversationId, tenantId, clientCpf }: Dispositio
           } as any);
       }
 
+      // Auto-fill debtor profile (only if currently NULL) when assigning a disposition.
+      if (!isAssigned && clientCpf && tenantId) {
+        void applyAutoProfileFromDisposition({
+          tenantId,
+          cpf: clientCpf,
+          dispositionKey: disposition.key,
+          channel: "whatsapp",
+        });
+      }
+
       await loadAssignments();
     } catch (err: any) {
       if (!err?.message?.includes("duplicate")) {
