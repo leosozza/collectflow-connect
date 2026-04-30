@@ -55,9 +55,11 @@ const DispositionSelector = ({ conversationId, tenantId, clientCpf, onAssignment
       .from("conversation_disposition_assignments" as any)
       .select("disposition_type_id")
       .eq("conversation_id", conversationId);
-    const ids = new Set((data || []).map((d: any) => d.disposition_type_id as string));
+    const idArr = (data || []).map((d: any) => d.disposition_type_id as string);
+    const ids = new Set(idArr);
     setAssignedIds(ids);
-  }, [conversationId]);
+    onAssignmentsChanged?.(conversationId, idArr);
+  }, [conversationId, onAssignmentsChanged]);
 
   useEffect(() => {
     if (!tenantId) return;
