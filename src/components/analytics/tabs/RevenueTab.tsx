@@ -111,7 +111,10 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
           ) : (
             <div className="space-y-2">
               {(comparison.data || []).map((c: any) => {
-                const v = Number(c.variation_pct || 0);
+                // RPC retorna delta_pct; mantemos compat com variation_pct caso renomeada
+                const rawPct = c.delta_pct ?? c.variation_pct;
+                const hasComparison = rawPct !== null && rawPct !== undefined && !Number.isNaN(Number(rawPct));
+                const v = hasComparison ? Number(rawPct) : 0;
                 const up = v >= 0;
                 const isMoney = !c.metric?.toLowerCase().includes("acordo");
                 const label = METRIC_LABELS[c.metric] ?? c.metric;
@@ -125,10 +128,14 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold tabular-nums">{isMoney ? formatCurrency(Number(c.current_value || 0)) : Number(c.current_value || 0)}</p>
-                      <p className={`text-[11px] font-semibold flex items-center justify-end gap-0.5 ${up ? "text-success" : "text-destructive"}`}>
-                        {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                        {v > 0 ? "+" : ""}{v.toFixed(1)}%
-                      </p>
+                      {hasComparison ? (
+                        <p className={`text-[11px] font-semibold flex items-center justify-end gap-0.5 ${up ? "text-success" : "text-destructive"}`}>
+                          {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {v > 0 ? "+" : ""}{v.toFixed(1)}%
+                        </p>
+                      ) : (
+                        <p className="text-[11px] font-medium text-muted-foreground">— sem comparação</p>
+                      )}
                     </div>
                   </div>
                 );
