@@ -133,11 +133,24 @@ Deno.serve(async (req) => {
     let persistMimeType = mediaMimeType || null;
 
     if (mediaUrl && mediaType) {
+      // Defesa em profundidade: se a imagem JPEG chegar com extensão problemática
+      // (.jfif/.jpe/.pjpeg/.pjp), o WhatsApp do destinatário não renderiza inline.
+      // Forçamos fileName/caption com extensão .jpg sem tocar no arquivo no storage
+      // (o conteúdo é JPEG válido — só o nome importa para o provedor).
+      let safeFileName = fileName || undefined;
+      const mt = (mediaMimeType || "").toLowerCase();
+      const isJpegLike =
+        mediaType === "image" &&
+        (mt.startsWith("image/jpeg") || mt === "image/jpg" || mt === "image/pjpeg");
+      if (isJpegLike && safeFileName) {
+        safeFileName = safeFileName.replace(/\.(jfif|jpe|pjpeg|pjp)$/i, ".jpg");
+      }
+
       media = {
         mediaUrl,
         mediaType,
-        caption: content || fileName || "",
-        fileName: fileName || undefined,
+        caption: content || safeFileName || "",
+        fileName: safeFileName,
         mimeType: mediaMimeType || undefined,
       };
     }
