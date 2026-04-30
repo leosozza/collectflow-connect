@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Paperclip, StickyNote, Zap, X, AlertTriangle } from "lucide-react";
+import { Send, Paperclip, StickyNote, Zap, X, AlertTriangle, Search, Hash, Sparkles } from "lucide-react";
 import EmojiPicker from "./EmojiPicker";
 import AudioRecorder from "./AudioRecorder";
 import { QuickReply, ChatMessage } from "@/services/conversationService";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 
 interface ClientInfo {
   nome_completo?: string;
