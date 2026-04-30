@@ -31,12 +31,12 @@ interface Props {
   setScoreMax: (v: string) => void;
 }
 
+// Apenas canais reais de atendimento existentes hoje no sistema.
+// Os identificadores precisam bater com a normalização feita em
+// public.get_bi_channel_performance ('whatsapp' | 'voice').
 const CHANNEL_OPTIONS = [
   { value: "whatsapp", label: "WhatsApp" },
-  { value: "voice", label: "Voz" },
-  { value: "email", label: "E-mail" },
-  { value: "sms", label: "SMS" },
-  { value: "portal", label: "Portal" },
+  { value: "voice", label: "Ligação" },
 ];
 
 const fmt = (d: string) => (d ? format(parseISO(d), "dd MMM", { locale: ptBR }) : "—");

@@ -15,7 +15,8 @@ const formatSec = (sec: number | null | undefined) => {
 };
 
 const channelLabel = (c: string) => ({
-  whatsapp: "WhatsApp", voice: "Voz", email: "E-mail", sms: "SMS", portal: "Portal",
+  whatsapp: "WhatsApp",
+  voice: "Ligação",
 }[c] || c);
 
 export const ChannelsTab = ({ params }: { params: AnalyticsRpcParams }) => {
