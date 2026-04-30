@@ -40,7 +40,7 @@ interface SimpleClient {
 }
 
 
-const ContactSidebar = ({ conversation, messages, onClientLinked }: ContactSidebarProps) => {
+const ContactSidebar = ({ conversation, messages, onClientLinked, onDispositionAssignmentsChanged, onDebtorProfileChanged }: ContactSidebarProps) => {
   const navigate = useNavigate();
   const { isTenantAdmin } = useTenant();
   const [linkedClient, setLinkedClient] = useState<SimpleClient | null>(null);
