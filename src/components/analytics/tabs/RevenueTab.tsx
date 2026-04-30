@@ -12,6 +12,15 @@ import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
 
 const fmt = (d: string) => format(parseISO(d), "dd/MM");
 
+const METRIC_LABELS: Record<string, string> = {
+  total_recebido: "Recebido",
+  total_negociado: "Negociado",
+  total_pendente: "Pendente",
+  qtd_acordos: "Acordos",
+  qtd_acordos_ativos: "Acordos Ativos",
+  ticket_medio: "Ticket Médio",
+};
+
 export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams; periodDays: number }) => {
   const granularity = periodDays <= 31 ? "day" : periodDays <= 90 ? "week" : "month";
 
@@ -62,7 +71,7 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
         ) : (
           <>
             <KpiTile label="Total Recebido" value={formatCurrency(Number(s?.total_recebido || 0))} icon={DollarSign}
-              valueClassName="text-success" hint={`${s?.qtd_acordos_ativos || 0} acordos ativos`} />
+              valueClassName="text-success" hint="Valor recebido no período" />
             <KpiTile label="Total Negociado" value={formatCurrency(Number(s?.total_negociado || 0))} icon={Handshake} />
             <KpiTile label="Total Pendente" value={formatCurrency(Number(s?.total_pendente || 0))} icon={AlertTriangle}
               valueClassName="text-destructive" />
@@ -105,10 +114,11 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
                 const v = Number(c.variation_pct || 0);
                 const up = v >= 0;
                 const isMoney = !c.metric?.toLowerCase().includes("acordo");
+                const label = METRIC_LABELS[c.metric] ?? c.metric;
                 return (
                   <div key={c.metric} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <div>
-                      <p className="text-xs font-medium capitalize">{c.metric}</p>
+                      <p className="text-xs font-medium">{label}</p>
                       <p className="text-[10px] text-muted-foreground">
                         Anterior: {isMoney ? formatCurrency(Number(c.previous_value || 0)) : Number(c.previous_value || 0)}
                       </p>
