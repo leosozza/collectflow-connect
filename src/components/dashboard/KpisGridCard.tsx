@@ -128,7 +128,7 @@ const KpisGridCard = ({
         iconColor="text-amber-500"
         iconBg="bg-amber-500/10"
         trend={trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : null}
-        info="Parcelas do mês ainda não pagas, com vencimento futuro ou atrasado em até 3 dias. Após 3 dias de atraso a parcela sai de Pendentes (e após 10 dias entra em Quebra)."
+        info="Parcelas do mês ainda não pagas, com vencimento futuro ou atrasado em até 3 dias. A partir do 4º dia de atraso a parcela entra em Quebra (Provisória)."
       />
       <Tile
         label="Colchão de Acordos"
