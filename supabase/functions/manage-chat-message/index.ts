@@ -183,8 +183,25 @@ Deno.serve(async (req) => {
         instanceName: inst.instance_name,
         providerBody: providerResult.result,
       });
+
+      // Map provider errors to user-friendly messages, especially WhatsApp time limits.
+      const rawErr = `${providerResult.error || ""} ${JSON.stringify(providerResult.result || "")}`.toLowerCase();
+      const looksLikeTimeLimit =
+        /too old|expired|time.?limit|past.?the.?time|no longer|not allowed|forbidden|messagetoold|cannot revoke|cannot edit/.test(rawErr);
+
+      let friendly: string;
+      if (looksLikeTimeLimit) {
+        friendly = action === "edit"
+          ? "O WhatsApp não permite mais editar esta mensagem (limite de 15 minutos)."
+          : "O WhatsApp não permite mais apagar esta mensagem para o destinatário. Mensagens antigas não podem mais ser apagadas.";
+      } else if (action === "edit") {
+        friendly = "O WhatsApp recusou a edição desta mensagem. Verifique se ela ainda está dentro do limite de 15 minutos.";
+      } else {
+        friendly = "O WhatsApp recusou apagar esta mensagem para o destinatário.";
+      }
+
       return json({
-        error: providerResult.error || "Falha no provider",
+        error: friendly,
         provider: providerResult.provider,
         httpStatus: providerResult.httpStatus,
         providerBody: providerResult.result,
