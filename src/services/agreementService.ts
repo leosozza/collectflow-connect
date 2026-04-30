@@ -550,7 +550,7 @@ const creditPaymentsToOriginalDebt = async (params: {
     .eq("tenant_id", tenantId)
     .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
     .eq("credor", credor)
-    .eq("status", "pendente")
+    .in("status", ["pendente", "em_acordo"])
     .order("data_vencimento", { ascending: true });
 
   if (error) throw error;
