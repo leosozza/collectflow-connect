@@ -21,6 +21,13 @@ const AnalyticsPage = () => {
 
   const f = useAnalyticsFilters(tenant?.id);
 
+  // Segurança: operador comum só vê os próprios dados, mesmo que o filtro de UI tente outros.
+  const scopedRpcParams = f.rpcParams
+    ? (isOperator && profile?.user_id
+        ? { ...f.rpcParams, _operator_ids: [profile.user_id] }
+        : f.rpcParams)
+    : null;
+
   // Canal e Score visíveis apenas em abas relevantes
   const showChannel = ["funil", "performance", "canais"].includes(f.tab);
   const showScore = ["funil", "inteligencia"].includes(f.tab);
