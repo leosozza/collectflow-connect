@@ -627,6 +627,8 @@ export const cancelAgreement = async (id: string): Promise<void> => {
     logger.info(MODULE, "cancel", { id });
     logAction({ action: "cancel", entity_type: "agreement", entity_id: id });
 
+    triggerStatusSync(agreement?.tenant_id);
+
     // Audit event in client_events timeline
     if (agreement?.tenant_id && agreement?.client_cpf) {
       try {
