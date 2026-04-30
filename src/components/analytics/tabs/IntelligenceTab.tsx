@@ -67,17 +67,42 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
     },
   });
 
+  const distData = (dist.data || []) as any[];
+  const SCORE_BUCKETS = ["0-20", "21-40", "41-60", "61-80", "81-100"];
+  const distNumeric = SCORE_BUCKETS.map((b) => {
+    const r = distData.find((x: any) => x.bucket === b);
+    return r ? r : { bucket: b, qtd: 0, pct: 0, valor_carteira: 0 };
+  });
+  const semScore = distData.find((x: any) => x.bucket === "sem_score");
+  const totalClientes = distData.reduce((s: number, r: any) => s + Number(r.qtd || 0), 0);
+  const semScoreQtd = Number(semScore?.qtd || 0);
+  const semScorePct = totalClientes > 0 ? (semScoreQtd / totalClientes) * 100 : 0;
+
+  const vsResultData = (vsResult.data || []) as any[];
+  const vsResultNumeric = vsResultData.filter((r: any) => r.bucket !== "sem_score");
+  const vsResultSem = vsResultData.find((r: any) => r.bucket === "sem_score");
+
   return (
     <div className="space-y-4">
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Distribuição por Faixa de Score</h3>
+        <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
+          <h3 className="text-sm font-semibold text-card-foreground">Distribuição por Faixa de Score</h3>
+          {!dist.isLoading && distData.length > 0 && (
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">Clientes sem score</p>
+              <p className="text-sm font-bold text-foreground tabular-nums">
+                {semScoreQtd} <span className="text-xs font-normal text-muted-foreground">({semScorePct.toFixed(1)}%)</span>
+              </p>
+            </div>
+          )}
+        </div>
         {dist.isLoading ? (
           <Skeleton className="h-[260px] w-full" />
-        ) : (dist.data || []).length === 0 ? (
+        ) : distData.length === 0 ? (
           <EmptyBlock message={SCORE_EMPTY} />
         ) : (
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={dist.data || []}>
+            <BarChart data={distNumeric}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="bucket" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
@@ -95,7 +120,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
         <h3 className="text-sm font-semibold text-card-foreground mb-3">Score vs Resultado</h3>
         {vsResult.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
-        ) : (vsResult.data || []).length === 0 ? (
+        ) : vsResultData.length === 0 ? (
           <EmptyBlock message={SCORE_EMPTY} />
         ) : (
           <Table>
@@ -111,7 +136,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(vsResult.data || []).map((r: any, i: number) => (
+              {vsResultNumeric.map((r: any, i: number) => (
                 <TableRow key={i}>
                   <TableCell className="text-xs font-medium"><BucketBadge bucket={r.bucket} /></TableCell>
                   <TableCell className="text-xs text-center">{r.qtd_clientes}</TableCell>
@@ -122,6 +147,17 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
                   <TableCell className="text-xs text-right text-success">{formatCurrency(Number(r.valor_recebido || 0))}</TableCell>
                 </TableRow>
               ))}
+              {vsResultSem && (
+                <TableRow className="bg-muted/30 border-t-2 border-border">
+                  <TableCell className="text-xs font-medium text-muted-foreground italic">sem score</TableCell>
+                  <TableCell className="text-xs text-center text-muted-foreground">{vsResultSem.qtd_clientes}</TableCell>
+                  <TableCell className="text-xs text-center text-muted-foreground">{vsResultSem.qtd_com_acordo}</TableCell>
+                  <TableCell className="text-xs text-right text-muted-foreground">{Number(vsResultSem.taxa_acordo || 0).toFixed(2)}%</TableCell>
+                  <TableCell className="text-xs text-center text-muted-foreground">{vsResultSem.qtd_pagos}</TableCell>
+                  <TableCell className="text-xs text-right text-muted-foreground">{Number(vsResultSem.taxa_pagamento || 0).toFixed(2)}%</TableCell>
+                  <TableCell className="text-xs text-right text-muted-foreground">{formatCurrency(Number(vsResultSem.valor_recebido || 0))}</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         )}

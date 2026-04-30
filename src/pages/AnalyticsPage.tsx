@@ -21,11 +21,18 @@ const AnalyticsPage = () => {
 
   const f = useAnalyticsFilters(tenant?.id);
 
+  // Segurança: operador comum só vê os próprios dados, mesmo que o filtro de UI tente outros.
+  const scopedRpcParams = f.rpcParams
+    ? (isOperator && profile?.user_id
+        ? { ...f.rpcParams, _operator_ids: [profile.user_id] }
+        : f.rpcParams)
+    : null;
+
   // Canal e Score visíveis apenas em abas relevantes
   const showChannel = ["funil", "performance", "canais"].includes(f.tab);
   const showScore = ["funil", "inteligencia"].includes(f.tab);
 
-  if (!tenant?.id || !f.rpcParams) {
+  if (!tenant?.id || !scopedRpcParams) {
     return (
       <div className="space-y-5 animate-fade-in">
         <div className="flex items-center gap-2">
@@ -84,22 +91,22 @@ const AnalyticsPage = () => {
         </TabsList>
 
         <TabsContent value="receita" className="mt-4">
-          {f.tab === "receita" && <RevenueTab params={f.rpcParams} periodDays={f.periodDays} />}
+          {f.tab === "receita" && <RevenueTab params={scopedRpcParams} periodDays={f.periodDays} />}
         </TabsContent>
         <TabsContent value="funil" className="mt-4">
-          {f.tab === "funil" && <FunnelTab params={f.rpcParams} />}
+          {f.tab === "funil" && <FunnelTab params={scopedRpcParams} />}
         </TabsContent>
         <TabsContent value="performance" className="mt-4">
-          {f.tab === "performance" && <PerformanceTab params={f.rpcParams} />}
+          {f.tab === "performance" && <PerformanceTab params={scopedRpcParams} />}
         </TabsContent>
         <TabsContent value="canais" className="mt-4">
-          {f.tab === "canais" && <ChannelsTab params={f.rpcParams} />}
+          {f.tab === "canais" && <ChannelsTab params={scopedRpcParams} />}
         </TabsContent>
         <TabsContent value="qualidade" className="mt-4">
-          {f.tab === "qualidade" && <QualityTab params={f.rpcParams} />}
+          {f.tab === "qualidade" && <QualityTab params={scopedRpcParams} />}
         </TabsContent>
         <TabsContent value="inteligencia" className="mt-4">
-          {f.tab === "inteligencia" && <IntelligenceTab params={f.rpcParams} />}
+          {f.tab === "inteligencia" && <IntelligenceTab params={scopedRpcParams} />}
         </TabsContent>
       </Tabs>
     </div>
