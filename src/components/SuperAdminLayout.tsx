@@ -355,3 +355,22 @@ const SuperAdminLayout = () => {
 };
 
 export default SuperAdminLayout;
+
+const SupportModeBanner = () => {
+  const { tenantId, tenantName, clear } = useImpersonatedTenant();
+  if (!tenantId) return null;
+  return (
+    <div className="bg-amber-500/15 border-b border-amber-500/40 px-4 lg:px-6 py-2 flex items-center justify-between gap-3">
+      <p className="text-xs text-amber-900 dark:text-amber-200">
+        <strong>Modo suporte ativo</strong> — visualizando tenant <strong>{tenantName || tenantId}</strong>. Todas as ações ficam registradas em auditoria.
+      </p>
+      <button
+        onClick={clear}
+        className="text-xs font-medium text-amber-900 dark:text-amber-200 underline underline-offset-2"
+      >
+        Sair do modo suporte
+      </button>
+    </div>
+  );
+};
+
