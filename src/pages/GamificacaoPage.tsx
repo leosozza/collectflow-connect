@@ -335,33 +335,33 @@ const GamificacaoPage = () => {
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
-          <RankingTab highlightCurrentUser={!isTenantAdmin} />
+          {currentTab === "ranking" && <RankingTab highlightCurrentUser={!isTenantAdmin} />}
         </TabsContent>
 
         <TabsContent value="campaigns" className="mt-4">
-          <CampaignsTab highlightCurrentUser={!isTenantAdmin} />
+          {currentTab === "campaigns" && <CampaignsTab highlightCurrentUser={!isTenantAdmin} />}
         </TabsContent>
 
         <TabsContent value="achievements" className="mt-4">
-          <AchievementsTab isAdmin={isTenantAdmin} />
+          {currentTab === "achievements" && <AchievementsTab isAdmin={isTenantAdmin} />}
         </TabsContent>
 
         <TabsContent value="goals" className="mt-4">
-          <GoalsTab />
+          {currentTab === "goals" && <GoalsTab />}
         </TabsContent>
 
         {!isTenantAdmin && (
           <>
             <TabsContent value="shop" className="mt-4">
-              <ShopTab />
+              {currentTab === "shop" && <ShopTab />}
             </TabsContent>
 
             <TabsContent value="wallet" className="mt-4">
-              <WalletTab />
+              {currentTab === "wallet" && <WalletTab />}
             </TabsContent>
 
             <TabsContent value="history" className="mt-4">
-              <PointsHistoryTab />
+              {currentTab === "history" && <PointsHistoryTab />}
             </TabsContent>
           </>
         )}
