@@ -109,37 +109,62 @@ const ClientDetailPage = () => {
   const handleReopenParcelas = async () => {
     if (selectedPagoIds.length === 0) return;
     setReopeningParcelas(true);
+    console.time("[reopen-parcelas] total");
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+
+      // Agrupa parcelas por novo status para fazer no máximo 2 UPDATEs em paralelo
+      const vencidoIds: string[] = [];
+      const pendenteIds: string[] = [];
       for (const id of selectedPagoIds) {
         const client = clients.find(c => c.id === id);
         if (!client) continue;
         const dueDate = new Date(client.data_vencimento);
         dueDate.setHours(0, 0, 0, 0);
-        const newStatus = dueDate < today ? "vencido" : "pendente";
-        await supabase.from("clients").update({ status: newStatus, valor_pago: 0 } as any).eq("id", id);
+        if (dueDate < today) vencidoIds.push(id);
+        else pendenteIds.push(id);
       }
+
+      const updates: Array<Promise<any>> = [];
+      if (vencidoIds.length > 0) {
+        updates.push(
+          Promise.resolve(supabase.from("clients").update({ status: "vencido", valor_pago: 0 } as any).in("id", vencidoIds))
+        );
+      }
+      if (pendenteIds.length > 0) {
+        updates.push(
+          Promise.resolve(supabase.from("clients").update({ status: "pendente", valor_pago: 0 } as any).in("id", pendenteIds))
+        );
+      }
+      const results = await Promise.all(updates);
+      const firstError = results.find((r: any) => r?.error)?.error;
+      if (firstError) throw firstError;
+
       const rawCpf = (cpf || "").replace(/\D/g, "");
-      await recalcScoreForCpf(rawCpf);
       const tenantId = clients[0]?.tenant_id;
+
+      // Pós-processamento em background — não bloqueia o operador
+      recalcScoreForCpf(rawCpf).catch(() => {});
       if (tenantId) {
-        await supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenantId } });
+        supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenantId } }).catch(() => {});
       }
-      await logAction({
+      logAction({
         action: "reabrir_parcelas",
         entity_type: "client",
         entity_id: rawCpf,
         details: { parcelas_reabertas: selectedPagoIds, quantidade: selectedPagoIds.length },
-      });
+      }).catch(() => {});
+
       toast.success(`${selectedPagoIds.length} parcela(s) reaberta(s) com sucesso.`);
       setSelectedPagoIds([]);
       setShowReopenParcelasDialog(false);
-      refetch();
+      refetch(); // sem await — UI já liberada
     } catch (err) {
       console.error(err);
       toast.error("Erro ao reabrir parcelas.");
     } finally {
+      console.timeEnd("[reopen-parcelas] total");
       setReopeningParcelas(false);
     }
   };
@@ -311,7 +336,9 @@ const ClientDetailPage = () => {
         }
       } catch { /* best-effort */ }
 
+      console.time("[reopen-agreement] total");
       await reopenAgreement(id, user.id);
+      console.timeEnd("[reopen-agreement] total");
       toast.success("Acordo reaberto. Regerando boletos das parcelas futuras…");
       if (pastDueCount > 0) {
         toast.warning(
@@ -319,6 +346,7 @@ const ClientDetailPage = () => {
           { duration: 10000 }
         );
       }
+      // refetch em background — não bloqueia o feedback ao operador
       refetch();
       refetchAgreements();
     } catch (err: any) {
