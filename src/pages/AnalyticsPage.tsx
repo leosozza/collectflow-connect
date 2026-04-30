@@ -37,7 +37,7 @@ const AnalyticsPage = () => {
   const showChannel = ["funil", "performance", "canais"].includes(f.tab);
   const showScore = ["funil", "inteligencia"].includes(f.tab);
 
-  if (!tenant?.id || !scopedRpcParams) {
+  if (!tenantId || !scopedRpcParams) {
     return (
       <div className="space-y-5 animate-fade-in">
         <div className="flex items-center gap-2">
@@ -47,7 +47,9 @@ const AnalyticsPage = () => {
           <h1 className="text-xl font-bold text-foreground">Analytics</h1>
         </div>
         <div className="bg-card rounded-xl border border-border p-8 text-center text-sm text-muted-foreground">
-          Carregando contexto do tenant…
+          {isSupportMode
+            ? "Selecione um tenant no Modo Suporte para ver o Analytics."
+            : "Carregando contexto do tenant…"}
         </div>
       </div>
     );
@@ -55,6 +57,14 @@ const AnalyticsPage = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {isSupportMode && (
+        <div className="bg-amber-500/15 border border-amber-500/40 rounded-lg px-3 py-2 flex items-center gap-2">
+          <Headphones className="w-4 h-4 text-amber-700 dark:text-amber-300" />
+          <p className="text-xs text-amber-900 dark:text-amber-200">
+            Modo suporte — visualizando tenant <strong>{supportTenantName || tenantId}</strong>.
+          </p>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
@@ -65,7 +75,7 @@ const AnalyticsPage = () => {
       </div>
 
       <AnalyticsFiltersBar
-        tenantId={tenant.id}
+        tenantId={tenantId}
         isOperator={isOperator}
         showChannel={showChannel}
         showScore={showScore}
