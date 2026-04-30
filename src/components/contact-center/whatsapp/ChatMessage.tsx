@@ -68,7 +68,16 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   const isEdited = !!message.edited_at;
   const isOptimistic = (message as any).__optimistic === true;
   const EDIT_WINDOW_MS = 15 * 60 * 1000;
+  const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
   const ageMs = now - new Date(message.created_at).getTime();
+  const isStuckSent =
+    !isOfficialApi &&
+    isOutbound &&
+    !isInternal &&
+    !isDeleted &&
+    !isOptimistic &&
+    message.status === "sent" &&
+    ageMs > STUCK_THRESHOLD_MS;
   const canEdit =
     !isOfficialApi &&
     isOutbound &&
