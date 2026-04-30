@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchCampaigns, Campaign, recalculateCampaignScores } from "@/services/campaignService";
+import { fetchCampaigns, Campaign } from "@/services/campaignService";
 import CampaignCard from "./CampaignCard";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
@@ -75,16 +75,10 @@ const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
 
   const active = useMemo(() => campaigns.filter(isCampaignActive), [campaigns]);
   const others = useMemo(() => campaigns.filter((c) => !isCampaignActive(c)), [campaigns]);
-  const activeIds = active.map((c) => c.id).join("|");
+  // Campaign scores are kept up-to-date by `recalculate_my_full` (page mount)
+  // and the `gamification-recalc-tick` cron job. Avoid client-side fan-out
+  // recalculation here — it generated N heavy RPCs per tab mount.
 
-  useEffect(() => {
-    if (!tenant?.id || active.length === 0) return;
-    active.forEach((campaign) => {
-      recalculateCampaignScores(campaign.id)
-        .then(() => queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] }))
-        .catch((error) => console.warn("Erro ao recalcular campanha", campaign.id, error));
-    });
-  }, [tenant?.id, activeIds, active, queryClient]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 

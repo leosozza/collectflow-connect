@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUrlState } from "@/hooks/useUrlState";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -58,7 +58,21 @@ const GamificacaoPage = () => {
   const month = now.getMonth() + 1;
 
   useEffect(() => {
-    triggerGamificationUpdate();
+    // Defer to idle so it doesn't compete with initial header queries.
+    const ric = (window as any).requestIdleCallback as
+      | ((cb: () => void, opts?: { timeout: number }) => number)
+      | undefined;
+    let handle: number | NodeJS.Timeout;
+    if (ric) {
+      handle = ric(() => triggerGamificationUpdate(), { timeout: 2000 });
+    } else {
+      handle = setTimeout(() => triggerGamificationUpdate(), 0);
+    }
+    return () => {
+      const cic = (window as any).cancelIdleCallback as ((h: number) => void) | undefined;
+      if (ric && cic) cic(handle as number);
+      else clearTimeout(handle as NodeJS.Timeout);
+    };
   }, [triggerGamificationUpdate]);
 
   const allowedTabs = isTenantAdmin ? adminTabs : operatorTabs;
@@ -75,23 +89,27 @@ const GamificacaoPage = () => {
     queryKey: ["my-points", profile?.id, year, month],
     queryFn: () => fetchMyPoints(profile!.id, year, month),
     enabled: !isTenantAdmin && !!profile?.id,
+    staleTime: 60_000,
   });
 
   const { data: ranking = [] } = useQuery({
     queryKey: ["ranking", year, month],
     queryFn: () => fetchRanking(year, month),
+    staleTime: 60_000,
   });
 
   const { data: wallet } = useQuery({
     queryKey: ["rivocoin-wallet", profile?.id],
     queryFn: () => fetchMyWallet(profile!.id),
     enabled: !isTenantAdmin && !!profile?.id,
+    staleTime: 120_000,
   });
 
   const { data: earnedAchievements = [] } = useQuery({
     queryKey: ["achievements", profile?.id],
     queryFn: () => fetchAllAchievements(profile!.id),
     enabled: !isTenantAdmin && !!profile?.id,
+    staleTime: 120_000,
   });
 
   const { data: adminAchievementsCount = 0 } = useQuery({
@@ -114,17 +132,20 @@ const GamificacaoPage = () => {
       return count || 0;
     },
     enabled: isTenantAdmin && !!tenant?.id,
+    staleTime: 120_000,
   });
 
   const { data: adminCampaigns = [] } = useQuery({
     queryKey: ["campaigns", tenant?.id],
     queryFn: () => fetchCampaigns(tenant?.id),
     enabled: isTenantAdmin && !!tenant?.id,
+    staleTime: 60_000,
   });
 
   const { data: scoringRules = [] } = useQuery({
     queryKey: ["scoring-rules"],
     queryFn: fetchScoringRules,
+    staleTime: 300_000,
   });
 
   const myRankEntry = ranking.find(r => r.operator_id === profile?.id);
@@ -136,9 +157,18 @@ const GamificacaoPage = () => {
   const achievementsCount = earnedAchievements.length;
   const rivoBalance = wallet?.balance || 0;
   const adminParticipantsCount = ranking.length;
-  const adminPointsTotal = ranking.reduce((sum, entry) => sum + Number(entry.points || 0), 0);
-  const adminReceivedTotal = ranking.reduce((sum, entry) => sum + Number(entry.total_received || 0), 0);
-  const activeCampaignsCount = adminCampaigns.filter(isCampaignActive).length;
+  const adminPointsTotal = useMemo(
+    () => ranking.reduce((sum, entry) => sum + Number(entry.points || 0), 0),
+    [ranking],
+  );
+  const adminReceivedTotal = useMemo(
+    () => ranking.reduce((sum, entry) => sum + Number(entry.total_received || 0), 0),
+    [ranking],
+  );
+  const activeCampaignsCount = useMemo(
+    () => adminCampaigns.filter(isCampaignActive).length,
+    [adminCampaigns],
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -305,96 +335,97 @@ const GamificacaoPage = () => {
         </TabsList>
 
         <TabsContent value="ranking" className="mt-4">
-          <RankingTab highlightCurrentUser={!isTenantAdmin} />
+          {currentTab === "ranking" && <RankingTab highlightCurrentUser={!isTenantAdmin} />}
         </TabsContent>
 
         <TabsContent value="campaigns" className="mt-4">
-          <CampaignsTab highlightCurrentUser={!isTenantAdmin} />
+          {currentTab === "campaigns" && <CampaignsTab highlightCurrentUser={!isTenantAdmin} />}
         </TabsContent>
 
         <TabsContent value="achievements" className="mt-4">
-          <AchievementsTab isAdmin={isTenantAdmin} />
+          {currentTab === "achievements" && <AchievementsTab isAdmin={isTenantAdmin} />}
         </TabsContent>
 
         <TabsContent value="goals" className="mt-4">
-          <GoalsTab />
+          {currentTab === "goals" && <GoalsTab />}
         </TabsContent>
 
         {!isTenantAdmin && (
           <>
             <TabsContent value="shop" className="mt-4">
-              <ShopTab />
+              {currentTab === "shop" && <ShopTab />}
             </TabsContent>
 
             <TabsContent value="wallet" className="mt-4">
-              <WalletTab />
+              {currentTab === "wallet" && <WalletTab />}
             </TabsContent>
 
             <TabsContent value="history" className="mt-4">
-              <PointsHistoryTab />
+              {currentTab === "history" && <PointsHistoryTab />}
             </TabsContent>
           </>
         )}
 
         {isTenantAdmin && (
           <TabsContent value="manage" className="mt-4">
-            <Tabs defaultValue="manage-campaigns">
-              <TabsList>
-                <TabsTrigger value="manage-campaigns" className="gap-1.5">
-                  <Flame className="w-3.5 h-3.5" /> Campanhas
-                </TabsTrigger>
-                <TabsTrigger value="manage-achievements" className="gap-1.5">
-                  <Star className="w-3.5 h-3.5" /> Conquistas
-                </TabsTrigger>
-                <TabsTrigger value="manage-goals" className="gap-1.5">
-                  <Target className="w-3.5 h-3.5" /> Metas
-                </TabsTrigger>
-                <TabsTrigger value="manage-rankings" className="gap-1.5">
-                  <Trophy className="w-3.5 h-3.5" /> Rankings
-                </TabsTrigger>
-                <TabsTrigger value="manage-shop" className="gap-1.5">
-                  <ShoppingBag className="w-3.5 h-3.5" /> Loja
-                </TabsTrigger>
-                <TabsTrigger value="manage-participants" className="gap-1.5">
-                  <Target className="w-3.5 h-3.5" /> Participantes
-                </TabsTrigger>
-                <TabsTrigger value="manage-scoring" className="gap-1.5">
-                  <Calculator className="w-3.5 h-3.5" /> Pontuação
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="manage-campaigns" className="mt-4">
-                <CampaignsManagementTab />
-              </TabsContent>
-
-              <TabsContent value="manage-achievements" className="mt-4">
-                <AchievementsManagementTab />
-              </TabsContent>
-
-              <TabsContent value="manage-goals" className="mt-4">
-                <GoalsManagementTab />
-              </TabsContent>
-
-              <TabsContent value="manage-rankings" className="mt-4">
-                <RankingManagementTab />
-              </TabsContent>
-
-              <TabsContent value="manage-shop" className="mt-4">
-                <ShopManagementTab />
-              </TabsContent>
-
-              <TabsContent value="manage-participants" className="mt-4">
-                <ParticipantsManagementTab />
-              </TabsContent>
-
-              <TabsContent value="manage-scoring" className="mt-4">
-                <ScoringRulesTab />
-              </TabsContent>
-            </Tabs>
+            {currentTab === "manage" && <ManageSubTabs />}
           </TabsContent>
         )}
       </Tabs>
     </div>
+  );
+};
+
+const ManageSubTabs = () => {
+  const [sub, setSub] = useState("manage-campaigns");
+  return (
+    <Tabs value={sub} onValueChange={setSub}>
+      <TabsList>
+        <TabsTrigger value="manage-campaigns" className="gap-1.5">
+          <Flame className="w-3.5 h-3.5" /> Campanhas
+        </TabsTrigger>
+        <TabsTrigger value="manage-achievements" className="gap-1.5">
+          <Star className="w-3.5 h-3.5" /> Conquistas
+        </TabsTrigger>
+        <TabsTrigger value="manage-goals" className="gap-1.5">
+          <Target className="w-3.5 h-3.5" /> Metas
+        </TabsTrigger>
+        <TabsTrigger value="manage-rankings" className="gap-1.5">
+          <Trophy className="w-3.5 h-3.5" /> Rankings
+        </TabsTrigger>
+        <TabsTrigger value="manage-shop" className="gap-1.5">
+          <ShoppingBag className="w-3.5 h-3.5" /> Loja
+        </TabsTrigger>
+        <TabsTrigger value="manage-participants" className="gap-1.5">
+          <Target className="w-3.5 h-3.5" /> Participantes
+        </TabsTrigger>
+        <TabsTrigger value="manage-scoring" className="gap-1.5">
+          <Calculator className="w-3.5 h-3.5" /> Pontuação
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="manage-campaigns" className="mt-4">
+        {sub === "manage-campaigns" && <CampaignsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-achievements" className="mt-4">
+        {sub === "manage-achievements" && <AchievementsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-goals" className="mt-4">
+        {sub === "manage-goals" && <GoalsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-rankings" className="mt-4">
+        {sub === "manage-rankings" && <RankingManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-shop" className="mt-4">
+        {sub === "manage-shop" && <ShopManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-participants" className="mt-4">
+        {sub === "manage-participants" && <ParticipantsManagementTab />}
+      </TabsContent>
+      <TabsContent value="manage-scoring" className="mt-4">
+        {sub === "manage-scoring" && <ScoringRulesTab />}
+      </TabsContent>
+    </Tabs>
   );
 };
 

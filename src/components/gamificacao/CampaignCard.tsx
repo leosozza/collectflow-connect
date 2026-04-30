@@ -1,5 +1,5 @@
-import { forwardRef, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { forwardRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,7 +11,6 @@ import {
 } from "@/services/campaignService";
 import { differenceInDays, parseISO } from "date-fns";
 import { Trophy, Gift, Building2, AlertTriangle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import CampaignCountdown from "./CampaignCountdown";
 
 interface CampaignCardProps {
@@ -30,35 +29,15 @@ const isValidDateString = (s?: string | null): boolean => {
 };
 
 const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, currentUserId }, ref) => {
-  const queryClient = useQueryClient();
-
   const { data: participants = [] } = useQuery({
     queryKey: ["campaign-participants", campaign.id],
     queryFn: () => fetchCampaignParticipants(campaign.id),
     refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
 
-  // Realtime per-card: invalidate this card's participants on any change
-  useEffect(() => {
-    const channel = supabase
-      .channel(`campaign-participants-${campaign.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "campaign_participants",
-          filter: `campaign_id=eq.${campaign.id}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] });
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [campaign.id, queryClient]);
+  // Realtime invalidation is handled at the parent (CampaignsTab) with a
+  // single channel filtered by tenant_id, avoiding one WebSocket per card.
 
   const metricLabel = METRIC_OPTIONS.find((m) => m.value === campaign.metric)?.label || campaign.metric;
   const periodLabel = PERIOD_OPTIONS.find((p) => p.value === campaign.period)?.label || campaign.period;
