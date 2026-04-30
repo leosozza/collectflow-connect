@@ -1,28 +1,34 @@
-## Correção: Dashboard zerado — `get_dashboard_stats`
+## Pendentes — janela de 3 dias de atraso
 
-### Causa raiz (confirmada via schema)
-A migration anterior referenciou `portal_payments.installment_key`, mas essa coluna **não existe** em `portal_payments` (só existe em `manual_payments` e `negociarie_cobrancas`).
+### Regra (sua definição)
+"Pendentes" deve conter apenas parcelas que:
+- **Ainda não venceram**, ou
+- **Venceram há no máximo 3 dias**
 
-Resultado: a função aborta com erro `42703` e devolve zeros em todos os cards (Recebido, Negociado, Quebra, Pendentes, contagens) — não só nos dois que mudamos.
+Parcelas com mais de 3 dias de atraso **saem** de Pendentes.
 
-### Schema real
-| Tabela | `installment_key`? |
-|---|---|
-| `manual_payments` | ✅ |
-| `negociarie_cobrancas` | ✅ |
-| `portal_payments` | ❌ — só tem `agreement_id`, `amount`, `status` |
+### Mudança técnica
+Migration que substitui `get_dashboard_stats` alterando **apenas o bloco de Pendentes do mês corrente**:
 
-### Correção (mínima e cirúrgica)
-Nova migration `CREATE OR REPLACE FUNCTION get_dashboard_stats(...)` que:
+**Antes**
+```
+due_date BETWEEN month_start AND month_end
+```
 
-1. **Quebra (por parcela)**: mantém a checagem em `manual_payments` e `negociarie_cobrancas` (ambas têm `installment_key`). Remove a checagem em `portal_payments`.
-2. **Pendentes (por parcela)**: idem.
-3. **Trade-off**: parcelas pagas exclusivamente via `portal_payments` (sem registro correspondente em `negociarie_cobrancas` quitada) podem aparecer como pendentes. Na prática, todo pagamento via portal gera `negociarie_cobrancas` com status pago, então o impacto é marginal. Se aparecer divergência, ajustamos depois.
-4. **Recebido / Negociado / contagens**: mantidos exatamente como estavam (lógica não muda).
+**Depois**
+```
+due_date BETWEEN GREATEST(month_start, CURRENT_DATE - 3) AND month_end
+```
+
+Aplicado tanto para entrada quanto para parcelas 1..N.
+
+### O que NÃO muda
+- **Quebra**: lógica per-installment com `due_date <= updated_at` (igual)
+- **Recebido / Negociado / Projetado / contagens**: idênticos
+- **Pendente do mês anterior** (usado para variação +/-%): mantém mês inteiro — é snapshot histórico, não faz sentido aplicar janela móvel a um mês passado
+
+### Efeito esperado
+Hoje (30/abr): cutoff = 27/abr. Parcelas vencidas entre 01/abr e 26/abr saem de Pendentes. Parcelas que vencem 27/abr → 30/abr permanecem. O valor atual (R$ 62.877,62) deve cair de forma significativa.
 
 ### Arquivo
-- `supabase/migrations/<timestamp>_fix_dashboard_portal_payments_column.sql`
-
-### Validação pós-deploy
-- Rodar `SELECT get_dashboard_stats(<tenant>, ...)` e confirmar JSON completo (sem erro).
-- Conferir Dashboard com valores de Recebido/Negociado voltando ao normal e Quebra/Pendentes aplicando a nova regra per-installment.
+- `supabase/migrations/<timestamp>_dashboard_pendente_3day_window.sql`
