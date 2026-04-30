@@ -1,138 +1,69 @@
-## Fase 7 — Correções residuais do Analytics (cirúrgicas, sem afetar produção)
+## Problema
 
-Escopo restrito a 3 problemas identificados no audit, sem tocar em Receita, Dashboard, Financeiro, Acordos, Baixas, WhatsApp, Discador, Funil, Score, Operadores, ou qualquer fluxo funcional. Cada fase é independente — se uma der problema, dá pra reverter sem afetar as outras.
+Cliente **Cleidson Gonçalves Rodrigues** (CPF `078.282.596-62`, credor `TESS MODELS`) aparece como **"Inadimplente"** no header (campo `Status do Cliente`), mas tem **acordo vigente** (`311f5d28`, status `pending`, criado em 16/04/2026).
 
----
+### Causa raiz
 
-### Fase 7.1 (P0) — Guard de tenant tolerante a Super Admin global
+1. O grupo CPF+Credor possui 12 linhas em `clients` com `status_cobranca_id` desalinhados:
+   - 5× `Acordo Vigente`
+   - 2× `Quitado`
+   - **2× `Inadimplente`** (linha exibida na tela)
+   - 2× `Quebra de Acordo`
+2. A função `auto-status-sync` aplica a hierarquia por grupo `(cpf|credor)`, mas **não rodou** para esse cliente após a criação do acordo vigente (`updated_at` das linhas problemáticas é anterior ao acordo).
+3. Acordos atuais não disparam sincronização do `status_cobranca_id` automaticamente — depende de cron ou ação manual em `/clientes` e `/carteira`.
 
-**Problema**
-As 3 RPCs alteradas em `20260430163427` (`get_bi_channel_performance`, `get_bi_breakage_analysis`, `get_bi_breakage_by_operator`) usam o guard:
+## Correção (3 passos, sem impacto em produção)
 
-```sql
-IF NOT public.is_super_admin(auth.uid())
-   AND NOT EXISTS (SELECT 1 FROM tenant_users tu WHERE tu.tenant_id = _tenant_id AND tu.user_id = auth.uid())
-THEN RAISE EXCEPTION 'forbidden tenant'; END IF;
-```
-
-`is_super_admin` só retorna true se houver linha com role `super_admin` em `tenant_users`. Para Super Admins de plataforma cuja role só está mapeada via `profiles.role='super_admin'` (ou via `is_owner`/SA permissions), a checagem falha → "forbidden tenant".
-
-**Correção**
-Recriar as 3 RPCs aceitando também Super Admin via `profiles.role`:
+### Passo 1 — Hotfix imediato no cliente afetado
+Migration SQL única, idempotente, escopada por tenant+CPF+credor. Sobrescreve `status_cobranca_id` de **todas as 12 linhas** do grupo para `Acordo Vigente` (`9ffe808b-4346-4336-ba77-1fc9f56b7385`), pois há acordo `pending` ativo.
 
 ```sql
--- Helper inline no guard (sem nova função)
-IF NOT (
-     public.is_super_admin(auth.uid())
-  OR EXISTS (SELECT 1 FROM public.profiles p
-             WHERE p.user_id = auth.uid() AND p.role = 'super_admin')
-  OR EXISTS (SELECT 1 FROM public.tenant_users tu
-             WHERE tu.tenant_id = _tenant_id AND tu.user_id = auth.uid())
-)
-THEN RAISE EXCEPTION 'forbidden tenant'; END IF;
+UPDATE public.clients
+SET status_cobranca_id = '9ffe808b-4346-4336-ba77-1fc9f56b7385',
+    updated_at = now()
+WHERE tenant_id = '39a450f8-7a40-46e5-8bc7-708da5043ec7'
+  AND regexp_replace(cpf, '\D', '', 'g') = '07828259662'
+  AND credor = 'TESS MODELS PRODUTOS FOTOGRAFICOS LTDA';
 ```
 
-Lógica de negócio das RPCs (allowlist de canais, normalização, filtro por updated_at em quebras) **permanece idêntica** — só o bloco `IF NOT (...)` muda.
+Risco: zero — afeta apenas 12 linhas de um único CPF/credor/tenant.
 
-**Migration nova** (não destrutiva — `CREATE OR REPLACE FUNCTION` mantém grants e assinatura):
-- `supabase/migrations/<ts>_bi_guard_super_admin_fallback.sql`
+### Passo 2 — Reexecutar `auto-status-sync` para o tenant
+Disparar a edge function `auto-status-sync` em modo single-tenant (`{ tenant_id: '39a450f8-...' }`) para revalidar **todos os demais clientes** do tenant que possam estar com o mesmo desalinhamento (ex.: outros acordos criados sem cron desde a última execução).
 
-**Arquivos**: 1 migration. Nenhum frontend.
+Operação read-then-write controlada pela própria função existente; segue lógica já em produção. Sem alteração de schema.
 
-**Validação**:
-- Super Admin consegue abrir Analytics sem `forbidden tenant`.
-- Operador comum continua restrito (regra `_operator_ids` no front + RLS).
-- Admin de tenant continua passando (já estava em `tenant_users`).
+### Passo 3 — Prevenir reincidências (opcional, recomendado)
+Ajuste mínimo no fluxo de criação/aprovação/cancelamento de acordo para invocar `auto-status-sync({ tenant_id })` ao final, garantindo que o `status_cobranca_id` do grupo CPF/credor seja recalculado em tempo real.
 
----
+Ponto de inserção: serviço/edge que finaliza criação de `agreements` (`agreementService.ts` lado client e/ou edge `agreement-create` se existir). Chamada não-bloqueante (`.catch(() => {})`) para não impactar UX.
 
-### Fase 7.2 (P1) — Outliers no tempo de resposta WhatsApp
+## Validação pós-aplicação
 
-**Problema**
-`get_bi_response_time_by_channel` calcula tempo médio de resposta usando `chat_messages.created_at` sem clipping. Conversas com gaps de 2-3 dias (cliente respondeu depois do fim de semana) elevam a média para 12h+, distorcendo a aba Canais.
+1. Recarregar a página `/clientes/{id}` — header deve exibir **"Acordo Vigente"**.
+2. Em `/financeiro/baixas` ou `/carteira`, filtrar pelo CPF — todas as 12 linhas com mesmo status.
+3. Verificar query:
+   ```sql
+   SELECT status_cobranca_id, count(*) FROM clients
+   WHERE cpf='07828259662' AND tenant_id='39a450f8-...'
+   GROUP BY 1;
+   ```
+   Esperado: 1 linha, 12 contagens, id `9ffe808b-...`.
 
-**Correção**
-Recriar a RPC mantendo a estrutura, adicionando filtro `interval <= '4 hours'` no cálculo do gap inbound→outbound (gaps maiores são considerados "fora de janela operacional" e descartados — não somados nem contados).
+## O que NÃO será mexido
 
-```sql
--- pseudo
-WHERE response_gap_seconds BETWEEN 0 AND 14400  -- 4h
-```
+- Tabela `agreements` (acordo `311f5d28` permanece `pending`).
+- Tabela `manual_payments` (pagamentos do caso anterior permanecem).
+- RLS, RPCs, schema.
+- Lógica de revenue/dashboards.
+- Outros tenants.
 
-Não muda payload, não muda assinatura, não muda nome.
+## Detalhes técnicos
 
-**Migration nova**:
-- `supabase/migrations/<ts>_bi_response_time_clip_outliers.sql`
+- Migração SQL: criada em `supabase/migrations/`.
+- Edge function: invocada via `supabase.functions.invoke('auto-status-sync', { body: { tenant_id } })` ou via tool de teste.
+- Hook de propagação (Passo 3): a definir após confirmação — inserir após `agreements.insert` e `agreements.update(status)`.
 
-**Validação**: tempo médio cai para faixa realista (segundos a minutos). Aba Canais → "Tempo de Resposta" passa a ser interpretável.
+## Pergunta antes de executar
 
----
-
-### Fase 7.3 (P1) — Limite de credores no filtro
-
-**Problema**
-`AnalyticsFiltersBar.tsx` linha 53: `.limit(1000)` no lookup de credores distintos. Para tenants grandes, a lista é truncada e credores reais ficam fora do filtro.
-
-**Correção**
-Trocar a query atual (que faz `select('credor')` e dedup no JS) por uma RPC `SECURITY DEFINER` simples que retorna `DISTINCT credor` direto do servidor, sem o limite implícito de 1000 do PostgREST:
-
-```sql
-CREATE OR REPLACE FUNCTION public.get_distinct_credores(_tenant_id uuid)
-RETURNS TABLE(credor text)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT DISTINCT credor FROM public.clients
-  WHERE tenant_id = _tenant_id AND credor IS NOT NULL
-  ORDER BY credor;
-$$;
-GRANT EXECUTE ON FUNCTION public.get_distinct_credores(uuid) TO authenticated;
-```
-
-Frontend (`AnalyticsFiltersBar.tsx`) passa a chamar `supabase.rpc('get_distinct_credores', { _tenant_id })` em vez de `.from('clients').select('credor').limit(1000)`.
-
-**Arquivos**:
-- 1 migration nova: `<ts>_bi_distinct_credores_rpc.sql`
-- `src/components/analytics/AnalyticsFiltersBar.tsx` (apenas o `useQuery` do credor, ~8 linhas)
-
-**Validação**: lista de credores no filtro mostra todos os credores reais do tenant.
-
----
-
-### Ordem de execução e segurança
-
-Cada fase é uma migration `CREATE OR REPLACE` — idempotente e reversível por reaplicação da versão anterior. Nenhuma `DROP`, nenhuma alteração de schema, nenhum DML.
-
-```text
-7.1 (guard)  →  valida com Super Admin   →  ok?
-                          ↓
-7.2 (outliers tempo)  →  valida aba Canais  →  ok?
-                          ↓
-7.3 (credores RPC)  →  valida filtro  →  fim
-```
-
-**Não tocar nesta fase**:
-- Receita (RPCs e tab) — comprovadamente correto (R$ 97.448 = Dashboard).
-- Score / Funil / Operadores / Quality (sem alteração de código nem RPC).
-- Dashboard, Financeiro, Acordos, Baixas, WhatsApp, Discador, Super Admin.
-- `is_super_admin` / `is_tenant_admin` (não mexer — usado em todo o app).
-- RLS de `clients`, `agreements`, `client_events`.
-
----
-
-### Arquivos alterados (resumo)
-
-**Migrations novas (3, todas `CREATE OR REPLACE`)**:
-1. `<ts>_bi_guard_super_admin_fallback.sql` — recria as 3 RPCs com guard tolerante.
-2. `<ts>_bi_response_time_clip_outliers.sql` — recria `get_bi_response_time_by_channel` com clip de 4h.
-3. `<ts>_bi_distinct_credores_rpc.sql` — cria `get_distinct_credores`.
-
-**Frontend (1 arquivo, ~8 linhas)**:
-- `src/components/analytics/AnalyticsFiltersBar.tsx` — troca query de credores por RPC.
-
----
-
-### Riscos residuais
-
-- Clip de 4h em tempo de resposta é uma decisão de produto. Se o cliente quiser janela diferente (2h, 8h), basta uma migration trocando o intervalo. Documentado no comentário SQL.
-- O guard Fase 7.1 passa a aceitar Super Admin via `profiles.role` — isso é coerente com `useSAPermissions` e `useTenant`, que já tratam essa role como super admin global.
-- `get_distinct_credores` retorna todos os credores do tenant sem paginação. Para tenants com >50k credores distintos isto pode pesar — improvável no cenário atual, mas pode-se adicionar `LIMIT 5000` defensivo se preferir.
+Você quer que eu execute apenas **Passo 1 + Passo 2** (correção pontual + revarredura do tenant) ou também o **Passo 3** (hook de propagação automática para evitar que isso volte a acontecer com outros clientes)?
