@@ -14,37 +14,14 @@ import MetaGaugeCard from "@/components/dashboard/MetaGaugeCard";
 const GoalsTab = () => {
   const { profile } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const qc = useQueryClient();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const monthLabel = now.toLocaleString("pt-BR", { month: "long", year: "numeric" });
 
-  // Recalculate snapshots when entering this tab so values are fresh
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      try {
-        if (isTenantAdmin) {
-          await recalculateTenantSnapshot(year, month);
-        } else {
-          await recalculateMySnapshot(year, month);
-        }
-        if (!cancelled) {
-          await Promise.all([
-            qc.invalidateQueries({ queryKey: ["my-points-goal"] }),
-            qc.invalidateQueries({ queryKey: ["operator-points-all"] }),
-            qc.invalidateQueries({ queryKey: ["my-points"] }),
-            qc.invalidateQueries({ queryKey: ["ranking"] }),
-          ]);
-        }
-      } catch (e) {
-        console.error("recalculate snapshot error:", e);
-      }
-    };
-    run();
-    return () => { cancelled = true; };
-  }, [isTenantAdmin, year, month, qc]);
+  // Snapshot recalc is centralized in GamificacaoPage (idle) and the cron tick.
+  // Avoid duplicating here to prevent double work on tab mount.
+
 
   const { data: myGoal } = useQuery({
     queryKey: ["my-goal", year, month],
