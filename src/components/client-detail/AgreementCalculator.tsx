@@ -76,6 +76,45 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
   const { user, profile } = useAuth();
   const pendentes = clients.filter((c) => c.status === "pendente" || c.status === "vencido");
 
+  // ── Crédito de acordos quebrados anteriores ──
+  // Lê valor_pago_origem dos títulos para mostrar ao operador que parte do
+  // saldo já foi abatida automaticamente após cancelamento de acordos.
+  const previousAgreementCredit = useMemo(() => {
+    const entries: Array<{ source_agreement_id: string; amount: number; applied_at: string }> = [];
+    for (const c of clients) {
+      const origem = Array.isArray(c?.valor_pago_origem) ? c.valor_pago_origem : [];
+      for (const o of origem) {
+        if (o?.source === "agreement_credit" && Number(o?.amount || 0) > 0) {
+          entries.push({
+            source_agreement_id: String(o.source_agreement_id || ""),
+            amount: Number(o.amount),
+            applied_at: String(o.applied_at || ""),
+          });
+        }
+      }
+    }
+    // Agrupa por acordo de origem
+    const byAgreement = new Map<string, { amount: number; applied_at: string }>();
+    for (const e of entries) {
+      const cur = byAgreement.get(e.source_agreement_id);
+      if (cur) {
+        cur.amount += e.amount;
+        if (!cur.applied_at || e.applied_at > cur.applied_at) cur.applied_at = e.applied_at;
+      } else {
+        byAgreement.set(e.source_agreement_id, { amount: e.amount, applied_at: e.applied_at });
+      }
+    }
+    const total = entries.reduce((s, e) => s + e.amount, 0);
+    return {
+      total,
+      breakdown: Array.from(byAgreement.entries()).map(([id, v]) => ({
+        source_agreement_id: id,
+        amount: v.amount,
+        applied_at: v.applied_at,
+      })),
+    };
+  }, [clients]);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendentes.map((c) => c.id)));
   const [calcDate, setCalcDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [jurosPercent, setJurosPercent] = useState("0");
@@ -721,6 +760,31 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
           <AlertTriangle className="w-4 h-4" />
           <AlertDescription>
             Este cliente já possui um acordo vigente. Cancele o anterior para criar um novo.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {previousAgreementCredit.total > 0 && (
+        <Alert className="border-blue-500/40 bg-blue-500/10">
+          <CheckCircle2 className="w-4 h-4 text-blue-600" />
+          <AlertDescription className="text-sm">
+            <div className="font-medium text-foreground">
+              Este cliente já pagou{" "}
+              <span className="text-blue-700 dark:text-blue-400 font-semibold">
+                {formatCurrency(previousAgreementCredit.total)}
+              </span>{" "}
+              em acordos anteriores que foram quebrados. Esse valor já foi abatido do saldo abaixo.
+            </div>
+            {previousAgreementCredit.breakdown.length > 0 && (
+              <ul className="mt-1.5 ml-1 space-y-0.5 text-xs text-muted-foreground">
+                {previousAgreementCredit.breakdown.map((b) => (
+                  <li key={b.source_agreement_id}>
+                    Acordo #{b.source_agreement_id.slice(0, 8)} — {formatCurrency(b.amount)}
+                    {b.applied_at ? ` em ${new Date(b.applied_at).toLocaleDateString("pt-BR")}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
           </AlertDescription>
         </Alert>
       )}

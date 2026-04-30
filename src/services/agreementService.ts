@@ -516,6 +516,97 @@ export const updateAgreement = async (
   }
 };
 
+/**
+ * Credita um valor (vindo de pagamentos confirmados de um acordo cancelado)
+ * de volta nas parcelas pendentes do cliente em `clients`, distribuindo FIFO
+ * por data_vencimento. Cada parcela atualizada recebe um registro em
+ * `valor_pago_origem` com a procedência (source_agreement_id) para auditoria
+ * e exibição na UI do calculator.
+ *
+ * Idempotente: o caller deve garantir que não chame duas vezes para o mesmo
+ * source_agreement_id (a checagem é feita em cancelAgreement via client_events).
+ *
+ * Retorna o detalhe do que foi aplicado e quanto sobrou (overflow).
+ */
+const creditPaymentsToOriginalDebt = async (params: {
+  cpf: string;
+  credor: string;
+  totalCredit: number;
+  tenantId: string;
+  sourceAgreementId: string;
+  appliedBy: string | null;
+}): Promise<{ appliedTo: Array<{ client_id: string; amount: number }>; overflow: number }> => {
+  const { cpf, credor, totalCredit, tenantId, sourceAgreementId, appliedBy } = params;
+  if (totalCredit <= 0) return { appliedTo: [], overflow: 0 };
+
+  const rawCpf = (cpf || "").replace(/\D/g, "");
+  const fmtCpf = rawCpf.length === 11
+    ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`
+    : rawCpf;
+
+  const { data: titles, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .or(`cpf.eq.${rawCpf},cpf.eq.${fmtCpf}`)
+    .eq("credor", credor)
+    .in("status", ["pendente", "em_acordo"])
+    .order("data_vencimento", { ascending: true });
+
+  if (error) throw error;
+  if (!titles || titles.length === 0) return { appliedTo: [], overflow: totalCredit };
+
+  let remaining = totalCredit;
+  const appliedTo: Array<{ client_id: string; amount: number }> = [];
+  const appliedAt = new Date().toISOString();
+
+  for (const title of titles as any[]) {
+    if (remaining <= 0.005) break;
+    const valorParcela = Number(title.valor_parcela || 0);
+    const valorPago = Number(title.valor_pago || 0);
+    const saldo = valorParcela - valorPago;
+    if (saldo <= 0.005) continue;
+
+    const credit = Math.min(remaining, saldo);
+    const newValorPago = valorPago + credit;
+    const isPaid = newValorPago >= valorParcela - 0.005;
+
+    const existingOrigem = Array.isArray(title.valor_pago_origem) ? title.valor_pago_origem : [];
+    const newOrigem = [
+      ...existingOrigem,
+      {
+        source: "agreement_credit",
+        source_agreement_id: sourceAgreementId,
+        amount: Number(credit.toFixed(2)),
+        applied_at: appliedAt,
+        applied_by: appliedBy,
+        note: "Abatimento de acordo quebrado",
+      },
+    ];
+
+    const updateData: any = {
+      valor_pago: newValorPago,
+      valor_pago_origem: newOrigem,
+    };
+    if (isPaid) {
+      updateData.status = "pago";
+      updateData.data_quitacao = new Date().toISOString().split("T")[0];
+    }
+
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update(updateData)
+      .eq("tenant_id", tenantId)
+      .eq("id", title.id);
+    if (updateError) throw updateError;
+
+    appliedTo.push({ client_id: title.id, amount: Number(credit.toFixed(2)) });
+    remaining -= credit;
+  }
+
+  return { appliedTo, overflow: Number(Math.max(0, remaining).toFixed(2)) };
+};
+
 export const cancelAgreement = async (id: string): Promise<void> => {
   try {
     const { data: agreement } = await supabase
@@ -530,6 +621,127 @@ export const cancelAgreement = async (id: string): Promise<void> => {
       .eq("id", id);
 
     if (error) throw error;
+
+    // ── Crédito automático de pagamentos do acordo quebrado ──
+    // Aplica somente para cancelamentos a partir desta regra (não faz backfill).
+    // Idempotente via checagem em client_events.
+    if (agreement?.tenant_id && agreement?.client_cpf && agreement?.credor) {
+      try {
+        // Idempotência: já creditado para este acordo?
+        const { data: existingCredit } = await supabase
+          .from("client_events")
+          .select("id")
+          .eq("tenant_id", agreement.tenant_id)
+          .eq("client_cpf", agreement.client_cpf)
+          .eq("event_type", "previous_agreement_credit_applied")
+          .filter("metadata->>source_agreement_id", "eq", id)
+          .limit(1);
+
+        if (!existingCredit || existingCredit.length === 0) {
+          // Soma manual_payments confirmed
+          const { data: confirmedManual } = await supabase
+            .from("manual_payments" as any)
+            .select("amount_paid")
+            .eq("agreement_id", id)
+            .eq("status", "confirmed");
+          const manualTotal = ((confirmedManual as any[]) || []).reduce(
+            (s, p) => s + Number(p.amount_paid || 0), 0,
+          );
+
+          // Soma negociarie_cobrancas pago
+          const { data: paidCobrancas } = await supabase
+            .from("negociarie_cobrancas" as any)
+            .select("valor_pago")
+            .eq("agreement_id", id)
+            .eq("status", "pago");
+          const negociarieTotal = ((paidCobrancas as any[]) || []).reduce(
+            (s, c) => s + Number(c.valor_pago || 0), 0,
+          );
+
+          const totalCredit = Number((manualTotal + negociarieTotal).toFixed(2));
+
+          if (totalCredit > 0) {
+            // Resolve perfil para applied_by
+            let appliedBy: string | null = null;
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                const { data: prof } = await supabase
+                  .from("profiles")
+                  .select("id")
+                  .eq("user_id", user.id)
+                  .single();
+                appliedBy = (prof as any)?.id || null;
+              }
+            } catch {}
+
+            const result = await creditPaymentsToOriginalDebt({
+              cpf: agreement.client_cpf,
+              credor: agreement.credor,
+              totalCredit,
+              tenantId: agreement.tenant_id,
+              sourceAgreementId: id,
+              appliedBy,
+            });
+
+            // Timeline event
+            await supabase.from("client_events").insert({
+              tenant_id: agreement.tenant_id,
+              client_cpf: agreement.client_cpf,
+              event_type: "previous_agreement_credit_applied",
+              event_source: "operator",
+              event_value: String(totalCredit),
+              metadata: {
+                source_agreement_id: id,
+                credor: agreement.credor,
+                total_credited: totalCredit,
+                breakdown: { manual: manualTotal, negociarie: negociarieTotal },
+                applied_to_titles: result.appliedTo,
+                overflow: result.overflow,
+                applied_by: appliedBy,
+              },
+            } as any);
+
+            // Overflow audit (sem crédito automático — admin decide)
+            if (result.overflow > 0.005) {
+              await supabase.from("client_events").insert({
+                tenant_id: agreement.tenant_id,
+                client_cpf: agreement.client_cpf,
+                event_type: "credit_overflow",
+                event_source: "operator",
+                event_value: String(result.overflow),
+                metadata: {
+                  source_agreement_id: id,
+                  credor: agreement.credor,
+                  overflow_amount: result.overflow,
+                  note: "Crédito do acordo cancelado excedeu o saldo pendente. Tratar manualmente.",
+                },
+              } as any);
+            }
+
+            logAction({
+              action: "previous_agreement_credit",
+              entity_type: "agreement",
+              entity_id: id,
+              details: {
+                cpf: agreement.client_cpf,
+                credor: agreement.credor,
+                total_credited: totalCredit,
+                breakdown: { manual: manualTotal, negociarie: negociarieTotal },
+                applied_count: result.appliedTo.length,
+                overflow: result.overflow,
+              },
+            });
+
+            logger.info(MODULE, "previous_agreement_credit", {
+              agreement_id: id, totalCredit, applied: result.appliedTo.length, overflow: result.overflow,
+            });
+          }
+        }
+      } catch (e) {
+        logger.error(MODULE, "previous_agreement_credit_failed", e);
+      }
+    }
 
     // Cancelar boletos pendentes na negociarie_cobrancas + invalidar no provider
     try {

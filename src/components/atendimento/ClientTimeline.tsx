@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature, Globe, Headphones, ArrowRightLeft, StickyNote } from "lucide-react";
+import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature, Globe, Headphones, ArrowRightLeft, StickyNote, AlertTriangle } from "lucide-react";
 
 type ActorKind = "user" | "admin" | "workflow" | "ai" | "system" | "portal" | "gateway" | "client" | "unknown";
 
@@ -90,6 +90,8 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   document_generated:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
   conversation_auto_closed: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
   conversation_transferred: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  previous_agreement_credit_applied: { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  credit_overflow:          { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
 };
 
 const toTitleCase = (s: string) =>
@@ -132,6 +134,8 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   agreement_broken: "Acordo Quebrado",
   note: "Observação",
   phone_promoted_hot: "Número Quente Definido",
+  previous_agreement_credit_applied: "Crédito de Acordo Anterior Aplicado",
+  credit_overflow: "Crédito Excedente (revisar manualmente)",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
@@ -171,6 +175,8 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   document_generated: <FileEdit className="w-3.5 h-3.5 text-indigo-500" />,
   conversation_auto_closed: <MessageSquare className="w-3.5 h-3.5 text-violet-500" />,
   conversation_transferred: <ArrowRightLeft className="w-3.5 h-3.5 text-violet-500" />,
+  previous_agreement_credit_applied: <CreditCard className="w-3.5 h-3.5 text-blue-500" />,
+  credit_overflow: <AlertTriangle className="w-3.5 h-3.5 text-blue-500" />,
 };
 
 const FIELD_LABELS: Record<string, string> = {
