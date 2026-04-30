@@ -35,6 +35,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
+import { SupportTenantSwitcher } from "@/components/SupportTenantSwitcher";
+import { useImpersonatedTenant } from "@/hooks/useImpersonatedTenant";
 
 interface NavItem {
   label: string;
@@ -323,7 +325,8 @@ const SuperAdminLayout = () => {
               {pageTitles[location.pathname] || "Super Admin"}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <SupportTenantSwitcher />
             <button
               onClick={() => navigate("/admin/perfil")}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
@@ -341,6 +344,7 @@ const SuperAdminLayout = () => {
             </button>
           </div>
         </header>
+        <SupportModeBanner />
 
         <main className="flex-1 overflow-auto p-4 lg:p-6">
           <Outlet />
