@@ -481,6 +481,21 @@ const WhatsAppChatLayout = () => {
       .eq("tenant_id", tenantId!)
       .single()
       .then(({ data }) => setClientInfo(data));
+
+    // Realtime: keep clientInfo (notably debtor_profile) in sync with sidebar edits.
+    const clientId = selectedConv.client_id;
+    const ch = supabase
+      .channel(`client-detail-${clientId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "clients", filter: `id=eq.${clientId}` },
+        (payload) => {
+          const next = payload.new as any;
+          setClientInfo((prev: any) => prev ? { ...prev, ...next } : next);
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, [selectedConv?.client_id, selectedConv?.id, tenantId]);
 
   // Realtime subscriptions
