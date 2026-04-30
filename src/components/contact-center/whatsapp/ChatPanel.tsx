@@ -577,14 +577,38 @@ const ChatPanel = ({
       })()}
 
 
+      {/* Gate banner — bloqueia envio até preencher Perfil + Tabulação */}
+      {mustGate && (
+        <WhatsAppGateBanner
+          hasProfile={hasProfile}
+          hasDisposition={hasDisposition}
+          inboundCount={inboundCount}
+          threshold={GATE_THRESHOLD}
+          onOpenSidebar={() => { if (!sidebarOpen) onToggleSidebar(); }}
+          sidebarOpen={sidebarOpen}
+        />
+      )}
+
       {/* Input - WhatsApp style */}
       <ChatInput
         onSend={handleSend}
-        onSendMedia={onSendMedia}
-        onSendAudio={onSendAudio}
+        onSendMedia={(file) => {
+          if (mustGate) {
+            toast.error("Defina o Perfil e a Tabulação para enviar mensagens.");
+            return;
+          }
+          onSendMedia(file);
+        }}
+        onSendAudio={(blob) => {
+          if (mustGate) {
+            toast.error("Defina o Perfil e a Tabulação para enviar mensagens.");
+            return;
+          }
+          onSendAudio(blob);
+        }}
         onSendInternalNote={onSendInternalNote}
         quickReplies={quickReplies}
-        disabled={conversation.status === "waiting"}
+        disabled={conversation.status === "waiting" || mustGate}
         clientInfo={clientInfo}
         operatorName={operatorName}
         replyTo={replyTo}
