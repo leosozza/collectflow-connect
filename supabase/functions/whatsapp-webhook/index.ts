@@ -310,6 +310,7 @@ Deno.serve(async (req) => {
         _provider_message_id: null,
         _actor_type: "human",
         _status: fromMe ? "sent" : "delivered",
+        _reply_to_external_id: replyToExternalId,
       });
 
       if (rpcErr) {
