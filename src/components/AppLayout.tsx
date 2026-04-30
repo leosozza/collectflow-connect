@@ -38,6 +38,8 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import SupportFloatingButton from "@/components/support/SupportFloatingButton";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { SupportTenantSwitcher } from "@/components/SupportTenantSwitcher";
+import { useImpersonatedTenant } from "@/hooks/useImpersonatedTenant";
 
 const AppLayout = () => {
   const { profile, signOut } = useAuth();
@@ -408,3 +410,21 @@ const AppLayout = () => {
 };
 
 export default AppLayout;
+
+const SupportModeAppBanner = () => {
+  const { tenantId, tenantName, clear } = useImpersonatedTenant();
+  if (!tenantId) return null;
+  return (
+    <div className="bg-amber-500/15 border-b border-amber-500/40 px-3 lg:px-4 py-1.5 flex items-center justify-between gap-3">
+      <p className="text-xs text-amber-900 dark:text-amber-200">
+        <strong>Modo suporte ativo</strong> — visualizando tenant <strong>{tenantName || tenantId}</strong>. Ações ficam registradas em auditoria.
+      </p>
+      <button
+        onClick={clear}
+        className="text-xs font-medium text-amber-900 dark:text-amber-200 underline underline-offset-2"
+      >
+        Sair do modo suporte
+      </button>
+    </div>
+  );
+};
