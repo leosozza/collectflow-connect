@@ -208,6 +208,84 @@ const WhatsAppChatLayout = () => {
       });
   }, [conversations.length]);
 
+  // Realtime: keep dispositionAssignments fresh so the WhatsApp gate
+  // unlocks immediately when an operator adds/removes a disposition
+  // (no page refresh needed). Filtered by tenant via RLS.
+  useEffect(() => {
+    if (!tenantId) return;
+    const ch = supabase
+      .channel(`disposition-assignments-realtime-${tenantId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_disposition_assignments" },
+        (payload) => {
+          const evt = payload.eventType;
+          if (evt === "INSERT") {
+            const row = payload.new as any;
+            setDispositionAssignments((prev) => {
+              if (prev.some(
+                (a) => a.conversation_id === row.conversation_id &&
+                       a.disposition_type_id === row.disposition_type_id
+              )) return prev;
+              return [...prev, {
+                conversation_id: row.conversation_id,
+                disposition_type_id: row.disposition_type_id,
+              }];
+            });
+          } else if (evt === "DELETE") {
+            const row = payload.old as any;
+            setDispositionAssignments((prev) =>
+              prev.filter(
+                (a) => !(a.conversation_id === row.conversation_id &&
+                         a.disposition_type_id === row.disposition_type_id)
+              )
+            );
+          } else if (evt === "UPDATE") {
+            const row = payload.new as any;
+            setDispositionAssignments((prev) => {
+              const without = prev.filter(
+                (a) => a.conversation_id !== row.conversation_id ||
+                       a.disposition_type_id !== row.disposition_type_id
+              );
+              return [...without, {
+                conversation_id: row.conversation_id,
+                disposition_type_id: row.disposition_type_id,
+              }];
+            });
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [tenantId]);
+
+  // Optimistic callback: parent gets notified the moment the sidebar
+  // toggles a disposition, so the gate unlocks even before realtime
+  // round-trips.
+  const handleDispositionAssignmentsChanged = useCallback(
+    (conversationId: string, assignedIds: string[]) => {
+      setDispositionAssignments((prev) => {
+        const others = prev.filter((a) => a.conversation_id !== conversationId);
+        const next = assignedIds.map((disposition_type_id) => ({
+          conversation_id: conversationId,
+          disposition_type_id,
+        }));
+        return [...others, ...next];
+      });
+    },
+    []
+  );
+
+  // Optimistic callback for debtor profile changes from the sidebar.
+  const handleDebtorProfileChanged = useCallback(
+    (clientId: string, profileValue: string | null) => {
+      setClientInfo((prev: any) =>
+        prev && prev.id === clientId ? { ...prev, debtor_profile: profileValue } : prev
+      );
+    },
+    []
+  );
+
   // Initialize known waiting set
   useEffect(() => {
     if (knownWaitingRef.current.size === 0 && conversations.length > 0) {
