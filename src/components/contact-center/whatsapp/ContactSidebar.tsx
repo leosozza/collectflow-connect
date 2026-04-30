@@ -369,7 +369,10 @@ const ContactSidebar = ({ conversation, messages, onClientLinked, onDispositionA
               clientCpf={linkedClient.cpf}
               tenantId={conversation.tenant_id || ""}
               currentProfile={linkedClient.debtor_profile}
-              onProfileChanged={(p) => setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev)}
+              onProfileChanged={(p) => {
+                setLinkedClient((prev) => prev ? { ...prev, debtor_profile: p } : prev);
+                onDebtorProfileChanged?.(linkedClient.id, p);
+              }}
             />
           </div>
         )}
@@ -381,6 +384,7 @@ const ContactSidebar = ({ conversation, messages, onClientLinked, onDispositionA
               conversationId={conversation.id}
               tenantId={conversation.tenant_id || ""}
               clientCpf={linkedClient?.cpf || null}
+              onAssignmentsChanged={onDispositionAssignmentsChanged}
             />
           </div>
         )}
