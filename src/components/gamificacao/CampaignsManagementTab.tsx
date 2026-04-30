@@ -78,8 +78,12 @@ const CampaignsManagementTab = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const activeCampaigns = campaigns.filter(isCampaignActive);
-  const otherCampaigns = campaigns.filter((c) => !isCampaignActive(c));
+  const activeCampaigns = useMemo(() => campaigns.filter(isCampaignActive), [campaigns]);
+  const otherCampaigns = useMemo(() => campaigns.filter((c) => !isCampaignActive(c)), [campaigns]);
+
+  // Mesma lógica da CampaignsTab: dispara recálculo server-side em background
+  // assim que a aba abre, fechando a janela de 30 min do cron.
+  useRefreshActiveCampaignScores(activeCampaigns);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 
 interface CampaignCountdownProps {
   /** UTC timestamp (ms) when the campaign ends. */
@@ -30,34 +30,41 @@ const Unit = ({ value, label }: { value: number; label: string }) => (
   </div>
 );
 
-const CampaignCountdown = ({ endMs }: CampaignCountdownProps) => {
-  const [t, setT] = useState(() => calc(endMs));
+const CampaignCountdown = forwardRef<HTMLDivElement, CampaignCountdownProps>(
+  ({ endMs }, ref) => {
+    const [t, setT] = useState(() => calc(endMs));
 
-  useEffect(() => {
-    setT(calc(endMs));
-    const id = setInterval(() => setT(calc(endMs)), 1000);
-    return () => clearInterval(id);
-  }, [endMs]);
+    useEffect(() => {
+      setT(calc(endMs));
+      const id = setInterval(() => setT(calc(endMs)), 1000);
+      return () => clearInterval(id);
+    }, [endMs]);
 
-  if (t.ended) {
+    if (t.ended) {
+      return (
+        <div
+          ref={ref}
+          className="text-[10px] text-muted-foreground uppercase tracking-wider"
+        >
+          Encerrada
+        </div>
+      );
+    }
+
     return (
-      <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
-        Encerrada
+      <div ref={ref} className="flex items-end gap-1.5">
+        <Unit value={t.days} label="dias" />
+        <span className="text-muted-foreground/50 text-sm pb-4">:</span>
+        <Unit value={t.hours} label="hrs" />
+        <span className="text-muted-foreground/50 text-sm pb-4">:</span>
+        <Unit value={t.minutes} label="min" />
+        <span className="text-muted-foreground/50 text-sm pb-4">:</span>
+        <Unit value={t.seconds} label="seg" />
       </div>
     );
-  }
+  },
+);
 
-  return (
-    <div className="flex items-end gap-1.5">
-      <Unit value={t.days} label="dias" />
-      <span className="text-muted-foreground/50 text-sm pb-4">:</span>
-      <Unit value={t.hours} label="hrs" />
-      <span className="text-muted-foreground/50 text-sm pb-4">:</span>
-      <Unit value={t.minutes} label="min" />
-      <span className="text-muted-foreground/50 text-sm pb-4">:</span>
-      <Unit value={t.seconds} label="seg" />
-    </div>
-  );
-};
+CampaignCountdown.displayName = "CampaignCountdown";
 
 export default CampaignCountdown;
