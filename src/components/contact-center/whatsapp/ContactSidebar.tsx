@@ -18,6 +18,11 @@ interface ContactSidebarProps {
   conversation: Conversation | null;
   messages: ChatMessage[];
   onClientLinked: () => void;
+  onDispositionAssignmentsChanged?: (
+    conversationId: string,
+    assignedDispositionTypeIds: string[]
+  ) => void;
+  onDebtorProfileChanged?: (clientId: string, profile: string | null) => void;
 }
 
 interface SimpleClient {
