@@ -1,54 +1,91 @@
-## Problema
+## Problema identificado
 
-Quando o operador é bloqueado (após 5 mensagens recebidas) por falta de perfil ou tabulação, ele preenche os dados na sidebar mas o gate **não libera automaticamente** — só após F5. Resultado: má experiência e operadores recarregando a página o tempo todo.
+Na tela do operador Vitor, ao tentar editar/apagar uma mensagem, apareceu:
 
-## Causa raiz
+> "Você só pode editar/excluir suas próprias mensagens"
 
-O cálculo `mustGate` no `ChatPanel.tsx` depende de duas fontes de estado mantidas em `WhatsAppChatLayout.tsx`:
+Mas a mensagem **foi enviada por ele**. Investiguei o código e encontrei a causa raiz — não tem nada a ver com o tempo do WhatsApp.
 
-1. **`dispositionAssignments`** — carregado uma única vez no `useEffect` que depende de `conversations.length` (linha 199). Quando o operador adiciona uma tabulação via `DispositionSelector`, esse estado **nunca é atualizado** localmente.
-2. **`clientInfo.debtor_profile`** — já tem realtime via canal `client-detail-${clientId}` (linha 487), então essa parte funciona. Porém, o componente `DebtorCategoryPanel` na sidebar atualiza apenas o estado local `linkedClient` da `ContactSidebar` e não dispara re-fetch — o realtime do Postgres deveria cobrir, mas só funciona se o update realmente persiste em `clients.debtor_profile`.
+### Causa raiz
 
-Conclusão: o gate de **tabulação nunca se atualiza** sem refresh, e o de **perfil** depende de o realtime entregar o UPDATE da tabela `clients`.
+A edge function `manage-chat-message` valida autoria lendo de `chat_messages.metadata`:
 
-## Solução
-
-### 1. Realtime para tabulações de conversa
-Em `WhatsAppChatLayout.tsx`, adicionar um canal Supabase Realtime escutando `conversation_disposition_assignments` filtrado por `tenant_id`, atualizando o estado `dispositionAssignments` em INSERT/UPDATE/DELETE.
-
-```text
-channel: dispositions-realtime-${tenantId}
-table: conversation_disposition_assignments
-event: * (INSERT, UPDATE, DELETE)
-→ atualiza setDispositionAssignments(prev => merge/remove)
+```ts
+const sentByUserId = meta.sent_by_user_id;
+const sentByProfileId = meta.sent_by_profile_id;
+const isAuthor = (sentByUserId && sentByUserId === userId)
+              || (sentByProfileId && profile?.id && sentByProfileId === profile.id);
 ```
 
-### 2. Callback imediato (otimista) no DispositionSelector
-Adicionar prop opcional `onAssigned(conversationId, dispositionTypeId)` em `DispositionSelector.tsx`. Após o `insert` bem-sucedido, chamar o callback para que `WhatsAppChatLayout` atualize `dispositionAssignments` **imediatamente**, sem depender da latência do realtime.
+Porém a função que envia a mensagem (`send-chat-message`) chama o RPC `ingest_channel_event` que **nunca grava** `sent_by_user_id` nem `sent_by_profile_id` no metadata. Resultado: para qualquer operador não-admin, `isAuthor` é sempre `false` → o erro "Você só pode editar/excluir suas próprias mensagens" sempre aparece, mesmo sendo o autor real.
 
-Encadear nas props: `ContactSidebar` → `DispositionSelector` → callback.
+Ou seja, hoje **somente admins conseguem editar/apagar**. Operadores comuns ficam bloqueados independentemente de tudo.
 
-### 3. Garantir realtime do perfil do devedor
-Verificar que `DebtorCategoryPanel` (usado na sidebar) realmente faz `UPDATE clients SET debtor_profile = ...`. Se sim, o canal já existente em `WhatsAppChatLayout` (linha 487) cuida da atualização. Adicionar também callback otimista `onProfileChanged` propagando para o pai `WhatsAppChatLayout` para zero-latência (atualmente só atualiza `linkedClient` interno da `ContactSidebar`, não o `clientInfo` do layout).
+### Sobre o limite de tempo do WhatsApp
 
-### 4. Verificação cruzada — tabulação alimenta o perfil?
+A regra de 15 minutos para edição já existe em `manage-chat-message`, com a mensagem:
 
-Análise solicitada anteriormente:
-- **Tabulação WhatsApp** (`DispositionSelector.tsx` linha 102): faz insert em `conversation_disposition_assignments` e em `call_dispositions` via `dispositionService.createDisposition`, que por sua vez chama `applyAutoProfileFromDisposition` → atualiza `clients.debtor_profile` quando o tipo de tabulação tem `auto_profile` configurado.
-- **Tabulação Discador** (`DispositionPanel.tsx` em `atendimento`): mesma rota — chama `dispositionService.createDisposition` → `applyAutoProfileFromDisposition`.
+> "Edição permitida apenas nos primeiros 15 minutos"
 
-Ambos abastecem corretamente. Apenas confirmar com 1 leitura rápida do `dispositionAutomationService` para garantir que continua atualizando `clients.debtor_profile` (e não só `client_profiles`).
+Mas o usuário nem chega nessa validação porque é barrado antes pela checagem de autoria quebrada. O texto dessa e de outras mensagens também precisa deixar explícito que o limite é imposto pelo WhatsApp.
 
-## Arquivos afetados
+---
 
-- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` — novo canal realtime + callbacks otimistas para `setDispositionAssignments` e `setClientInfo`
-- `src/components/contact-center/whatsapp/DispositionSelector.tsx` — nova prop `onAssigned`, chamada após insert
-- `src/components/contact-center/whatsapp/ContactSidebar.tsx` — encadear `onAssigned` e `onProfileChanged` para o pai
-- `src/components/atendimento/DebtorCategoryPanel.tsx` — confirmar prop `onProfileChanged` já existe (já vista) e que faz UPDATE em `clients`
+## Plano de correção
 
-## Resultado esperado
+### 1. Gravar o autor no metadata ao enviar (corrige o falso bloqueio)
 
-- Operador adiciona tabulação → banner amarelo `WhatsAppGateBanner` desaparece em <500ms, input desbloqueia.
-- Operador define perfil → mesmo comportamento.
-- Sem necessidade de F5.
-- Funciona em outros operadores conectados na mesma conversa (via realtime).
+Em `supabase/functions/send-chat-message/index.ts`, logo após o RPC `ingest_channel_event` retornar `message_id`, fazer um UPDATE em `chat_messages` mesclando no `metadata`:
+
+```ts
+{
+  sent_by_user_id: userId,
+  sent_by_profile_id: senderProfile?.id ?? null,
+}
+```
+
+Reaproveitar o lookup de profile que já existe na seção "auto-assign" (linhas 320-326), executando-o sempre (não só quando precisa atribuir conversa) — uma única consulta a `profiles`.
+
+### 2. Fallback retroativo para mensagens antigas
+
+Mensagens enviadas antes desta correção não têm `sent_by_user_id`. Para não bloquear edição/exclusão delas, em `manage-chat-message`, quando metadata estiver vazio:
+
+- Se a conversa estava `assigned_to = profile.id` no momento do envio, considerar autor.
+- Como aproximação prática: se a mensagem é outbound e a conversa atualmente está atribuída ao operador, permitir.
+
+Usar essa regra **somente quando** `sent_by_user_id` e `sent_by_profile_id` estão ambos ausentes (mensagens legadas). Mensagens novas continuam usando a checagem estrita.
+
+### 3. Melhorar todas as mensagens de erro (deixar claro que o limite é do WhatsApp)
+
+Ajustar em `supabase/functions/manage-chat-message/index.ts`:
+
+| Atual | Novo |
+|---|---|
+| "Edição permitida apenas nos primeiros 15 minutos" | "O WhatsApp não permite editar mensagens enviadas há mais de 15 minutos." |
+| "Somente mensagens de texto podem ser editadas" | "O WhatsApp permite editar apenas mensagens de texto." |
+| "Mensagens com falha não podem ser editadas/excluídas" | "Mensagens que falharam no envio não podem ser editadas/excluídas." |
+| "Mensagem já foi excluída para o destinatário" | "Esta mensagem já foi apagada para o destinatário." |
+| "Mensagem sem ID do provider — não é possível operar" | "Não foi possível localizar esta mensagem no WhatsApp para apagar/editar." |
+| "Você só pode editar/excluir suas próprias mensagens" | "Você só pode editar ou apagar mensagens que você mesmo enviou." |
+
+Também tratar erros do provider (deleteByProvider/editByProvider) com mensagem amigável quando o WhatsApp recusar por tempo (o WhatsApp oficialmente bloqueia exclusão "para todos" após ~2 dias):
+
+> "O WhatsApp não permitiu apagar esta mensagem. Mensagens muito antigas não podem mais ser apagadas para o destinatário."
+
+Detectar via `httpStatus` 4xx + payload do provider mencionando tempo/expirado/old.
+
+### 4. Validar o fluxo
+
+- Operador Vitor envia mensagem nova → consegue editar nos 15 min e apagar.
+- Após 15 min → mostra mensagem clara "O WhatsApp não permite editar mensagens enviadas há mais de 15 minutos."
+- Mensagens antigas (pré-correção) → fallback permite operar.
+- Mensagem de outro operador → bloqueia com texto claro de autoria.
+
+---
+
+## Arquivos alterados
+
+- `supabase/functions/send-chat-message/index.ts` — gravar metadata de autor após RPC.
+- `supabase/functions/manage-chat-message/index.ts` — fallback de autoria para legados + textos de erro melhorados + tratamento de erro do provider.
+
+Sem migrações de banco.

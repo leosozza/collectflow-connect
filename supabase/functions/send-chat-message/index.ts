@@ -301,34 +301,54 @@ Deno.serve(async (req) => {
       }, 500);
     }
 
-    // 10. Handle reply_to
-    if (replyToMessageId && rpcResult?.message_id) {
-      await supabase
-        .from("chat_messages")
-        .update({ reply_to_message_id: replyToMessageId })
-        .eq("id", rpcResult.message_id);
+    // 10. Resolve sender profile (used for authorship metadata + auto-assign)
+    let senderProfileId: string | null = null;
+    {
+      const { data: senderProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      senderProfileId = senderProfile?.id || null;
     }
 
-    // 11. Waiting → open for outbound + auto-assign to operator if unassigned
-    // Single UPDATE: uses conv.assigned_to from initial SELECT and resolves sender's profile inline.
+    // 11. Stamp authorship into chat_messages.metadata so edit/delete (manage-chat-message)
+    //     can verify the operator is the original sender. Also handle reply_to in same UPDATE.
+    if (rpcResult?.message_id) {
+      // Read existing metadata to merge instead of overwriting
+      const { data: existingMsg } = await supabase
+        .from("chat_messages")
+        .select("metadata")
+        .eq("id", rpcResult.message_id)
+        .maybeSingle();
+      const mergedMeta = {
+        ...((existingMsg?.metadata as Record<string, unknown>) || {}),
+        sent_by_user_id: userId,
+        sent_by_profile_id: senderProfileId,
+      };
+
+      const updates: Record<string, unknown> = { metadata: mergedMeta };
+      if (replyToMessageId) updates.reply_to_message_id = replyToMessageId;
+
+      const { error: stampErr } = await supabase
+        .from("chat_messages")
+        .update(updates)
+        .eq("id", rpcResult.message_id);
+      if (stampErr) {
+        console.warn("[send-chat-message] failed to stamp authorship metadata:", stampErr);
+      }
+    }
+
+    // 12. Waiting → open for outbound + auto-assign to operator if unassigned
     {
       const needsStatusUpdate = conv.status === "waiting";
       const needsAssign = !conv.assigned_to;
 
       if (needsStatusUpdate || needsAssign) {
-        let assignedToId: string | null = null;
-        if (needsAssign) {
-          const { data: senderProfile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("user_id", userId)
-            .maybeSingle();
-          assignedToId = senderProfile?.id || null;
-        }
-
         const updates: Record<string, unknown> = {};
         if (needsStatusUpdate) updates.status = "open";
-        if (assignedToId) updates.assigned_to = assignedToId;
+        if (needsAssign && senderProfileId) updates.assigned_to = senderProfileId;
 
         if (Object.keys(updates).length > 0) {
           await supabase.from("conversations").update(updates).eq("id", conversationId);
