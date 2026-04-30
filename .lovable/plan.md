@@ -1,59 +1,66 @@
-## Diagnóstico
+## Análise: Por que a reabertura está lenta
 
-Os scores de campanhas atualizam de forma inconsistente porque hoje há **dois caminhos diferentes** mantendo a coluna `campaign_participants.score`:
+Não é o computador do operador — é a forma como o frontend executa a operação. Hoje, quando o operador clica em **"Reabrir parcela(s)"** ou **"Reabrir acordo"**, a interface só libera o botão depois de uma cadeia de chamadas sequenciais ao servidor que ele nem precisa esperar.
 
-1. **No mount da página** (`recalculate_my_full`, RPC `recalculate_operator_full`): atualiza scores **somente do operador logado**, nas campanhas em que ele participa. Usuário A não vê scores recentes do usuário B.
-2. **Cron `gamification-recalc-tick`**: roda **a cada 30 minutos** (`*/30 * * * *`) e recalcula todos os operadores. É a única fonte que mantém o ranking inter-operador atualizado.
+### Gargalos identificados
 
-A `CampaignsTab` lê apenas a coluna persistida (`fetchCampaignParticipants` foi otimizado para isso), e Realtime invalida a query somente quando a tabela muda. Resultado prático:
+**1. Reabrir parcelas (`ClientDetailPage.handleReopenParcelas`)**
 
-- Logo após uma janela do cron (a cada 30 min): aparece atualizado.
-- Entre janelas: aparece desatualizado, mesmo que tenham entrado pagamentos/acordos novos.
-- Quando o operador atual abre a página: ele vê **o próprio score** atualizado (RPC do mount), mas os colegas continuam congelados até o próximo tick.
+Hoje o fluxo é estritamente sequencial e bloqueante:
 
-Isso é exatamente "às vezes atualiza, às vezes não".
+```text
+para cada parcela selecionada:
+  await supabase.update(clients)        ← 1 round-trip por parcela
+await recalcScoreForCpf(cpf)             ← invoca edge function (calculate-propensity)
+await supabase.functions.invoke("auto-status-sync")  ← edge function pesada
+await logAction(...)
+await refetch()
+```
 
-Há também um warning React no console (`Function components cannot be given refs ... CampaignCountdown`). É efeito colateral de HMR após eu reescrever o componente — mas como `CampaignCard` ainda passa props/forwardRef pelo DOM e o Vite às vezes serve uma versão stale, vale garantir que `CampaignCountdown` aceite ref formalmente para silenciar o aviso. Não causa o bug de atualização, mas elimino junto.
+- Se o operador seleciona 10 parcelas, são **10 UPDATEs em série** (cada um ~150–400ms = 1,5–4s só aí).
+- Em seguida, **duas edge functions** (`calculate-propensity` e `auto-status-sync`) rodam **dentro do `await`** — o botão fica em "Reabrindo..." até elas terminarem (cold start + execução = facilmente 2–6s extras).
+- Total: **5–10 segundos** com a UI travada, dependendo da quantidade.
 
-## Correção
+**2. Reabrir acordo (`agreementService.reopenAgreement`)**
 
-### 1. Recalcular a campanha inteira (todos os operadores) no mount, em background
+O service em si é razoável (UPDATE + UPDATE em massa + insert no timeline) e o `generate-agreement-boletos` já é fire-and-forget. Mas em `ClientDetailPage.handleReopenAgreement` o `await reopenAgreement(...)` é seguido de `await refetch()` e re-renderizações pesadas da página de detalhes. Não há feedback imediato — o usuário só vê o resultado quando tudo termina.
 
-Usar a RPC já existente `recalculate_campaign_scores(_campaign_id uuid)` (definida em `20260429192000_*.sql`) para cada campanha **ativa** assim que `CampaignsTab` ou `CampaignsManagementTab` montar — uma única vez por mount, em paralelo, e fora do caminho crítico de render. Ao terminar, invalidar `campaign-participants` para refletir.
+**3. Edge function `auto-status-sync`**
 
-Diferença em relação à versão antiga (que foi removida na otimização):
-- A versão antiga rodava em `forEach` síncrono dentro do render, multiplicando latência.
-- A nova roda dentro de `requestIdleCallback` + `Promise.allSettled`, sem bloquear o "first useful pixel" e sem encadear roundtrips.
-- Limita-se a campanhas **ativas** (já filtradas pelo helper `isCampaignActive`), evitando trabalho desnecessário em encerradas.
+Roda recálculo de status de TODOS os clientes do tenant. Chamá-la com `await` no clique do operador é desnecessário: ela existe justamente para sincronizar em background.
 
-### 2. Throttle / dedupe entre tabs e remontes
+## O que vou mudar
 
-Para não disparar o recálculo se o usuário entra/sai do tab Gamificação repetidamente, manter um cache em memória `lastRecalcAt: Map<campaignId, ms>` com TTL de 60s. Se foi recalculada há menos de 60s nesta sessão, pula. Mantém custo controlado.
+### 1. Paralelizar updates das parcelas
+Trocar o `for ... await` por `Promise.all` dos UPDATEs (ou um único UPDATE com `.in("id", ids)` separado por status). Reduz de N round-trips sequenciais para 1–2 chamadas em paralelo.
 
-### 3. Realtime já existente cobre a propagação
+### 2. Tornar pós-processamento fire-and-forget
+- `recalcScoreForCpf` → sem `await` (já é resiliente, falha silenciosa).
+- `auto-status-sync` → sem `await` (é sincronização global, não é pré-requisito para o sucesso da operação).
+- `logAction` → sem `await`.
+- Fechar o dialog e mostrar `toast.success` **imediatamente** após os UPDATEs principais.
 
-A subscription em `CampaignsTab` já invalida `campaign-participants` quando `campaign_participants` muda — ou seja, assim que a RPC do passo 1 atualiza as linhas, todos os cards re-renderizam automaticamente com os novos números, **sem nenhum polling adicional**.
+### 3. Otimistic update no React Query
+Antes do `refetch`, atualizar o cache local do `["client-detail", cpf, credorFilter]` marcando as parcelas como `pendente`/`vencido` localmente. O operador vê a mudança instantaneamente; o `refetch` continua rodando em background para garantir consistência.
 
-### 4. Silenciar o warning de ref
+### 4. Reabertura de acordo com feedback imediato
+- Mostrar `toast.success` assim que o UPDATE do `agreements` retorna (não esperar o UPDATE em massa de `clients` nem o insert no timeline — esses já têm try/catch, podem ir em paralelo).
+- `refetch` em background (sem `await` bloqueando o toast).
 
-Tornar `CampaignCountdown` um `forwardRef<HTMLDivElement, Props>` (envolvendo a div externa). Trivial e elimina a mensagem do console.
-
-## Arquivos alterados
-
-- `src/services/campaignService.ts`: nada estrutural — apenas garantir que `recalculateCampaignScores` está exportada (já está) e adicionar comentário sobre o uso correto.
-- `src/components/gamificacao/CampaignsTab.tsx`: novo `useEffect` que, quando `active` muda, dispara `recalculateCampaignScores` para cada campanha ativa via `requestIdleCallback` com dedupe de 60s; ao final, `queryClient.invalidateQueries({ queryKey: ["campaign-participants"] })`.
-- `src/components/gamificacao/CampaignsManagementTab.tsx`: mesmo efeito (mesmo helper, importado de um util compartilhado para evitar duplicação).
-- Novo `src/components/gamificacao/useRefreshActiveCampaignScores.ts`: encapsula o dedupe + idle dispatch, importado pelas duas tabs.
-- `src/components/gamificacao/CampaignCountdown.tsx`: converter para `forwardRef` (resolve warning de console).
-
-## Não alterar
-
-- O cron `gamification-recalc-tick` (continua sendo a rede de segurança a cada 30 min para usuários offline).
-- A leitura direta de `campaign_participants.score` no `fetchCampaignParticipants` (mantém a otimização anterior).
-- Qualquer lógica de cálculo de score (continua 100% server-side via RPC).
+### 5. Telemetria leve
+Adicionar `console.time/timeEnd` em `handleReopenParcelas` e `handleReopenAgreement` para que a gente consiga medir o impacto em produção via console se voltar a reclamação.
 
 ## Resultado esperado
 
-- Ao abrir Gamificação → aba Campanhas: scores são recalculados em background no servidor para todas as campanhas ativas. O Realtime injeta os valores novos nos cards em ~1–2s.
-- Sem regressão de performance: o trabalho roda em idle, paralelo e com dedupe de 60s.
-- Warning React de ref no console desaparece.
+- **Reabrir 1 parcela**: de ~3–5s → ~400–800ms percebidos.
+- **Reabrir 10 parcelas**: de ~8–12s → ~1–2s percebidos.
+- **Reabrir acordo**: de ~3–6s → ~600ms–1,2s percebidos.
+
+A consistência final continua garantida — `auto-status-sync`, recálculo de score e refetch continuam executando, só não bloqueiam mais a UI.
+
+## Arquivos a alterar
+
+- `src/pages/ClientDetailPage.tsx` — refatorar `handleReopenParcelas` (paralelizar + fire-and-forget + otimistic update) e `handleReopenAgreement` (refetch em background).
+- (Opcional) `src/services/agreementService.ts` — pequenos ajustes para que `reopenAgreement` retorne assim que o UPDATE principal sai, deixando o resto em background com tratamento de erro silencioso.
+
+Sem mudanças de schema, RLS ou edge functions.
