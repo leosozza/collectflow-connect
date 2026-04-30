@@ -902,6 +902,8 @@ const WhatsAppChatLayout = () => {
             conversation={selectedConv}
             messages={messages}
             onClientLinked={() => refetchConversations()}
+            onDispositionAssignmentsChanged={handleDispositionAssignmentsChanged}
+            onDebtorProfileChanged={handleDebtorProfileChanged}
           />
         )}
       </div>
