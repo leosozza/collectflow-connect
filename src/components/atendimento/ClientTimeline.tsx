@@ -134,6 +134,8 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   agreement_broken: "Acordo Quebrado",
   note: "Observação",
   phone_promoted_hot: "Número Quente Definido",
+  previous_agreement_credit_applied: "Crédito de Acordo Anterior Aplicado",
+  credit_overflow: "Crédito Excedente (revisar manualmente)",
 };
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
