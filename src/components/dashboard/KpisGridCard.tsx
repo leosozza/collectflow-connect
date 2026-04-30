@@ -29,10 +29,14 @@ interface TileProps {
   iconColor: string;
   iconBg: string;
   trend?: TrendData | null;
+  info?: string;
 }
 
-const Tile = ({ label, value, Icon, iconColor, iconBg, trend }: TileProps) => (
-  <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_2px_8px_-2px_rgb(0_0_0_/_0.08)] transition-shadow px-3 py-2.5 flex flex-col justify-between min-w-0 h-full overflow-hidden">
+const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps) => (
+  <div
+    title={info}
+    className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_2px_8px_-2px_rgb(0_0_0_/_0.08)] transition-shadow px-3 py-2.5 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help"
+  >
     <div className="min-w-0">
       <div className={cn("rounded-lg p-1.5 inline-flex shrink-0 mb-1.5", iconBg)}>
         <Icon className={cn("w-3.5 h-3.5", iconColor)} strokeWidth={2.25} />
@@ -88,6 +92,7 @@ const KpisGridCard = ({
         iconColor="text-blue-500"
         iconBg="bg-blue-500/10"
         trend={trendAcionados ? { ...trendAcionados, text: "vs ontem" } : null}
+        info="CPFs únicos com interação registrada hoje (carteira ou atendimento) que ainda NÃO fecharam acordo."
       />
       <Tile
         label="Acordos do Dia"
@@ -96,6 +101,7 @@ const KpisGridCard = ({
         iconColor="text-emerald-500"
         iconBg="bg-emerald-500/10"
         trend={trendAcordosDia ? { ...trendAcordosDia, text: "vs ontem" } : null}
+        info="Acordos criados hoje, excluindo cancelados e rejeitados."
       />
       <Tile
         label="Acordos do Mês"
@@ -104,6 +110,7 @@ const KpisGridCard = ({
         iconColor="text-blue-500"
         iconBg="bg-blue-500/10"
         trend={trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : null}
+        info="Acordos criados no mês selecionado, excluindo cancelados e rejeitados."
       />
       <Tile
         label="Total de Quebra"
@@ -112,6 +119,7 @@ const KpisGridCard = ({
         iconColor="text-red-500"
         iconBg="bg-red-500/10"
         trend={trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : null}
+        info="Parcelas do mês não pagas que (a) pertencem a acordos cancelados (auto/manual) ou (b) estão atrasadas há mais de 10 dias. Pagamentos confirmados (manual, portal, Negociarie) saem do cálculo."
       />
       <Tile
         label="Pendentes"
@@ -120,6 +128,7 @@ const KpisGridCard = ({
         iconColor="text-amber-500"
         iconBg="bg-amber-500/10"
         trend={trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : null}
+        info="Parcelas do mês ainda não pagas, com vencimento futuro ou atrasado em até 3 dias. Após 3 dias de atraso a parcela sai de Pendentes (e após 10 dias entra em Quebra)."
       />
       <Tile
         label="Colchão de Acordos"
@@ -127,6 +136,7 @@ const KpisGridCard = ({
         Icon={Wallet}
         iconColor="text-indigo-500"
         iconBg="bg-indigo-500/10"
+        info="Soma das parcelas com vencimento no mês originadas de acordos vivos criados em meses anteriores (entrada + parcelas mensais)."
       />
     </div>
   );
