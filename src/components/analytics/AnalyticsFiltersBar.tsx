@@ -45,14 +45,25 @@ export const AnalyticsFiltersBar = (p: Props) => {
   const { data: credorOpts = [] } = useQuery({
     queryKey: ["analytics-credor-opts", p.tenantId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("clients")
-        .select("credor")
-        .eq("tenant_id", p.tenantId!)
-        .not("credor", "is", null)
-        .limit(1000);
-      const set = new Set<string>((data || []).map((r: any) => r.credor).filter(Boolean));
-      return Array.from(set).sort().map((c) => ({ value: c, label: c }));
+      // RPC server-side: retorna DISTINCT credor sem o limite de 1000 do PostgREST.
+      const { data, error } = await supabase.rpc("get_distinct_credores", {
+        _tenant_id: p.tenantId!,
+      });
+      if (error) {
+        // Fallback defensivo: mantém o comportamento antigo se a RPC falhar.
+        const { data: rows } = await supabase
+          .from("clients")
+          .select("credor")
+          .eq("tenant_id", p.tenantId!)
+          .not("credor", "is", null)
+          .limit(1000);
+          const set = new Set<string>((rows || []).map((r: any) => r.credor).filter(Boolean));
+          return Array.from(set).sort().map((c) => ({ value: c, label: c }));
+      }
+      return (data || [])
+        .map((r: any) => r.credor)
+        .filter(Boolean)
+        .map((c: string) => ({ value: c, label: c }));
     },
     enabled: !!p.tenantId,
   });
