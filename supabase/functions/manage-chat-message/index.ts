@@ -60,12 +60,12 @@ Deno.serve(async (req) => {
       .eq("id", messageId)
       .maybeSingle();
     if (msgErr || !msg) return json({ error: "Mensagem não encontrada" }, 404);
-    if (msg.direction !== "outbound") return json({ error: "Somente mensagens enviadas podem ser editadas/excluídas" }, 400);
-    if (msg.status === "failed") return json({ error: "Mensagens com falha não podem ser editadas/excluídas" }, 400);
-    if (msg.deleted_for_recipient_at) return json({ error: "Mensagem já foi excluída para o destinatário" }, 400);
+    if (msg.direction !== "outbound") return json({ error: "Somente mensagens enviadas pelo operador podem ser editadas ou apagadas." }, 400);
+    if (msg.status === "failed") return json({ error: "Mensagens que falharam no envio não podem ser editadas ou apagadas." }, 400);
+    if (msg.deleted_for_recipient_at) return json({ error: "Esta mensagem já foi apagada para o destinatário." }, 400);
 
     const providerMessageId = msg.provider_message_id || msg.external_id;
-    if (!providerMessageId) return json({ error: "Mensagem sem ID do provider — não é possível operar" }, 400);
+    if (!providerMessageId) return json({ error: "Não foi possível localizar esta mensagem no WhatsApp para editar ou apagar." }, 400);
 
     // Authorization: tenant admin OR original sender
     const { data: tenantUser } = await admin
@@ -87,22 +87,37 @@ Deno.serve(async (req) => {
     const meta = (msg.metadata || {}) as Record<string, any>;
     const sentByUserId = meta.sent_by_user_id;
     const sentByProfileId = meta.sent_by_profile_id;
-    const isAuthor =
+    const hasAuthorshipMeta = !!sentByUserId || !!sentByProfileId;
+    let isAuthor =
       (sentByUserId && sentByUserId === userId) ||
       (sentByProfileId && profile?.id && sentByProfileId === profile.id);
 
-    if (!isAdmin && !isAuthor) {
-      return json({ error: "Você só pode editar/excluir suas próprias mensagens" }, 403);
+    // Legacy fallback: messages sent before authorship metadata existed.
+    // If metadata has no authorship, allow when the conversation is currently
+    // assigned to this operator (best-effort approximation for legacy rows).
+    if (!isAuthor && !isAdmin && !hasAuthorshipMeta && profile?.id) {
+      const { data: convForAuth } = await admin
+        .from("conversations")
+        .select("assigned_to")
+        .eq("id", msg.conversation_id)
+        .maybeSingle();
+      if (convForAuth?.assigned_to && convForAuth.assigned_to === profile.id) {
+        isAuthor = true;
+      }
     }
 
-    // Edit-only: enforce 15 min limit and text-only
+    if (!isAdmin && !isAuthor) {
+      return json({ error: "Você só pode editar ou apagar mensagens que você mesmo enviou." }, 403);
+    }
+
+    // Edit-only: enforce 15 min limit and text-only (WhatsApp-imposed limits)
     if (action === "edit") {
       if (msg.message_type !== "text") {
-        return json({ error: "Somente mensagens de texto podem ser editadas" }, 400);
+        return json({ error: "O WhatsApp permite editar apenas mensagens de texto." }, 400);
       }
       const ageMs = Date.now() - new Date(msg.created_at).getTime();
       if (ageMs > 15 * 60 * 1000) {
-        return json({ error: "Edição permitida apenas nos primeiros 15 minutos" }, 400);
+        return json({ error: "O WhatsApp não permite editar mensagens enviadas há mais de 15 minutos." }, 400);
       }
     }
 
