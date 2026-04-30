@@ -32,7 +32,7 @@ const EM_DIA_KEYS = ["em_dia", "wa_em_dia"];
 const EM_DIA_BLOCKED_TITLE =
   "Cliente possui acordo no Rivo — esta tabulação é apenas para clientes em dia com pagamentos originais";
 
-const DispositionSelector = ({ conversationId, tenantId, clientCpf }: DispositionSelectorProps) => {
+const DispositionSelector = ({ conversationId, tenantId, clientCpf, onAssignmentsChanged }: DispositionSelectorProps) => {
   const { data: hasAgreement = false } = useHasRivoAgreement(clientCpf, tenantId);
   const { profile } = useAuth();
   const [dispositions, setDispositions] = useState<DispositionType[]>([]);
