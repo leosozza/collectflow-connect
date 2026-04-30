@@ -7665,88 +7665,47 @@ export type Database = {
         }
         Returns: boolean
       }
-      ingest_channel_event:
-        | {
-            Args: {
-              _actor_type?: string
-              _channel_type?: string
-              _content?: string
-              _direction?: string
-              _endpoint_id: string
-              _external_id?: string
-              _media_mime_type?: string
-              _media_url?: string
-              _message_type?: string
-              _provider?: string
-              _provider_message_id?: string
-              _remote_name?: string
-              _remote_phone?: string
-              _status?: string
-              _tenant_id: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              _actor_type?: string
-              _channel_type?: string
-              _content?: string
-              _direction?: string
-              _endpoint_id: string
-              _external_id?: string
-              _media_mime_type?: string
-              _media_url?: string
-              _message_type?: string
-              _provider?: string
-              _provider_message_id?: string
-              _remote_name?: string
-              _remote_phone?: string
-              _reply_to_external_id?: string
-              _status?: string
-              _tenant_id: string
-            }
-            Returns: Json
-          }
-      ingest_channel_event_v2:
-        | {
-            Args: {
-              _actor_type?: string
-              _channel_type?: string
-              _content?: string
-              _direction?: string
-              _external_id?: string
-              _instance_name?: string
-              _media_mime_type?: string
-              _media_url?: string
-              _message_type?: string
-              _provider?: string
-              _provider_message_id?: string
-              _remote_name?: string
-              _remote_phone?: string
-              _status?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              _actor_type?: string
-              _channel_type?: string
-              _content?: string
-              _direction?: string
-              _external_id?: string
-              _instance_name?: string
-              _media_mime_type?: string
-              _media_url?: string
-              _message_type?: string
-              _provider?: string
-              _provider_message_id?: string
-              _remote_name?: string
-              _remote_phone?: string
-              _reply_to_external_id?: string
-              _status?: string
-            }
-            Returns: Json
-          }
+      ingest_channel_event: {
+        Args: {
+          _actor_type?: string
+          _channel_type?: string
+          _content?: string
+          _direction?: string
+          _endpoint_id: string
+          _external_id?: string
+          _media_mime_type?: string
+          _media_url?: string
+          _message_type?: string
+          _provider?: string
+          _provider_message_id?: string
+          _remote_name?: string
+          _remote_phone?: string
+          _reply_to_external_id?: string
+          _status?: string
+          _tenant_id: string
+        }
+        Returns: Json
+      }
+      ingest_channel_event_v2: {
+        Args: {
+          _actor_type?: string
+          _channel_type?: string
+          _content?: string
+          _direction?: string
+          _external_id?: string
+          _instance_name?: string
+          _media_mime_type?: string
+          _media_url?: string
+          _message_type?: string
+          _provider?: string
+          _provider_message_id?: string
+          _remote_name?: string
+          _remote_phone?: string
+          _reply_to_external_id?: string
+          _status?: string
+        }
+        Returns: Json
+      }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       is_tenant_admin: {
         Args: { _tenant_id: string; _user_id: string }
