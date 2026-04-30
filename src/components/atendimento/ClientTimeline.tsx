@@ -90,6 +90,8 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   document_generated:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
   conversation_auto_closed: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
   conversation_transferred: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  previous_agreement_credit_applied: { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  credit_overflow:          { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
 };
 
 const toTitleCase = (s: string) =>
