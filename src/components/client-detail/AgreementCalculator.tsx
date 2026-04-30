@@ -789,6 +789,7 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         </Alert>
       )}
 
+      {draftRestoreOpen && draft && !draftDismissed && (
         <Alert className="border-primary/40 bg-primary/5">
           <RotateCcw className="w-4 h-4" />
           <AlertDescription className="flex items-center justify-between gap-3 w-full">
