@@ -8,6 +8,37 @@ import { EmptyBlock } from "../EmptyBlock";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
 import { format, parseISO } from "date-fns";
 
+const SCORE_EMPTY = "Score ainda não calculado para este período.";
+
+const ScoreBadge = ({ value }: { value: number | null | undefined }) => {
+  if (value === null || value === undefined) return <span className="text-muted-foreground">—</span>;
+  const n = Number(value);
+  let cls = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400";
+  if (n >= 71) cls = "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400";
+  else if (n >= 41) cls = "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400";
+  return (
+    <span className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${cls}`}>
+      {n}
+    </span>
+  );
+};
+
+const BucketBadge = ({ bucket }: { bucket: string }) => {
+  const m = String(bucket || "").match(/(\d+)/);
+  const n = m ? Number(m[1]) : null;
+  let cls = "bg-muted text-foreground";
+  if (n !== null) {
+    if (n >= 71) cls = "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400";
+    else if (n >= 41) cls = "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400";
+    else cls = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400";
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>
+      {bucket || "—"}
+    </span>
+  );
+};
+
 export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
   const dist = useQuery({
     queryKey: ["bi-score-dist", params],
@@ -43,7 +74,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
         {dist.isLoading ? (
           <Skeleton className="h-[260px] w-full" />
         ) : (dist.data || []).length === 0 ? (
-          <EmptyBlock />
+          <EmptyBlock message={SCORE_EMPTY} />
         ) : (
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={dist.data || []}>
@@ -65,7 +96,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
         {vsResult.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
         ) : (vsResult.data || []).length === 0 ? (
-          <EmptyBlock />
+          <EmptyBlock message={SCORE_EMPTY} />
         ) : (
           <Table>
             <TableHeader>
@@ -82,7 +113,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
             <TableBody>
               {(vsResult.data || []).map((r: any, i: number) => (
                 <TableRow key={i}>
-                  <TableCell className="text-xs font-medium">{r.bucket}</TableCell>
+                  <TableCell className="text-xs font-medium"><BucketBadge bucket={r.bucket} /></TableCell>
                   <TableCell className="text-xs text-center">{r.qtd_clientes}</TableCell>
                   <TableCell className="text-xs text-center">{r.qtd_com_acordo}</TableCell>
                   <TableCell className="text-xs text-right">{Number(r.taxa_acordo || 0).toFixed(2)}%</TableCell>
@@ -101,7 +132,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
         {top.isLoading ? (
           <Skeleton className="h-[260px] w-full" />
         ) : (top.data || []).length === 0 ? (
-          <EmptyBlock />
+          <EmptyBlock message={SCORE_EMPTY} />
         ) : (
           <Table>
             <TableHeader>
@@ -120,7 +151,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
                   <TableCell className="text-xs tabular-nums">{r.cpf}</TableCell>
                   <TableCell className="text-xs font-medium max-w-[200px] truncate">{r.nome}</TableCell>
                   <TableCell className="text-xs max-w-[200px] truncate">{r.credor}</TableCell>
-                  <TableCell className="text-xs text-center font-bold text-primary">{r.propensity_score}</TableCell>
+                  <TableCell className="text-xs text-center"><ScoreBadge value={r.propensity_score} /></TableCell>
                   <TableCell className="text-xs text-right text-destructive">{formatCurrency(Number(r.valor_atualizado || 0))}</TableCell>
                   <TableCell className="text-xs text-right text-muted-foreground">
                     {r.ultimo_contato ? format(parseISO(r.ultimo_contato), "dd/MM/yyyy") : "—"}

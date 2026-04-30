@@ -76,11 +76,11 @@ const AnalyticsPage = () => {
       <Tabs value={f.tab} onValueChange={f.setTab}>
         <TabsList className="flex flex-wrap h-auto gap-1">
           <TabsTrigger value="receita" className="gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Receita</TabsTrigger>
-          <TabsTrigger value="funil" className="gap-1.5"><Filter className="w-3.5 h-3.5" /> Funil</TabsTrigger>
-          <TabsTrigger value="performance" className="gap-1.5"><Users className="w-3.5 h-3.5" /> Performance</TabsTrigger>
+          <TabsTrigger value="funil" className="gap-1.5"><Filter className="w-3.5 h-3.5" /> Funil de Cobrança</TabsTrigger>
+          <TabsTrigger value="performance" className="gap-1.5"><Users className="w-3.5 h-3.5" /> Operadores</TabsTrigger>
           <TabsTrigger value="canais" className="gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Canais</TabsTrigger>
-          <TabsTrigger value="qualidade" className="gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> Qualidade</TabsTrigger>
-          <TabsTrigger value="inteligencia" className="gap-1.5"><Brain className="w-3.5 h-3.5" /> Inteligência</TabsTrigger>
+          <TabsTrigger value="qualidade" className="gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> Quebras & Risco</TabsTrigger>
+          <TabsTrigger value="inteligencia" className="gap-1.5"><Brain className="w-3.5 h-3.5" /> Score & Propensão</TabsTrigger>
         </TabsList>
 
         <TabsContent value="receita" className="mt-4">

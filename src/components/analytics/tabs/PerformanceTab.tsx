@@ -40,6 +40,25 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
     ? (eff.data || []).reduce((s: number, r: any) => s + Number(r.acordos_por_hora || 0), 0) / (eff.data || []).length
     : 0;
 
+  // Merge perf + eff per operator_id, preserving perf order; append eff-only at end.
+  const effList = eff.data || [];
+  const perfList = perf.data || [];
+  const seen = new Set<string>();
+  const merged: any[] = [];
+  for (const p of perfList) {
+    const e = effList.find((x: any) => x.operator_id === p.operator_id) || {};
+    merged.push({ ...e, ...p, ...{ talk_time_seconds: e.talk_time_seconds, conv_rate: e.conv_rate, qtd_chamadas: e.qtd_chamadas } });
+    if (p.operator_id) seen.add(p.operator_id);
+  }
+  for (const e of effList) {
+    if (e.operator_id && !seen.has(e.operator_id)) {
+      merged.push({ ...e, qtd_acordos: 0, total_recebido: 0, qtd_calls: e.qtd_chamadas, taxa_quebra: 0 });
+    }
+  }
+
+  const isLoading = perf.isLoading || eff.isLoading;
+  const hasNoTelephony = !isLoading && totalTalk === 0 && (effList.length === 0 || effList.every((r: any) => Number(r.qtd_chamadas || 0) === 0));
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -56,71 +75,49 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
         <h3 className="text-sm font-semibold text-card-foreground mb-3">Ranking de Operadores</h3>
-        {perf.isLoading ? (
-          <Skeleton className="h-[200px] w-full" />
-        ) : (perf.data || []).length === 0 ? (
-          <EmptyBlock />
+        {isLoading ? (
+          <Skeleton className="h-[240px] w-full" />
+        ) : merged.length === 0 ? (
+          <EmptyBlock message="Sem dados de chamadas no período. Verifique a integração 3CPlus." />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="text-xs w-10">#</TableHead>
-                <TableHead className="text-xs">Operador</TableHead>
-                <TableHead className="text-xs text-center">Acordos</TableHead>
-                <TableHead className="text-xs text-right">Recebido</TableHead>
-                <TableHead className="text-xs text-center">Chamadas</TableHead>
-                <TableHead className="text-xs text-right">Taxa CPC</TableHead>
-                <TableHead className="text-xs text-right">Taxa Quebra</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(perf.data || []).map((r: any, i: number) => (
-                <TableRow key={r.operator_id || i}>
-                  <TableCell className="text-xs font-bold text-primary">{i + 1}</TableCell>
-                  <TableCell className="text-xs font-medium">{r.operator_name || "Sem nome"}</TableCell>
-                  <TableCell className="text-xs text-center">{r.qtd_acordos}</TableCell>
-                  <TableCell className="text-xs text-right text-success">{formatCurrency(Number(r.total_recebido || 0))}</TableCell>
-                  <TableCell className="text-xs text-center">{r.qtd_calls}</TableCell>
-                  <TableCell className="text-xs text-right">{Number(r.taxa_cpc || 0).toFixed(2)}%</TableCell>
-                  <TableCell className="text-xs text-right text-destructive">{Number(r.taxa_quebra || 0).toFixed(2)}%</TableCell>
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="text-xs w-10">#</TableHead>
+                  <TableHead className="text-xs">Operador</TableHead>
+                  <TableHead className="text-xs text-center">Acordos</TableHead>
+                  <TableHead className="text-xs text-right">Recebido</TableHead>
+                  <TableHead className="text-xs text-center">Chamadas</TableHead>
+                  <TableHead className="text-xs text-right">Taxa de Conversão</TableHead>
+                  <TableHead className="text-xs text-right">Tempo Falado</TableHead>
+                  <TableHead className="text-xs text-right">Taxa de Quebra</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
-
-      <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Eficiência Operacional</h3>
-        {eff.isLoading ? (
-          <Skeleton className="h-[200px] w-full" />
-        ) : (eff.data || []).length === 0 ? (
-          <EmptyBlock />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="text-xs">Operador</TableHead>
-                <TableHead className="text-xs text-center">Chamadas</TableHead>
-                <TableHead className="text-xs text-center">Conversões</TableHead>
-                <TableHead className="text-xs text-right">Conv. Rate</TableHead>
-                <TableHead className="text-xs text-right">Talk Time</TableHead>
-                <TableHead className="text-xs text-right">Acordos/h</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(eff.data || []).map((r: any, i: number) => (
-                <TableRow key={r.operator_id || i}>
-                  <TableCell className="text-xs font-medium">{r.operator_name || "Sem nome"}</TableCell>
-                  <TableCell className="text-xs text-center">{r.qtd_chamadas}</TableCell>
-                  <TableCell className="text-xs text-center">{r.qtd_conversoes}</TableCell>
-                  <TableCell className="text-xs text-right">{Number(r.conv_rate || 0).toFixed(2)}%</TableCell>
-                  <TableCell className="text-xs text-right tabular-nums">{formatHHMMSS(Number(r.talk_time_seconds || 0))}</TableCell>
-                  <TableCell className="text-xs text-right">{Number(r.acordos_por_hora || 0).toFixed(2)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {merged.map((r: any, i: number) => {
+                  const chamadas = r.qtd_chamadas ?? r.qtd_calls ?? 0;
+                  return (
+                    <TableRow key={r.operator_id || i}>
+                      <TableCell className="text-xs font-bold text-primary">{i + 1}</TableCell>
+                      <TableCell className="text-xs font-medium">{r.operator_name || "Sem nome"}</TableCell>
+                      <TableCell className="text-xs text-center">{r.qtd_acordos || 0}</TableCell>
+                      <TableCell className="text-xs text-right text-success">{formatCurrency(Number(r.total_recebido || 0))}</TableCell>
+                      <TableCell className="text-xs text-center">{chamadas}</TableCell>
+                      <TableCell className="text-xs text-right">{Number(r.conv_rate || 0).toFixed(2)}%</TableCell>
+                      <TableCell className="text-xs text-right tabular-nums">{formatHHMMSS(Number(r.talk_time_seconds || 0))}</TableCell>
+                      <TableCell className="text-xs text-right text-destructive">{Number(r.taxa_quebra || 0).toFixed(2)}%</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            {hasNoTelephony && (
+              <p className="mt-3 text-[11px] text-muted-foreground italic">
+                Sem dados de chamadas no período. Verifique a integração 3CPlus.
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
