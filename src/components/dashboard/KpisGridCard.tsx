@@ -119,7 +119,7 @@ const KpisGridCard = ({
         iconColor="text-red-500"
         iconBg="bg-red-500/10"
         trend={trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : null}
-        info="Parcelas do mês não pagas que (a) pertencem a acordos cancelados (auto/manual) ou (b) estão atrasadas há mais de 10 dias. Pagamentos confirmados (manual, portal, Negociarie) saem do cálculo."
+        info="Parcelas do mês não pagas, em 2 estágios. PROVISÓRIA (4-10 dias de atraso): pode voltar para Pendentes se a data for reagendada, ou para Recebido se for paga. DEFINITIVA (acordo cancelado pelo prazo do cadastro ou atraso > 10 dias): trava como prejuízo e os boletos pendentes são cancelados na Negociarie automaticamente."
       />
       <Tile
         label="Pendentes"
