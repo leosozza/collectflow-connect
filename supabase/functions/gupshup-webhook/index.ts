@@ -87,6 +87,17 @@ Deno.serve(async (req) => {
       const externalId = msgPayload.id || payload.messageId || payload.payload?.id || "";
       const destination = msgPayload.destination || payload.destination || "";
 
+      // Reply / quoted reference (Gupshup may expose context.id or context.gsId)
+      const replyToExternalId: string | null =
+        msgPayload.context?.id ||
+        msgPayload.context?.gsId ||
+        msgPayload.payload?.context?.id ||
+        payload.context?.id ||
+        null;
+      if (replyToExternalId) {
+        console.log(`[provider=gupshup] Reply detected, context.id=${replyToExternalId}`);
+      }
+
       // Map Gupshup types to canonical
       const rawType = msgType === "file" ? "document" : msgType;
       const canonicalType = ["text", "image", "audio", "video", "document"].includes(rawType) ? rawType : "text";
@@ -223,6 +234,7 @@ Deno.serve(async (req) => {
             _provider_message_id: externalId || null,
             _actor_type: "human",
             _status: "delivered",
+            _reply_to_external_id: replyToExternalId,
           });
 
           if (rpcErr) {

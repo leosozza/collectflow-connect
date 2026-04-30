@@ -1,95 +1,84 @@
-## Contexto da análise
+## Problema
 
-### Como o `debtor_profile` é alimentado hoje
-- **Único ponto de escrita**: `DebtorProfileBadge` (`src/components/shared/DebtorProfileBadge.tsx`) — alteração 100% manual pelo operador.
-- **Tabulação WhatsApp** (`DispositionSelector.tsx`): grava em `conversation_disposition_assignments`. **Não toca em `clients.debtor_profile`**.
-- **Tabulação Discador** (`DispositionPanel.tsx` → `dispositionService.createDisposition`): grava em `call_dispositions`. **Não toca em `clients.debtor_profile`**.
+Quando o cliente seleciona uma mensagem nossa no WhatsApp e responde citando-a, o RIVO recebe a mensagem mas **não exibe** que é uma resposta a uma mensagem específica. No envio (operador → cliente) o reply já funciona — o gargalo está na **ingestão de mensagens inbound**.
 
-**Conclusão da análise solicitada**: nem o WhatsApp nem o discador estão alimentando o perfil do devedor. Hoje "Aguardando definição de perfil" só sai do estado se o operador clicar manualmente no badge. Isso explica por que muitos clientes ficam eternamente sem perfil.
+## Diagnóstico
 
-### Como o envio de mensagem funciona hoje
-- `WhatsAppChatLayout.handleSend` envia direto sem qualquer validação de perfil/tabulação.
-- `ChatInput` recebe um `disabled`, mas só é desligado por status de conversa — não há gate por perfil/tabulação.
+1. A coluna `chat_messages.reply_to_message_id` existe e a UI (`ChatMessage.tsx`) já renderiza o bloco de citação quando ela está preenchida.
+2. O webhook **`whatsapp-webhook`** (Evolution/Baileys) faz parsing de `msg.conversation`, `extendedTextMessage`, etc., **mas ignora completamente o `contextInfo`** que o WhatsApp envia junto da mensagem citada.
+3. O webhook **`gupshup-webhook`** também não lê o `context.id` que o Gupshup envia em mensagens citadas.
+4. A RPC `ingest_channel_event` (e o wrapper v2) não aceita parâmetro de reply, então mesmo que o webhook tivesse o ID, ele não seria persistido.
 
----
+Resultado: toda resposta citada do cliente perde a referência → aparece como mensagem solta.
 
-## O que será implementado
+## O que entrega o WhatsApp / Evolution
 
-### 1. Auto-população do `debtor_profile` a partir de tabulações
-Mapear cada tabulação para um perfil sugerido e, ao registrar a tabulação (WhatsApp **ou** discador), atualizar `clients.debtor_profile` **somente se ainda estiver vazio** (não sobrescreve perfil já definido manualmente).
+```
+msg.extendedTextMessage.contextInfo = {
+  stanzaId: "<external_id da mensagem original>",
+  participant: "<jid>",
+  quotedMessage: { ... }
+}
+```
+O mesmo `contextInfo` aparece em `imageMessage`, `audioMessage`, `videoMessage`, `documentMessage` e `stickerMessage`. No Gupshup vem em `payload.context.id`.
 
-Mapa proposto (chaves canônicas das `call_disposition_types` já existentes):
+## Solução
 
-| Tabulação (key) | Perfil sugerido |
-|---|---|
-| `wa_acordo_formalizado`, `wa_em_dia`, `wa_quitado` | `ocasional` |
-| `wa_em_negociacao`, `cpc`, `wa_cpc` | `ocasional` |
-| `wa_risco_processo`, `wa_sem_interesse_financeiro` | `resistente` |
-| `wa_sem_interesse_produto` | `insatisfeito` |
-| `wa_sem_contato`, `no_answer`, `voicemail`, `interrupted` | (não altera) |
-| `wrong_contact`, `wa_cpe` | (não altera — contato errado) |
+### 1. Migration — estender a RPC de ingestão
 
-Regra: nunca sobrescreve um perfil já definido. Apenas preenche quando `debtor_profile IS NULL`.
+Adicionar parâmetro `_reply_to_external_id text DEFAULT NULL` em:
+- `public.ingest_channel_event(...)`
+- `public.ingest_channel_event_v2(...)` (apenas repassa)
 
-### 2. Bloqueio obrigatório no WhatsApp após 5 mensagens recebidas
+Dentro da v1, antes do INSERT em `chat_messages`:
+- Se `_reply_to_external_id` informado, fazer lookup:
+  ```sql
+  SELECT id INTO _reply_to_msg_id
+  FROM chat_messages
+  WHERE tenant_id = _tenant_id
+    AND external_id = _reply_to_external_id
+  LIMIT 1;
+  ```
+- Incluir `reply_to_message_id = _reply_to_msg_id` no INSERT.
+- Se a mensagem original não for encontrada (corner case: usuário citou mensagem antiga não importada), o campo fica NULL e a UI segue funcionando normalmente.
 
-Em `ChatPanel.tsx`/`ChatInput.tsx`:
+Nota: tanto mensagens inbound quanto outbound já gravam `external_id` como o `key.id` do WhatsApp, então o lookup casa para os dois lados (cliente respondendo nossa msg, ou nós respondendo a dele).
 
-- Contar mensagens do cliente (`direction = 'inbound'`, `is_internal = false`) na conversa atual.
-- Se `inboundCount >= 5` E (`debtor_profile` está nulo OU não existe nenhuma `conversation_disposition_assignments` para a conversa):
-  - Desabilitar o input de envio (mesma lógica visual de "aceitar conversa").
-  - Mostrar banner amarelo acima do input com checklist:
-    - ⚠️ "Defina o Perfil do Devedor para continuar" (link rola até o badge)
-    - ⚠️ "Selecione ao menos uma Tabulação" (link rola até o seletor)
-  - Toast ao tentar enviar via Enter: "Preencha o Perfil e a Tabulação para enviar mensagens".
-- Quando ambos forem preenchidos, libera automaticamente.
+### 2. `whatsapp-webhook/index.ts` — extrair contextInfo
 
-### 3. Aplicação na tabulação do discador (Atendimento/Telefonia)
-- Em `DispositionPanel`, ao registrar tabulação, chamar a mesma helper que atualiza `debtor_profile` (vincular pelo `client_id` da sessão de atendimento).
-- Não há fluxo de "envio de mensagem" no discador, então o bloqueio do item 2 fica restrito ao WhatsApp (conforme o pedido).
+No bloco de parsing (linhas 129-156), após identificar o tipo, ler o `contextInfo` correspondente:
 
-### 4. Helper centralizado
-Criar `src/services/debtorProfileAutoService.ts` com:
-- `inferDebtorProfileFromDisposition(key: string): string | null`
-- `applyAutoProfile(tenantId, cpf, dispositionKey)` — atualiza `clients.debtor_profile` apenas se nulo, registra `client_events` (`debtor_profile_changed` com `event_source: 'auto_disposition'`) e dispara `recalcScoreForCpf`.
-
-Chamado em:
-- `DispositionSelector.handleToggle` (após insert bem-sucedido).
-- `dispositionService.createDisposition` (após insert).
-
----
-
-## Detalhes técnicos
-
-**Arquivos a criar:**
-- `src/services/debtorProfileAutoService.ts`
-- `src/components/contact-center/whatsapp/WhatsAppGateBanner.tsx` (banner com checklist)
-
-**Arquivos a editar:**
-- `src/components/contact-center/whatsapp/DispositionSelector.tsx` — chamar `applyAutoProfile` após assign.
-- `src/components/contact-center/whatsapp/ChatPanel.tsx` — calcular `inboundCount`, derivar `mustGate`, passar `disabled` e renderizar banner; props novas `debtorProfile`, `dispositionAssignments` (já recebe).
-- `src/components/contact-center/whatsapp/ChatInput.tsx` — exibir mensagem de gate quando `disabled` por motivo `requires_profile_disposition`.
-- `src/components/contact-center/whatsapp/WhatsAppChatLayout.tsx` — passar `linkedClient.debtor_profile` para o `ChatPanel` e bloquear `handleSend` defensivamente.
-- `src/services/dispositionService.ts` — em `createDisposition`, após insert chamar `applyAutoProfile` (precisa do `cpf`; buscar via `clients.id`).
-- `src/components/atendimento/DispositionPanel.tsx` — sem mudança visual; o serviço cuida da automação.
-
-**Pseudocódigo do gate (ChatPanel):**
 ```ts
-const inboundCount = messages.filter(
-  m => m.direction === "inbound" && !m.is_internal
-).length;
-
-const hasDisposition = dispositionAssignments.some(
-  a => a.conversation_id === conversation?.id
-);
-const hasProfile = !!clientInfo?.debtor_profile;
-
-const mustGate = inboundCount >= 5 && (!hasDisposition || !hasProfile);
+const ctx =
+  msg?.extendedTextMessage?.contextInfo ||
+  msg?.imageMessage?.contextInfo ||
+  msg?.audioMessage?.contextInfo ||
+  msg?.videoMessage?.contextInfo ||
+  msg?.documentMessage?.contextInfo ||
+  msg?.stickerMessage?.contextInfo ||
+  null;
+const replyToExternalId = ctx?.stanzaId || null;
 ```
 
-**Banner**: aparece logo acima do `ChatInput`, com 2 itens (perfil / tabulação) marcados ✓ ou ✗, e botões "Definir perfil" / "Tabular" que abrem a sidebar (`onToggleSidebar`) caso esteja fechada e dão `scrollIntoView` nos respectivos cards.
+Passar `_reply_to_external_id: replyToExternalId` na chamada `supabase.rpc("ingest_channel_event_v2", ...)`.
 
-**Não-objetivos (fora do escopo deste plano)**
-- Não vamos forçar tabulação para conversas com menos de 5 mensagens.
-- Não vamos exigir perfil em mídia/áudio antes de 5 inbound (mesma regra aplica via `mustGate` — vale para todos os métodos de envio).
-- Não mexemos no fluxo de "aceitar conversa" existente.
+### 3. `gupshup-webhook/index.ts` — extrair context.id
+
+No parser de mensagens inbound do Gupshup, extrair `payload.context?.id` (ou equivalente conforme o formato atual) e passar para a RPC do mesmo modo.
+
+### 4. UI — nada a mudar
+
+`ChatMessage.tsx` já procura `allMessages.find(m => m.id === message.reply_to_message_id)` e renderiza a citação com nome/conteúdo. Funcionará automaticamente assim que o backend popular o campo.
+
+## Arquivos afetados
+
+- `supabase/migrations/<novo>.sql` — nova versão de `ingest_channel_event` + `ingest_channel_event_v2`.
+- `supabase/functions/whatsapp-webhook/index.ts` — extrair `contextInfo.stanzaId` e passar para a RPC.
+- `supabase/functions/gupshup-webhook/index.ts` — extrair `context.id` e passar para a RPC.
+
+## Casos de borda tratados
+
+- Mensagem citada não existe no banco → `reply_to_message_id` fica NULL, mensagem entra normal.
+- Mensagem citada é de antes da migration → mesmo comportamento, sem erro.
+- Citação a uma mídia (áudio, imagem, doc) → funciona igual, é só `external_id`.
+- Mensagens duplicadas (já bloqueadas pelo dedup atual de `external_id`) → comportamento inalterado.
