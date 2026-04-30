@@ -461,6 +461,12 @@ export const rejectAgreement = async (
   userId: string
 ): Promise<void> => {
   try {
+    const { data: agr } = await supabase
+      .from("agreements")
+      .select("tenant_id")
+      .eq("id", id)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("agreements")
       .update({ status: "rejected", approved_by: userId } as any)
@@ -469,6 +475,8 @@ export const rejectAgreement = async (
     if (error) throw error;
     logger.info(MODULE, "reject", { id });
     logAction({ action: "reject", entity_type: "agreement", entity_id: id });
+
+    triggerStatusSync((agr as any)?.tenant_id);
   } catch (error) {
     handleServiceError(error, MODULE);
   }
