@@ -50,7 +50,11 @@ export const SupportTenantSwitcher = () => {
       action: "support_mode_enter",
       entity_type: "tenant",
       entity_id: t.id,
-      details: { tenant_name: t.name },
+      details: {
+        target_tenant_id: t.id,
+        tenant_name: t.name,
+        mode: "support_admin_global",
+      },
     });
   };
 
@@ -60,7 +64,11 @@ export const SupportTenantSwitcher = () => {
         action: "support_mode_exit",
         entity_type: "tenant",
         entity_id: tenantId,
-        details: { tenant_name: tenantName },
+        details: {
+          target_tenant_id: tenantId,
+          tenant_name: tenantName,
+          mode: "support_admin_global",
+        },
       });
     }
     clear();
