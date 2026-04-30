@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { useHasRivoAgreement } from "@/hooks/useHasRivoAgreement";
+import { applyAutoProfileFromDisposition } from "@/services/debtorProfileAutoService";
 
 interface DispositionType {
   id: string;
