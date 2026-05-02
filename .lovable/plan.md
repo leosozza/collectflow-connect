@@ -1,77 +1,102 @@
-## Quebra em 2 estágios + cancelamento automático na Negociarie
+## Diagnóstico — por que o Dashboard aparece zerado
 
-### Parte 1 — Métrica de Quebra com 2 estágios
+Reproduzi direto no banco. **A causa não é fallback nem propagação** — é um bug introduzido pela última migration de "Quebra 2 estágios" na função `get_dashboard_stats`.
 
-**Total de Quebra** no Dashboard passa a somar parcelas em dois estágios:
+### Erro real
 
-#### Estágio 1 — Quebra Provisória (reversível)
-- Vencimento dentro do mês alvo
-- Atraso entre **3 e 10 dias** (`due_date BETWEEN CURRENT_DATE - 10 AND CURRENT_DATE - 3`)
-- Acordo ainda **vivo** (`status IN ('pending','approved','overdue')`)
-- Sem pagamento confirmado
-
-Sai automaticamente quando:
-- Pagamento confirmado → vai para Total Recebido
-- Operador altera a data da parcela para o futuro → volta para Pendentes
-
-#### Estágio 2 — Quebra Definitiva (irreversível)
-- Acordo `cancelled` (`auto_expired` ou `manual`) com vencimento ≤ data de cancelamento, **OU**
-- Atraso > 10 dias, mesmo com acordo ainda não cancelado pelo job
+Ao chamar `SELECT * FROM get_dashboard_stats(NULL, 2026, 5);` o Postgres retorna:
 
 ```text
-Vencimento futuro       → Pendentes
-Atraso 0-3 dias         → Pendentes
-Atraso 4-10 dias (vivo) → Quebra (provisória, reversível)
-Atraso >10 dias         → Quebra (definitiva)
-Acordo cancelado        → Quebra (definitiva)
-Pagamento confirmado    → Total Recebido
+ERROR: 42703: column ag.cpf_cnpj does not exist
+CONTEXT: PL/pgSQL function get_dashboard_stats(uuid,integer,integer,uuid[])
 ```
 
-Sem mais gap. Pendentes e Quebra encostam em D+3.
+A coluna real em `public.agreements` é **`client_cpf`** — confirmado via `information_schema`. O bloco final de `_acionados_ontem` ficou:
+
+```sql
+AND NOT EXISTS (
+  SELECT 1 FROM agreements ag
+  WHERE ag.tenant_id = _tenant
+    AND ag.cpf_cnpj = vc.cpf       -- ❌ coluna inexistente
+    AND ag.created_at::date >= CURRENT_DATE - 1
+)
+```
+
+Como esse bloco roda **antes** do `RETURN QUERY`, a função inteira aborta. Toda métrica volta vazia, o React Query lança, e os cards renderizam `0`. Os warnings de `_v2 not found` no console são esperados (você está rodando com fallback) — eles não são o problema; o problema é que o legacy também está quebrado.
+
+### Estado dos dados no tenant `39a450f8…`
+
+- 596 acordos no histórico, 1 em maio/2026, 65 completos, 5 approved, 452 pending.
+- Há dados — a RPC simplesmente não chega a retornar nada por causa do erro SQL.
 
 ---
 
-### Parte 2 — Cancelar boletos na Negociarie ao cancelar acordo
+## Correção
 
-**Regra**: quando um acordo passa para `status = 'cancelled'` (auto ou manual), todas as parcelas/boletos ativos daquele acordo devem ser cancelados na Negociarie pra impedir o cliente de pagar um acordo já quebrado.
+### 1. Migration: corrigir `get_dashboard_stats` com comparação normalizada de CPF
 
-O proxy `negociarie-proxy` já tem a action `cancelar-cobranca` (PATCH idempotente, trata 404 como sucesso). Vamos usá-la em três pontos:
+`CREATE OR REPLACE FUNCTION` mantendo todo o resto idêntico (Quebra 2 estágios, recebido, pendente, projetado, contagens) e ajustando só o bloco quebrado.
 
-#### 2.1. Edge function nova: `cancel-agreement-charges`
-Função utilitária reutilizável que:
-1. Recebe `agreement_id` (e `tenant_id` quando chamada via service_role).
-2. Busca todas as parcelas do acordo (entrada + 1..N) que ainda têm `id_parcela` na Negociarie e não estão pagas.
-3. Para cada parcela: chama `negociarie-proxy` action `cancelar-cobranca` com o `id_parcela`.
-4. Registra resultado em `client_events` (`type: 'agreement_charges_cancelled'`) com a lista de parcelas e status de cada cancelamento.
-5. Retorna `{ cancelled: number, failed: number, details: [] }`.
+Como você pediu **comparação normalizada de CPF**, vou aplicar `regexp_replace(...,'\D','','g')` nos dois lados — assim acordos com CPF formatado (`123.456.789-09`) também batem com CPFs extraídos do `page_path` (que já vêm só dígitos):
 
-#### 2.2. Acionada pelo job `auto-expire-agreements` (auto)
-Após marcar o acordo como `cancelled / auto_expired`, invoca `cancel-agreement-charges` para cada acordo recém-cancelado, em paralelo limitado (chunks de ~10) pra não estourar rate limit da Negociarie.
+```sql
+WITH visited_cpfs AS (
+  SELECT DISTINCT regexp_replace(
+           COALESCE(NULLIF(split_part(ual.page_path,'/',3),''),''),
+           '\D','','g'
+         ) AS cpf
+  FROM public.user_activity_logs ual
+  WHERE ual.tenant_id = _tenant
+    AND ual.created_at >= date_trunc('day', now() - interval '1 day')
+    AND ual.created_at <  date_trunc('day', now())
+    AND (_no_op_filter OR ual.user_id = _user_id
+         OR ual.user_id = ANY(COALESCE(_user_ids,'{}'::uuid[])))
+)
+SELECT COUNT(DISTINCT vc.cpf) INTO _acionados_ontem
+FROM visited_cpfs vc
+WHERE vc.cpf <> ''
+  AND NOT EXISTS (
+    SELECT 1 FROM agreements ag
+    WHERE ag.tenant_id = _tenant
+      AND regexp_replace(COALESCE(ag.client_cpf,''),'\D','','g') = vc.cpf
+      AND ag.created_at::date >= CURRENT_DATE - 1
+  );
+```
 
-#### 2.3. Acionada no cancelamento manual (UI)
-Em `agreementService.ts` linha 529 (`update status='cancelled', cancellation_type='manual'`), após o update bem-sucedido, dispara `supabase.functions.invoke('cancel-agreement-charges', { body: { agreement_id } })` em fire-and-forget (não bloqueia a UI). Toast informa "Boletos sendo cancelados na Negociarie em background".
+### 2. Validação imediata
 
-#### 2.4. Reativação (reversão)
-Se um acordo for reaberto (`status` voltando para `approved`, linha 981 do service), **não recriamos** os boletos automaticamente — os boletos cancelados ficam cancelados, e o operador precisa gerar novos via fluxo formal de regeneração. (Comportamento conservador: evita ressuscitar cobrança que cliente já achou que foi anulada.)
+Após aplicar a migration, executar exatamente o comando que você pediu:
+
+```sql
+SELECT * FROM get_dashboard_stats(NULL, 2026, 5);
+```
+
+Esperado: linhas com `total_pendente`, `total_quebra`, `total_recebido` > 0 (dado o histórico do tenant). Se vierem números coerentes, o Dashboard sai do zero automaticamente — sem precisar mexer em frontend nem fallback.
+
+### 3. Endurecer log do fallback (defensivo, opcional mas recomendado)
+
+Hoje o fallback do frontend converte erros em `console.warn` discretos que escondem erros SQL. Vou adicionar `console.error` no catch do legacy para que, na próxima vez que algo quebrar no banco, a gente veja o erro real no console em vez de só o warning de `_v2 not found`:
+
+- `src/pages/DashboardPage.tsx` — catch de `callDashboardStats` e `callDashboardVencimentos`.
+- `src/components/dashboard/TotalRecebidoCard.tsx` — catches dos blocos legacy (manual_payments, portal_payments, negociarie_cobrancas).
+
+Sem mudança de comportamento — só visibilidade.
 
 ---
 
-### Arquivos
+## Sobre as funções `_v2`
+
+`get_dashboard_stats_v2`, `get_dashboard_vencimentos_v2` e `get_financial_received_by_day` continuam sem existir no schema. Os warnings vão continuar aparecendo até a fonte central ser aprovada e o fallback ser removido. **Não vou criá-las nem removê-las nesse passo** — não é o pedido. Quando você aprovar a fonte central, removemos o fallback junto.
+
+---
+
+## Arquivos
 
 **Backend**
-- `supabase/migrations/<ts>_dashboard_quebra_two_stage.sql` — reescreve blocos `_quebra` e `_quebra_mes_ant` no `get_dashboard_stats` para a lógica de 2 estágios.
-- `supabase/functions/cancel-agreement-charges/index.ts` — nova função (verify_jwt=false; valida via JWT do operador OU service_role + tenant_id explícito).
-- `supabase/functions/auto-expire-agreements/index.ts` — após cancelar cada acordo, invoca `cancel-agreement-charges`.
+- `supabase/migrations/<ts>_fix_dashboard_stats_cpf_normalized.sql` — `CREATE OR REPLACE FUNCTION public.get_dashboard_stats` com `ag.cpf_cnpj` → `regexp_replace(ag.client_cpf,'\D','','g')`.
 
-**Frontend**
-- `src/services/agreementService.ts` — após o update de cancelamento manual (linha ~529), invocar `cancel-agreement-charges`.
-- `src/components/dashboard/KpisGridCard.tsx` — atualizar tooltip de "Total de Quebra" descrevendo provisória vs definitiva.
+**Frontend (defensivo)**
+- `src/pages/DashboardPage.tsx`
+- `src/components/dashboard/TotalRecebidoCard.tsx`
 
----
-
-### Pontos de atenção
-
-- **Idempotência**: o proxy já trata 404 como sucesso, então retentativas e múltiplas chamadas pra mesma parcela são seguras.
-- **Latência da UI no manual**: cancelamento dos boletos roda async — operador não precisa esperar. Em caso de falha parcial, fica registrada em `client_events` pra auditoria.
-- **Memória do projeto**: vou registrar a regra "Acordo cancelado → boletos Negociarie cancelados automaticamente" em `mem://features/billing/manual-payment-confirmation.md` (já existe) ou criar entrada dedicada quando implementar.
-- **Job `auto-break-overdue` e `auto-expire-agreements`**: precisamos confirmar qual dos dois é o canônico pra cancelamento por prazo. Pelo nome, `auto-expire-agreements` é o que muda `status=cancelled`; `auto-break-overdue` parece operar em `clients`. Vou verificar e plugar o cancelamento de boletos no job certo durante a implementação.
+Sem mudança em UI, props ou assinaturas de RPC.
