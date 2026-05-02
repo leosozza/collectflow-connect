@@ -81,7 +81,10 @@ async function callDashboardStats(params: Record<string, unknown>) {
   const legacyParams = { ...params };
   delete legacyParams._tenant_id;
   const legacy = await supabase.rpc("get_dashboard_stats", legacyParams as any);
-  if (legacy.error) throw legacy.error;
+  if (legacy.error) {
+    console.error("[Dashboard] legacy get_dashboard_stats also failed", legacy.error);
+    throw legacy.error;
+  }
   return legacy.data;
 }
 
@@ -93,7 +96,10 @@ async function callDashboardVencimentos(params: Record<string, unknown>) {
   const legacyParams = { ...params };
   delete legacyParams._tenant_id;
   const legacy = await supabase.rpc("get_dashboard_vencimentos", legacyParams as any);
-  if (legacy.error) throw legacy.error;
+  if (legacy.error) {
+    console.error("[Dashboard] legacy get_dashboard_vencimentos also failed", legacy.error);
+    throw legacy.error;
+  }
   return legacy.data;
 }
 
