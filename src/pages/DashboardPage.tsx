@@ -73,6 +73,30 @@ function pctDelta(
   };
 }
 
+async function callDashboardStats(params: Record<string, unknown>) {
+  const { data, error } = await supabase.rpc("get_dashboard_stats_v2" as any, params as any);
+  if (!error) return data;
+
+  console.warn("[Dashboard] get_dashboard_stats_v2 failed; falling back to get_dashboard_stats", error);
+  const legacyParams = { ...params };
+  delete legacyParams._tenant_id;
+  const legacy = await supabase.rpc("get_dashboard_stats", legacyParams as any);
+  if (legacy.error) throw legacy.error;
+  return legacy.data;
+}
+
+async function callDashboardVencimentos(params: Record<string, unknown>) {
+  const { data, error } = await supabase.rpc("get_dashboard_vencimentos_v2" as any, params as any);
+  if (!error) return data;
+
+  console.warn("[Dashboard] get_dashboard_vencimentos_v2 failed; falling back to get_dashboard_vencimentos", error);
+  const legacyParams = { ...params };
+  delete legacyParams._tenant_id;
+  const legacy = await supabase.rpc("get_dashboard_vencimentos", legacyParams as any);
+  if (legacy.error) throw legacy.error;
+  return legacy.data;
+}
+
 const DashboardPage = () => {
   const { profile } = useAuth();
   const { tenantId: effectiveTenantId } = useEffectiveTenantId();
@@ -121,8 +145,7 @@ const DashboardPage = () => {
       if (filterYear) params._year = filterYear;
       if (filterMonth) params._month = filterMonth;
 
-      const { data, error } = await supabase.rpc("get_dashboard_stats_v2" as any, params as any);
-      if (error) throw error;
+      const data = await callDashboardStats(params);
       const row = Array.isArray(data) ? data[0] : data;
       return row as DashboardStats;
     },
@@ -151,8 +174,7 @@ const DashboardPage = () => {
       if (rpcUserIds) params._user_ids = rpcUserIds;
       else if (rpcUserId) params._user_id = rpcUserId;
 
-      const { data, error } = await supabase.rpc("get_dashboard_vencimentos_v2" as any, params as any);
-      if (error) throw error;
+      const data = await callDashboardVencimentos(params);
       return (data || []) as VencimentoRow[];
     },
     enabled: !!effectiveTenantId,

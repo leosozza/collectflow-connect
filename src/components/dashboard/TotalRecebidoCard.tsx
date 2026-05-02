@@ -27,6 +27,110 @@ interface ChartPoint {
   prevValue: number | null;
 }
 
+function addBucket(buckets: DailyMap, rawDate: string | null | undefined, amount: unknown) {
+  if (!rawDate) return;
+  const d = new Date(String(rawDate).includes("T") ? String(rawDate) : `${rawDate}T00:00:00`);
+  const day = d.getDate();
+  buckets[day] = (buckets[day] || 0) + Number(amount || 0);
+}
+
+function allowedByOperator(agreementId: string | null | undefined, allowedAgreementIds: Set<string> | null) {
+  if (!allowedAgreementIds) return true;
+  return !!agreementId && allowedAgreementIds.has(agreementId);
+}
+
+async function fetchAllowedAgreementIds(
+  tenantId: string,
+  userId?: string | null,
+  userIds?: string[] | null
+): Promise<Set<string> | null> {
+  const operatorIds = userIds?.length ? userIds : userId ? [userId] : null;
+  if (!operatorIds?.length) return null;
+
+  const { data, error } = await supabase
+    .from("agreements" as any)
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .in("created_by", operatorIds);
+
+  if (error) throw error;
+  return new Set((data || []).map((row: any) => String(row.id)));
+}
+
+async function fetchLegacyDailyTotals(
+  tenantId: string,
+  start: Date,
+  end: Date,
+  userId?: string | null,
+  userIds?: string[] | null
+): Promise<DailyMap> {
+  const startIso = format(start, "yyyy-MM-dd");
+  const endIso = format(end, "yyyy-MM-dd");
+  const buckets: DailyMap = {};
+  let allowedAgreementIds: Set<string> | null = null;
+  try {
+    allowedAgreementIds = await fetchAllowedAgreementIds(tenantId, userId, userIds);
+  } catch (error) {
+    console.warn("[Dashboard] legacy operator filter fallback failed", error);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("manual_payments" as any)
+      .select("amount_paid, payment_date, agreement_id")
+      .eq("tenant_id", tenantId)
+      .in("status", ["confirmed", "approved"])
+      .gte("payment_date", startIso)
+      .lte("payment_date", endIso);
+    if (error) throw error;
+    (data || []).forEach((row: any) => {
+      if (allowedByOperator(row.agreement_id, allowedAgreementIds)) {
+        addBucket(buckets, row.payment_date, row.amount_paid);
+      }
+    });
+  } catch (error) {
+    console.warn("[Dashboard] legacy manual payments fallback failed", error);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("portal_payments" as any)
+      .select("amount, updated_at, agreement_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "paid")
+      .gte("updated_at", `${startIso}T00:00:00Z`)
+      .lte("updated_at", `${endIso}T23:59:59Z`);
+    if (error) throw error;
+    (data || []).forEach((row: any) => {
+      if (allowedByOperator(row.agreement_id, allowedAgreementIds)) {
+        addBucket(buckets, row.updated_at, row.amount);
+      }
+    });
+  } catch (error) {
+    console.warn("[Dashboard] legacy portal payments fallback failed", error);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("negociarie_cobrancas" as any)
+      .select("valor_pago, data_pagamento, agreement_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "pago")
+      .gte("data_pagamento", startIso)
+      .lte("data_pagamento", endIso);
+    if (error) throw error;
+    (data || []).forEach((row: any) => {
+      if (allowedByOperator(row.agreement_id, allowedAgreementIds)) {
+        addBucket(buckets, row.data_pagamento, row.valor_pago);
+      }
+    });
+  } catch (error) {
+    console.warn("[Dashboard] legacy Negociarie payments fallback failed", error);
+  }
+
+  return buckets;
+}
+
 async function fetchDailyTotals(
   tenantId: string,
   start: Date,
@@ -47,13 +151,13 @@ async function fetchDailyTotals(
   else if (userId) params._operator_ids = [userId];
 
   const { data, error } = await supabase.rpc("get_financial_received_by_day" as any, params as any);
-  if (error) throw error;
+  if (error) {
+    console.warn("[Dashboard] get_financial_received_by_day failed; falling back to legacy payment queries", error);
+    return fetchLegacyDailyTotals(tenantId, start, end, userId, userIds);
+  }
 
   (data || []).forEach((row: any) => {
-    if (!row.payment_date) return;
-    const d = new Date(String(row.payment_date) + "T00:00:00");
-    const day = d.getDate();
-    buckets[day] = (buckets[day] || 0) + Number(row.total_recebido || 0);
+    addBucket(buckets, row.payment_date, row.total_recebido);
   });
 
   return buckets;
