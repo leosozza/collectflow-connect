@@ -34,7 +34,9 @@ export default function ParcelasProgramadasCard({
 }: Props) {
   const isToday = format(browseDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
-  const totalDia = vencimentos.reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);
+  const totalDia = vencimentos
+    .filter((v) => v.effective_status !== "paid")
+    .reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);
   const totalRecebido = vencimentos
     .filter((v) => v.effective_status === "paid")
     .reduce((acc, v) => acc + Number(v.valor_parcela || 0), 0);

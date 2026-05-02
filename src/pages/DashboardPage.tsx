@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useScheduledCallbacks } from "@/hooks/useScheduledCallbacks";
+import { useEffectiveTenantId } from "@/hooks/useEffectiveTenantId";
 import DashboardMetaCard from "@/components/dashboard/DashboardMetaCard";
 import ParcelasProgramadasCard, {
   VencimentoRow,
@@ -74,6 +75,7 @@ function pctDelta(
 
 const DashboardPage = () => {
   const { profile } = useAuth();
+  const { tenantId: effectiveTenantId } = useEffectiveTenantId();
   const navigate = useNavigate();
   const now = new Date();
   const permissions = usePermissions();
@@ -90,15 +92,15 @@ const DashboardPage = () => {
   const canViewAll = permissions.canViewAllDashboard;
 
   const { data: operators = [] } = useQuery({
-    queryKey: ["dashboard-operators", profile?.tenant_id],
+    queryKey: ["dashboard-operators", effectiveTenantId],
     queryFn: async () => {
       const { data } = await supabase.from("profiles")
         .select("user_id, full_name, role")
-        .eq("tenant_id", profile!.tenant_id!)
+        .eq("tenant_id", effectiveTenantId!)
         .neq("role", "admin");
       return (data || []).map(p => ({ value: p.user_id, label: p.full_name || "Sem nome" }));
     },
-    enabled: !!profile?.tenant_id && canViewAll,
+    enabled: !!effectiveTenantId && canViewAll,
   });
 
   const rpcUserIds: string[] | null =
@@ -111,47 +113,49 @@ const DashboardPage = () => {
   const filterMonth = selectedMonths.length === 1 ? parseInt(selectedMonths[0]) + 1 : null;
 
   const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats", rpcUserId, rpcUserIdsKey, filterYear, filterMonth],
+    queryKey: ["dashboard-stats", effectiveTenantId, rpcUserId, rpcUserIdsKey, filterYear, filterMonth],
     queryFn: async () => {
-      const params: Record<string, unknown> = {};
+      const params: Record<string, unknown> = { _tenant_id: effectiveTenantId };
       if (rpcUserIds) params._user_ids = rpcUserIds;
       else if (rpcUserId) params._user_id = rpcUserId;
       if (filterYear) params._year = filterYear;
       if (filterMonth) params._month = filterMonth;
 
-      const { data, error } = await supabase.rpc("get_dashboard_stats", params as any);
+      const { data, error } = await supabase.rpc("get_dashboard_stats_v2" as any, params as any);
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       return row as DashboardStats;
     },
+    enabled: !!effectiveTenantId,
   });
 
   const { data: acionadosHoje = 0 } = useQuery({
-    queryKey: ["acionados-hoje", rpcUserId, rpcUserIdsKey, profile?.tenant_id],
+    queryKey: ["acionados-hoje", effectiveTenantId, rpcUserId, rpcUserIdsKey],
     queryFn: async () => {
-      const params: Record<string, unknown> = {};
+      const params: Record<string, unknown> = { _tenant_id: effectiveTenantId };
       if (rpcUserIds) params._user_ids = rpcUserIds;
       else if (rpcUserId) params._user_id = rpcUserId;
       const { data, error } = await supabase.rpc("get_acionados_hoje", params as any);
       if (error) throw error;
       return Number(data) || 0;
     },
-    enabled: !!profile?.tenant_id,
+    enabled: !!effectiveTenantId,
     refetchInterval: 60_000,
   });
 
   const browseDateStr = format(browseDate, "yyyy-MM-dd");
   const { data: vencimentos = [] } = useQuery({
-    queryKey: ["dashboard-vencimentos", browseDateStr, rpcUserId, rpcUserIdsKey],
+    queryKey: ["dashboard-vencimentos", effectiveTenantId, browseDateStr, rpcUserId, rpcUserIdsKey],
     queryFn: async () => {
-      const params: Record<string, unknown> = { _target_date: browseDateStr };
+      const params: Record<string, unknown> = { _tenant_id: effectiveTenantId, _target_date: browseDateStr };
       if (rpcUserIds) params._user_ids = rpcUserIds;
       else if (rpcUserId) params._user_id = rpcUserId;
 
-      const { data, error } = await supabase.rpc("get_dashboard_vencimentos", params as any);
+      const { data, error } = await supabase.rpc("get_dashboard_vencimentos_v2" as any, params as any);
       if (error) throw error;
       return (data || []) as VencimentoRow[];
     },
+    enabled: !!effectiveTenantId,
   });
 
   const yearOptions = useMemo(
@@ -267,7 +271,14 @@ const DashboardPage = () => {
         )}
         {isVisible("totalRecebido") && (
           <section className="min-h-0 h-full md:col-span-2 xl:col-span-6 xl:col-start-4 xl:row-start-1">
-            <TotalRecebidoCard totalRecebido={stats?.total_recebido ?? 0} />
+            <TotalRecebidoCard
+              totalRecebido={stats?.total_recebido ?? 0}
+              tenantId={effectiveTenantId}
+              year={filterYear ?? now.getFullYear()}
+              month={filterMonth ?? now.getMonth() + 1}
+              userId={rpcUserId}
+              userIds={rpcUserIds}
+            />
           </section>
         )}
         {isVisible("kpisGrid") && (

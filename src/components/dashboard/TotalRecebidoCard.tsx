@@ -2,13 +2,17 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { ComposedChart, Area, Line, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { format, startOfMonth, endOfMonth, subMonths, differenceInDays, getDate, getDaysInMonth } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, getDate, getDaysInMonth, isSameMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 
 interface Props {
   totalRecebido: number;
+  tenantId?: string;
+  year: number;
+  month: number;
+  userId?: string | null;
+  userIds?: string[] | null;
 }
 
 interface DailyMap {
@@ -26,118 +30,77 @@ interface ChartPoint {
 async function fetchDailyTotals(
   tenantId: string,
   start: Date,
-  end: Date
+  end: Date,
+  userId?: string | null,
+  userIds?: string[] | null
 ): Promise<DailyMap> {
   const startIso = format(start, "yyyy-MM-dd");
   const endIso = format(end, "yyyy-MM-dd");
   const buckets: DailyMap = {};
 
-  // 1) manual_payments — alinhado com get_dashboard_stats: confirmed OU approved
-  try {
-    const { data: manual } = await supabase
-      .from("manual_payments")
-      .select("amount_paid, payment_date, status, tenant_id")
-      .eq("tenant_id", tenantId)
-      .in("status", ["confirmed", "approved"])
-      .gte("payment_date", startIso)
-      .lte("payment_date", endIso);
+  const params: Record<string, unknown> = {
+    _tenant_id: tenantId,
+    _date_from: startIso,
+    _date_to: endIso,
+  };
+  if (userIds?.length) params._operator_ids = userIds;
+  else if (userId) params._operator_ids = [userId];
 
-    (manual || []).forEach((row: any) => {
-      const d = new Date(String(row.payment_date) + "T00:00:00");
-      const day = d.getDate();
-      buckets[day] = (buckets[day] || 0) + Number(row.amount_paid || 0);
-    });
-  } catch {
-    /* silent */
-  }
+  const { data, error } = await supabase.rpc("get_financial_received_by_day" as any, params as any);
+  if (error) throw error;
 
-  // 2) portal_payments — pagos via portal do devedor
-  try {
-    const { data: portal } = await supabase
-      .from("portal_payments")
-      .select("amount, status, updated_at, tenant_id")
-      .eq("tenant_id", tenantId)
-      .eq("status", "paid")
-      .gte("updated_at", `${startIso}T00:00:00Z`)
-      .lte("updated_at", `${endIso}T23:59:59Z`);
-
-    (portal || []).forEach((row: any) => {
-      const day = new Date(row.updated_at).getDate();
-      buckets[day] = (buckets[day] || 0) + Number(row.amount || 0);
-    });
-  } catch {
-    /* silent */
-  }
-
-  // 3) negociarie_cobrancas — pagamentos confirmados pelo gateway Negociarie
-  try {
-    const { data: negociarie } = await supabase
-      .from("negociarie_cobrancas")
-      .select("valor_pago, data_pagamento, status, tenant_id")
-      .eq("tenant_id", tenantId)
-      .eq("status", "pago")
-      .gte("data_pagamento", startIso)
-      .lte("data_pagamento", endIso);
-
-    (negociarie || []).forEach((row: any) => {
-      if (!row.data_pagamento) return;
-      const d = new Date(String(row.data_pagamento) + "T00:00:00");
-      const day = d.getDate();
-      buckets[day] = (buckets[day] || 0) + Number(row.valor_pago || 0);
-    });
-  } catch {
-    /* silent */
-  }
+  (data || []).forEach((row: any) => {
+    if (!row.payment_date) return;
+    const d = new Date(String(row.payment_date) + "T00:00:00");
+    const day = d.getDate();
+    buckets[day] = (buckets[day] || 0) + Number(row.total_recebido || 0);
+  });
 
   return buckets;
 }
 
-export default function TotalRecebidoCard({ totalRecebido }: Props) {
-  const { profile } = useAuth();
-  const tenantId = profile?.tenant_id;
+function getCurrentPeriodEnd(start: Date) {
+  const today = new Date();
+  if (isSameMonth(start, today)) return today;
+  return endOfMonth(start);
+}
 
-  // Série mês corrente (até hoje)
+export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month, userId, userIds }: Props) {
+  const selectedStart = useMemo(() => startOfMonth(new Date(year, month - 1, 1)), [year, month]);
+  const selectedEnd = useMemo(() => getCurrentPeriodEnd(selectedStart), [selectedStart]);
+  const previousStart = useMemo(() => startOfMonth(subMonths(selectedStart, 1)), [selectedStart]);
+  const previousEnd = useMemo(() => endOfMonth(previousStart), [previousStart]);
+  const userIdsKey = userIds?.join(",") || null;
+
   const { data: currentMap = {} } = useQuery<DailyMap>({
-    queryKey: ["dashboard-recebido-current-month-map", tenantId],
+    queryKey: ["dashboard-recebido-period-map", tenantId, year, month, userId, userIdsKey],
     enabled: !!tenantId,
-    queryFn: async () => {
-      const today = new Date();
-      const start = startOfMonth(today);
-      return fetchDailyTotals(tenantId!, start, today);
-    },
+    queryFn: async () => fetchDailyTotals(tenantId!, selectedStart, selectedEnd, userId, userIds),
   });
 
-  // Série mês anterior (mês inteiro)
   const { data: prevMap = {} } = useQuery<DailyMap>({
-    queryKey: ["dashboard-recebido-prev-month-map", tenantId],
+    queryKey: ["dashboard-recebido-prev-period-map", tenantId, year, month, userId, userIdsKey],
     enabled: !!tenantId,
-    queryFn: async () => {
-      const today = new Date();
-      const prev = subMonths(today, 1);
-      const prevStart = startOfMonth(prev);
-      const prevEnd = endOfMonth(prev);
-      return fetchDailyTotals(tenantId!, prevStart, prevEnd);
-    },
+    queryFn: async () => fetchDailyTotals(tenantId!, previousStart, previousEnd, userId, userIds),
   });
 
   // Mescla as duas séries em um único array indexado por dia do mês
   const series: ChartPoint[] = useMemo(() => {
-    const today = new Date();
-    const todayDay = getDate(today);
-    const prevDays = getDaysInMonth(subMonths(today, 1));
-    const totalDays = Math.max(getDaysInMonth(today), prevDays);
+    const currentLastDay = getDate(selectedEnd);
+    const prevDays = getDaysInMonth(previousStart);
+    const totalDays = Math.max(getDaysInMonth(selectedStart), prevDays);
 
     const points: ChartPoint[] = [];
     for (let d = 1; d <= totalDays; d++) {
       points.push({
         day: d,
         label: String(d).padStart(2, "0"),
-        value: d <= todayDay ? Number(currentMap[d] || 0) : null,
+        value: d <= currentLastDay ? Number(currentMap[d] || 0) : null,
         prevValue: d <= prevDays ? Number(prevMap[d] || 0) : null,
       });
     }
     return points;
-  }, [currentMap, prevMap]);
+  }, [currentMap, previousStart, prevMap, selectedEnd, selectedStart]);
 
   const prevMonthTotal = useMemo(
     () => Object.values(prevMap).reduce((sum, v) => sum + Number(v || 0), 0),
