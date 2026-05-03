@@ -349,14 +349,14 @@ Deno.serve(async (req) => {
       const agreementIds = activeAgreements.map(a => a.id);
       const paymentByAgreement = await fetchAgreementPaymentTotals(supabase, agreementIds);
 
-      const toApproved: any[] = [];
+      const toCompleted: any[] = [];
 
       for (const a of activeAgreements) {
         const totalPaid = paymentByAgreement[a.id] || 0;
 
         // Check if fully paid
         if (totalPaid >= (a.proposed_total || 0) - 0.01 && a.proposed_total > 0) {
-          toApproved.push(a);
+          toCompleted.push(a);
           continue;
         }
 
@@ -398,12 +398,12 @@ Deno.serve(async (req) => {
         await supabase.from("agreements").update({ status: "pending" }).in("id", ids);
       }
 
-      if (toApproved.length > 0) {
-        const ids = toApproved.map((a: any) => a.id);
-        await supabase.from("agreements").update({ status: "approved" }).in("id", ids);
+      if (toCompleted.length > 0) {
+        const ids = toCompleted.map((a: any) => a.id);
+        await supabase.from("agreements").update({ status: "completed" }).in("id", ids);
 
         // Update client status to 'pago' for fully paid agreements
-        for (const a of toApproved) {
+        for (const a of toCompleted) {
           const rawCpf = (a.client_cpf || "").replace(/[.\-]/g, "");
           const fmtCpf = rawCpf.length === 11
             ? `${rawCpf.slice(0,3)}.${rawCpf.slice(3,6)}.${rawCpf.slice(6,9)}-${rawCpf.slice(9)}`

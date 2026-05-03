@@ -21,7 +21,7 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   pending: "Acordo Vigente",
   pending_approval: "Aguardando Liberação",
-  approved: "Quitado",
+  approved: "Acordo Vigente",
   completed: "Quitado",
   rejected: "Rejeitado",
   cancelled: "Cancelado",

@@ -299,7 +299,7 @@ export const manualPaymentService = {
 
       if (updateErr) throw updateErr;
 
-      // Check if agreement is fully paid and mark as approved
+      // Check if agreement is fully paid and mark as completed
       try {
         const { data: agreement } = await supabase
           .from("agreements")
@@ -313,18 +313,25 @@ export const manualPaymentService = {
             .from("manual_payments" as any)
             .select("amount_paid")
             .eq("agreement_id", mp.agreement_id)
-            .eq("status", "confirmed");
+            .in("status", ["confirmed", "approved"]);
+
+          const { data: paidPortalPayments } = await supabase
+            .from("portal_payments" as any)
+            .select("amount")
+            .eq("agreement_id", mp.agreement_id)
+            .eq("status", "paid");
 
           const { data: paidCobrancas } = await supabase
             .from("negociarie_cobrancas" as any)
-            .select("valor_pago")
+            .select("valor_pago, valor")
             .eq("agreement_id", mp.agreement_id)
             .eq("status", "pago");
 
           const manualTotal = ((confirmedPayments as any[]) || []).reduce((s, p) => s + Number(p.amount_paid || 0), 0);
-          const cobrancaTotal = ((paidCobrancas as any[]) || []).reduce((s, c) => s + Number(c.valor_pago || 0), 0);
+          const portalTotal = ((paidPortalPayments as any[]) || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+          const cobrancaTotal = ((paidCobrancas as any[]) || []).reduce((s, c) => s + Number(c.valor_pago ?? c.valor ?? 0), 0);
           // Canais distintos — soma direta sem dupla contagem
-          const totalPaid = manualTotal + cobrancaTotal;
+          const totalPaid = manualTotal + portalTotal + cobrancaTotal;
 
           if (totalPaid >= (agreement.proposed_total || 0) - 0.01 && agreement.proposed_total > 0) {
             // Acordo totalmente quitado → completed (não approved)

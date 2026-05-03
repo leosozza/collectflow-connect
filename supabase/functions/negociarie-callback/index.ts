@@ -36,24 +36,47 @@ async function checkAgreementCompletion(supabase: any, agreementId: string, tena
 
   if (!agreement || agreement.status === "completed" || agreement.status === "cancelled") return;
 
-  // Sum all payments for this agreement from client_events
+  // Sum all payments for this agreement from events and direct payment sources.
   const { data: events } = await supabase
     .from("client_events")
     .select("metadata")
     .eq("tenant_id", tenantId)
-    .eq("event_type", "payment_confirmed")
+    .in("event_type", ["payment_confirmed", "manual_payment_confirmed"])
     .eq("client_id", clientId);
 
-  let totalPaid = 0;
+  let eventTotal = 0;
   if (events) {
     for (const ev of events) {
-      if (ev.metadata?.agreement_id === agreementId && ev.metadata?.valor_pago) {
-        totalPaid += Number(ev.metadata.valor_pago);
+      if (ev.metadata?.agreement_id === agreementId) {
+        eventTotal += Number(ev.metadata?.valor_pago || ev.metadata?.amount_paid || 0);
       }
     }
   }
 
-  if (totalPaid >= Number(agreement.proposed_total)) {
+  const [{ data: manualPayments }, { data: portalPayments }, { data: cobrancas }] = await Promise.all([
+    supabase
+      .from("manual_payments")
+      .select("amount_paid")
+      .eq("agreement_id", agreementId)
+      .in("status", ["confirmed", "approved"]),
+    supabase
+      .from("portal_payments")
+      .select("amount")
+      .eq("agreement_id", agreementId)
+      .eq("status", "paid"),
+    supabase
+      .from("negociarie_cobrancas")
+      .select("valor_pago, valor")
+      .eq("agreement_id", agreementId)
+      .eq("status", "pago"),
+  ]);
+
+  const manualTotal = (manualPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0);
+  const portalTotal = (portalPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+  const cobrancaTotal = (cobrancas || []).reduce((sum: number, c: any) => sum + Number(c.valor_pago ?? c.valor ?? 0), 0);
+  const totalPaid = Math.max(eventTotal, manualTotal + portalTotal + cobrancaTotal);
+
+  if (totalPaid >= Number(agreement.proposed_total) - 0.01) {
     // Mark agreement as completed
     await supabase
       .from("agreements")

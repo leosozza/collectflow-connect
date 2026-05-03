@@ -18,7 +18,7 @@ const ProfileStatsCards = ({ profileData }: Props) => {
         .eq("created_by", profileData!.user_id);
 
       const total = agreements?.length || 0;
-      const approved = agreements?.filter((a) => a.status === "approved" || a.status === "paid") || [];
+      const approved = agreements?.filter((a) => a.status === "approved" || a.status === "completed") || [];
       const totalValue = approved.reduce((s, a) => s + Number(a.proposed_total), 0);
       const conversionRate = total > 0 ? Math.round((approved.length / total) * 100) : 0;
 

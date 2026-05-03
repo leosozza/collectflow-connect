@@ -44,7 +44,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const statusLabelsMap: Record<string, string> = {
-  approved: "Pago",
+  approved: "Acordo Vigente",
+  completed: "Quitado",
   pending: "Acordo Vigente",
   pending_approval: "Aguardando Liberação",
   rejected: "Rejeitado",
@@ -54,6 +55,7 @@ const statusLabelsMap: Record<string, string> = {
 
 const statusVariantMap: Record<string, "default" | "outline" | "secondary" | "destructive"> = {
   approved: "default",
+  completed: "default",
   pending: "outline",
   pending_approval: "outline",
   overdue: "destructive",

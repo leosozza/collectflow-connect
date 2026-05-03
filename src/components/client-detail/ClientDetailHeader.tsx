@@ -359,14 +359,14 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     }
   };
 
-  // Total Pago: somente parcelas efetivamente pagas (exclui cheque devolvido) + acordos aprovados
+  // Total Pago: somente parcelas efetivamente pagas (exclui cheque devolvido) + acordos quitados
   const totalPagoRecords = clients.reduce((sum, c) => {
     const isDevolvido = !!(c as any).data_devolucao;
     if (isDevolvido) return sum;
     return sum + Number(c.valor_pago);
   }, 0);
   const totalPagoAcordos = (agreements || [])
-    .filter((a: any) => a.status === "approved")
+    .filter((a: any) => a.status === "completed")
     .reduce((sum: number, a: any) => sum + Number(a.proposed_total), 0);
   const totalPago = totalPagoRecords + totalPagoAcordos;
   

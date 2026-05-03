@@ -133,15 +133,17 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
         // 4. Recalculate consolidated total and sync agreement/client status
         if (agr) {
           const agreementId = current.agreement_id as string;
-          const [{ data: agreementRow }, { data: mps }, { data: cobs }] = await Promise.all([
+          const [{ data: agreementRow }, { data: mps }, { data: pps }, { data: cobs }] = await Promise.all([
             supabase.from("agreements").select("id, proposed_total, status, client_cpf, credor, tenant_id").eq("id", agreementId).single(),
-            supabase.from("manual_payments" as any).select("amount_paid").eq("agreement_id", agreementId).eq("status", "confirmed"),
-            supabase.from("negociarie_cobrancas" as any).select("valor_pago").eq("agreement_id", agreementId).eq("status", "pago"),
+            supabase.from("manual_payments" as any).select("amount_paid").eq("agreement_id", agreementId).in("status", ["confirmed", "approved"]),
+            supabase.from("portal_payments" as any).select("amount").eq("agreement_id", agreementId).eq("status", "paid"),
+            supabase.from("negociarie_cobrancas" as any).select("valor_pago, valor").eq("agreement_id", agreementId).eq("status", "pago"),
           ]);
 
           const manualTotal = ((mps as any[]) || []).reduce((s, p) => s + Number(p.amount_paid || 0), 0);
-          const cobrancaTotal = ((cobs as any[]) || []).reduce((s, c) => s + Number(c.valor_pago || 0), 0);
-          const totalPaid = manualTotal + cobrancaTotal;
+          const portalTotal = ((pps as any[]) || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+          const cobrancaTotal = ((cobs as any[]) || []).reduce((s, c) => s + Number(c.valor_pago ?? c.valor ?? 0), 0);
+          const totalPaid = manualTotal + portalTotal + cobrancaTotal;
           const ag = agreementRow as any;
 
           if (ag && ag.proposed_total > 0) {

@@ -311,13 +311,13 @@ const AcordosPage = () => {
       switch (statusFilter) {
         case "vigentes":
           if (isMonthSelected && cls !== undefined) return cls === "vigente";
-          return a.status === "pending";
+          return a.status === "pending" || a.status === "approved";
         case "approved": {
           // No modo mês, considera apenas a parcela classificada como "pago".
           if (isMonthSelected && cls !== undefined) return cls === "pago";
-          // Fora do modo mês: usa status global ou flag de pagamento no escopo.
+          // Fora do modo mês: usa acordo quitado ou pagamento confirmado no escopo.
           const hasPaid = (a as any)._hasPaidInScope as boolean | undefined;
-          return hasPaid === true || a.status === "approved" || a.status === "completed";
+          return hasPaid === true || a.status === "completed";
         }
         case "overdue":
           if (isMonthSelected && cls !== undefined) return cls === "vencido";
@@ -346,9 +346,9 @@ const AcordosPage = () => {
         const c = (a as any)._installmentClass as InstallmentClassification | undefined;
         return c === "vigente" || c === "pending_confirmation";
       }).length
-      : relevant.filter(a => a.status === "pending" || a.status === "pending_approval").length;
-    // Inclusive paid: agreements with at least one paid installment in scope OR fully approved
-    const paid = relevant.filter(a => (a as any)._hasPaidInScope === true || a.status === "approved").length;
+      : relevant.filter(a => a.status === "pending" || a.status === "approved" || a.status === "pending_approval").length;
+    // Inclusive paid: agreements with at least one paid installment in scope OR fully completed
+    const paid = relevant.filter(a => (a as any)._hasPaidInScope === true || a.status === "completed").length;
     return { total, pending, paid };
   }, [classifiedAgreements, selectedMonth, dateFrom, dateTo]);
 
@@ -374,9 +374,9 @@ const AcordosPage = () => {
         else if (cls === "pending_confirmation") counts.payment_confirmation++;
       } else {
         const hasPaid = (a as any)._hasPaidInScope as boolean | undefined;
-        if (hasPaid === true || a.status === "approved" || a.status === "completed") counts.approved++;
+        if (hasPaid === true || a.status === "completed") counts.approved++;
         else if (a.status === "overdue") counts.overdue++;
-        else if (a.status === "pending") counts.vigentes++;
+        else if (a.status === "pending" || a.status === "approved") counts.vigentes++;
       }
     }
     return counts;
