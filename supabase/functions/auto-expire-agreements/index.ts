@@ -38,6 +38,88 @@ function buildSchedule(a: any): { date: string; amount: number; cumulative: numb
   return schedule;
 }
 
+function diffDaysFrom(dateStr: string, now: Date): number {
+  const dueDate = new Date(`${dateStr}T12:00:00Z`);
+  const today = new Date(`${now.toISOString().split("T")[0]}T12:00:00Z`);
+  return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function firstUnpaidPastDueDate(a: any, totalPaid: number, todayStr: string): string | null {
+  const schedule = buildSchedule(a);
+  for (const item of schedule) {
+    if (item.date < todayStr && totalPaid < item.cumulative - 0.01) {
+      return item.date;
+    }
+  }
+  return null;
+}
+
+function shouldExpireAgreement(a: any, totalPaid: number, prazo: number, todayStr: string, now: Date): boolean {
+  const firstUnpaidDue = firstUnpaidPastDueDate(a, totalPaid, todayStr);
+  if (!firstUnpaidDue) return false;
+  return diffDaysFrom(firstUnpaidDue, now) >= Math.max(1, prazo || 10);
+}
+
+async function fetchAgreementPaymentTotals(supabase: any, agreementIds: string[]): Promise<Record<string, number>> {
+  const eventByAgreement: Record<string, number> = {};
+  const directByAgreement: Record<string, number> = {};
+
+  for (let i = 0; i < agreementIds.length; i += 200) {
+    const batch = agreementIds.slice(i, i + 200);
+
+    const { data: events } = await supabase
+      .from("client_events")
+      .select("metadata")
+      .in("event_type", ["payment_confirmed", "manual_payment_confirmed"])
+      .in("metadata->>agreement_id", batch);
+    for (const ev of events || []) {
+      const agId = ev.metadata?.agreement_id;
+      if (!agId) continue;
+      const val = Number(ev.metadata?.valor_pago || ev.metadata?.amount_paid || 0);
+      eventByAgreement[agId] = (eventByAgreement[agId] || 0) + val;
+    }
+
+    const { data: manualPayments } = await supabase
+      .from("manual_payments" as any)
+      .select("agreement_id, amount_paid")
+      .in("status", ["confirmed", "approved"])
+      .in("agreement_id", batch);
+    for (const mp of manualPayments || []) {
+      const agId = mp.agreement_id;
+      if (!agId) continue;
+      directByAgreement[agId] = (directByAgreement[agId] || 0) + Number(mp.amount_paid || 0);
+    }
+
+    const { data: portalPayments } = await supabase
+      .from("portal_payments" as any)
+      .select("agreement_id, amount")
+      .eq("status", "paid")
+      .in("agreement_id", batch);
+    for (const pp of portalPayments || []) {
+      const agId = pp.agreement_id;
+      if (!agId) continue;
+      directByAgreement[agId] = (directByAgreement[agId] || 0) + Number(pp.amount || 0);
+    }
+
+    const { data: cobrancas } = await supabase
+      .from("negociarie_cobrancas" as any)
+      .select("agreement_id, valor, valor_pago")
+      .eq("status", "pago")
+      .in("agreement_id", batch);
+    for (const c of cobrancas || []) {
+      const agId = c.agreement_id;
+      if (!agId) continue;
+      directByAgreement[agId] = (directByAgreement[agId] || 0) + Number(c.valor_pago ?? c.valor ?? 0);
+    }
+  }
+
+  const totals: Record<string, number> = {};
+  for (const id of agreementIds) {
+    totals[id] = Math.max(eventByAgreement[id] || 0, directByAgreement[id] || 0);
+  }
+  return totals;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -122,8 +204,8 @@ Deno.serve(async (req) => {
     if (onDemand) {
       let query = supabase
         .from("agreements")
-        .select("id, tenant_id, created_by, client_name, client_cpf, credor, first_due_date, entrada_date, entrada_value")
-        .eq("status", "overdue")
+        .select("id, tenant_id, created_by, client_name, client_cpf, credor, first_due_date, entrada_date, entrada_value, new_installments, new_installment_value, proposed_total, status, custom_installment_dates, custom_installment_values")
+        .in("status", ["pending", "approved", "overdue"])
         .eq("tenant_id", onDemandTenantId!);
       // Filter by credor name (agreements.credor stores the name string)
       if (onDemandCredorName) query = query.eq("credor", onDemandCredorName);
@@ -135,19 +217,22 @@ Deno.serve(async (req) => {
         .select("prazo_dias_acordo")
         .eq("id", payload.credor_id!)
         .maybeSingle();
-      const prazo = (credorPrazo as any)?.prazo_dias_acordo;
+      const prazo = Math.max(1, Number((credorPrazo as any)?.prazo_dias_acordo || 10));
 
       let expiredCount = 0;
       let clientsUpdated = 0;
       const errors: string[] = [];
 
-      if (prazo && prazo > 0 && overdueAgreements && overdueAgreements.length > 0) {
+      if (overdueAgreements && overdueAgreements.length > 0) {
+        const paymentTotals = await fetchAgreementPaymentTotals(
+          supabase,
+          overdueAgreements.map((a: any) => a.id)
+        );
         const toCancel: any[] = [];
         for (const a of overdueAgreements) {
-          const earliestDue = (a.entrada_value > 0 && a.entrada_date) ? a.entrada_date : a.first_due_date;
-          const dueDate = new Date(earliestDue);
-          const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays >= prazo) toCancel.push(a);
+          if (shouldExpireAgreement(a, paymentTotals[a.id] || 0, prazo, todayStr, now)) {
+            toCancel.push(a);
+          }
         }
 
         if (toCancel.length > 0) {
@@ -248,7 +333,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ============= CRON MODE (unchanged) =============
+    // ============= CRON MODE =============
     // 1. Fetch all active agreements
     const { data: activeAgreements, error: err1 } = await supabase
       .from("agreements")
@@ -262,80 +347,12 @@ Deno.serve(async (req) => {
 
     if (activeAgreements && activeAgreements.length > 0) {
       const agreementIds = activeAgreements.map(a => a.id);
-
-      // Fetch payment events (including manual) in batches
-      const allPaymentEvents: any[] = [];
-      for (let i = 0; i < agreementIds.length; i += 200) {
-        const batch = agreementIds.slice(i, i + 200);
-        const { data: events } = await supabase
-          .from("client_events")
-          .select("metadata")
-          .in("event_type", ["payment_confirmed", "manual_payment_confirmed"])
-          .in("metadata->>agreement_id", batch);
-        if (events) allPaymentEvents.push(...events);
-      }
-
-      // Index payment totals by agreement_id (coalesce valor_pago / amount_paid)
-      const paymentByAgreement: Record<string, number> = {};
-      for (const ev of allPaymentEvents) {
-        const agId = ev.metadata?.agreement_id;
-        if (agId) {
-          const val = Number(ev.metadata?.valor_pago || ev.metadata?.amount_paid || 0);
-          paymentByAgreement[agId] = (paymentByAgreement[agId] || 0) + val;
-        }
-      }
-
-      // Fetch confirmed manual_payments totals
-      const allManualPayments: any[] = [];
-      for (let i = 0; i < agreementIds.length; i += 200) {
-        const batch = agreementIds.slice(i, i + 200);
-        const { data: mps } = await supabase
-          .from("manual_payments" as any)
-          .select("agreement_id, amount_paid")
-          .eq("status", "confirmed")
-          .in("agreement_id", batch);
-        if (mps) allManualPayments.push(...(mps as any[]));
-      }
-
-      const manualByAgreement: Record<string, number> = {};
-      for (const mp of allManualPayments) {
-        const agId = mp.agreement_id;
-        if (agId) {
-          manualByAgreement[agId] = (manualByAgreement[agId] || 0) + Number(mp.amount_paid || 0);
-        }
-      }
-
-      // Fetch paid cobrancas
-      const allPaidCobrancas: any[] = [];
-      for (let i = 0; i < agreementIds.length; i += 200) {
-        const batch = agreementIds.slice(i, i + 200);
-        const { data: cobrancas } = await supabase
-          .from("negociarie_cobrancas" as any)
-          .select("agreement_id, valor, status")
-          .eq("status", "pago")
-          .in("agreement_id", batch);
-        if (cobrancas) allPaidCobrancas.push(...(cobrancas as any[]));
-      }
-
-      const cobrancaByAgreement: Record<string, number> = {};
-      for (const c of allPaidCobrancas) {
-        const agId = c.agreement_id;
-        if (agId) {
-          cobrancaByAgreement[agId] = (cobrancaByAgreement[agId] || 0) + Number(c.valor || 0);
-        }
-      }
+      const paymentByAgreement = await fetchAgreementPaymentTotals(supabase, agreementIds);
 
       const toApproved: any[] = [];
 
       for (const a of activeAgreements) {
-        if (a.status === "approved") continue;
-
-        const totalPaid = Math.max(
-          (paymentByAgreement[a.id] || 0),
-          (manualByAgreement[a.id] || 0),
-          (cobrancaByAgreement[a.id] || 0),
-          (manualByAgreement[a.id] || 0) + (cobrancaByAgreement[a.id] || 0)
-        );
+        const totalPaid = paymentByAgreement[a.id] || 0;
 
         // Check if fully paid
         if (totalPaid >= (a.proposed_total || 0) - 0.01 && a.proposed_total > 0) {
@@ -354,7 +371,7 @@ Deno.serve(async (req) => {
         const expectedPaid = pastDueEntries[pastDueEntries.length - 1].cumulative;
         const isOverdue = totalPaid < expectedPaid - 0.01;
 
-        if (isOverdue && a.status === "pending") {
+        if (isOverdue && a.status !== "overdue") {
           toOverdue.push(a);
         } else if (!isOverdue && a.status === "overdue") {
           toPending.push(a);
@@ -404,7 +421,7 @@ Deno.serve(async (req) => {
     // 2. Cancel overdue agreements based on credor's prazo_dias_acordo
     const { data: overdueAgreements, error: err2 } = await supabase
       .from("agreements")
-      .select("id, tenant_id, created_by, client_name, client_cpf, credor, first_due_date, entrada_date, entrada_value")
+      .select("id, tenant_id, created_by, client_name, client_cpf, credor, first_due_date, entrada_date, entrada_value, new_installments, new_installment_value, proposed_total, status, custom_installment_dates, custom_installment_values")
       .eq("status", "overdue");
 
     if (err2) throw err2;
@@ -427,14 +444,17 @@ Deno.serve(async (req) => {
         }
       }
 
+      const paymentTotals = await fetchAgreementPaymentTotals(
+        supabase,
+        overdueAgreements.map((a: any) => a.id)
+      );
+
       const toCancel: any[] = [];
       for (const a of overdueAgreements) {
-        const prazo = prazoMap[`${a.tenant_id}|${a.credor}`];
-        if (!prazo || prazo <= 0) continue;
-        const earliestDue = (a.entrada_value > 0 && a.entrada_date) ? a.entrada_date : a.first_due_date;
-        const dueDate = new Date(earliestDue);
-        const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays >= prazo) toCancel.push(a);
+        const prazo = Math.max(1, Number(prazoMap[`${a.tenant_id}|${a.credor}`] || 10));
+        if (shouldExpireAgreement(a, paymentTotals[a.id] || 0, prazo, todayStr, now)) {
+          toCancel.push(a);
+        }
       }
 
       if (toCancel.length > 0) {
@@ -513,7 +533,7 @@ Deno.serve(async (req) => {
         }
 
         const notifications = toCancel.map((a: any) => {
-          const p = prazoMap[`${a.tenant_id}|${a.credor}`];
+          const p = Math.max(1, Number(prazoMap[`${a.tenant_id}|${a.credor}`] || 10));
           return {
             tenant_id: a.tenant_id,
             user_id: a.created_by,

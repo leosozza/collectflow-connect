@@ -46,6 +46,8 @@ const GATEWAYS = ["Negociarie", "Asaas", "Mercado Pago", "PagSeguro", "Outro"];
 
 import { TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
 
+const DEFAULT_AGREEMENT_EXPIRATION_DAYS = 10;
+
 const VARIAVEIS = [
   "{nome_devedor}", "{cpf_devedor}", "{valor_divida}", "{valor_acordo}", "{quantidade_parcelas}",
   "{valor_parcela}", "{data_vencimento}", "{desconto_concedido}", "{razao_social_credor}", "{cnpj_credor}",
@@ -120,7 +122,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         setForm({
           status: "ativo", tipo_conta: "corrente", gateway_ambiente: "producao", gateway_status: "ativo",
           parcelas_min: 1, parcelas_max: 12, entrada_minima_valor: 0, entrada_minima_tipo: "percent",
-          desconto_maximo: 0, juros_mes: 0, multa: 0,
+          desconto_maximo: 0, juros_mes: 0, multa: 0, prazo_dias_acordo: DEFAULT_AGREEMENT_EXPIRATION_DAYS,
           ...Object.fromEntries(Object.entries(TEMPLATE_DEFAULTS).map(([k, v]) => [k, v])),
         });
         setHonorarios([]);
@@ -145,7 +147,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       queryClient.invalidateQueries({ queryKey: ["credores-count"] });
       toast.success("Credor salvo!");
-      const newPrazo = parseInt(variables?.prazo_dias_acordo) || 30;
+      const newPrazo = parseInt(variables?.prazo_dias_acordo) || DEFAULT_AGREEMENT_EXPIRATION_DAYS;
       const newId = data?.id || data?.[0]?.id;
       // Se acabou de criar (rota /novo) e há id retornado, atualizar URL para /:id/:section
       if (!editing?.id && newId) {
@@ -173,7 +175,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     if (!editing?.id) return;
     setSavingNegociacao(true);
     try {
-      const newPrazo = parseInt(form.prazo_dias_acordo) || 30;
+      const newPrazo = parseInt(form.prazo_dias_acordo) || DEFAULT_AGREEMENT_EXPIRATION_DAYS;
       const { error } = await supabase
         .from("credores" as any)
         .update({
@@ -575,7 +577,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div><Label>Desconto Máximo (%)</Label><Input type="text" inputMode="decimal" value={form.desconto_maximo ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); set("desconto_maximo", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => set("desconto_maximo", Math.min(100, Math.max(0, parseFloat(form.desconto_maximo) || 0)))} /></div>
                 <div><Label>Juros ao Mês (%)</Label><Input type="text" inputMode="decimal" value={form.juros_mes ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); set("juros_mes", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => set("juros_mes", Math.max(0, parseFloat(form.juros_mes) || 0))} /></div>
                 <div><Label>Multa (%)</Label><Input type="text" inputMode="decimal" value={form.multa ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ""); set("multa", v === "" ? "" : parseFloat(v) || v); }} onBlur={() => set("multa", Math.max(0, parseFloat(form.multa) || 0))} /></div>
-                <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="text" inputMode="numeric" value={form.prazo_dias_acordo ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); set("prazo_dias_acordo", v === "" ? "" : parseInt(v)); }} onBlur={() => set("prazo_dias_acordo", Math.max(1, parseInt(form.prazo_dias_acordo) || 30))} /></div>
+                <div><Label>Prazo para pagamento do acordo (dias)</Label><Input type="text" inputMode="numeric" value={form.prazo_dias_acordo ?? ""} onChange={e => { const v = e.target.value.replace(/[^0-9]/g, ""); set("prazo_dias_acordo", v === "" ? "" : parseInt(v)); }} onBlur={() => set("prazo_dias_acordo", Math.max(1, parseInt(form.prazo_dias_acordo) || DEFAULT_AGREEMENT_EXPIRATION_DAYS))} /></div>
               </div>
 
               {/* Índice de Correção Monetária */}
