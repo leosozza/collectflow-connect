@@ -42,6 +42,90 @@ function timeStrToMinutes(t: string): number {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function messageToHtml(message: string): string {
+  return escapeHtml(message)
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+async function enqueueCollectionEmail(
+  supabase: any,
+  params: {
+    brtDate: string;
+    email: string;
+    message: string;
+    ruleId: string;
+    ruleName: string;
+    ruleType: "wallet" | "agreement";
+    clientCpf?: string | null;
+    clientId?: string | null;
+    agreementId?: string | null;
+    installmentKey?: string | null;
+  },
+): Promise<{ queueMessageId: number | null; messageId: string }> {
+  const cleanCpf = (params.clientCpf || params.clientId || "unknown").replace(/\D/g, "") || "unknown";
+  const messageId = [
+    "collection_rule",
+    params.ruleId,
+    params.ruleType,
+    params.agreementId || cleanCpf,
+    params.installmentKey || "wallet",
+    params.brtDate,
+    params.email.toLowerCase(),
+  ].join(":");
+
+  const from = Deno.env.get("COLLECTION_EMAIL_FROM")
+    || Deno.env.get("EMAIL_FROM")
+    || "RIVO CONNECT <noreply@rivo.app>";
+  const senderDomain = Deno.env.get("COLLECTION_EMAIL_SENDER_DOMAIN")
+    || Deno.env.get("EMAIL_SENDER_DOMAIN")
+    || Deno.env.get("LOVABLE_EMAIL_SENDER_DOMAIN")
+    || null;
+
+  const payload: Record<string, unknown> = {
+    run_id: `collection-rule-${params.ruleId}-${params.brtDate}`,
+    to: params.email,
+    from,
+    subject: params.ruleName ? `RIVO Connect - ${params.ruleName}` : "RIVO Connect - Aviso de cobrança",
+    html: `
+      <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#1f2937">
+        ${messageToHtml(params.message)}
+        <p style="margin-top:24px;color:#6b7280;font-size:12px">
+          Esta é uma mensagem automática enviada pela régua de cobrança RIVO Connect.
+        </p>
+      </div>
+    `,
+    text: params.message,
+    purpose: "transactional",
+    label: "collection_rule",
+    idempotency_key: messageId,
+    message_id: messageId,
+    queued_at: new Date().toISOString(),
+  };
+
+  if (senderDomain) {
+    payload.sender_domain = senderDomain;
+  }
+
+  const { data, error } = await supabase.rpc("enqueue_email", {
+    queue_name: "transactional_emails",
+    payload,
+  });
+
+  if (error) throw error;
+  return { queueMessageId: typeof data === "number" ? data : null, messageId };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -72,6 +156,7 @@ Deno.serve(async (req) => {
     let totalSkippedDup = 0;
     let totalSkippedWindow = 0;
     let totalSkippedCap = 0;
+    let totalEmailQueued = 0;
 
     for (const tenant of tenants || []) {
       const { data: rules, error: rErr } = await supabase
@@ -105,7 +190,7 @@ Deno.serve(async (req) => {
             .select("id", { count: "exact", head: true })
             .eq("tenant_id", tenant.id)
             .eq("rule_id", rule.id)
-            .eq("status", "sent")
+            .in("status", ["sent", "pending"])
             .gte("created_at", todayBRTStartUTC);
           remainingCap = Math.max(0, rule.daily_cap - (sentToday || 0));
           if (remainingCap <= 0) {
@@ -178,12 +263,14 @@ Deno.serve(async (req) => {
           }
 
           const message = resolveTemplate(rule.message_template, client);
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
 
           if (rule.channel === "whatsapp" || rule.channel === "both") {
-            if (!client.phone) continue;
+            if (!client.phone) {
+              if (rule.channel === "whatsapp") continue;
+            } else {
 
-            const todayStart = new Date();
-            todayStart.setHours(0, 0, 0, 0);
             let dupQuery = supabase
               .from("message_logs")
               .select("id")
@@ -206,10 +293,9 @@ Deno.serve(async (req) => {
 
             if (dupLog) {
               totalSkippedDup++;
-              continue;
-            }
-
-            try {
+              if (rule.channel === "whatsapp") continue;
+            } else {
+              try {
               let sendOk = false;
               let providerName = "gupshup";
               let providerMessageId: string | null = null;
@@ -255,7 +341,8 @@ Deno.serve(async (req) => {
                 rawResult = result;
               } else {
                 console.warn(`[send-notifications] rule=${rule.id} sem instância e sem Gupshup global — pulando cliente`);
-                continue;
+                if (rule.channel === "whatsapp") continue;
+                rawResult = { error: "Nenhuma instância WhatsApp configurada" };
               }
 
               const status = sendOk ? "sent" : "failed";
@@ -351,32 +438,109 @@ Deno.serve(async (req) => {
               });
               totalFailed++;
             }
+            }
+            }
           }
 
           if (rule.channel === "email" || rule.channel === "both") {
+            if (sentInThisRule >= remainingCap) {
+              console.log(`[send-notifications] rule=${rule.id} cap atingido antes do email`);
+              continue;
+            }
+
             if (client.email) {
-              await logMessage(supabase, {
-                tenant_id: tenant.id,
-                client_id: client.client_id,
-                client_cpf: client.cpf,
-                channel: "email",
-                status: "pending",
-                message_body: message,
-                error_message: "Email provider not yet configured",
-                rule_id: rule.id,
-                email_to: client.email,
-                metadata: {
-                  source_type: "trigger",
-                  source: client.source || ruleType,
+              let emailDupQuery = supabase
+                .from("message_logs")
+                .select("id")
+                .eq("tenant_id", tenant.id)
+                .eq("rule_id", rule.id)
+                .eq("channel", "email")
+                .in("status", ["pending", "sent"])
+                .gte("created_at", todayStart.toISOString());
+
+              if (ruleType === "agreement" && client.agreement_id) {
+                emailDupQuery = emailDupQuery
+                  .eq("metadata->>agreement_id", client.agreement_id)
+                  .eq("metadata->>installment_key", client.installment_key || "");
+              } else if (client.client_id) {
+                emailDupQuery = emailDupQuery.eq("client_id", client.client_id);
+              } else {
+                emailDupQuery = emailDupQuery.eq("client_cpf", client.cpf);
+              }
+
+              const { data: emailDupLog } = await emailDupQuery.limit(1).maybeSingle();
+              if (emailDupLog) {
+                totalSkippedDup++;
+                continue;
+              }
+
+              try {
+                const queued = await enqueueCollectionEmail(supabase, {
+                  brtDate: brt.date,
+                  email: client.email,
+                  message,
+                  ruleId: rule.id,
+                  ruleName: rule.name,
+                  ruleType,
+                  clientCpf: client.cpf,
+                  clientId: client.client_id,
+                  agreementId: client.agreement_id || null,
+                  installmentKey: client.installment_key || null,
+                });
+
+                await logMessage(supabase, {
+                  tenant_id: tenant.id,
+                  client_id: client.client_id,
+                  client_cpf: client.cpf,
+                  channel: "email",
+                  status: "pending",
+                  message_body: message,
+                  error_message: null,
                   rule_id: rule.id,
-                  rule_name: rule.name,
-                  rule_type: ruleType,
-                  event_source: eventSource,
                   email_to: client.email,
-                  agreement_id: client.agreement_id || null,
-                  installment_key: client.installment_key || null,
-                },
-              });
+                  metadata: {
+                    source_type: "trigger",
+                    source: client.source || ruleType,
+                    rule_id: rule.id,
+                    rule_name: rule.name,
+                    rule_type: ruleType,
+                    event_source: eventSource,
+                    email_to: client.email,
+                    email_queue: "transactional_emails",
+                    email_queue_message_id: queued.queueMessageId,
+                    email_message_id: queued.messageId,
+                    agreement_id: client.agreement_id || null,
+                    installment_key: client.installment_key || null,
+                  },
+                });
+
+                totalEmailQueued++;
+                sentInThisRule++;
+              } catch (err: any) {
+                await logMessage(supabase, {
+                  tenant_id: tenant.id,
+                  client_id: client.client_id,
+                  client_cpf: client.cpf,
+                  channel: "email",
+                  status: "failed",
+                  message_body: message,
+                  error_message: (err?.message || "email queue error").slice(0, 500),
+                  rule_id: rule.id,
+                  email_to: client.email,
+                  metadata: {
+                    source_type: "trigger",
+                    source: client.source || ruleType,
+                    rule_id: rule.id,
+                    rule_name: rule.name,
+                    rule_type: ruleType,
+                    event_source: eventSource,
+                    email_to: client.email,
+                    agreement_id: client.agreement_id || null,
+                    installment_key: client.installment_key || null,
+                  },
+                });
+                totalFailed++;
+              }
             }
           }
         }
@@ -391,6 +555,7 @@ Deno.serve(async (req) => {
         skipped_duplicates: totalSkippedDup,
         skipped_out_of_window: totalSkippedWindow,
         skipped_daily_cap: totalSkippedCap,
+        emails_queued: totalEmailQueued,
         elapsed_ms: Date.now() - startedAt,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

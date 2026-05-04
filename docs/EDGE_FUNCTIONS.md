@@ -811,8 +811,9 @@ const supabase = createClient(
    - Calcula data alvo: `hoje - days_offset`
    - Busca clientes pendentes com vencimento na data alvo
    - Substitui variáveis no template
-   - Envia WhatsApp via Gupshup (se configurado)
-   - Registra email (placeholder — provider não integrado)
+   - Envia WhatsApp pela instância configurada ou fallback Gupshup
+   - Enfileira email transacional em `transactional_emails` para envio pelo `process-email-queue`
+   - Para parcelas de acordo, só seleciona alvo quando a parcela ainda não consta como paga nas fontes confirmadas: `manual_payments`, `portal_payments` e `negociarie_cobrancas`
    - Registra tudo em `message_logs`
 
 ---
