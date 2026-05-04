@@ -36,6 +36,8 @@ const DebtorProfileBadge = ({ clientId, clientCpf, tenantId, currentProfile, onP
         .eq("id", clientId);
       if (error) throw error;
 
+      const { data: { user } } = await supabase.auth.getUser();
+
       await supabase.from("client_events").insert({
         client_cpf: clientCpf.replace(/\D/g, ""),
         tenant_id: tenantId,
@@ -43,7 +45,12 @@ const DebtorProfileBadge = ({ clientId, clientCpf, tenantId, currentProfile, onP
         event_source: "operator",
         event_channel: "whatsapp",
         event_value: newValue,
-        metadata: { from: currentProfile, to: newValue },
+        metadata: { 
+          from: currentProfile, 
+          to: newValue,
+          operator_id: user?.id,
+          operator_name: (await supabase.from("profiles").select("full_name").eq("user_id", user?.id).maybeSingle()).data?.full_name
+        },
       });
 
       onProfileChanged(newValue);
