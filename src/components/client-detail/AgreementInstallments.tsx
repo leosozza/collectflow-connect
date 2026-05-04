@@ -841,6 +841,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                       {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
                     </Badge>
                   )}
+                </TableCell>
+
                 <TableCell className="text-center">
                   {inst.paidAt ? (
                     <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 gap-1 font-medium text-[10px]">

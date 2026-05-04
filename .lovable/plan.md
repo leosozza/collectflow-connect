@@ -1,29 +1,32 @@
-# Refinar arrasto do botão flutuante de suporte
+## Erro encontrado
 
-## Problema
-Mesmo após o último ajuste, ao arrastar o FAB de suporte (`SupportFloatingButton`) lateralmente ele ainda some da tela. A causa é que o `framer-motion` aplica internamente um `transform: translate(x, y)` durante o `drag`, que se soma ao `left`/`top` que estamos atualizando em `onDrag`. Esse deslocamento duplicado empurra o botão para fora da viewport, e como `onDragEnd` não reseta o transform de forma síncrona, ele não retorna.
+A página não carrega devido a um **erro de sintaxe JSX** em `src/components/client-detail/AgreementInstallments.tsx`.
 
-## Solução
-Abandonar o sistema `drag` do framer-motion para esse botão e implementar o arrasto com **pointer events nativos** (`onPointerDown` + `pointermove` + `pointerup` com `setPointerCapture`). A posição passa a ser 100% controlada por `left`/`top` no estado `pos`, sem nenhum `transform` concorrente. Isso garante:
+```
+Plugin: vite:react-swc
+File: src/components/client-detail/AgreementInstallments.tsx
+x Expected '</', got 'jsx text'
+```
 
-- Clamp rígido aos limites da viewport em todas as direções (esquerda, direita, topo, base).
-- Funciona com mouse, toque e caneta (pointer capture).
-- Diferenciação clara entre clique e arrasto via threshold de 4px (não dispara `setOpen` durante drag).
-- Sem dependência de `info.point` do framer (que pode falhar em iframes/embed do preview do Lovable).
+## Causa raiz
 
-## Arquivo afetado
-- `src/components/support/SupportFloatingButton.tsx` — trocar `<motion.button drag …>` por `<button>` nativo com handler `onPointerDown` que registra listeners temporários para `pointermove` e `pointerup`. Mantém `pos` no estado, persistência em `localStorage` e o `panelStyle` calculado a partir de `pos` (sem alterações).
+Na coluna **Status** da tabela de parcelas (linha ~827–843), o `<TableCell>` de Status é aberto mas **nunca é fechado** antes da próxima `<TableCell>` da coluna "Pagamento" começar na linha 844:
 
-## Detalhes técnicos
-- `onPointerDown` captura `clientX/Y` iniciais e `pos` inicial; usa `setPointerCapture` para garantir recebimento dos eventos mesmo se o cursor sair do botão.
-- `onMove`: calcula `dx/dy`, ativa flag de drag após 4px de movimento, atualiza `setPos` com clamp `[FAB_MARGIN, window.innerWidth - FAB_SIZE - FAB_MARGIN]` (idem para Y).
-- `onUp`/`onCancel`: remove listeners, libera pointer capture, reseta `isDragging` e `draggedRef` (com `setTimeout` de 50ms para suprimir o `click` subsequente quando houve drag).
-- `onClick`: se `draggedRef.current` for `true`, ignora; caso contrário, alterna `open`.
-- Adicionar classe `touch-none select-none` para evitar scroll/seleção em mobile durante o drag.
-- Remover `animate={{ x: 0, y: 0 }}` e `motion.button` — não há mais transform a resetar.
+```tsx
+// Linha 827
+<TableCell className="text-center ...">  // Status
+  {isCancelled ? (...) : (...)}
+                                     // ← falta </TableCell> aqui
+// Linha 844
+<TableCell className="text-center">     // Pagamento
+```
 
-## Critérios de aceite
-- Arrastar para qualquer direção mantém o botão totalmente visível, parando exatamente na borda da viewport (com margem de 16px).
-- Clicar (sem mover) abre/fecha o painel normalmente.
-- A posição persiste após reload (já coberto pelo `localStorage` existente).
-- Funciona em desktop e mobile.
+Isso quebra todo o restante da árvore JSX (TableRow, TableBody, etc.), gerando os múltiplos erros em cascata que aparecem no log do Vite.
+
+## Correção
+
+Adicionar `</TableCell>` entre as linhas 843 e 844, fechando corretamente a célula de Status antes de abrir a célula de Pagamento.
+
+## Arquivos afetados
+
+- `src/components/client-detail/AgreementInstallments.tsx` (1 linha adicionada)
