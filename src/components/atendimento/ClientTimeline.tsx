@@ -602,10 +602,20 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
 
   const getCategoryColor = (cat: EventCategory) => {
     const colors: Record<EventCategory, string> = {
-      acordo: "bg-[#4ade80]",
-      manual: "bg-[#3b82f6]",
-      automatico: "bg-[#a855f7]",
-      lote: "bg-[#f97316]",
+      acordo: "data-[state=checked]:bg-[#4ade80]",
+      manual: "data-[state=checked]:bg-[#3b82f6]",
+      automatico: "data-[state=checked]:bg-[#a855f7]",
+      lote: "data-[state=checked]:bg-[#f97316]",
+    };
+    return colors[cat];
+  };
+
+  const getCategoryTextColor = (cat: EventCategory) => {
+    const colors: Record<EventCategory, string> = {
+      acordo: "text-[#4ade80]",
+      manual: "text-[#3b82f6]",
+      automatico: "text-[#a855f7]",
+      lote: "text-[#f97316]",
     };
     return colors[cat];
   };
