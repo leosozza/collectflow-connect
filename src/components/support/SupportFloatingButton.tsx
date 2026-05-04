@@ -454,36 +454,31 @@ const SupportFloatingButton = () => {
         drag
         dragMomentum={false}
         dragElastic={0}
-        dragConstraints={{
-          left: FAB_MARGIN,
-          top: FAB_MARGIN,
-          right: (typeof window !== "undefined" ? window.innerWidth : 1024) - FAB_SIZE - FAB_MARGIN,
-          bottom: (typeof window !== "undefined" ? window.innerHeight : 768) - FAB_SIZE - FAB_MARGIN,
-        }}
-        style={{ left: pos.x, top: pos.y }}
+        // Use the actual viewport rect at drag time so constraints stay correct
+        // even after window resizes, and the button can never leave the screen.
         onDragStart={() => {
           draggedRef.current = true;
           setIsDragging(true);
         }}
-        onDragEnd={(_, info) => {
+        onDrag={(_, info) => {
+          // Live-update position from the pointer so left/top stay authoritative
+          // and framer-motion's internal transform doesn't drift off-screen.
+          const nx = Math.min(
+            Math.max(FAB_MARGIN, info.point.x - FAB_SIZE / 2),
+            window.innerWidth - FAB_SIZE - FAB_MARGIN,
+          );
+          const ny = Math.min(
+            Math.max(FAB_MARGIN, info.point.y - FAB_SIZE / 2),
+            window.innerHeight - FAB_SIZE - FAB_MARGIN,
+          );
+          setPos({ x: nx, y: ny });
+        }}
+        onDragEnd={() => {
           setIsDragging(false);
-          setPos((p) => {
-            const nx = Math.min(
-              Math.max(FAB_MARGIN, p.x + info.offset.x),
-              window.innerWidth - FAB_SIZE - FAB_MARGIN,
-            );
-            const ny = Math.min(
-              Math.max(FAB_MARGIN, p.y + info.offset.y),
-              window.innerHeight - FAB_SIZE - FAB_MARGIN,
-            );
-            return { x: nx, y: ny };
-          });
           // reset drag flag shortly after so click event (if any) is suppressed
           setTimeout(() => { draggedRef.current = false; }, 50);
         }}
-        // reset offset after we commit pos
-        animate={{ x: 0, y: 0 }}
-        transition={{ duration: 0 }}
+        style={{ left: pos.x, top: pos.y, x: 0, y: 0 }}
         onClick={(e) => {
           if (draggedRef.current) {
             e.preventDefault();
