@@ -126,6 +126,16 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   });
 
   const allPaymentRecords = useMemo(() => {
+    const normalizeKey = (k: string) => {
+      if (!k) return null;
+      if (k.includes(':')) {
+        const parts = k.split(':');
+        const last = parts[parts.length - 1];
+        return last === '0' ? 'entrada' : last;
+      }
+      return k;
+    };
+
     const manualRecords = manualPayments
       .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
       .map((mp: any) => ({
@@ -134,14 +144,17 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         key: mp.installment_key
       }));
 
-    const manualKeys = new Set(manualRecords.map(r => r.key).filter(Boolean));
+    const manualKeys = new Set(manualRecords.map(r => normalizeKey(r.key)).filter(Boolean));
 
     const records = [
       ...manualRecords,
       ...portalPayments.map((pp: any) => ({ amount: Number(pp.amount || 0), date: pp.updated_at, key: null })),
       ...cobrancas
         .filter((c: any) => c.status === "pago")
-        .filter((c: any) => !manualKeys.has(c.installment_key)) // Deduplicate: skip cobranca if already covered by manual entry for same key
+        .filter((c: any) => {
+          const norm = normalizeKey(c.installment_key);
+          return !manualKeys.has(norm);
+        })
         .map((c: any) => ({
           amount: Number(c.valor_pago ?? c.valor ?? 0),
           date: c.data_pagamento || c.updated_at,
