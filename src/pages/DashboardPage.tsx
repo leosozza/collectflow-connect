@@ -298,7 +298,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("totalRecebido") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-6 xl:col-start-4 xl:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-1">
             <TotalRecebidoCard
               totalRecebido={stats?.total_recebido ?? 0}
               tenantId={effectiveTenantId}
@@ -310,7 +310,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("kpisGrid") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-3 xl:col-start-10 xl:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-1">
             <KpisGridCard
               acionadosHoje={acionadosHoje}
               acordosDia={stats?.acordos_dia ?? 0}
@@ -327,7 +327,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("agendamentos") && (
-          <section className="min-h-0 h-full xl:col-span-3 xl:col-start-1 xl:row-start-2">
+          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-1 lg:row-start-2">
             <AgendamentosHojeCard
               callbacks={callbacks}
               showOperator={canViewAllAgendados}
@@ -335,7 +335,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("parcelas") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-6 xl:col-start-4 xl:row-start-2">
+          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-2">
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
