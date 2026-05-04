@@ -279,9 +279,9 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 md:grid-cols-2 xl:grid-cols-12 xl:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3">
+      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3">
         {isVisible("metas") && (
-          <section className="min-h-0 h-full xl:col-span-3 xl:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-3 lg:row-start-1">
             <DashboardMetaCard
               year={filterYear ?? now.getFullYear()}
               month={filterMonth ?? now.getMonth() + 1}
