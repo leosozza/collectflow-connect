@@ -560,11 +560,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                   value={client.external_id}
                   onSave={(v) => updateSingleField("external_id", v)}
                 />
-                <InlineEditableField
-                  label="Cod. Contrato"
-                  value={client.cod_contrato}
-                  onSave={(v) => updateSingleField("cod_contrato", v)}
-                />
+                <InfoItem label="Cod. Contrato(s)" value={codContratos} />
                 <InfoItem label="Modelo" value={modelNames} />
                 <InfoItem label="Credor" value={client.credor} />
               </div>
