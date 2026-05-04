@@ -624,7 +624,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     <Card className="border-none shadow-none bg-transparent overflow-visible">
       <CardHeader className="px-0 pb-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <CardTitle className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2.5">
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2.5">
             <Clock className="w-4 h-4" />
             Histórico de Atendimento
           </CardTitle>
