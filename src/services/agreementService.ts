@@ -209,7 +209,7 @@ export const createAgreement = async (
       .eq("tenant_id", tenantId)
       .eq("credor", data.credor)
       .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${fmtCpf}`)
-      .in("status", ["pending", "approved", "pending_approval"])
+      .in("status", ["pending", "approved", "overdue", "pending_approval"])
       .limit(1);
 
     if (existingAgreements && existingAgreements.length > 0) {
@@ -968,7 +968,7 @@ export const reopenAgreement = async (
       .eq("tenant_id", agreement.tenant_id)
       .eq("credor", agreement.credor)
       .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${fmtCpf}`)
-      .in("status", ["pending", "approved", "pending_approval"])
+      .in("status", ["pending", "approved", "overdue", "pending_approval"])
       .neq("id", id)
       .limit(1);
 

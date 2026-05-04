@@ -738,7 +738,7 @@ const AtendimentoPage = ({ clientId: propClientId, agentId: propAgentId, callId:
                   clientName={client.nome_completo}
                   credor={client.credor}
                   onAgreementCreated={handleAgreementCreated}
-                  hasActiveAgreement={agreements.some((a: any) => a.status === "approved" || a.status === "pending")}
+                  hasActiveAgreement={agreements.some((a: any) => ["pending", "approved", "overdue", "pending_approval"].includes(a.status))}
                 />
               </DialogContent>
             </Dialog>

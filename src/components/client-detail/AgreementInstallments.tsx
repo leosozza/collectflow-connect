@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
@@ -97,7 +97,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         { event: "*", schema: "public", table: "negociarie_cobrancas", filter: `agreement_id=eq.${agreementId}` },
         () => {
           refetchCobrancas();
-          queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
         },
       )
       .subscribe();
@@ -112,40 +111,31 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
-  // Fetch real payments linked to THIS agreement via client_events + manual_payments
-  const { data: agreementPaymentsTotal = 0 } = useQuery({
-    queryKey: ["agreement-real-payments", agreementId],
+  const { data: portalPayments = [] } = useQuery({
+    queryKey: ["portal-payments", agreementId],
     queryFn: async () => {
-      let total = 0;
-
-      // 1. Payment events from client_events
-      const { data: paymentEvents } = await supabase
-        .from("client_events")
-        .select("metadata")
-        .eq("event_type", "payment_confirmed")
-        .filter("metadata->>agreement_id", "eq", agreementId);
-
-      if (paymentEvents) {
-        total += paymentEvents.reduce((sum: number, ev: any) => {
-          const val = Number(ev.metadata?.valor_pago || 0);
-          return sum + val;
-        }, 0);
-      }
-
-      // 2. Confirmed manual payments
-      const confirmedManual = manualPayments.filter((mp: any) => mp.status === "confirmed");
-      total += confirmedManual.reduce((sum: number, mp: any) => sum + Number(mp.amount_paid || 0), 0);
-
-      // 3. Paid cobrancas from negociarie
-      const paidCobrancas = cobrancas.filter((c: any) => c.status === "pago");
-      total += paidCobrancas.reduce((sum: number, c: any) => sum + Number(c.valor || 0), 0);
-
-      return total;
+      const { data, error } = await supabase
+        .from("portal_payments" as any)
+        .select("amount")
+        .eq("agreement_id", agreementId)
+        .eq("status", "paid");
+      if (error) return [];
+      return (data as any[]) || [];
     },
     enabled: !!agreementId,
   });
 
-  const totalPaidFromClients = agreementPaymentsTotal;
+  // Material payment sources only. client_events are audit trail and can duplicate provider rows.
+  const totalPaidFromClients = useMemo(() => {
+    const manualTotal = manualPayments
+      .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
+      .reduce((sum: number, mp: any) => sum + Number(mp.amount_paid || 0), 0);
+    const portalTotal = portalPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+    const cobrancaTotal = cobrancas
+      .filter((c: any) => c.status === "pago")
+      .reduce((sum: number, c: any) => sum + Number(c.valor_pago ?? c.valor ?? 0), 0);
+    return manualTotal + portalTotal + cobrancaTotal;
+  }, [manualPayments, portalPayments, cobrancas]);
 
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
@@ -249,7 +239,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     );
 
     const confirmedManualForThis = manualPayments
-      .filter((mp: any) => matchesInst(mp) && mp.status === "confirmed")
+      .filter((mp: any) => matchesInst(mp) && ["confirmed", "approved"].includes(mp.status))
       .reduce((s: number, mp: any) => s + Number(mp.amount_paid || 0), 0);
     const isPaidByManual = confirmedManualForThis >= instValue - 0.01;
 
@@ -409,7 +399,6 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
       if (error) throw error;
       toast({ title: "Baixa revertida para pendente de confirmação." });
       queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
-      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
       onRefresh?.();
     } catch (err: any) {
       toast({ title: "Erro ao desconfirmar", description: err.message, variant: "destructive" });
@@ -429,7 +418,6 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
       if (error) throw error;
       toast({ title: "Solicitação de baixa cancelada." });
       queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
-      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
       onRefresh?.();
     } catch (err: any) {
       toast({ title: "Erro ao cancelar", description: err.message, variant: "destructive" });
@@ -486,7 +474,6 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
       toast({ title: "Pagamento estornado com sucesso." });
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
-      queryClient.invalidateQueries({ queryKey: ["agreement-real-payments", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       refetchCobrancas();
       onRefresh?.();
@@ -964,7 +951,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                           (mp: any) => (
                             (mp.installment_key && mp.installment_key === inst.customKey) ||
                             (!mp.installment_key && mp.installment_number === inst.number)
-                          ) && mp.status === "confirmed"
+                          ) && ["confirmed", "approved"].includes(mp.status)
                         );
                         const isCobrancaPaga = inst.cobranca?.status === "pago";
                         const showButton = hasConfirmedManual || isCobrancaPaga;

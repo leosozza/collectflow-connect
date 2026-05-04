@@ -310,7 +310,7 @@ const ClientDetailPage = () => {
     refetchAgreements();
   };
 
-  const hasActiveAgreement = agreements.some((a: any) => ["pending", "approved", "pending_approval"].includes(a.status));
+  const hasActiveAgreement = agreements.some((a: any) => ["pending", "approved", "overdue", "pending_approval"].includes(a.status));
 
   const handleReactivateAgreement = (agreement: any) => {
     setReactivateAgreement(agreement);

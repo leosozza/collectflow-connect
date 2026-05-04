@@ -135,7 +135,7 @@ export function classifyInstallment(
 
   // If confirmed manual payment covers the installment
   const confirmedManualTotal = mps
-    .filter(mp => mp.status === "confirmed")
+    .filter(mp => mp.status === "confirmed" || mp.status === "approved")
     .reduce((sum, mp) => sum + Number(mp.amount_paid || 0), 0);
 
   if (confirmedManualTotal >= installment.value - 0.01) {
@@ -151,8 +151,7 @@ export function classifyInstallment(
     }
   }
 
-  // Check client_events payment_confirmed (already handled by auto-expire, but also check waterfall)
-  // For simplicity, if no payment found, check due date
+  // If no material payment was found, classify by due date.
   const dueDateOnly = new Date(installment.dueDate);
   dueDateOnly.setHours(23, 59, 59, 999);
 

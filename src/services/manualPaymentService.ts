@@ -341,13 +341,20 @@ export const manualPaymentService = {
               .eq("id", mp.agreement_id);
 
             // Also update client status
+            const rawCpf = String((agr as any).client_cpf || "").replace(/\D/g, "");
+            const fmtCpf = rawCpf.length === 11
+              ? `${rawCpf.slice(0, 3)}.${rawCpf.slice(3, 6)}.${rawCpf.slice(6, 9)}-${rawCpf.slice(9)}`
+              : rawCpf;
+            const cpfOr = Array.from(new Set([rawCpf, fmtCpf, (agr as any).client_cpf].filter(Boolean)))
+              .map((value) => `cpf.eq.${value}`)
+              .join(",");
             await supabase
               .from("clients")
-              .update({ status: "pago" })
+              .update({ status: "pago", data_quitacao: new Date().toISOString().split("T")[0] })
               .eq("status", "em_acordo")
               .eq("credor", (agr as any).credor)
-              .eq("cpf", (agr as any).client_cpf)
-              .eq("tenant_id", mp.tenant_id);
+              .eq("tenant_id", mp.tenant_id)
+              .or(cpfOr);
           }
         }
       } catch (e) {

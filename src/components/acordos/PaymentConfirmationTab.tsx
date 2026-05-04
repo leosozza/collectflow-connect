@@ -147,23 +147,32 @@ const PaymentConfirmationTab = ({ tenantId }: PaymentConfirmationTabProps) => {
           const ag = agreementRow as any;
 
           if (ag && ag.proposed_total > 0) {
+            const rawCpf = String(ag.client_cpf || "").replace(/\D/g, "");
+            const fmtCpf = rawCpf.length === 11
+              ? `${rawCpf.slice(0, 3)}.${rawCpf.slice(3, 6)}.${rawCpf.slice(6, 9)}-${rawCpf.slice(9)}`
+              : rawCpf;
+            const cpfOr = Array.from(new Set([rawCpf, fmtCpf, ag.client_cpf].filter(Boolean)))
+              .map((value) => `cpf.eq.${value}`)
+              .join(",");
             const isFullyPaid = totalPaid >= ag.proposed_total - 0.01;
             if (isFullyPaid && ag.status !== "completed") {
               await supabase.from("agreements").update({ status: "completed" } as any).eq("id", agreementId);
               await supabase
                 .from("clients")
-                .update({ status: "pago" } as any)
-                .eq("cpf", ag.client_cpf)
+                .update({ status: "pago", data_quitacao: new Date().toISOString().split("T")[0] } as any)
+                .eq("tenant_id", ag.tenant_id || tenantId)
                 .eq("credor", ag.credor)
-                .eq("status", "em_acordo");
+                .eq("status", "em_acordo")
+                .or(cpfOr);
             } else if (!isFullyPaid && ag.status === "completed") {
               await supabase.from("agreements").update({ status: "pending" } as any).eq("id", agreementId);
               await supabase
                 .from("clients")
-                .update({ status: "em_acordo" } as any)
-                .eq("cpf", ag.client_cpf)
+                .update({ status: "em_acordo", data_quitacao: null } as any)
+                .eq("tenant_id", ag.tenant_id || tenantId)
                 .eq("credor", ag.credor)
-                .eq("status", "pago");
+                .eq("status", "pago")
+                .or(cpfOr);
             }
           }
 

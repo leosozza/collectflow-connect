@@ -107,6 +107,17 @@ async function syncTenant(supabase: any, tenant_id: string) {
     if (allInNegociacao && emNegociacaoId) return;
 
     let targetStatusId: string | null = null;
+    const activeAgreementStatuses = new Set(["pending", "approved", "pending_approval", "overdue"]);
+    const hasActiveAgreement = agreements.some((a: any) => activeAgreementStatuses.has(a.status));
+    const hasOverdueAgreement = agreements.some((a: any) => a.status === "overdue");
+    const hasCurrentAgreement = agreements.some((a: any) =>
+      a.status === "pending" || a.status === "approved" || a.status === "pending_approval"
+    );
+    const sortedAgreements = [...agreements].sort((a, b) => {
+      const da = new Date(a.updated_at || a.created_at || 0).getTime();
+      const db = new Date(b.updated_at || b.created_at || 0).getTime();
+      return db - da;
+    });
 
     const allPago = clients.every((c: any) => c.status === "pago");
     if (allPago && quitadoId) {
@@ -114,38 +125,30 @@ async function syncTenant(supabase: any, tenant_id: string) {
       countQuitado += clients.length;
     }
 
-    if (!targetStatusId && acordoVigenteId) {
-      if (agreements.some((a: any) => a.status === "pending")) {
-        targetStatusId = acordoVigenteId;
-        countAcordoVigente += clients.length;
+    if (!targetStatusId && quebraAcordoId) {
+      if (!hasActiveAgreement && sortedAgreements.length > 0 && sortedAgreements[0].status === "cancelled") {
+        targetStatusId = quebraAcordoId;
+        countQuebraAcordo += clients.length;
       }
     }
 
     if (!targetStatusId && acordoAtrasadoId) {
-      if (agreements.some((a: any) => a.status === "overdue")) {
+      if (hasOverdueAgreement) {
         targetStatusId = acordoAtrasadoId;
         countAcordoAtrasado += clients.length;
       }
     }
 
-    if (!targetStatusId && quebraAcordoId) {
-      const sortedAgreements = [...agreements].sort((a, b) => {
-        const da = new Date(a.updated_at || a.created_at || 0).getTime();
-        const db = new Date(b.updated_at || b.created_at || 0).getTime();
-        return db - da;
-      });
-      if (sortedAgreements.length > 0 && sortedAgreements[0].status === "cancelled") {
-        targetStatusId = quebraAcordoId;
-        countQuebraAcordo += clients.length;
+    if (!targetStatusId && acordoVigenteId) {
+      if (hasCurrentAgreement) {
+        targetStatusId = acordoVigenteId;
+        countAcordoVigente += clients.length;
       }
     }
 
     if (!targetStatusId) {
       const hasOverdue = clients.some((c: any) =>
         c.data_vencimento < today && (c.status === "pendente" || c.status === "vencido")
-      );
-      const hasActiveAgreement = agreements.some((a: any) =>
-        a.status === "pending" || a.status === "overdue"
       );
       if (hasOverdue && !hasActiveAgreement) {
         targetStatusId = inadimplenteId;
