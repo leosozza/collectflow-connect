@@ -279,9 +279,9 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 md:grid-cols-2 xl:grid-cols-12 xl:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3">
+      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3">
         {isVisible("metas") && (
-          <section className="min-h-0 h-full xl:col-span-3 xl:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-3 lg:row-start-1">
             <DashboardMetaCard
               year={filterYear ?? now.getFullYear()}
               month={filterMonth ?? now.getMonth() + 1}
@@ -298,7 +298,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("totalRecebido") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-6 xl:col-start-4 xl:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-1">
             <TotalRecebidoCard
               totalRecebido={stats?.total_recebido ?? 0}
               tenantId={effectiveTenantId}
@@ -310,7 +310,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("kpisGrid") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-3 xl:col-start-10 xl:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-1">
             <KpisGridCard
               acionadosHoje={acionadosHoje}
               acordosDia={stats?.acordos_dia ?? 0}
@@ -327,7 +327,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("agendamentos") && (
-          <section className="min-h-0 h-full xl:col-span-3 xl:col-start-1 xl:row-start-2">
+          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-1 lg:row-start-2">
             <AgendamentosHojeCard
               callbacks={callbacks}
               showOperator={canViewAllAgendados}
@@ -335,7 +335,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("parcelas") && (
-          <section className="min-h-0 h-full md:col-span-2 xl:col-span-6 xl:col-start-4 xl:row-start-2">
+          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-2">
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
