@@ -124,15 +124,18 @@ Deno.serve(async (req) => {
     // Conversation + instance
     const { data: conv } = await admin
       .from("conversations")
-      .select("id, remote_phone, instance_id, tenant_id")
+      .select("id, remote_phone, instance_id, endpoint_id, tenant_id")
       .eq("id", msg.conversation_id)
       .maybeSingle();
     if (!conv) return json({ error: "Conversa não encontrada" }, 404);
 
+    const instanceId = conv.endpoint_id || conv.instance_id;
+    if (!instanceId) return json({ error: "Instância não encontrada para esta conversa" }, 404);
+
     const { data: inst } = await admin
       .from("whatsapp_instances")
       .select("id, instance_name, instance_url, api_key, provider")
-      .eq("id", conv.instance_id)
+      .eq("id", instanceId)
       .maybeSingle();
     if (!inst) return json({ error: "Instância não encontrada" }, 404);
 
@@ -145,8 +148,9 @@ Deno.serve(async (req) => {
 
     const fallbackEvolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
     const fallbackEvolutionKey = Deno.env.get("EVOLUTION_API_KEY") || "";
-    const wuzapiUrl = Deno.env.get("WUZAPI_URL") || "";
+    const wuzapiUrl = Deno.env.get("WUZAPI_API_URL") || Deno.env.get("WUZAPI_URL") || "";
     const wuzapiAdminToken = Deno.env.get("WUZAPI_ADMIN_TOKEN") || "";
+    const providerKey = (meta.provider_key || {}) as Record<string, any>;
 
     let providerResult;
     if (action === "delete") {
@@ -159,6 +163,7 @@ Deno.serve(async (req) => {
         fallbackEvolutionKey,
         wuzapiUrl,
         wuzapiAdminToken,
+        providerKey,
       );
     } else {
       providerResult = await editByProvider(
@@ -221,6 +226,18 @@ Deno.serve(async (req) => {
         .update({
           deleted_for_recipient_at: new Date().toISOString(),
           deleted_by: profile?.id || null,
+          metadata: {
+            ...meta,
+            delete_for_recipient: {
+              requested_at: new Date().toISOString(),
+              provider: providerResult.provider,
+              provider_message_id: providerMessageId,
+              provider_key: providerKey,
+              provider_status: providerResult.result?.status || null,
+              provider_response_key: providerResult.result?.key || null,
+              http_status: providerResult.httpStatus || null,
+            },
+          },
         } as any)
         .eq("id", messageId);
       if (updErr) {

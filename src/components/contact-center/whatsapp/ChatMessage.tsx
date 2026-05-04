@@ -55,9 +55,12 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   const repliedMessage = message.reply_to_message_id
     ? allMessages.find((m) => m.id === message.reply_to_message_id) ?? null
     : null;
-  const hasReplyRef = !!message.reply_to_message_id;
 
   const metadata = (message as any).metadata as Record<string, any> | null;
+  const quotedMeta = metadata?.quoted_message as
+    | { direction?: string; message_type?: string; content?: string | null }
+    | undefined;
+  const hasReplyRef = !!message.reply_to_message_id || !!quotedMeta;
   const sendError = metadata?.send_error as string | undefined;
   const providerError = metadata?.provider_error as string | undefined;
   const errorTooltip = sendError || providerError || null;
@@ -88,6 +91,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     message.status !== "failed" &&
     ageMs <= EDIT_WINDOW_MS;
   const canDelete =
+    !isOfficialApi &&
     isOutbound &&
     !isInternal &&
     !isDeleted &&
@@ -182,7 +186,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     setBusy(true);
     try {
       await deleteChatMessageForRecipient(message.id);
-      toast.success("Mensagem excluída para o destinatário");
+      toast.success("Solicitação de exclusão enviada ao WhatsApp");
       setConfirmDelete(false);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao excluir mensagem");
@@ -326,7 +330,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
   }
 
   const deletedTooltip = isDeleted
-    ? `Excluída para o cliente em ${format(new Date(message.deleted_for_recipient_at!), "dd/MM/yyyy HH:mm")}`
+    ? `Solicitação de exclusão registrada em ${format(new Date(message.deleted_for_recipient_at!), "dd/MM/yyyy HH:mm")}`
     : null;
 
   return (
@@ -385,7 +389,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
                   onClick={() => setConfirmDelete(true)}
                   className="text-destructive focus:text-destructive"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" /> Excluir para o cliente
+                  <Trash2 className="w-4 h-4 mr-2" /> Solicitar exclusão
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -410,6 +414,17 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
                   {repliedMessage.content
                     ? stripWhatsAppMarkers(repliedMessage.content)
                     : `[${repliedMessage.message_type}]`}
+                </span>
+              </>
+            ) : quotedMeta ? (
+              <>
+                <span className="font-medium text-[11px] block">
+                  {quotedMeta.direction === "inbound" ? "Cliente" : quotedMeta.direction === "outbound" ? "Operador" : "Mensagem"}
+                </span>
+                <span className="line-clamp-2 text-muted-foreground">
+                  {quotedMeta.content
+                    ? stripWhatsAppMarkers(String(quotedMeta.content))
+                    : `[${quotedMeta.message_type || "mensagem"}]`}
                 </span>
               </>
             ) : (
@@ -544,17 +559,17 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
       <AlertDialog open={confirmDelete} onOpenChange={(o) => { if (!busy) setConfirmDelete(o); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir mensagem para o cliente?</AlertDialogTitle>
+            <AlertDialogTitle>Solicitar exclusão da mensagem?</AlertDialogTitle>
             <AlertDialogDescription>
-              No WhatsApp do cliente a mensagem aparecerá como "Esta mensagem foi apagada".
-              Aqui na Rivo ela permanecerá visível, riscada e marcada como excluída, para auditoria.
+              A Rivo vai solicitar ao WhatsApp a exclusão para todos. Aqui a mensagem
+              permanecerá visível, riscada e marcada para auditoria.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} disabled={busy} className="bg-destructive hover:bg-destructive/90">
               {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Excluir para o cliente
+              Solicitar exclusão
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

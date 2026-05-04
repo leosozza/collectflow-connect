@@ -27,8 +27,8 @@ interface ChatPanelProps {
   conversation: Conversation | null;
   messages: ChatMessage[];
   onSend: (text: string, replyToMessageId?: string | null) => void;
-  onSendMedia: (file: File) => void;
-  onSendAudio: (blob: Blob) => void;
+  onSendMedia: (file: File, replyToMessageId?: string | null) => void;
+  onSendAudio: (blob: Blob, replyToMessageId?: string | null) => void;
   onSendInternalNote?: (text: string) => void;
   sending: boolean;
   onStatusChange: (status: string) => void;
@@ -597,14 +597,16 @@ const ChatPanel = ({
             toast.error("Defina o Perfil e a Tabulação para enviar mensagens.");
             return;
           }
-          onSendMedia(file);
+          onSendMedia(file, replyTo?.id || null);
+          setReplyTo(null);
         }}
         onSendAudio={(blob) => {
           if (mustGate) {
             toast.error("Defina o Perfil e a Tabulação para enviar mensagens.");
             return;
           }
-          onSendAudio(blob);
+          onSendAudio(blob, replyTo?.id || null);
+          setReplyTo(null);
         }}
         onSendInternalNote={onSendInternalNote}
         quickReplies={quickReplies}

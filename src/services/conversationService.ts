@@ -33,6 +33,7 @@ export interface ChatMessage {
   media_mime_type: string | null;
   status: "pending" | "sent" | "delivered" | "read" | "failed" | "sending";
   external_id: string | null;
+  provider_message_id?: string | null;
   is_internal: boolean;
   reply_to_message_id: string | null;
   metadata?: Record<string, any> | null;
@@ -264,6 +265,7 @@ export async function sendTextMessage(
     media_mime_type: null,
     status: "sent",
     external_id: result.provider_message_id || null,
+    provider_message_id: result.provider_message_id || null,
     is_internal: false,
     reply_to_message_id: replyToMessageId || null,
     created_at: new Date().toISOString(),
@@ -277,6 +279,7 @@ export async function sendMediaMessage(
   mediaType: "image" | "video" | "audio" | "document",
   mediaMimeType: string,
   fileName: string,
+  replyToMessageId?: string | null,
 ): Promise<ChatMessage> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData?.session?.access_token;
@@ -296,6 +299,7 @@ export async function sendMediaMessage(
       mediaType,
       mediaMimeType,
       fileName,
+      replyToMessageId: replyToMessageId || undefined,
     }),
   });
 
@@ -313,8 +317,9 @@ export async function sendMediaMessage(
     media_mime_type: mediaMimeType,
     status: "sent",
     external_id: result.provider_message_id || null,
+    provider_message_id: result.provider_message_id || null,
     is_internal: false,
-    reply_to_message_id: null,
+    reply_to_message_id: replyToMessageId || null,
     created_at: new Date().toISOString(),
   } as ChatMessage;
 }
@@ -505,4 +510,3 @@ export async function fetchConversationTransfers(
     to_user_name: map.get(r.to_user_id) || null,
   }));
 }
-

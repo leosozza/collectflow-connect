@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { sendByProvider } from "../_shared/whatsapp-sender.ts";
-import type { MediaPayload } from "../_shared/whatsapp-sender.ts";
+import type { MediaPayload, QuotedPayload } from "../_shared/whatsapp-sender.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +13,41 @@ function jsonResp(body: Record<string, unknown>, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function previewForQuotedMessage(message: any): string {
+  const content = String(message?.content || "").trim();
+  if (content) return content.slice(0, 500);
+
+  const type = String(message?.message_type || "mensagem");
+  if (type === "image") return "[imagem]";
+  if (type === "audio") return "[audio]";
+  if (type === "video") return "[video]";
+  if (type === "document") return "[documento]";
+  if (type === "sticker") return "[sticker]";
+  return "[mensagem]";
+}
+
+function buildQuotedPayload(message: any): QuotedPayload | null {
+  const providerMessageId = message?.provider_message_id || message?.external_id;
+  if (!providerMessageId) return null;
+
+  const meta = (message?.metadata || {}) as Record<string, any>;
+  const savedKey = (meta.provider_key || {}) as Record<string, any>;
+  const key: QuotedPayload["key"] = {
+    id: savedKey.id || providerMessageId,
+  };
+  if (savedKey.remoteJid) key.remoteJid = savedKey.remoteJid;
+  if (typeof savedKey.fromMe === "boolean") key.fromMe = savedKey.fromMe;
+  else key.fromMe = message.direction === "outbound";
+  if (savedKey.participant) key.participant = savedKey.participant;
+
+  return {
+    key,
+    message: {
+      conversation: previewForQuotedMessage(message),
+    },
+  };
 }
 
 Deno.serve(async (req) => {
@@ -125,6 +160,32 @@ Deno.serve(async (req) => {
 
     const providerName = (instance?.provider || conv.provider || "").toLowerCase();
     const tenantSettings = (tenantRes.data?.settings as Record<string, any>) || {};
+
+    let quotedForProvider: QuotedPayload | null = null;
+    let replyMetadata: Record<string, unknown> | null = null;
+    if (replyToMessageId) {
+      const { data: replyMsg, error: replyErr } = await supabase
+        .from("chat_messages")
+        .select("id, external_id, provider_message_id, direction, message_type, content, media_mime_type, metadata")
+        .eq("id", replyToMessageId)
+        .eq("tenant_id", tenantId)
+        .eq("conversation_id", conversationId)
+        .maybeSingle();
+
+      if (replyErr) {
+        console.warn("[send-chat-message] failed to load quoted message:", replyErr.message);
+      } else if (replyMsg) {
+        quotedForProvider = buildQuotedPayload(replyMsg);
+        replyMetadata = {
+          id: replyMsg.id,
+          external_id: replyMsg.external_id || null,
+          provider_message_id: replyMsg.provider_message_id || null,
+          direction: replyMsg.direction,
+          message_type: replyMsg.message_type,
+          content: previewForQuotedMessage(replyMsg),
+        };
+      }
+    }
 
     // 6. Build media payload if applicable
     let media: MediaPayload | null = null;
@@ -242,6 +303,7 @@ Deno.serve(async (req) => {
       wuzapiUrl,
       wuzapiToken,
       media,
+      quotedForProvider,
     );
 
     if (!sendResult.ok) {
@@ -339,6 +401,11 @@ Deno.serve(async (req) => {
         ...((existingMsg?.metadata as Record<string, unknown>) || {}),
         sent_by_user_id: userId,
         sent_by_profile_id: senderProfileId,
+        provider_message_id: sendResult.providerMessageId,
+        provider_key: sendResult.result?.key || null,
+        provider_status: sendResult.result?.status || null,
+        provider_timestamp: sendResult.result?.messageTimestamp || null,
+        ...(replyMetadata ? { quoted_message: replyMetadata } : {}),
       };
 
       const updates: Record<string, unknown> = { metadata: mergedMeta };

@@ -744,7 +744,7 @@ const WhatsAppChatLayout = () => {
     }
   };
 
-  const handleSendMedia = async (file: File) => {
+  const handleSendMedia = async (file: File, replyToMessageId?: string | null) => {
     if (!selectedConv || !tenantId) return;
     setSending(true);
     try {
@@ -782,7 +782,7 @@ const WhatsAppChatLayout = () => {
       else if (file.type.startsWith("video/")) mediaType = "video";
       else if (file.type.startsWith("audio/")) mediaType = "audio";
 
-      await sendMediaMessage(selectedConv.id, tenantId, mediaUrl, mediaType, file.type, safeFileName);
+      await sendMediaMessage(selectedConv.id, tenantId, mediaUrl, mediaType, file.type, safeFileName, replyToMessageId);
 
       if (selectedConv.status === "waiting") {
         setSelectedConv({ ...selectedConv, status: "open" as any });
@@ -794,7 +794,7 @@ const WhatsAppChatLayout = () => {
     }
   };
 
-  const handleSendAudio = async (blob: Blob) => {
+  const handleSendAudio = async (blob: Blob, replyToMessageId?: string | null) => {
     const mime = blob.type || "audio/ogg;codecs=opus";
     const extMap: Record<string, string> = {
       "audio/ogg": ".ogg",
@@ -806,7 +806,7 @@ const WhatsAppChatLayout = () => {
     };
     const ext = extMap[mime] || ".ogg";
     const file = new File([blob], `audio_${Date.now()}${ext}`, { type: mime });
-    await handleSendMedia(file);
+    await handleSendMedia(file, replyToMessageId);
   };
 
   const handleStatusChangeFromList = async (convId: string, status: string) => {

@@ -67,6 +67,30 @@ Deno.serve(async (req) => {
     return defaults[canonicalType] || "";
   }
 
+  function buildQuotedPreview(replyToExternalId: string | null, msgPayload: any, payload: any): Record<string, any> | null {
+    if (!replyToExternalId) return null;
+    const context =
+      msgPayload.context ||
+      msgPayload.payload?.context ||
+      payload.context ||
+      payload.payload?.context ||
+      {};
+    const contextPayload = context.payload || context.message || {};
+    const text =
+      contextPayload.text ||
+      context.text ||
+      contextPayload.caption ||
+      "";
+    const rawType = contextPayload.type || context.type || "text";
+    const messageType = rawType === "file" ? "document" : rawType;
+    return {
+      external_id: replyToExternalId,
+      provider_message_id: context.gsId || context.id || replyToExternalId,
+      message_type: ["text", "image", "audio", "video", "document"].includes(messageType) ? messageType : "text",
+      content: text ? String(text).slice(0, 500) : "[mensagem respondida]",
+    };
+  }
+
   try {
     const payload = await req.json();
     console.log("[provider=gupshup] Webhook payload:", JSON.stringify(payload).slice(0, 500));
@@ -186,6 +210,7 @@ Deno.serve(async (req) => {
 
           // Build metadata for simulated buttons
           let metadata: Record<string, any> = {};
+          const quotedPreview = buildQuotedPreview(replyToExternalId, msgPayload, payload);
 
           if (canonicalType === "text" && /^\d{1,2}$/.test(content.trim())) {
             try {
@@ -244,12 +269,47 @@ Deno.serve(async (req) => {
             console.log("[provider=gupshup] Ingested:", JSON.stringify(result));
             await writeLog(targetTenantId, "success", `Mensagem ingerida: from=${phone}, type=${canonicalType}`, result, 200);
 
-            // Update metadata on the inserted message if we have button context
-            if (Object.keys(metadata).length > 0 && result?.message_id) {
-              await supabase
-                .from("chat_messages")
-                .update({ metadata })
-                .eq("id", result.message_id);
+            if (result?.message_id) {
+              try {
+                let replyToMessageId = result?.reply_to_message_id || null;
+                if (!replyToMessageId && replyToExternalId && result?.conversation_id) {
+                  const [{ data: byExternal }, { data: byProvider }] = await Promise.all([
+                    supabase
+                      .from("chat_messages")
+                      .select("id")
+                      .eq("tenant_id", targetTenantId)
+                      .eq("conversation_id", result.conversation_id)
+                      .eq("external_id", replyToExternalId)
+                      .limit(1),
+                    supabase
+                      .from("chat_messages")
+                      .select("id")
+                      .eq("tenant_id", targetTenantId)
+                      .eq("conversation_id", result.conversation_id)
+                      .eq("provider_message_id", replyToExternalId)
+                      .limit(1),
+                  ]);
+                  replyToMessageId = byExternal?.[0]?.id || byProvider?.[0]?.id || null;
+                }
+
+                const { data: existingMsg } = await supabase
+                  .from("chat_messages")
+                  .select("metadata")
+                  .eq("id", result.message_id)
+                  .maybeSingle();
+                const mergedMeta = {
+                  ...(((existingMsg as any)?.metadata as Record<string, unknown>) || {}),
+                  ...metadata,
+                  provider_message_id: externalId || null,
+                  ...(replyToExternalId ? { reply_to_external_id: replyToExternalId } : {}),
+                  ...(quotedPreview ? { quoted_message: quotedPreview } : {}),
+                };
+                const updates: Record<string, unknown> = { metadata: mergedMeta };
+                if (replyToMessageId) updates.reply_to_message_id = replyToMessageId;
+                await supabase.from("chat_messages").update(updates).eq("id", result.message_id);
+              } catch (metaErr: any) {
+                console.warn("[provider=gupshup] metadata/reply update failed:", metaErr.message);
+              }
             }
 
             // ===== Trigger async transcription for audio =====
@@ -288,6 +348,44 @@ Deno.serve(async (req) => {
       const errorCode = payload.payload?.payload?.code || payload.payload?.code || "";
 
       if (gsMessageId && status) {
+        if (status === "deleted" || status === "delete") {
+          const [{ data: msgByExt }, { data: msgByProv }] = await Promise.all([
+            supabase
+              .from("chat_messages")
+              .select("id, tenant_id, metadata")
+              .eq("external_id", gsMessageId)
+              .order("created_at", { ascending: false })
+              .limit(1),
+            supabase
+              .from("chat_messages")
+              .select("id, tenant_id, metadata")
+              .eq("provider_message_id", gsMessageId)
+              .order("created_at", { ascending: false })
+              .limit(1),
+          ]);
+          const matchedMsg = msgByExt?.[0] || msgByProv?.[0];
+          if (matchedMsg) {
+            const existingMeta = (matchedMsg.metadata || {}) as Record<string, any>;
+            await supabase.from("chat_messages").update({
+              deleted_for_recipient_at: new Date().toISOString(),
+              metadata: {
+                ...existingMeta,
+                deleted_by_whatsapp: {
+                  detected_at: new Date().toISOString(),
+                  provider: "gupshup",
+                  provider_message_id: gsMessageId,
+                  payload: payload.payload || payload,
+                },
+              },
+            }).eq("id", matchedMsg.id);
+          }
+
+          await writeLog(null, "message_deleted", `Mensagem marcada como apagada: ${gsMessageId}`, payload, 200);
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         const mappedStatus =
           status === "delivered" ? "delivered" :
             status === "read" ? "read" :
@@ -301,14 +399,16 @@ Deno.serve(async (req) => {
           // Update by external_id
           const { data: msgByExt } = await supabase
             .from("chat_messages")
-            .select("id, metadata")
+            .select("id, tenant_id, metadata")
             .eq("external_id", gsMessageId)
+            .order("created_at", { ascending: false })
             .limit(1);
 
           const { data: msgByProv } = await supabase
             .from("chat_messages")
-            .select("id, metadata")
+            .select("id, tenant_id, metadata")
             .eq("provider_message_id", gsMessageId)
+            .order("created_at", { ascending: false })
             .limit(1);
 
           const matchedMsg = msgByExt?.[0] || msgByProv?.[0];
@@ -322,10 +422,24 @@ Deno.serve(async (req) => {
 
           await writeLog(null, "status_failed", `Mensagem falhou: ${providerError}`, { gsMessageId, errorReason, errorCode }, 200);
         } else {
-          await Promise.all([
-            supabase.from("chat_messages").update({ status: mappedStatus }).eq("external_id", gsMessageId),
-            supabase.from("chat_messages").update({ status: mappedStatus }).eq("provider_message_id", gsMessageId),
+          const [{ data: msgByExt }, { data: msgByProv }] = await Promise.all([
+            supabase
+              .from("chat_messages")
+              .select("id, tenant_id")
+              .eq("external_id", gsMessageId)
+              .order("created_at", { ascending: false })
+              .limit(1),
+            supabase
+              .from("chat_messages")
+              .select("id, tenant_id")
+              .eq("provider_message_id", gsMessageId)
+              .order("created_at", { ascending: false })
+              .limit(1),
           ]);
+          const matchedMsg = msgByExt?.[0] || msgByProv?.[0];
+          if (matchedMsg) {
+            await supabase.from("chat_messages").update({ status: mappedStatus }).eq("id", matchedMsg.id);
+          }
         }
 
         // ===== Propagate to campaign recipient =====

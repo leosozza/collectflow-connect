@@ -7,6 +7,31 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function parseMessagePreview(message: any): { message_type: string; content: string | null; media_mime_type: string | null } {
+  if (message?.conversation) {
+    return { message_type: "text", content: String(message.conversation).slice(0, 500), media_mime_type: null };
+  }
+  if (message?.extendedTextMessage?.text) {
+    return { message_type: "text", content: String(message.extendedTextMessage.text).slice(0, 500), media_mime_type: null };
+  }
+  if (message?.imageMessage) {
+    return { message_type: "image", content: message.imageMessage.caption || "[imagem]", media_mime_type: message.imageMessage.mimetype || "image/jpeg" };
+  }
+  if (message?.audioMessage) {
+    return { message_type: "audio", content: "[audio]", media_mime_type: message.audioMessage.mimetype || "audio/ogg" };
+  }
+  if (message?.videoMessage) {
+    return { message_type: "video", content: message.videoMessage.caption || "[video]", media_mime_type: message.videoMessage.mimetype || "video/mp4" };
+  }
+  if (message?.documentMessage) {
+    return { message_type: "document", content: message.documentMessage.fileName || "[documento]", media_mime_type: message.documentMessage.mimetype || "application/octet-stream" };
+  }
+  if (message?.stickerMessage) {
+    return { message_type: "sticker", content: "[sticker]", media_mime_type: null };
+  }
+  return { message_type: "text", content: "[mensagem]", media_mime_type: null };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -119,6 +144,61 @@ Deno.serve(async (req) => {
       const fromMe = msgData.key?.fromMe || false;
       const externalId = msgData.key?.id || "";
       const pushName = msgData.pushName || "";
+      const msg = msgData.message;
+
+      // Protocol REVOKE means a WhatsApp message was deleted for everyone.
+      // We never remove the row; we mark it for audit and keep metadata.
+      const protocolMessage = msg?.protocolMessage;
+      const protocolType = protocolMessage?.type;
+      const revokedExternalId = protocolMessage?.key?.id || null;
+      if (revokedExternalId && (protocolType === "REVOKE" || protocolType === 0)) {
+        const { data: instForDelete } = await supabase
+          .from("whatsapp_instances")
+          .select("tenant_id")
+          .eq("instance_name", instanceName)
+          .maybeSingle();
+
+        const tenantForDelete = instForDelete?.tenant_id;
+        if (tenantForDelete) {
+          const [{ data: byExternal }, { data: byProvider }] = await Promise.all([
+            supabase
+              .from("chat_messages")
+              .select("id, metadata")
+              .eq("tenant_id", tenantForDelete)
+              .eq("external_id", revokedExternalId)
+              .limit(1),
+            supabase
+              .from("chat_messages")
+              .select("id, metadata")
+              .eq("tenant_id", tenantForDelete)
+              .eq("provider_message_id", revokedExternalId)
+              .limit(1),
+          ]);
+          const target = byExternal?.[0] || byProvider?.[0];
+          if (target) {
+            const existingMeta = (target.metadata || {}) as Record<string, any>;
+            await supabase
+              .from("chat_messages")
+              .update({
+                deleted_for_recipient_at: new Date().toISOString(),
+                metadata: {
+                  ...existingMeta,
+                  deleted_by_whatsapp: {
+                    detected_at: new Date().toISOString(),
+                    provider: "evolution",
+                    protocol_key: protocolMessage.key,
+                    webhook_key: msgData.key,
+                  },
+                },
+              })
+              .eq("id", target.id);
+          }
+        }
+
+        return new Response(JSON.stringify({ ok: true, revoked: revokedExternalId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       // Parse message content — explicit per type
       let messageType = "text";
@@ -126,7 +206,6 @@ Deno.serve(async (req) => {
       let rawMediaUrl = "";
       let mediaMimeType = "";
 
-      const msg = msgData.message;
       if (msg?.conversation) {
         content = msg.conversation;
       } else if (msg?.extendedTextMessage?.text) {
@@ -165,6 +244,13 @@ Deno.serve(async (req) => {
         msg?.stickerMessage?.contextInfo ||
         null;
       const replyToExternalId: string | null = ctxInfo?.stanzaId || null;
+      const quotedPreview = ctxInfo?.quotedMessage
+        ? {
+            external_id: replyToExternalId,
+            participant: ctxInfo?.participant || null,
+            ...parseMessagePreview(ctxInfo.quotedMessage),
+          }
+        : null;
       if (replyToExternalId) {
         console.log(`[provider=unofficial] Reply detected, stanzaId=${replyToExternalId}`);
       }
@@ -319,6 +405,50 @@ Deno.serve(async (req) => {
       }
 
       console.log("[provider=unofficial] Ingested:", JSON.stringify(result));
+
+      if (result?.message_id) {
+        try {
+          let replyToMessageId = result?.reply_to_message_id || null;
+          if (!replyToMessageId && replyToExternalId && result?.conversation_id) {
+            const [{ data: byExternal }, { data: byProvider }] = await Promise.all([
+              supabase
+                .from("chat_messages")
+                .select("id")
+                .eq("tenant_id", tenantId)
+                .eq("conversation_id", result.conversation_id)
+                .eq("external_id", replyToExternalId)
+                .limit(1),
+              supabase
+                .from("chat_messages")
+                .select("id")
+                .eq("tenant_id", tenantId)
+                .eq("conversation_id", result.conversation_id)
+                .eq("provider_message_id", replyToExternalId)
+                .limit(1),
+            ]);
+            replyToMessageId = byExternal?.[0]?.id || byProvider?.[0]?.id || null;
+          }
+
+          const { data: existingMsg } = await supabase
+            .from("chat_messages")
+            .select("metadata")
+            .eq("id", result.message_id)
+            .maybeSingle();
+          const metadata = {
+            ...(((existingMsg as any)?.metadata as Record<string, unknown>) || {}),
+            provider_key: msgData.key || null,
+            provider_status: msgData.status || null,
+            remote_jid: remoteJid || null,
+            ...(quotedPreview ? { quoted_message: quotedPreview } : {}),
+            ...(replyToExternalId ? { reply_to_external_id: replyToExternalId } : {}),
+          };
+          const updates: Record<string, unknown> = { metadata };
+          if (replyToMessageId) updates.reply_to_message_id = replyToMessageId;
+          await supabase.from("chat_messages").update(updates).eq("id", result.message_id);
+        } catch (metaErr: any) {
+          console.warn("[provider=unofficial] metadata/reply update failed:", metaErr.message);
+        }
+      }
 
       // ===== Trigger async transcription for audio (inbound + outbound) =====
       if (messageType === "audio" && finalMediaUrl && result?.message_id) {

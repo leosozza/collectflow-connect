@@ -42,16 +42,27 @@ export interface MediaPayload {
   mimeType?: string;
 }
 
+export interface QuotedPayload {
+  key: {
+    id: string;
+    remoteJid?: string;
+    fromMe?: boolean;
+    participant?: string;
+  };
+  message?: Record<string, unknown>;
+}
+
 export async function sendByProvider(
   inst: { provider?: string; instance_url?: string; api_key?: string; instance_name?: string },
   phone: string,
   message: string,
-  tenantSettings: Record<string, any>,
+  _tenantSettings: Record<string, any>,
   fallbackEvolutionUrl: string,
   fallbackEvolutionKey: string,
   wuzapiUrl: string,
   wuzapiAdminToken: string,
   media?: MediaPayload | null,
+  quoted?: QuotedPayload | null,
 ): Promise<SendResult> {
   const provider = (inst.provider || "").toLowerCase();
   const normalizedPhone = normalizePhoneBR(phone);
@@ -64,14 +75,14 @@ export async function sendByProvider(
 
   if (provider === "gupshup") {
     return media
-      ? sendGupshupMedia(normalizedPhone, media, tenantSettings)
-      : sendGupshupText(normalizedPhone, message, tenantSettings);
+      ? sendGupshupMedia(normalizedPhone, media, _tenantSettings)
+      : sendGupshupText(normalizedPhone, message, _tenantSettings);
   }
 
   // Default: Evolution / Baylers
   return media
-    ? sendEvolutionMedia(inst, normalizedPhone, media, fallbackEvolutionUrl, fallbackEvolutionKey)
-    : sendEvolutionText(inst, normalizedPhone, message, fallbackEvolutionUrl, fallbackEvolutionKey);
+    ? sendEvolutionMedia(inst, normalizedPhone, media, fallbackEvolutionUrl, fallbackEvolutionKey, quoted)
+    : sendEvolutionText(inst, normalizedPhone, message, fallbackEvolutionUrl, fallbackEvolutionKey, quoted);
 }
 
 // ========== TEXT SENDERS ==========
@@ -108,6 +119,7 @@ function sendGupshupText(
 async function sendEvolutionText(
   inst: any, phone: string, message: string,
   fallbackUrl: string, fallbackKey: string,
+  quoted?: QuotedPayload | null,
 ): Promise<SendResult> {
   const provider = inst.provider || "evolution";
   const instanceUrl = (inst.instance_url || fallbackUrl).replace(/\/+$/, "");
@@ -116,12 +128,24 @@ async function sendEvolutionText(
     return { ok: false, result: { error: "URL da instância Evolution não configurada" }, providerMessageId: null, provider };
   }
   try {
+    const payload: Record<string, unknown> = {
+      number: phone,
+      text: message,
+      options: { checkExists: false },
+    };
+    if (quoted?.key?.id) {
+      payload.quoted = {
+        key: quoted.key,
+        message: quoted.message || { conversation: "" },
+      };
+    }
+
     const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
       method: "POST",
       headers: { apikey: instanceKey, "Content-Type": "application/json" },
       // options.checkExists: false → força envio mesmo se a verificação heurística
       // do Evolution (que remove o 9º dígito) não confirmar a conta.
-      body: JSON.stringify({ number: phone, text: message, options: { checkExists: false } }),
+      body: JSON.stringify(payload),
     });
     const result = await resp.json();
     return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
@@ -247,6 +271,7 @@ async function sendGupshupMedia(
 async function sendEvolutionMedia(
   inst: any, phone: string, media: MediaPayload,
   fallbackUrl: string, fallbackKey: string,
+  quoted?: QuotedPayload | null,
 ): Promise<SendResult> {
   const provider = inst.provider || "evolution";
   const instanceUrl = (inst.instance_url || fallbackUrl).replace(/\/+$/, "");
@@ -257,10 +282,16 @@ async function sendEvolutionMedia(
 
   // Audio uses dedicated endpoint sendWhatsAppAudio (PTT voice note)
   if (media.mediaType === "audio") {
-    const audioPayload = {
+    const audioPayload: Record<string, unknown> = {
       number: phone,
       audio: media.mediaUrl,
     };
+    if (quoted?.key?.id) {
+      audioPayload.quoted = {
+        key: quoted.key,
+        message: quoted.message || { conversation: "" },
+      };
+    }
 
     console.log(`[evolution-sender] Sending audio via sendWhatsAppAudio: url=${media.mediaUrl.substring(0, 80)}`);
 
@@ -296,6 +327,13 @@ async function sendEvolutionMedia(
 
   if (media.mimeType) {
     payload.mimetype = media.mimeType;
+  }
+
+  if (quoted?.key?.id) {
+    payload.quoted = {
+      key: quoted.key,
+      message: quoted.message || { conversation: "" },
+    };
   }
 
   console.log(`[evolution-sender] Sending ${media.mediaType}: url=${media.mediaUrl.substring(0, 80)}, mime=${media.mimeType}`);
@@ -347,11 +385,12 @@ export async function deleteByProvider(
   inst: { provider?: string; instance_url?: string; api_key?: string; instance_name?: string },
   providerMessageId: string,
   remotePhone: string,
-  tenantSettings: Record<string, any>,
+  _tenantSettings: Record<string, any>,
   fallbackEvolutionUrl: string,
   fallbackEvolutionKey: string,
   wuzapiUrl: string,
   wuzapiAdminToken: string,
+  providerKey?: Record<string, any> | null,
 ): Promise<ManageResult> {
   const provider = (inst.provider || "evolution").toLowerCase();
   const phone = normalizePhoneBR(remotePhone);
@@ -376,22 +415,12 @@ export async function deleteByProvider(
   }
 
   if (provider === "gupshup") {
-    const apiKey = tenantSettings.gupshup_api_key;
-    if (!apiKey) {
-      return { ok: false, result: null, provider, error: "Credenciais Gupshup não configuradas" };
-    }
-    try {
-      const resp = await fetch(`https://api.gupshup.io/wa/api/v1/msg/${encodeURIComponent(providerMessageId)}`, {
-        method: "DELETE",
-        headers: { "apikey": apiKey },
-      });
-      const text = await resp.text();
-      let result: any;
-      try { result = JSON.parse(text); } catch { result = { raw: text }; }
-      return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
-    } catch (err) {
-      return { ok: false, result: null, provider, error: `Falha de rede Gupshup: ${(err as Error).message}` };
-    }
+    return {
+      ok: false,
+      result: null,
+      provider,
+      error: "Exclusão remota de mensagens enviadas pela empresa não é suportada pela API oficial Gupshup/Meta neste fluxo.",
+    };
   }
 
   // Default: Evolution / Baylers
@@ -401,14 +430,20 @@ export async function deleteByProvider(
     return { ok: false, result: null, provider, error: "Instância Evolution não configurada" };
   }
   try {
+    const exactKey = providerKey || {};
+    const deletePayload: Record<string, unknown> = {
+      id: exactKey.id || providerMessageId,
+      remoteJid: exactKey.remoteJid || `${phone}@s.whatsapp.net`,
+      fromMe: typeof exactKey.fromMe === "boolean" ? exactKey.fromMe : true,
+    };
+    if (exactKey.participant) {
+      deletePayload.participant = exactKey.participant;
+    }
+
     const resp = await fetch(`${instanceUrl}/chat/deleteMessageForEveryone/${inst.instance_name}`, {
       method: "DELETE",
       headers: { apikey: instanceKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: providerMessageId,
-        remoteJid: `${phone}@s.whatsapp.net`,
-        fromMe: true,
-      }),
+      body: JSON.stringify(deletePayload),
     });
     const result = await resp.json().catch(() => ({}));
     return { ok: resp.ok, result, provider, httpStatus: resp.status, error: resp.ok ? undefined : describeProviderError(resp.status, result) };
