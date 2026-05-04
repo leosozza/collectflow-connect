@@ -126,14 +126,27 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   });
 
   const allPaymentRecords = useMemo(() => {
+    const manualRecords = manualPayments
+      .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
+      .map((mp: any) => ({
+        amount: Number(mp.amount_paid || 0),
+        date: mp.payment_date,
+        key: mp.installment_key
+      }));
+
+    const manualKeys = new Set(manualRecords.map(r => r.key).filter(Boolean));
+
     const records = [
-      ...manualPayments
-        .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
-        .map((mp: any) => ({ amount: Number(mp.amount_paid || 0), date: mp.payment_date })),
-      ...portalPayments.map((pp: any) => ({ amount: Number(pp.amount || 0), date: pp.updated_at })),
+      ...manualRecords,
+      ...portalPayments.map((pp: any) => ({ amount: Number(pp.amount || 0), date: pp.updated_at, key: null })),
       ...cobrancas
         .filter((c: any) => c.status === "pago")
-        .map((c: any) => ({ amount: Number(c.valor_pago ?? c.valor ?? 0), date: c.data_pagamento || c.updated_at }))
+        .filter((c: any) => !manualKeys.has(c.installment_key)) // Deduplicate: skip cobranca if already covered by manual entry for same key
+        .map((c: any) => ({
+          amount: Number(c.valor_pago ?? c.valor ?? 0),
+          date: c.data_pagamento || c.updated_at,
+          key: c.installment_key
+        }))
     ];
     return records.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [manualPayments, portalPayments, cobrancas]);
@@ -271,7 +284,9 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       ? "pago"
       : (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
 
-    return { ...inst, status, isOverdue, pendingManual, isCancelled: false, paidAt: effectivePaidAt };
+    const finalPaidAt = status === "pago" ? effectivePaidAt : null;
+
+    return { ...inst, status, isOverdue, pendingManual, isCancelled: false, paidAt: finalPaidAt };
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
