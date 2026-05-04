@@ -125,17 +125,22 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
-  // Material payment sources only. client_events are audit trail and can duplicate provider rows.
-  const totalPaidFromClients = useMemo(() => {
-    const manualTotal = manualPayments
-      .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
-      .reduce((sum: number, mp: any) => sum + Number(mp.amount_paid || 0), 0);
-    const portalTotal = portalPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-    const cobrancaTotal = cobrancas
-      .filter((c: any) => c.status === "pago")
-      .reduce((sum: number, c: any) => sum + Number(c.valor_pago ?? c.valor ?? 0), 0);
-    return manualTotal + portalTotal + cobrancaTotal;
+  const allPaymentRecords = useMemo(() => {
+    const records = [
+      ...manualPayments
+        .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
+        .map((mp: any) => ({ amount: Number(mp.amount_paid || 0), date: mp.payment_date })),
+      ...portalPayments.map((pp: any) => ({ amount: Number(pp.amount || 0), date: pp.updated_at })),
+      ...cobrancas
+        .filter((c: any) => c.status === "pago")
+        .map((c: any) => ({ amount: Number(c.valor_pago ?? c.valor ?? 0), date: c.data_pagamento || c.updated_at }))
+    ];
+    return records.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [manualPayments, portalPayments, cobrancas]);
+
+  const totalPaidFromClients = useMemo(() => {
+    return allPaymentRecords.reduce((sum, r) => sum + r.amount, 0);
+  }, [allPaymentRecords]);
 
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
@@ -211,7 +216,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const totalInstallments = installments.length;
   const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
-  let remainingPaid = totalPaidFromClients;
+  let paymentPool = allPaymentRecords.map(p => ({ ...p, rem: p.amount }));
   const installmentsWithStatus = installments.map((inst) => {
     const isCancelled = !!cancelledMap[inst.customKey];
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -224,12 +229,24 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     }
 
     let isPaidManually = false;
-    if (remainingPaid >= instValue) {
-      isPaidManually = true;
-      remainingPaid -= instValue;
-    } else {
-      remainingPaid = 0;
+    let paidAt: string | null = null;
+    let needed = instValue;
+
+    // Track payment date using FIFO pool
+    for (let p of paymentPool) {
+      if (needed <= 0.005) break;
+      if (p.rem > 0) {
+        const take = Math.min(needed, p.rem);
+        needed -= take;
+        p.rem -= take;
+        paidAt = p.date;
+      }
     }
+
+    if (needed <= 0.01) {
+      isPaidManually = true;
+    }
+
     const matchesInst = (mp: any) =>
       (mp.installment_key && mp.installment_key === inst.customKey) ||
       (!mp.installment_key && mp.installment_number === inst.number);
@@ -243,14 +260,18 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       .reduce((s: number, mp: any) => s + Number(mp.amount_paid || 0), 0);
     const isPaidByManual = confirmedManualForThis >= instValue - 0.01;
 
+    // Se houver uma data de pagamento direta na cobrança vinculada, use-a como prioridade
+    const effectivePaidAt = inst.cobranca?.data_pagamento || paidAt;
+
     const status = pendingManual
       ? "pending_confirmation"
       : inst.cobranca?.status === "pago"
       ? "pago"
       : isPaidByManual
       ? "pago"
-      : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-    return { ...inst, status, isOverdue, pendingManual, isCancelled: false };
+      : (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
+
+    return { ...inst, status, isOverdue, pendingManual, isCancelled: false, paidAt: effectivePaidAt };
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
@@ -713,6 +734,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             <TableHead>Vencimento</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead className="text-center">Status</TableHead>
+            <TableHead className="text-center">Pagamento</TableHead>
             <TableHead className="text-center w-[140px]">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -818,6 +840,15 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                       {statusIcon(inst.status)}
                       {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
                     </Badge>
+                  )}
+                <TableCell className="text-center">
+                  {inst.paidAt ? (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 gap-1 font-medium text-[10px]">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {formatDate(inst.paidAt.split("T")[0])}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-[10px]">—</span>
                   )}
                 </TableCell>
 

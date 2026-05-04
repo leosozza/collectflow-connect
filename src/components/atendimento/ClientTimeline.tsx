@@ -624,12 +624,12 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     <Card className="border-none shadow-none bg-transparent overflow-visible">
       <CardHeader className="px-0 pb-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2.5">
+          <CardTitle className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2.5 flex-shrink-0">
             <Clock className="w-4 h-4" />
             Histórico de Atendimento
           </CardTitle>
 
-          <div className="flex items-center gap-8">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-8 justify-end">
             {/* Categories Switches */}
             <div className="flex items-center gap-5 pr-8 border-r border-slate-200">
               {(Object.keys(filters) as EventCategory[]).map((cat) => (
