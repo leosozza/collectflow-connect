@@ -58,14 +58,14 @@ const NotificationList = ({ notifications, onClose }: Props) => {
         )}
       </div>
 
-      <ScrollArea className="max-h-[320px]">
+      <ScrollArea className="h-[320px]">
         {notifications.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
             Nenhuma notificação
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {notifications.slice(0, 20).map((n) => {
+            {notifications.slice(0, 50).map((n) => {
               const Icon = typeIcons[n.type] || Info;
               const color = typeColors[n.type] || "text-muted-foreground";
               return (
