@@ -581,7 +581,6 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       if (!filters[item.category]) return false;
       if (sentiment === "positive" && item.sentiment !== "positive") return false;
       if (sentiment === "negative" && item.sentiment !== "negative") return false;
-      // Skip raw chat messages unless it's a significant event
       if (item.type === "whatsapp_inbound" || item.type === "whatsapp_outbound") return false;
       return true;
     });
@@ -612,35 +611,43 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
   };
 
   return (
-    <Card className="border-border/40 shadow-sm overflow-hidden">
-      <CardHeader className="pb-4 border-b border-border/40 bg-muted/20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <CardTitle className="text-sm font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+    <Card className="border-none shadow-none bg-transparent overflow-visible">
+      <CardHeader className="px-0 pb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <CardTitle className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2.5">
             <Clock className="w-4 h-4" />
             Histórico de Atendimento
           </CardTitle>
 
-          <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-8">
             {/* Categories Switches */}
-            <div className="flex items-center gap-4 border-r border-border/60 pr-6">
+            <div className="flex items-center gap-5 pr-8 border-r border-slate-200">
               {(Object.keys(filters) as EventCategory[]).map((cat) => (
-                <div key={cat} className="flex flex-col items-center gap-1">
+                <div key={cat} className="flex flex-col items-center gap-1.5">
                   <Switch 
                     checked={filters[cat]} 
                     onCheckedChange={() => toggleCategory(cat)}
-                    className={cn(filters[cat] && getCategoryColor(cat))}
+                    className={cn(
+                      "scale-90",
+                      filters[cat] ? getCategoryColor(cat) : "bg-slate-200"
+                    )}
                   />
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase">{cat === "automatico" ? "Automático" : toTitleCase(cat)}</span>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                    {cat === "automatico" ? "Automático" : toTitleCase(cat)}
+                  </span>
                 </div>
               ))}
             </div>
 
             {/* Sentiment Filters */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn("w-8 h-8 rounded-full", sentiment === "positive" ? "bg-emerald-50 text-emerald-600" : "text-muted-foreground")}
+                className={cn(
+                  "w-9 h-9 rounded-full transition-all",
+                  sentiment === "positive" ? "bg-emerald-50 text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                )}
                 onClick={() => setSentiment(sentiment === "positive" ? "all" : "positive")}
               >
                 <ThumbsUp className="w-4 h-4" />
@@ -648,7 +655,10 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn("w-8 h-8 rounded-full", sentiment === "negative" ? "bg-red-50 text-red-600" : "text-muted-foreground")}
+                className={cn(
+                  "w-9 h-9 rounded-full transition-all",
+                  sentiment === "negative" ? "bg-rose-50 text-rose-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                )}
                 onClick={() => setSentiment(sentiment === "negative" ? "all" : "negative")}
               >
                 <ThumbsDown className="w-4 h-4" />
@@ -658,93 +668,94 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         </div>
       </CardHeader>
 
-      <CardContent className="p-6 bg-card/40">
+      <CardContent className="px-0">
         {groupedItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Inbox className="w-12 h-12 text-muted-foreground/20 mb-4" />
-            <p className="text-sm font-medium text-muted-foreground">Nenhum evento encontrado para os filtros selecionados</p>
+          <div className="flex flex-col items-center justify-center py-32 text-center opacity-40">
+            <Inbox className="w-16 h-16 text-slate-300 mb-4" />
+            <p className="text-sm font-medium text-slate-500">Nenhum evento registrado</p>
           </div>
         ) : (
-          <div className="relative pt-4 max-w-5xl mx-auto">
-            {/* Central Vertical Line */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-[1px] bg-border/60" />
+          <div className="relative pt-8 w-full max-w-6xl mx-auto">
+            {/* Central Line */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-[2px] bg-slate-100" />
 
-            <div className="space-y-12">
+            <div className="space-y-16">
               {groupedItems.map(([minute, items], idx) => {
                 const isLeft = idx % 2 === 0;
                 const primaryItem = items[0];
-                const colors = COLOR_MAP[primaryItem.type] || COLOR_MAP.system;
-                const sourceLabel = primaryItem.actor?.kind === "system" || primaryItem.actor?.kind === "workflow" ? "AUTO" : "MANUAL";
+                const sourceLabel = primaryItem.actor?.kind === "system" || primaryItem.actor?.kind === "workflow" ? "AUTO" : (primaryItem.actor?.kind || "MANUAL").toUpperCase();
 
                 return (
-                  <div key={minute} className="relative flex items-center min-h-[100px]">
-                    {/* Content Card Side */}
-                    <div className={cn("w-[45%] flex", isLeft ? "justify-end pr-8" : "order-2 pl-8")}>
-                      <div className="space-y-3 w-full max-w-sm">
+                  <div key={minute} className="grid grid-cols-[1fr_80px_1fr] items-center group">
+                    {/* LEFT SIDE */}
+                    <div className={cn("flex flex-col", isLeft ? "items-end pr-10" : "items-start pl-10 order-3")}>
+                      <div className="space-y-4 w-full">
                         {items.map((item) => (
                           <div 
                             key={item.id} 
                             className={cn(
-                              "relative group p-4 rounded-xl border bg-card/60 backdrop-blur-sm shadow-sm transition-all hover:shadow-md",
-                              item.sentiment === "positive" && "border-emerald-200/50 bg-emerald-50/10",
-                              item.sentiment === "negative" && "border-red-200/50 bg-red-50/10",
-                              !isLeft ? "rounded-tl-none" : "rounded-tr-none"
+                              "relative p-6 rounded-2xl border transition-all duration-300 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-lg hover:-translate-y-0.5",
+                              item.sentiment === "positive" ? "border-emerald-100" : item.sentiment === "negative" ? "border-rose-100" : "border-slate-100",
+                              isLeft ? "text-right" : "text-left"
                             )}
                           >
-                            {/* Tip pointing to icon */}
+                            {/* Speech Bubble Tip */}
                             <div className={cn(
-                              "absolute top-4 w-3 h-3 bg-card border-inherit transform rotate-45",
-                              isLeft ? "-right-1.5 border-r border-t" : "-left-1.5 border-l border-b"
+                              "absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-inherit transform rotate-45",
+                              isLeft ? "-right-[9px] border-r border-t" : "-left-[9px] border-l border-b"
                             )} />
 
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[11px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
-                                {TYPE_ICON[item.type] || TYPE_ICON.system}
+                            <div className={cn("flex items-center gap-2.5 mb-2", isLeft ? "justify-end" : "justify-start")}>
+                              <span className={cn(
+                                "text-[12px] font-black uppercase tracking-wider flex items-center gap-2",
+                                item.category === "acordo" ? "text-emerald-600" : item.category === "manual" ? "text-blue-600" : item.category === "automatico" ? "text-purple-600" : "text-orange-600"
+                              )}>
+                                {isLeft && item.sentiment === "positive" && <CheckCircle2 className="w-3.5 h-3.5" />}
+                                {isLeft && item.sentiment === "negative" && <XCircle className="w-3.5 h-3.5" />}
                                 {item.title}
+                                {!isLeft && item.sentiment === "positive" && <CheckCircle2 className="w-3.5 h-3.5" />}
+                                {!isLeft && item.sentiment === "negative" && <XCircle className="w-3.5 h-3.5" />}
                               </span>
-                              {item.sentiment === "positive" && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                              {item.sentiment === "negative" && <XCircle className="w-3 h-3 text-red-500" />}
                             </div>
 
                             {item.detail && (
-                              <p className="text-xs text-muted-foreground leading-relaxed">
+                              <p className="text-[13px] text-slate-500 font-medium leading-relaxed mb-3">
                                 {item.detail}
                               </p>
                             )}
 
-                            {item.type === "call" && item.recordingUrl && (
-                              <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter">Gravação</span>
-                                <InlineAudioPlayer url={item.recordingUrl} />
-                              </div>
-                            )}
-                            
-                            {item.actor && (
-                              <div className="mt-2 pt-2 border-t border-border/20">
-                                <ResponsibleLabel actor={item.actor} />
-                              </div>
-                            )}
+                            <div className={cn("flex flex-col gap-2 pt-3 border-t border-slate-50", isLeft ? "items-end" : "items-start")}>
+                              {item.actor && <ResponsibleLabel actor={item.actor} />}
+                              {item.type === "call" && item.recordingUrl && (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] font-bold text-blue-500 uppercase">Gravação</span>
+                                  <InlineAudioPlayer url={item.recordingUrl} />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* Central Icon Block */}
-                    <div className="absolute left-1/2 -translate-x-1/2 z-10">
+                    {/* CENTRAL ICON */}
+                    <div className="relative z-10 flex justify-center order-2">
                       <div className={cn(
-                        "w-10 h-10 rounded-full border-4 border-background shadow-lg flex items-center justify-center transition-transform hover:scale-110",
+                        "w-12 h-12 rounded-full border-[6px] border-white shadow-xl flex items-center justify-center transition-all group-hover:scale-110",
                         getCategoryColor(primaryItem.category)
                       )}>
-                        {TYPE_ICON[primaryItem.type] || <Bot className="w-4 h-4 text-white" />}
+                        <div className="text-white">
+                          {TYPE_ICON[primaryItem.type] || <Bot className="w-5 h-5" />}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Meta Info Side (Date/Source) */}
-                    <div className={cn("w-[45%] flex flex-col", isLeft ? "order-2 pl-8" : "justify-end pr-8 text-right")}>
-                      <span className="text-[11px] font-black text-foreground/80 tracking-tighter">
+                    {/* META INFO SIDE */}
+                    <div className={cn("flex flex-col opacity-60 group-hover:opacity-100 transition-opacity", isLeft ? "items-start pl-10 order-3" : "items-end pr-10 text-right")}>
+                      <span className="text-[11px] font-black text-slate-800 tracking-widest mb-0.5">
                         {sourceLabel}
                       </span>
-                      <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+                      <span className="text-[10px] font-bold text-slate-500 tabular-nums">
                         {new Date(primaryItem.date).toLocaleDateString("pt-BR")} — {new Date(primaryItem.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </span>
                     </div>
