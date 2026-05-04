@@ -7512,12 +7512,32 @@ export type Database = {
         }
         Returns: number
       }
+      get_operator_negotiated_and_received_for_tenant: {
+        Args: {
+          _credor_names?: string[]
+          _end_date: string
+          _operator_user_id: string
+          _start_date: string
+          _tenant_id: string
+        }
+        Returns: number
+      }
       get_operator_received_total: {
         Args: {
           _credor_names?: string[]
           _end_date: string
           _operator_user_id: string
           _start_date: string
+        }
+        Returns: number
+      }
+      get_operator_received_total_for_tenant: {
+        Args: {
+          _credor_names?: string[]
+          _end_date: string
+          _operator_user_id: string
+          _start_date: string
+          _tenant_id: string
         }
         Returns: number
       }
@@ -7794,6 +7814,10 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      recalculate_campaign_scores: {
+        Args: { _campaign_id: string }
+        Returns: Json
       }
       recalculate_my_full: {
         Args: { _month: number; _year: number }
