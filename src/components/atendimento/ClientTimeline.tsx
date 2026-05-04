@@ -637,12 +637,12 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
                   <Switch 
                     checked={filters[cat]} 
                     onCheckedChange={() => toggleCategory(cat)}
-                    className={cn(
-                      "scale-90",
-                      filters[cat] ? getCategoryColor(cat) : "bg-slate-200"
-                    )}
+                    className={cn("scale-90", getCategoryColor(cat))}
                   />
-                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                  <span className={cn(
+                    "text-[9px] font-bold uppercase tracking-wider transition-colors",
+                    filters[cat] ? getCategoryTextColor(cat) : "text-slate-500"
+                  )}>
                     {cat === "automatico" ? "Automático" : toTitleCase(cat)}
                   </span>
                 </div>
