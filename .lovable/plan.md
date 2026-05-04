@@ -1,31 +1,29 @@
-# Corrigir layout do Dashboard no preview do Lovable
+# Refinar arrasto do botão flutuante de suporte
 
 ## Problema
+Mesmo após o último ajuste, ao arrastar o FAB de suporte (`SupportFloatingButton`) lateralmente ele ainda some da tela. A causa é que o `framer-motion` aplica internamente um `transform: translate(x, y)` durante o `drag`, que se soma ao `left`/`top` que estamos atualizando em `onDrag`. Esse deslocamento duplicado empurra o botão para fora da viewport, e como `onDragEnd` não reseta o transform de forma síncrona, ele não retorna.
 
-No preview do Lovable o viewport é ~1259px de largura. O grid principal do `DashboardPage` usa o breakpoint `xl:` do Tailwind, que só ativa a partir de 1280px. Por isso o layout "quebra" e empilha os blocos (1ª imagem), em vez de exibir as 3 colunas como no 2º anexo.
+## Solução
+Abandonar o sistema `drag` do framer-motion para esse botão e implementar o arrasto com **pointer events nativos** (`onPointerDown` + `pointermove` + `pointerup` com `setPointerCapture`). A posição passa a ser 100% controlada por `left`/`top` no estado `pos`, sem nenhum `transform` concorrente. Isso garante:
 
-A 2ª imagem (referência) mostra o layout correto:
-- Coluna 1 (≈3/12): Meta do Mês + Agendamentos para Hoje
-- Coluna 2 (≈6/12): Total Recebido (gráfico) + Parcelas Programadas
-- Coluna 3 (≈3/12): Grid 2x3 de KPIs (Acionados, Acordos Dia, Acordos Mês, Quebra, Pendentes, Colchão)
+- Clamp rígido aos limites da viewport em todas as direções (esquerda, direita, topo, base).
+- Funciona com mouse, toque e caneta (pointer capture).
+- Diferenciação clara entre clique e arrasto via threshold de 4px (não dispara `setOpen` durante drag).
+- Sem dependência de `info.point` do framer (que pode falhar em iframes/embed do preview do Lovable).
 
-Esse é exatamente o layout já definido nas classes `xl:col-span-*` / `xl:row-start-*`. Só precisa ativar antes.
+## Arquivo afetado
+- `src/components/support/SupportFloatingButton.tsx` — trocar `<motion.button drag …>` por `<button>` nativo com handler `onPointerDown` que registra listeners temporários para `pointermove` e `pointerup`. Mantém `pos` no estado, persistência em `localStorage` e o `panelStyle` calculado a partir de `pos` (sem alterações).
 
-## Mudança
+## Detalhes técnicos
+- `onPointerDown` captura `clientX/Y` iniciais e `pos` inicial; usa `setPointerCapture` para garantir recebimento dos eventos mesmo se o cursor sair do botão.
+- `onMove`: calcula `dx/dy`, ativa flag de drag após 4px de movimento, atualiza `setPos` com clamp `[FAB_MARGIN, window.innerWidth - FAB_SIZE - FAB_MARGIN]` (idem para Y).
+- `onUp`/`onCancel`: remove listeners, libera pointer capture, reseta `isDragging` e `draggedRef` (com `setTimeout` de 50ms para suprimir o `click` subsequente quando houve drag).
+- `onClick`: se `draggedRef.current` for `true`, ignora; caso contrário, alterna `open`.
+- Adicionar classe `touch-none select-none` para evitar scroll/seleção em mobile durante o drag.
+- Remover `animate={{ x: 0, y: 0 }}` e `motion.button` — não há mais transform a resetar.
 
-Em `src/pages/DashboardPage.tsx`, no container do grid e em cada `<section>` dos blocos visíveis, substituir o prefixo `xl:` por `lg:` (ativa em ≥1024px). Remover o `md:col-span-2` intermediário onde ele conflita, mantendo o comportamento mobile (`grid-cols-1`).
-
-Especificamente:
-- Wrapper: `grid-cols-1 md:grid-cols-2 xl:grid-cols-12 xl:grid-rows-[...]` → `grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)]`
-- Cada `<section>`: trocar `xl:` por `lg:` nas classes `col-span`, `col-start`, `row-start`. Remover os `md:col-span-2` (já que pulamos direto de 1 col para 12 cols).
-
-## Resultado esperado
-
-- <1024px: tudo empilhado em 1 coluna (mobile).
-- ≥1024px (inclui o preview de 1259px): layout idêntico ao 2º anexo, com 3 colunas e 2 linhas.
-
-## Arquivos afetados
-
-- `src/pages/DashboardPage.tsx` (somente classes do grid; nenhuma lógica alterada)
-
-Nenhuma mudança em backend, RPCs ou outros componentes.
+## Critérios de aceite
+- Arrastar para qualquer direção mantém o botão totalmente visível, parando exatamente na borda da viewport (com margem de 16px).
+- Clicar (sem mover) abre/fecha o painel normalmente.
+- A posição persiste após reload (já coberto pelo `localStorage` existente).
+- Funciona em desktop e mobile.

@@ -449,36 +449,53 @@ const SupportFloatingButton = () => {
         )}
       </AnimatePresence>
 
-      {/* FAB - draggable */}
-      <motion.button
-        drag
-        dragMomentum={false}
-        dragElastic={0}
-        // Use the actual viewport rect at drag time so constraints stay correct
-        // even after window resizes, and the button can never leave the screen.
-        onDragStart={() => {
-          draggedRef.current = true;
-          setIsDragging(true);
+      {/* FAB - draggable via native pointer events (no transform drift) */}
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          if (e.button !== undefined && e.button !== 0) return;
+          const target = e.currentTarget;
+          const startX = e.clientX;
+          const startY = e.clientY;
+          const origX = pos.x;
+          const origY = pos.y;
+          let moved = false;
+          try { target.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+
+          const clamp = (x: number, y: number) => ({
+            x: Math.min(Math.max(FAB_MARGIN, x), window.innerWidth - FAB_SIZE - FAB_MARGIN),
+            y: Math.min(Math.max(FAB_MARGIN, y), window.innerHeight - FAB_SIZE - FAB_MARGIN),
+          });
+
+          const onMove = (ev: PointerEvent) => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+            if (!moved && Math.hypot(dx, dy) > 4) {
+              moved = true;
+              draggedRef.current = true;
+              setIsDragging(true);
+            }
+            if (moved) {
+              setPos(clamp(origX + dx, origY + dy));
+            }
+          };
+          const onUp = () => {
+            target.removeEventListener("pointermove", onMove);
+            target.removeEventListener("pointerup", onUp);
+            target.removeEventListener("pointercancel", onUp);
+            try { target.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+            if (moved) {
+              setIsDragging(false);
+              setTimeout(() => { draggedRef.current = false; }, 50);
+            } else {
+              draggedRef.current = false;
+            }
+          };
+          target.addEventListener("pointermove", onMove);
+          target.addEventListener("pointerup", onUp);
+          target.addEventListener("pointercancel", onUp);
         }}
-        onDrag={(_, info) => {
-          // Live-update position from the pointer so left/top stay authoritative
-          // and framer-motion's internal transform doesn't drift off-screen.
-          const nx = Math.min(
-            Math.max(FAB_MARGIN, info.point.x - FAB_SIZE / 2),
-            window.innerWidth - FAB_SIZE - FAB_MARGIN,
-          );
-          const ny = Math.min(
-            Math.max(FAB_MARGIN, info.point.y - FAB_SIZE / 2),
-            window.innerHeight - FAB_SIZE - FAB_MARGIN,
-          );
-          setPos({ x: nx, y: ny });
-        }}
-        onDragEnd={() => {
-          setIsDragging(false);
-          // reset drag flag shortly after so click event (if any) is suppressed
-          setTimeout(() => { draggedRef.current = false; }, 50);
-        }}
-        style={{ left: pos.x, top: pos.y, x: 0, y: 0 }}
+        style={{ left: pos.x, top: pos.y }}
         onClick={(e) => {
           if (draggedRef.current) {
             e.preventDefault();
@@ -488,7 +505,7 @@ const SupportFloatingButton = () => {
           setOpen((prev) => !prev);
         }}
         className={cn(
-          "fixed z-50 h-14 w-14 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm",
+          "fixed z-50 h-14 w-14 rounded-full flex items-center justify-center transition-colors duration-200 backdrop-blur-sm touch-none select-none",
           isDragging ? "cursor-grabbing scale-105" : "cursor-grab",
           open
             ? "bg-muted text-muted-foreground hover:bg-muted/80 shadow-lg"
@@ -496,7 +513,7 @@ const SupportFloatingButton = () => {
         )}
       >
         {open ? <X className="w-6 h-6" /> : <LifeBuoy className="w-6 h-6" />}
-      </motion.button>
+      </button>
 
     </>
   );
