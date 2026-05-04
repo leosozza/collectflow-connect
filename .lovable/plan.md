@@ -1,32 +1,35 @@
-## Erro encontrado
+## Objetivo
 
-A página não carrega devido a um **erro de sintaxe JSX** em `src/components/client-detail/AgreementInstallments.tsx`.
-
-```
-Plugin: vite:react-swc
-File: src/components/client-detail/AgreementInstallments.tsx
-x Expected '</', got 'jsx text'
-```
+Filtro **"Primeira Parcela De / Até"** (Carteira) deve retornar **apenas clientes que possuam parcela em aberto com vencimento dentro do período selecionado**. Clientes sem parcelas em aberto, ou cujas parcelas em aberto estejam fora da faixa, não devem aparecer.
 
 ## Causa raiz
 
-Na coluna **Status** da tabela de parcelas (linha ~827–843), o `<TableCell>` de Status é aberto mas **nunca é fechado** antes da próxima `<TableCell>` da coluna "Pagamento" começar na linha 844:
+A RPC `public.get_carteira_grouped` aplica o filtro sobre `MIN(f.data_vencimento)` considerando todas as parcelas (incluindo `pago`):
 
-```tsx
-// Linha 827
-<TableCell className="text-center ...">  // Status
-  {isCancelled ? (...) : (...)}
-                                     // ← falta </TableCell> aqui
-// Linha 844
-<TableCell className="text-center">     // Pagamento
+```sql
+HAVING (_primeira_parcela_de IS NULL OR MIN(f.data_vencimento) >= _primeira_parcela_de)
+   AND (_primeira_parcela_ate IS NULL OR MIN(f.data_vencimento) <= _primeira_parcela_ate)
 ```
-
-Isso quebra todo o restante da árvore JSX (TableRow, TableBody, etc.), gerando os múltiplos erros em cascata que aparecem no log do Vite.
 
 ## Correção
 
-Adicionar `</TableCell>` entre as linhas 843 e 844, fechando corretamente a célula de Status antes de abrir a célula de Pagamento.
+Migração SQL: `CREATE OR REPLACE FUNCTION public.get_carteira_grouped(...)` mantendo assinatura idêntica, alterando apenas o `HAVING` da CTE `grouped` para usar parcelas com `status <> 'pago'` e exigir presença dessas parcelas quando o filtro estiver ativo:
 
-## Arquivos afetados
+```sql
+HAVING (
+  (_primeira_parcela_de IS NULL AND _primeira_parcela_ate IS NULL)
+  OR (
+    MIN(f.data_vencimento) FILTER (WHERE f.status <> 'pago') IS NOT NULL
+    AND (_primeira_parcela_de  IS NULL OR MIN(f.data_vencimento) FILTER (WHERE f.status <> 'pago') >= _primeira_parcela_de)
+    AND (_primeira_parcela_ate IS NULL OR MIN(f.data_vencimento) FILTER (WHERE f.status <> 'pago') <= _primeira_parcela_ate)
+  )
+)
+```
 
-- `src/components/client-detail/AgreementInstallments.tsx` (1 linha adicionada)
+## Comportamento resultante
+
+- **Cliente 100% quitado**: `MIN(...) FILTER` = NULL → excluído quando filtro ativo.
+- **Cliente com parcelas pagas + em aberto**: avalia somente a 1ª parcela em aberto.
+- **Sem filtro preenchido**: comportamento idêntico ao atual.
+
+Sem alterações no frontend.
