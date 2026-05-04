@@ -206,7 +206,14 @@ const SOURCE_LABELS: Record<string, string> = {
   negociarie: "Negociarie", portal: "Portal do Devedor",
   ai: "Agente IA", ai_agent: "Agente IA",
   operator: "Operador", admin: "Administrador",
-  system: "Sistema", workflow: "Fluxo Automático",
+  system: "Sistema Rivo", workflow: "Fluxo Automático",
+};
+
+const DEBTOR_PROFILE_LABELS: Record<string, string> = {
+  ocasional: "Ocasional",
+  recorrente: "Recorrente",
+  insatisfeito: "Insatisfeito",
+  resistente: "Resistente",
 };
 
 const AGREEMENT_STATUS_LABELS: Record<string, string> = {
@@ -284,9 +291,9 @@ const InlineAudioPlayer = ({ url }: { url: string }) => {
 };
 
 const ResponsibleLabel = ({ actor }: { actor?: Actor }) => {
-  const a: Actor = actor && actor.label
+  const a: Actor = actor && actor.label && actor.label !== "Origem desconhecida"
     ? actor
-    : { label: "Origem desconhecida", kind: "unknown" };
+    : { label: "Sistema Rivo", kind: "system" };
 
   const iconByKind: Record<ActorKind, React.ReactNode> = {
     user: <User className="w-3 h-3" />,
@@ -394,7 +401,7 @@ const resolveActor = (
     return { label: "Operador", kind: "user" };
   }
 
-  return { label: "Origem desconhecida", kind: "unknown" };
+  return { label: "Sistema Rivo", kind: "system" };
 };
 
 const resolveCategory = (event: any): EventCategory => {
@@ -558,6 +565,9 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         if (meta.duration_seconds) detail = `Duração: ${formatDuration(meta.duration_seconds)}`;
       } else if (eventType === "whatsapp_inbound" || eventType === "whatsapp_outbound") {
         detail = e.event_value || "";
+      } else if (eventType === "debtor_profile_changed") {
+        const profileLabel = DEBTOR_PROFILE_LABELS[e.event_value as string] || e.event_value;
+        detail = profileLabel ? `Novo perfil: ${profileLabel}` : "Perfil removido";
       }
 
       items.push({
@@ -693,7 +703,12 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
               {groupedItems.map(([minute, items], idx) => {
                 const isLeft = idx % 2 === 0;
                 const primaryItem = items[0];
-                const sourceLabel = primaryItem.actor?.kind === "system" || primaryItem.actor?.kind === "workflow" ? "AUTO" : (primaryItem.actor?.kind || "MANUAL").toUpperCase();
+                const sourceLabel = 
+                  primaryItem.actor?.kind === "system" || primaryItem.actor?.kind === "workflow" ? "SISTEMA" : 
+                  primaryItem.actor?.kind === "user" ? "USUÁRIO" :
+                  primaryItem.actor?.kind === "ai" ? "IA RIVO" :
+                  primaryItem.actor?.kind === "portal" ? "PORTAL" :
+                  (primaryItem.actor?.kind || "MANUAL").toUpperCase();
 
                 return (
                   <div key={minute} className="grid grid-cols-[1fr_80px_1fr] items-center group">
