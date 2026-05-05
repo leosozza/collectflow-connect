@@ -722,7 +722,10 @@ const WhatsAppChatLayout = () => {
     if (inboundCount >= 5 && selectedConv.client_id && clientInfo?.id) {
       const hasDisp = dispositionAssignments.some((a) => a.conversation_id === selectedConv.id);
       const hasProf = !!clientInfo?.debtor_profile;
-      if (!hasDisp || !hasProf) {
+      const hasReopened = !!clientInfo?.has_reopened_agreement;
+      // Gate apenas quando: (sem perfil) OU (acordo refeito após quebra e ainda falta perfil/tabulação).
+      const needsGate = !hasProf || (hasReopened && (!hasProf || !hasDisp));
+      if (needsGate) {
         toast.error("Defina o Perfil do Devedor e selecione ao menos uma Tabulação para enviar mensagens.");
         return;
       }
