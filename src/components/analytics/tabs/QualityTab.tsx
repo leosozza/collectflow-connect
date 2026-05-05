@@ -90,7 +90,8 @@ export const QualityTab = ({ params }: { params: AnalyticsRpcParams }) => {
                     <TableCell className="text-xs text-right text-destructive">{formatCurrency(Number(r.valor_perdido || 0))}</TableCell>
                     <TableCell className="text-xs text-right">{Number(r.pct_motivo || 0).toFixed(2)}%</TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
