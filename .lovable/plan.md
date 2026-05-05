@@ -1,15 +1,18 @@
 ## Problema
 
-A tela não carrega porque dois arquivos têm JSX duplicado após `export default`, gerando Syntax Error no Vite:
+`src/components/analytics/tabs/QualityTab.tsx` está com Syntax Error na linha 93, derrubando o Vite e impedindo o Analytics (e qualquer painel que importe a árvore) de renderizar.
 
-- `src/components/atendimento/ClientTimeline.tsx` — linhas 747–784 são lixo duplicado depois de `export default ClientTimeline;` (linha 745) e `export { ClientObservations };` (linha 746).
-- `src/components/client-detail/AgreementInstallments.tsx` — linhas 1231–1260 são lixo duplicado depois de `export default AgreementInstallments;` (linha 1230).
+A causa: o `.map(...)` na linha 80 usa corpo de arrow com chaves (`{ let motivo = ...; return (<TableRow>...</TableRow>); }`), mas é fechado com `))}` em vez de `})}`. Falta a chave de fechamento do bloco.
 
-Esses blocos são cópias do JSX já presente acima nos arquivos (botão "Salvar Nota", dialog de "Campos faltantes"), provavelmente resíduo de um merge/edit anterior.
+```text
+80:  {(breakage.data || []).map((r: any, i: number) => {
+...
+92:    </TableRow>
+93:  ))}        <-- errado: fecha como se fosse arrow expression
+```
 
 ## Correção
 
-1. `ClientTimeline.tsx`: apagar tudo depois da linha 746 (manter apenas até `export { ClientObservations };`).
-2. `AgreementInstallments.tsx`: apagar tudo depois da linha 1230 (manter apenas até `export default AgreementInstallments;`).
+Trocar `))}` por `})}` na linha 93 de `QualityTab.tsx`. Nenhuma outra mudança necessária — o restante do arquivo está íntegro.
 
-Sem nenhuma outra mudança — o JSX correto já existe acima nos dois arquivos.
+Sem impacto em RLS, dados ou outras telas.
