@@ -469,10 +469,22 @@ export async function createRecipients(
   messageBody: string | string[]
 ): Promise<void> {
   const isArray = Array.isArray(messageBody);
+  
+  // Cria um pool de mensagens distribuídas igualmente e depois embaralha
+  let messagePool: string[] = [];
+  if (isArray) {
+    messagePool = recipients.map((_, i) => messageBody[i % messageBody.length]);
+    // Embaralhamento de Fisher-Yates
+    for (let i = messagePool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [messagePool[i], messagePool[j]] = [messagePool[j], messagePool[i]];
+    }
+  }
+
   const rows = recipients.map((r, i) => {
     let chosenMessage = "";
     if (isArray) {
-      chosenMessage = messageBody[i % messageBody.length]; // Round-robin assignment of variations
+      chosenMessage = messagePool[i]; // Pegando do pool embaralhado
     } else {
       chosenMessage = messageBody as string;
     }

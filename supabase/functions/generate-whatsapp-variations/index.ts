@@ -86,6 +86,18 @@ Retorne APENAS um array JSON de strings com as variações, e nada mais. Nenhuma
     });
 
     if (!aiResp.ok) {
+      if (aiResp.status === 429) {
+        return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em instantes." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (aiResp.status === 402) {
+        return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos em Configurações > Workspace > Uso." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const errText = await aiResp.text();
       console.error("AI gateway error:", aiResp.status, errText);
       return new Response(JSON.stringify({ error: "Erro no serviço de IA ao gerar variações" }), {
@@ -103,7 +115,28 @@ Retorne APENAS um array JSON de strings com as variações, e nada mais. Nenhuma
       variations = parsed.variations || [];
     }
 
-    return new Response(JSON.stringify({ variations }), {
+    // Validação das variáveis
+    const requiredVarsMatch = template.match(/\{\{[^}]+\}\}/g) || [];
+    const requiredVars = Array.from(new Set(requiredVarsMatch));
+
+    const validVariations = variations.filter(variation => {
+      // Verifica se a variação contém todas as variáveis originais
+      const hasAllVars = requiredVars.every(v => variation.includes(v));
+      // Garante que a IA não inventou variáveis novas
+      const variationVarsMatch = variation.match(/\{\{[^}]+\}\}/g) || [];
+      const hasNoExtraVars = variationVarsMatch.every(v => requiredVars.includes(v));
+      
+      return hasAllVars && hasNoExtraVars;
+    });
+
+    if (validVariations.length === 0 && variations.length > 0) {
+      return new Response(JSON.stringify({ error: "As variações geradas falharam na validação de variáveis." }), {
+        status: 422,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ variations: validVariations }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
