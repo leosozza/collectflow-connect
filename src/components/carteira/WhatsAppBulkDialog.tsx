@@ -74,6 +74,7 @@ import {
   Calendar,
   Repeat,
   Send,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -109,6 +110,9 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
   const [distributionMode, setDistributionMode] = useState<"equal" | "weighted">("equal");
   const [weightMap, setWeightMap] = useState<Record<string, number>>({});
   const [sending, setSending] = useState(false);
+  const [generatingVariations, setGeneratingVariations] = useState(false);
+  const [generatedVariations, setGeneratedVariations] = useState<string[]>([]);
+  const [selectedVariations, setSelectedVariations] = useState<number[]>([]);
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [progress, setProgress] = useState<CampaignProgress | null>(null);
   const [result, setResult] = useState<{ sent: number; failed: number; errors: string[]; finalStatus?: string } | null>(null);
@@ -162,6 +166,9 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       setDistributionMode("equal");
       setWeightMap({});
       setSending(false);
+      setGeneratingVariations(false);
+      setGeneratedVariations([]);
+      setSelectedVariations([]);
       setCampaignId(null);
       setProgress(null);
       setConfirmStartOpen(false);
@@ -429,6 +436,10 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       const providerCategory = deriveProviderCategory(selectedInstanceIds, instances);
       const finalName = campaignName.trim() || buildDefaultName();
 
+      const messagesToSave = generatedVariations.length > 0 && selectedVariations.length > 0
+        ? selectedVariations.map(idx => generatedVariations[idx])
+        : template;
+
       const campaign = await createCampaign({
         tenant_id: tenant.id,
         message_mode: useCustom ? "custom" : "template",
@@ -447,7 +458,7 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
       });
 
       setCampaignId(campaign.id);
-      await createRecipients(campaign.id, tenant.id, distributed, template);
+      await createRecipients(campaign.id, tenant.id, distributed, messagesToSave);
 
       if (isScheduled) {
         const when = new Date(scheduledForIso!);
@@ -470,6 +481,41 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
         setSending(false);
       }
     }
+  };
+
+  const handleGenerateVariations = async () => {
+    const templateText = getMessageTemplate();
+    if (!templateText.trim()) {
+      toast.error("Defina uma mensagem base primeiro.");
+      return;
+    }
+
+    setGeneratingVariations(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-whatsapp-variations", {
+        body: { template: templateText, count: 10 },
+      });
+
+      if (error) throw error;
+      
+      if (data && data.variations && Array.isArray(data.variations)) {
+        setGeneratedVariations(data.variations);
+        setSelectedVariations(data.variations.map((_: any, i: number) => i));
+        toast.success("Variações geradas com sucesso!");
+      } else {
+        toast.error("Resposta inválida da IA");
+      }
+    } catch (err: any) {
+      toast.error("Erro ao gerar variações: " + (err.message || ""));
+    } finally {
+      setGeneratingVariations(false);
+    }
+  };
+
+  const toggleVariation = (index: number) => {
+    setSelectedVariations(prev => 
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
   };
 
   const renderStepIndicator = () => (
@@ -526,10 +572,78 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
           </SelectContent>
         </Select>
       )}
+      
       {getPreview() && (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Preview (1º cliente):</Label>
-          <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">{getPreview()}</div>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Preview (1º cliente):</Label>
+            <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">{getPreview()}</div>
+          </div>
+          
+          <div className="pt-2 border-t">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Wand2 className="w-4 h-4 text-primary" />
+                  Anti-Ban: Variações com IA
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Gere mensagens com mesmo sentido mas palavras diferentes para evitar banimento.
+                </p>
+              </div>
+              <Button 
+                type="button"
+                variant="outline" 
+                size="sm" 
+                onClick={handleGenerateVariations}
+                disabled={generatingVariations}
+              >
+                {generatingVariations ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando...</>
+                ) : (
+                  <><Wand2 className="w-4 h-4 mr-2" /> Gerar 10 Variações</>
+                )}
+              </Button>
+            </div>
+
+            {generatedVariations.length > 0 && (
+              <div className="space-y-2 mt-3 max-h-60 overflow-y-auto border rounded-lg p-2 bg-muted/20">
+                <div className="flex items-center justify-between px-2 pb-2 mb-2 border-b">
+                  <span className="text-xs font-medium">Selecione as variações que deseja usar ({selectedVariations.length} selecionadas):</span>
+                  <Button 
+                    type="button"
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      if (selectedVariations.length === generatedVariations.length) {
+                        setSelectedVariations([]);
+                      } else {
+                        setSelectedVariations(generatedVariations.map((_, i) => i));
+                      }
+                    }}
+                  >
+                    {selectedVariations.length === generatedVariations.length ? "Desmarcar Todas" : "Marcar Todas"}
+                  </Button>
+                </div>
+                {generatedVariations.map((variation, index) => (
+                  <label 
+                    key={index} 
+                    className="flex items-start gap-3 p-3 rounded border cursor-pointer hover:bg-muted/50 bg-background transition-colors"
+                  >
+                    <Checkbox
+                      checked={selectedVariations.includes(index)}
+                      onCheckedChange={() => toggleVariation(index)}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 text-sm whitespace-pre-wrap">
+                      {variation}
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -758,7 +872,13 @@ const WhatsAppBulkDialog = ({ open, onClose, selectedClients }: WhatsAppBulkDial
 
         <div className="p-3 rounded-lg border border-dashed text-sm text-muted-foreground">
           <p><strong>Mensagem:</strong> {useCustom ? "Personalizada" : templates.find(t => t.id === selectedTemplate)?.name || "—"}</p>
-          <p><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
+          {generatedVariations.length > 0 && selectedVariations.length > 0 && (
+            <p className="text-primary font-medium mt-1">
+              <Wand2 className="w-3 h-3 inline mr-1" />
+              Usando {selectedVariations.length} variação(ões) com IA (Anti-Ban)
+            </p>
+          )}
+          <p className="mt-1"><strong>Instâncias:</strong> {selectedInstanceIds.length}</p>
           <p><strong>Modo:</strong> {distributionMode === "weighted" ? "Distribuição personalizada (por peso)" : "Round-robin (igual)"} com proteção Anti-Ban</p>
         </div>
       </div>

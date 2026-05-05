@@ -466,18 +466,28 @@ export async function createRecipients(
   campaignId: string,
   tenantId: string,
   recipients: (DeduplicatedRecipient & { assignedInstanceId: string })[],
-  messageBody: string
+  messageBody: string | string[]
 ): Promise<void> {
-  const rows = recipients.map((r) => ({
-    campaign_id: campaignId,
-    tenant_id: tenantId,
-    representative_client_id: r.representativeClientId,
-    phone: r.phone,
-    recipient_name: r.recipientName,
-    assigned_instance_id: r.assignedInstanceId === "gupshup-official" ? null : r.assignedInstanceId,
-    status: "pending",
-    message_body_snapshot: messageBody,
-  }));
+  const isArray = Array.isArray(messageBody);
+  const rows = recipients.map((r, i) => {
+    let chosenMessage = "";
+    if (isArray) {
+      chosenMessage = messageBody[i % messageBody.length]; // Round-robin assignment of variations
+    } else {
+      chosenMessage = messageBody as string;
+    }
+
+    return {
+      campaign_id: campaignId,
+      tenant_id: tenantId,
+      representative_client_id: r.representativeClientId,
+      phone: r.phone,
+      recipient_name: r.recipientName,
+      assigned_instance_id: r.assignedInstanceId === "gupshup-official" ? null : r.assignedInstanceId,
+      status: "pending",
+      message_body_snapshot: chosenMessage,
+    };
+  });
 
   for (let i = 0; i < rows.length; i += 500) {
     const batch = rows.slice(i, i + 500);
