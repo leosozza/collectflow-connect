@@ -1228,33 +1228,3 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 };
 
 export default AgreementInstallments;
-        <div className="space-y-3 py-2">
-          <p className="text-[10px] uppercase font-medium text-muted-foreground">Campos faltantes</p>
-          {Object.keys(boletoPendenteMissing).map((field) => (
-            <div key={field} className="space-y-1">
-              <Label className="text-xs font-medium">{FIELD_LABELS[field] || field}</Label>
-              <Input
-                value={boletoPendenteMissing[field]}
-                onChange={(e) => setBoletoPendenteMissing((prev) => ({ ...prev, [field]: e.target.value }))}
-                placeholder={`Informe o ${(FIELD_LABELS[field] || field).toLowerCase()}`}
-                className="h-9"
-              />
-            </div>
-          ))}
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => setBoletoPendenteMissingOpen(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSaveBoletoPendenteMissing} disabled={savingBoletoPendente}>
-            {savingBoletoPendente ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Salvar e Gerar Boletos
-          </Button>
-        </DialogFooter>
-      </DialogContent >
-    </Dialog >
-    </>
-  );
-};
-
-export default AgreementInstallments;
