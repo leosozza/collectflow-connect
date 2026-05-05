@@ -77,6 +77,17 @@ export interface CampaignProgress {
   progress_metadata: Record<string, any> | null;
 }
 
+// ---- Shuffle (Fisher-Yates, uniform) ----
+
+function shuffleFisherYates<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 // ---- Phone normalization ----
 
 function normalizePhone(phone: string | null | undefined): string {
@@ -165,7 +176,7 @@ export function distributeRoundRobin(
   recipients: DeduplicatedRecipient[],
   instanceIds: string[]
 ): (DeduplicatedRecipient & { assignedInstanceId: string })[] {
-  const shuffled = [...recipients].sort(() => Math.random() - 0.5);
+  const shuffled = shuffleFisherYates(recipients);
   return shuffled.map((r, i) => ({
     ...r,
     assignedInstanceId: instanceIds[i % instanceIds.length],
@@ -217,7 +228,7 @@ export function distributeWeighted(
   }
 
   // Shuffle source recipients first
-  const shuffled = [...recipients].sort(() => Math.random() - 0.5);
+  const shuffled = shuffleFisherYates(recipients);
   const result: (DeduplicatedRecipient & { assignedInstanceId: string })[] = [];
   let cursor = 0;
   for (const c of counts) {
@@ -227,7 +238,7 @@ export function distributeWeighted(
     }
   }
   // Re-shuffle to avoid bursts from a single instance
-  return result.sort(() => Math.random() - 0.5);
+  return shuffleFisherYates(result);
 }
 
 // ---- Fetch eligible instances (multi-provider: DB + Gupshup virtual) ----
@@ -470,15 +481,11 @@ export async function createRecipients(
 ): Promise<void> {
   const isArray = Array.isArray(messageBody);
   
-  // Cria um pool de mensagens distribuídas igualmente e depois embaralha
+  // Cria um pool de mensagens distribuídas igualmente e depois embaralha (Fisher-Yates)
   let messagePool: string[] = [];
   if (isArray) {
-    messagePool = recipients.map((_, i) => messageBody[i % messageBody.length]);
-    // Embaralhamento de Fisher-Yates
-    for (let i = messagePool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [messagePool[i], messagePool[j]] = [messagePool[j], messagePool[i]];
-    }
+    const base = recipients.map((_, i) => messageBody[i % messageBody.length]);
+    messagePool = shuffleFisherYates(base);
   }
 
   const rows = recipients.map((r, i) => {
