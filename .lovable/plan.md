@@ -1,180 +1,127 @@
 
 ## Objetivo
 
-Entregar duas melhorias no Contact Center → WhatsApp **sem alterar o fluxo de envio/recebimento atual** (mensagens, áudios, mídia, status, replies continuam intactos):
-
-1. **Colar imagem (Ctrl+V)** direto no campo de texto do chat → envia como anexo, igual ao botão "clipe".
-2. **Reações** (👍 ❤️ 😂 etc.) que o cliente envia em uma mensagem → exibir o emoji na própria bolha da mensagem reagida, no estilo WhatsApp Web.
+Deixar o **Histórico de Atendimento** legível para o operador final: zero tecnicismo, zero "Origem desconhecida", zero UUID cru, zero ruído de mensagens individuais de WhatsApp — e devolver os botões de filtro no topo. Sem quebrar timelines existentes nem inserts atuais.
 
 ---
 
-## 1) Confirmação na Evolution API v2
+## 1) Eliminar ruído de WhatsApp na timeline
 
-Após revisar a documentação (`doc.evolution-api.com/v2`) e o payload real que já chega no nosso webhook:
+**Hoje**: cada mensagem WhatsApp vira um card `WhatsApp Enviado` / `WhatsApp Recebido` (vindo do trigger `trg_client_event_from_chat_message`). Isso polui o histórico — o canal WhatsApp já tem aba própria.
 
-- **Reações são suportadas.** A Evolution dispara o evento `messages.upsert` com `data.message.reactionMessage`:
-  ```json
-  {
-    "event": "messages.upsert",
-    "data": {
-      "key": { "id": "<id-da-reação>", "fromMe": false, "remoteJid": "..." },
-      "message": {
-        "reactionMessage": {
-          "key": { "id": "<id-da-mensagem-original>", "fromMe": true },
-          "text": "👍",          // emoji (ou "" para remoção)
-          "senderTimestampMs": 1730000000000
-        }
-      }
-    }
-  }
-  ```
-  Hoje nosso `whatsapp-webhook` **ignora silenciosamente** esse subtipo (cai fora dos `if/else if` de tipo e grava como texto vazio). É só o que precisamos tratar — nenhuma config nova na Evolution.
+**Mudança (somente UI, sem mexer no banco)**:
+- Em `ClientTimeline.tsx`, **filtrar fora** os eventos `whatsapp_inbound` e `whatsapp_outbound` na construção de `items`.
+- Em vez disso, agrupar conversas usando os eventos já existentes:
+  - `atendimento_opened` → "Cliente iniciou conversa com **{operador}**" (ou "**{operador}** iniciou atendimento via WhatsApp" quando `origin_actor=operator`).
+  - `atendimento_closed` → "Atendimento encerrado por **{operador}**".
+  - `conversation_auto_closed` → "Conversa encerrada automaticamente pelo sistema (inatividade)".
+  - `conversation_transferred` → "Conversa transferida de **{de}** para **{para}**".
 
-- **Colar imagem** é puramente front-end (clipboard do browser). Reaproveita o mesmo `onSendMedia(file)` que o botão "clipe" já usa → vai pelo `send-chat-message` → `sendMedia` da Evolution. Sem mudança no backend.
+**Resiliência**: para conversas antigas sem `atendimento_opened`/`closed`, sintetizar **um único card por janela de WhatsApp** agrupando inbound+outbound contíguos (gap > 30 min ou troca de direção encerra) — exibido como "Conversa por WhatsApp ({n} mensagens)" com hora de início e fim, sem rótulo de "operador desconhecido". Eventos WhatsApp brutos seguem disponíveis no DB para auditoria; só somem da UI.
 
 ---
 
-## 2) Mudanças — Reações (👍❤️…)
+## 2) Acabar com "Origem desconhecida"
 
-### 2.1 Banco — nova coluna `reactions` em `chat_messages`
-Migration:
-- `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS reactions jsonb NOT NULL DEFAULT '[]'::jsonb;`
-- Index GIN opcional para futuras buscas.
-- Formato de cada item:
-  ```json
-  { "emoji": "👍", "from": "remote" | "me", "actor_jid": "55...@s.whatsapp.net", "ts": 1730000000000 }
-  ```
-- Realtime: `chat_messages` já está na publicação `supabase_realtime`, então o front recebe o update sem trabalho extra.
+**Hoje**: `resolveActor` retorna `unknown` quando não acha `operator_id`/`created_by`. Mas vários eventos trazem o ator em outros campos (`event_source`, `metadata.source`, `metadata.actor`, `auto_disposition`, etc.).
 
-### 2.2 `supabase/functions/whatsapp-webhook/index.ts`
-Antes do bloco que parseia `messageType`, adicionar:
+**Mudança em `resolveActor`**:
+- Adicionar fallbacks por **`event_source`** sempre que nada melhor for resolvido: `maxlist` → "Importação MaxList", `import` → "Importação", `api` → "API Externa", `manual` → "Edição Manual no Cadastro", `negociarie`/`asaas`/`boleto` → gateway, `auto_disposition` → "Sistema (regra automática)", `prevention` → "Régua de Prevenção", `workflow` → "Fluxo Automático", `regua` → "Régua de Cobrança", `ai_agent`/`ai` → "Agente IA".
+- Para `field_update` vindo do **cadastro manual**, resolver pelo `auth.uid()` salvo em `metadata.updated_by` **ou** pelo cabeçalho `user_id` do RLS (já consultado via `profileMap`). Se mesmo assim faltar nome, exibir "Operador" (com `kind:user`) — nunca "desconhecida".
+- **Garantia última**: o ramo `unknown` no fim só dispara se **não tivermos nenhum sinal**, e nesse caso mostramos "**Sistema**" (nunca "Origem desconhecida").
 
-```ts
-// ===== Reaction message — não cria mensagem nova, atualiza a mensagem reagida =====
-const reaction = msg?.reactionMessage;
-if (reaction?.key?.id) {
-  const targetExternalId = reaction.key.id;
-  const emoji = (reaction.text ?? "").toString();
-  const actorJid = msgData.key?.participant || remoteJid;
+**Backend complementar (opcional, baixo risco)**: ajustar `trg_client_event_from_update_log` para preencher `metadata.actor_label` quando `auth.uid()` resolver para um `profiles.full_name` — assim toda alteração manual já chega rotulada. Sem alterar payload existente, só **adiciona** chave nova.
 
-  // Localiza a mensagem original no tenant
-  const { data: instReact } = await supabase
-    .from("whatsapp_instances")
-    .select("tenant_id")
-    .eq("instance_name", instanceName)
-    .maybeSingle();
+---
 
-  if (instReact?.tenant_id) {
-    const { data: target } = await supabase
-      .from("chat_messages")
-      .select("id, reactions")
-      .eq("tenant_id", instReact.tenant_id)
-      .or(`external_id.eq.${targetExternalId},provider_message_id.eq.${targetExternalId}`)
-      .limit(1)
-      .maybeSingle();
+## 3) `field_update` legível (sem UUID/sem nome técnico)
 
-    if (target) {
-      const list = Array.isArray(target.reactions) ? [...target.reactions] : [];
-      // Mantém apenas a reação mais recente por ator (WhatsApp permite só 1 por contato).
-      const filtered = list.filter((r: any) => r.actor_jid !== actorJid);
-      if (emoji) {
-        filtered.push({
-          emoji,
-          from: fromMe ? "me" : "remote",
-          actor_jid: actorJid,
-          ts: reaction.senderTimestampMs ?? Date.now(),
-        });
-      }
-      await supabase.from("chat_messages").update({ reactions: filtered }).eq("id", target.id);
-    }
-  }
-  return new Response(JSON.stringify({ ok: true, reaction: targetExternalId }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+**Hoje**: `tipo_divida_id: — → fdda7e09-…`.
+
+**Mudança em `FieldUpdateDetail`**:
+- **Lista de blacklist**: campos puramente técnicos não viram card (`updated_at`, `external_id`, `tenant_id`, `operator_id`, `status_cobranca_locked_*`, `propensity_score`, `enrichment_data`, `score_*`). Se a alteração só toca esses campos → o evento é **descartado** silenciosamente da UI.
+- **Resolver IDs em rótulo humano** com queries leves cacheadas no componente:
+  - `tipo_divida_id` → `debt_types.name`
+  - `tipo_devedor_id` → `tipos_devedores.name`
+  - `status_cobranca_id` → `status_cobrancas.name`
+  - `meio_pagamento_id` → `payment_methods.name`
+  - `operator_id` → `profiles.full_name`
+- **Rótulos de campo PT-BR ampliados** em `FIELD_LABELS` (ex.: `tipo_divida_id` → "Tipo de Dívida", `tipo_devedor_id` → "Perfil do Devedor (cadastro)", `meio_pagamento_id` → "Meio de Pagamento").
+- Valores `null/""/—` exibidos como "(vazio)" em vez de `—` ambíguo.
+- Datas (`data_*`) formatadas pt-BR; valores monetários (`valor_*`) via `formatCurrency`.
+
+Resultado: `Tipo de Dívida: (vazio) → Cartão de Crédito` por **Importação MaxList**.
+
+---
+
+## 4) Perfil do Devedor & Tabulação completos
+
+**Perfil do Devedor (`debtor_profile_changed`)**:
+- Detalhe passa a mostrar: `Ocasional → Resistente` (resolvendo via `PROFILES` de `DebtorProfileBadge`).
+- Ator: usa `event_source` (`operator` → operador resolvido; `auto_disposition` → "Sistema (inferido pela tabulação **{disposition}**)").
+
+**Disposição (`disposition`)**:
+- Título permanece com o rótulo PT-BR (`DISPOSITION_TYPES`).
+- Detalhe passa a incluir: `"{notas}"` quando houver, e sempre **"Tabulado por {operador}"** + canal (`event_channel`). Quando `metadata.scheduled_callback` existir → "Retorno agendado para {data formatada}".
+- `resolveActor` para `disposition` prioriza `metadata.operator_id` (já existe) — se faltar, "Operador" em vez de unknown.
+
+---
+
+## 5) Restaurar a barra de filtros no topo (regressão do commit `31d91d07`)
+
+A barra de chips/toggles **Acordo / Manual / Automático / Lote / 👍 / 👎** existia antes e foi apagada na correção de WhatsApp. Vamos recriar **dentro de `ClientTimeline.tsx`** (não em outro arquivo, para não criar dependência nova) com `useMemo`:
+
+- Estado local `filters` com chaves: `acordo`, `manual`, `automatico`, `lote`, `positivas`, `negativas`. Default: todos ligados.
+- Mapeamento → `event_type`:
+  - **Acordo**: `agreement_*`, `payment_confirmed`, `manual_payment_*`, `previous_agreement_credit_applied`.
+  - **Manual** (ações humanas): `disposition`, `note`, `observation_added`, `debtor_profile_changed` (quando `event_source=operator`), `field_update` (quando `event_source` ∈ manual/api), `atendimento_opened/closed` por operador.
+  - **Automático** (sistema/IA/workflow/régua): `message_sent`, `conversation_auto_closed`, `agreement_overdue`, `agreement_status_completed`, `ai_*`, `portal_*`, `field_update` (maxlist/import/negociarie/asaas), `debtor_profile_changed` (auto_disposition).
+  - **Lote**: eventos com `metadata.batch_id` ou `event_source ∈ {maxlist, import, prevention, regua}` (importações em massa, régua disparando para muitos clientes).
+  - **Positivas / Negativas**: usa `DISPOSITION_TYPES[code].sentiment` (já existe). Vale para `disposition` e para `manual_payment_confirmed` (positiva) / `_rejected` (negativa).
+- Visual: chips arredondados com cor da categoria (verde, azul, roxo, laranja) + 👍/👎 — replicando o screenshot enviado.
+- **Estado vazio** quando todos desligados: "Nenhum filtro ativo — selecione ao menos uma categoria."
+
+---
+
+## 6) Sanidade & não-regressão
+
+- Nada de mexer em RLS, nada de remover dados — apenas **filtra/transforma na UI** e adiciona rotulagem.
+- Dispositions e agreements vindos por props (fallback quando `client_events` está vazio) seguem funcionando.
+- Audio inline, gravação de ligação, `manual_payment_*`, signature etc. permanecem inalterados.
+- Migration **opcional** (item 2): trigger ganha 1 chave a mais no metadata; backfill não é necessário (fallback do front cobre eventos antigos).
+
+---
+
+## Detalhes técnicos (referência)
+
+### Arquivos tocados
+- `src/components/atendimento/ClientTimeline.tsx` (núcleo: filtros + transformações + agrupamento WhatsApp + resolveActor + FieldUpdateDetail).
+- `supabase/migrations/<novo>.sql` (apenas se aplicarmos o item 2 backend — adiciona `actor_label` ao `trg_client_event_from_update_log`).
+
+### Queries adicionais (cacheadas via React Query)
+- `debt_types(id,name)`, `tipos_devedores(id,name)`, `status_cobrancas(id,name)`, `payment_methods(id,name)` — chamadas só quando `field_update` referenciar esses IDs.
+
+### Mapa de filtros (visualização)
+```text
+chip          color       inclui event_type
+-----------------------------------------------------------------
+Acordo        emerald     agreement_* / payment_confirmed / manual_payment_*
+Manual        blue        disposition / note / observation_added / atendimento_* (operador)
+Automático    purple      message_sent / *_auto_closed / agreement_overdue / ai_* / portal_*
+Lote          orange      qualquer com metadata.batch_id OU source maxlist/import/prevention
+👍 Positivas  green       disposition.sentiment=positive / manual_payment_confirmed
+👎 Negativas  rose        disposition.sentiment=negative / manual_payment_rejected
 ```
 
-Pontos críticos preservados:
-- Não chama `ingest_channel_event_v2` → **não cria mensagem fantasma** na timeline.
-- Não toca em `revoke`, status updates, áudio, mídia, replies — todos os branches já existentes ficam idênticos.
-- Falha de lookup nunca quebra o webhook (retorna `ok: true`).
-
-### 2.3 Front — `ChatMessage.tsx`
-- Ler `message.reactions` (vem direto via realtime de `chat_messages`).
-- Renderizar um *badge* sobreposto no canto inferior da bolha:
-  ```tsx
-  {reactions?.length > 0 && (
-    <div className="absolute -bottom-2 right-2 bg-card border border-border/60 rounded-full px-1.5 py-0.5 text-xs shadow flex items-center gap-0.5">
-      {Array.from(new Set(reactions.map(r => r.emoji))).slice(0,3).map(e => <span key={e}>{e}</span>)}
-      {reactions.length > 1 && <span className="text-[10px] text-muted-foreground">{reactions.length}</span>}
-    </div>
-  );
-  ```
-- Tipagem em `ChatMessage` (`services/conversationService.ts`): adicionar `reactions?: Array<{emoji:string; from:"me"|"remote"; actor_jid:string; ts:number}>`.
-
-> **Escopo desta entrega:** apenas **exibir** reações recebidas (era o pedido). Enviar reação a partir do Rivo fica para uma fase 2.
-
 ---
 
-## 3) Mudanças — Colar imagem (Ctrl+V)
+## Aceite (como você valida)
 
-Apenas `src/components/contact-center/whatsapp/ChatInput.tsx`:
-
-```tsx
-const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-  const items = e.clipboardData?.items;
-  if (!items) return;
-  for (const item of Array.from(items)) {
-    if (item.kind === "file" && item.type.startsWith("image/")) {
-      const file = item.getAsFile();
-      if (file) {
-        e.preventDefault();
-        // Renomeia para algo legível
-        const named = new File([file], `colado-${Date.now()}.${(file.type.split("/")[1] || "png")}`, { type: file.type });
-        onSendMedia(named);
-        return;
-      }
-    }
-  }
-};
-```
-- Plugar via `onPaste={handlePaste}` no `<Textarea>`.
-- Não interfere em colar texto normal (só consome o evento se houver arquivo de imagem).
-- Reusa exatamente o mesmo caminho do botão de clipe → zero risco no envio.
-
-(Opcional, fase 2 trivial: aceitar `video/*` e `application/pdf` colados também.)
-
----
-
-## 4) Plano de validação (sem perder mensagem alguma)
-
-1. **Migration aplicada** com `DEFAULT '[]'::jsonb` → registros antigos continuam válidos, nada a *backfill*.
-2. **Smoke test do webhook** (dev):
-   - Mensagem texto normal → ainda cai em `ingest_channel_event_v2`.
-   - Mídia (imagem/áudio) → caminho de upload inalterado.
-   - REVOKE → marca `deleted_for_recipient_at` igual antes.
-   - Reação nova → grava em `reactions`, **não** cria nova `chat_messages`.
-   - Reação removida (`text:""`) → remove do array.
-   - `messages.update` (status sent/delivered/read) → inalterado.
-3. **Front**:
-   - Colar print → vai como anexo, mensagem aparece otimista, status atualiza normal.
-   - Reação do cliente → badge aparece em até ~1s via realtime; remoção some o badge.
-
-## 5) Itens de risco e mitigação
-
-| Risco | Mitigação |
-|---|---|
-| Reação chegar antes da mensagem original ser persistida | Lookup por `external_id`/`provider_message_id`; se não achar, simplesmente não aplica (não cria fantasma). Webhook do WhatsApp reentrega quase nada de reações antigas, então a perda é cosmética e raríssima. |
-| Operador colar texto formatado e esperar comportamento de imagem | `handlePaste` só intercepta itens `kind === "file"`; texto continua normal. |
-| Coluna `reactions` quebrar `select('*')` antigo | jsonb com default `[]` e nullable false → compatível. Tipos do Supabase serão regenerados automaticamente. |
-| Reação enviada por nós mesmos (`fromMe`) duplicar | Filtra por `actor_jid` (apenas a reação mais recente por contato fica). |
-
-## 6) Arquivos tocados
-
-- `supabase/migrations/<novo>.sql` — coluna `reactions`.
-- `supabase/functions/whatsapp-webhook/index.ts` — branch novo de `reactionMessage`.
-- `src/components/contact-center/whatsapp/ChatInput.tsx` — `onPaste`.
-- `src/components/contact-center/whatsapp/ChatMessage.tsx` — badge de reações.
-- `src/services/conversationService.ts` — tipagem `reactions`.
-
-Nada mais é alterado. Envio de mensagens, áudios, mídia, replies, transcrição, campanhas e status (sent/delivered/read) seguem exatamente como hoje.
+1. Recarregar `/carteira/44653594899?tab=historico`:
+   - Não aparecem mais 8 cards "WhatsApp Enviado/Recebido". Em vez disso, no máximo 1–2 cards "Conversa por WhatsApp" + os `atendimento_opened/closed` quando existirem.
+   - "Acordo Criado" continua igual.
+   - "Perfil do Devedor Atualizado" mostra "Ocasional" como destino e o operador (ou "Sistema (inferido pela tabulação …)" quando aplicável).
+   - "Alteração de Dados" do `tipo_divida_id` aparece como "Tipo de Dívida: (vazio) → {nome do tipo}" com ator "Importação MaxList".
+2. Nenhum card exibe "Origem desconhecida".
+3. No topo da timeline aparecem os chips **Acordo / Manual / Automático / Lote / 👍 / 👎** e desligar cada um filtra corretamente.
+4. Nenhum dado é perdido: queries diretas em `client_events` continuam vendo tudo (apenas a UI esconde ruído e renderiza melhor).
