@@ -240,8 +240,16 @@ const ChatPanel = ({
     [dispositionAssignments, conversation?.id]
   );
   const hasProfile = !!(clientInfo?.debtor_profile);
+  const hasReopenedAgreement = !!(clientInfo?.has_reopened_agreement);
+  // Banner aparece apenas quando: perfil ainda não definido,
+  // OU cliente refez acordo após quebra e ainda falta tabulação.
+  const gateReason: "no_profile" | "reopened_agreement" | null = !hasProfile
+    ? "no_profile"
+    : hasReopenedAgreement && !hasDisposition
+      ? "reopened_agreement"
+      : null;
   const mustGate =
-    inboundCount >= GATE_THRESHOLD && !!conversation && !!clientInfo?.id && (!hasDisposition || !hasProfile);
+    inboundCount >= GATE_THRESHOLD && !!conversation && !!clientInfo?.id && gateReason !== null;
 
   const handleSend = (text: string) => {
     if (mustGate) {
