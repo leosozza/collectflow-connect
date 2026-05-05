@@ -717,7 +717,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
   const visibleItems = showAll ? filtered : filtered.slice(0, 5);
   const getColors = (type: string) => COLOR_MAP[type] || COLOR_MAP.disposition;
 
-  const FilterChip = ({ active, onClick, color, label, icon }: { active: boolean; onClick: () => void; color: string; label: string; icon?: React.ReactNode }) => (
+  const FilterChip = ({ active, onClick, color, label, icon }: { active: boolean; onClick: () => void; color: string; label?: string; icon?: React.ReactNode }) => (
     <button
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${
@@ -727,7 +727,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       }`}
     >
       {icon}
-      {label}
+      {label ? <span>{label}</span> : null}
     </button>
   );
 
