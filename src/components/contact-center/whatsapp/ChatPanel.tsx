@@ -592,6 +592,7 @@ const ChatPanel = ({
           hasDisposition={hasDisposition}
           inboundCount={inboundCount}
           threshold={GATE_THRESHOLD}
+          reason={gateReason!}
           onOpenSidebar={() => { if (!sidebarOpen) onToggleSidebar(); }}
           sidebarOpen={sidebarOpen}
         />
