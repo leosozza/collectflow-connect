@@ -147,16 +147,16 @@ const ClientDetailPage = () => {
       const tenantId = clients[0]?.tenant_id;
 
       // Pós-processamento em background — não bloqueia o operador
-      recalcScoreForCpf(rawCpf).catch(() => {});
+      recalcScoreForCpf(rawCpf).catch(() => { });
       if (tenantId) {
-        supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenantId } }).catch(() => {});
+        supabase.functions.invoke("auto-status-sync", { body: { tenant_id: tenantId } }).catch(() => { });
       }
       logAction({
         action: "reabrir_parcelas",
         entity_type: "client",
         entity_id: rawCpf,
         details: { parcelas_reabertas: selectedPagoIds, quantidade: selectedPagoIds.length },
-      }).catch(() => {});
+      }).catch(() => { });
 
       toast.success(`${selectedPagoIds.length} parcela(s) reaberta(s) com sucesso.`);
       setSelectedPagoIds([]);
@@ -545,7 +545,6 @@ const ClientDetailPage = () => {
                       <TableHead>Parcela</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Devolução</TableHead>
-                      <TableHead>Contrato</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
                       <TableHead className="text-right">Saldo Devedor</TableHead>
@@ -590,7 +589,6 @@ const ClientDetailPage = () => {
                           <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
-                          <TableCell>{c.cod_contrato || "—"}</TableCell>
                           <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(pagoLinha)}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(saldoDevedor)}</TableCell>

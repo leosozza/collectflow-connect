@@ -125,48 +125,17 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
-  const allPaymentRecords = useMemo(() => {
-    const normalizeKey = (k: string) => {
-      if (!k) return null;
-      if (k.includes(':')) {
-        const parts = k.split(':');
-        const last = parts[parts.length - 1];
-        return last === '0' ? 'entrada' : last;
-      }
-      return k;
-    };
-
-    const manualRecords = manualPayments
-      .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
-      .map((mp: any) => ({
-        amount: Number(mp.amount_paid || 0),
-        date: mp.payment_date,
-        key: mp.installment_key
-      }));
-
-    const manualKeys = new Set(manualRecords.map(r => normalizeKey(r.key)).filter(Boolean));
-
-    const records = [
-      ...manualRecords,
-      ...portalPayments.map((pp: any) => ({ amount: Number(pp.amount || 0), date: pp.updated_at, key: null })),
-      ...cobrancas
-        .filter((c: any) => c.status === "pago")
-        .filter((c: any) => {
-          const norm = normalizeKey(c.installment_key);
-          return !manualKeys.has(norm);
-        })
-        .map((c: any) => ({
-          amount: Number(c.valor_pago ?? c.valor ?? 0),
-          date: c.data_pagamento || c.updated_at,
-          key: c.installment_key
-        }))
-    ];
-    return records.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [manualPayments, portalPayments, cobrancas]);
-
+  // Material payment sources only. client_events are audit trail and can duplicate provider rows.
   const totalPaidFromClients = useMemo(() => {
-    return allPaymentRecords.reduce((sum, r) => sum + r.amount, 0);
-  }, [allPaymentRecords]);
+    const manualTotal = manualPayments
+      .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
+      .reduce((sum: number, mp: any) => sum + Number(mp.amount_paid || 0), 0);
+    const portalTotal = portalPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+    const cobrancaTotal = cobrancas
+      .filter((c: any) => c.status === "pago")
+      .reduce((sum: number, c: any) => sum + Number(c.valor_pago ?? c.valor ?? 0), 0);
+    return manualTotal + portalTotal + cobrancaTotal;
+  }, [manualPayments, portalPayments, cobrancas]);
 
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
@@ -242,7 +211,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const totalInstallments = installments.length;
   const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
-  let paymentPool = allPaymentRecords.map(p => ({ ...p, rem: p.amount }));
+  let remainingPaid = totalPaidFromClients;
   const installmentsWithStatus = installments.map((inst) => {
     const isCancelled = !!cancelledMap[inst.customKey];
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -255,24 +224,12 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     }
 
     let isPaidManually = false;
-    let paidAt: string | null = null;
-    let needed = instValue;
-
-    // Track payment date using FIFO pool
-    for (let p of paymentPool) {
-      if (needed <= 0.005) break;
-      if (p.rem > 0) {
-        const take = Math.min(needed, p.rem);
-        needed -= take;
-        p.rem -= take;
-        paidAt = p.date;
-      }
-    }
-
-    if (needed <= 0.01) {
+    if (remainingPaid >= instValue) {
       isPaidManually = true;
+      remainingPaid -= instValue;
+    } else {
+      remainingPaid = 0;
     }
-
     const matchesInst = (mp: any) =>
       (mp.installment_key && mp.installment_key === inst.customKey) ||
       (!mp.installment_key && mp.installment_number === inst.number);
@@ -286,20 +243,14 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       .reduce((s: number, mp: any) => s + Number(mp.amount_paid || 0), 0);
     const isPaidByManual = confirmedManualForThis >= instValue - 0.01;
 
-    // Se houver uma data de pagamento direta na cobrança vinculada, use-a como prioridade
-    const effectivePaidAt = inst.cobranca?.data_pagamento || paidAt;
-
     const status = pendingManual
       ? "pending_confirmation"
       : inst.cobranca?.status === "pago"
-      ? "pago"
-      : isPaidByManual
-      ? "pago"
-      : (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-
-    const finalPaidAt = status === "pago" ? effectivePaidAt : null;
-
-    return { ...inst, status, isOverdue, pendingManual, isCancelled: false, paidAt: finalPaidAt };
+        ? "pago"
+        : isPaidByManual
+          ? "pago"
+          : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
+    return { ...inst, status, isOverdue, pendingManual, isCancelled: false };
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
@@ -519,7 +470,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
           entity_id: agreementId,
           details: { cobranca_id: inst.cobranca.id, installment_key: inst.customKey },
         });
-      } catch {}
+      } catch { }
 
       toast({ title: "Pagamento estornado com sucesso." });
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
@@ -555,7 +506,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             cancelled_by: profile?.id,
           },
         } as any);
-      } catch {}
+      } catch { }
       toast({ title: "Parcela cancelada", description: "A parcela foi marcada como cancelada." });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
@@ -584,7 +535,7 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             reactivated_by: profile?.id,
           },
         } as any);
-      } catch {}
+      } catch { }
       toast({ title: "Parcela reativada" });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
@@ -709,556 +660,574 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
 
   return (
     <>
-    <Collapsible open={open} onOpenChange={setOpen} className="pt-3 border-t border-border space-y-3">
-      <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center justify-between hover:bg-muted/30 rounded-md px-1 py-1 transition-colors cursor-pointer">
-          <p className="text-xs text-muted-foreground uppercase font-medium flex items-center gap-1">
-            <FileText className="w-3 h-3" /> Parcelas do Acordo
-          </p>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{paidCount}/{activeInstallmentsCount} pagas</span>
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-          </div>
-        </button>
-      </CollapsibleTrigger>
+      <Collapsible open={open} onOpenChange={setOpen} className="pt-3 border-t border-border space-y-3">
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center justify-between hover:bg-muted/30 rounded-md px-1 py-1 transition-colors cursor-pointer">
+            <p className="text-xs text-muted-foreground uppercase font-medium flex items-center gap-1">
+              <FileText className="w-3 h-3" /> Parcelas do Acordo
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{paidCount}/{activeInstallmentsCount} pagas</span>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+            </div>
+          </button>
+        </CollapsibleTrigger>
 
-      <div className="relative w-full bg-muted rounded-full h-5 overflow-hidden">
-        <div
-          className="bg-green-500 h-full rounded-full transition-all duration-500"
-          style={{ width: `${progressPercent}%` }}
-        />
-        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground mix-blend-difference">
-          {paidCount}/{activeInstallmentsCount} pagas
-        </span>
-      </div>
-
-      {/* Boleto Pendente Banner */}
-      {(agreement as any).boleto_pendente && cobrancas.length === 0 && (
-        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="w-4 h-4" />
-          <AlertDescription className="flex items-center justify-between w-full">
-            <span className="text-xs">Boletos pendentes — dados incompletos na criação do acordo.</span>
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-3 gap-1.5 text-xs h-7"
-              disabled={generatingAllBoletos}
-              onClick={handleGenerateAllBoletos}
-            >
-              {generatingAllBoletos ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileBarChart className="w-3 h-3" />}
-              Gerar Boletos
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <CollapsibleContent>
-
-      <div className="max-h-[400px] overflow-y-auto border border-border rounded-md">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/50">
-            <TableHead className="w-[80px]">Parcela</TableHead>
-            <TableHead>Vencimento</TableHead>
-            <TableHead className="text-right">Valor</TableHead>
-            <TableHead className="text-center">Status</TableHead>
-            <TableHead className="text-center">Pagamento</TableHead>
-            <TableHead className="text-center w-[140px]">Ações</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {installmentsWithStatus.map((inst, idx) => {
-            const isCancelled = !!inst.isCancelled;
-            const hasBoleto = inst.cobranca?.link_boleto;
-            const hasLinhaDigitavel = inst.cobranca?.linha_digitavel;
-            const hasPix = inst.cobranca?.pix_copia_cola;
-            const isPaid = inst.status === "pago";
-            const canEdit = !isPaid && !isCancelled && inst.status !== "pending_confirmation";
-            const hasActiveBoleto = !!inst.cobranca && !["cancelado", "substituido", "estornado"].includes(inst.cobranca.status);
-            const isOnlyEntrada = inst.isEntrada && inst.entradaCount === 1;
-            const canCancel = !isPaid && !isCancelled && inst.status !== "pending_confirmation"
-              && !hasActiveBoleto && !isOnlyEntrada
-              && activeInstallmentsCount > 1;
-
-            return (
-              <TableRow key={idx} className={cn(isCancelled && "opacity-60 [&_td]:line-through [&_td]:decoration-muted-foreground")}>
-                <TableCell className="font-medium text-xs">
-                  {inst.isEntrada
-                    ? (inst.entradaCount > 1 ? `Entrada ${inst.displayNumber}` : "Entrada")
-                    : `${inst.displayNumber}/${totalInstallments}`}
-                </TableCell>
-
-                {/* Vencimento + pencil */}
-                <TableCell className="text-xs">
-                  <span className="inline-flex items-center gap-1">
-                    {formatDate(inst.dueDate.toISOString().split("T")[0])}
-                    {canEdit && (
-                      <TooltipProvider delayDuration={200}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={() => handleOpenDateEdit(inst)}
-                              className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
-                            >
-                              <Pencil className="w-3 h-3 text-muted-foreground" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Editar Data</p></TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </span>
-                </TableCell>
-
-                {/* Valor + pencil */}
-                <TableCell className="text-right text-xs">
-                  {editingValueIdx === idx ? (
-                    <div className="flex items-center gap-1 justify-end">
-                      <Input
-                        className="h-7 w-24 text-xs"
-                        value={editValueInput}
-                        onChange={e => setEditValueInput(e.target.value)}
-                        placeholder="0,00"
-                        onKeyDown={e => { if (e.key === "Enter") handleEditValue(inst); if (e.key === "Escape") { setEditingValueIdx(null); setEditValueInput(""); } }}
-                        autoFocus
-                      />
-                      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleEditValue(inst)}>
-                        <CheckCircle2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <span className="inline-flex items-center gap-1">
-                      {formatCurrency(Number(inst.value))}
-                      {canEdit && (
-                        <TooltipProvider delayDuration={200}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                onClick={() => {
-                                  setEditingValueIdx(idx);
-                                  setEditValueInput(String(Number(inst.value).toFixed(2)).replace(".", ","));
-                                }}
-                                className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
-                              >
-                                <Pencil className="w-3 h-3 text-muted-foreground" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top"><p>Editar Valor</p></TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </span>
-                  )}
-                </TableCell>
-
-                {/* Status */}
-                <TableCell className="text-center no-underline [text-decoration:none]">
-                  {isCancelled ? (
-                    <Badge variant="outline" className="gap-1 text-[10px] bg-muted text-muted-foreground border-border no-underline [text-decoration:none]">
-                      <XCircle className="w-3.5 h-3.5" /> Cancelada
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className={cn(
-                      "gap-1 text-[10px]",
-                      inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
-                      inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
-                      inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
-                      "bg-warning/10 text-warning border-warning/30"
-                    )}>
-                      {statusIcon(inst.status)}
-                      {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
-                    </Badge>
-                  )}
-                </TableCell>
-
-                <TableCell className="text-center">
-                  {inst.paidAt ? (
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 gap-1 font-medium text-[10px]">
-                      <CheckCircle2 className="w-3 h-3" />
-                      {formatDate(inst.paidAt.split("T")[0])}
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground text-[10px]">—</span>
-                  )}
-                </TableCell>
-
-                {/* Inline action icons */}
-                <TableCell className="text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <TooltipProvider delayDuration={200}>
-                      {/* Gerar/Reemitir Boleto */}
-                      {!isPaid && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-primary hover:text-primary hover:bg-primary/10"
-                              disabled={generatingIdx === idx}
-                              onClick={() => handleGenerateBoleto(inst, idx)}
-                            >
-                              {generatingIdx === idx ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <FileBarChart className="w-4 h-4" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>{hasBoleto ? "Reemitir Boleto" : "Gerar Boleto"}</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {/* Abrir boleto */}
-                      {hasBoleto && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
-                              asChild
-                            >
-                              <a href={inst.cobranca.link_boleto} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>{isPaid ? "2ª Via Boleto" : "Abrir Boleto"}</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {/* Copiar linha digitável */}
-                      {hasLinhaDigitavel && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent"
-                              onClick={() => handleCopy(inst.cobranca.linha_digitavel, "Linha digitável")}
-                            >
-                              <ClipboardCopy className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Copiar Linha Digitável</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {/* Copiar PIX */}
-                      {hasPix && !hasLinhaDigitavel && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent"
-                              onClick={() => handleCopy(inst.cobranca.pix_copia_cola, "PIX")}
-                            >
-                              <ClipboardCopy className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Copiar PIX</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {/* Baixar manualmente (pendente) ou Desconfirmar (pago) */}
-                      {canEdit && tenantId && profile && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-500/10"
-                              onClick={() => setManualPaymentInst({
-                                number: inst.number,
-                                value: Number(inst.value),
-                                key: inst.customKey,
-                                label: inst.isEntrada
-                                  ? (inst.entradaCount > 1 ? `Entrada ${inst.entradaIndex + 1}` : "Entrada")
-                                  : `Parcela ${inst.displayNumber}/${totalInstallments}`,
-                              })}
-                            >
-                              <DollarSign className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Baixar Manualmente</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {/* Cancelar baixa pendente */}
-                      {inst.status === "pending_confirmation" && inst.pendingManual && tenantId && profile && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-500/10"
-                              disabled={cancellingIdx === idx}
-                              onClick={() => handleCancelPendingPayment(inst, idx)}
-                            >
-                              {cancellingIdx === idx ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <DollarSign className="w-4 h-4" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Cancelar Solicitação de Baixa</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {isPaid && tenantId && profile && (() => {
-                        const hasConfirmedManual = manualPayments.some(
-                          (mp: any) => (
-                            (mp.installment_key && mp.installment_key === inst.customKey) ||
-                            (!mp.installment_key && mp.installment_number === inst.number)
-                          ) && ["confirmed", "approved"].includes(mp.status)
-                        );
-                        const isCobrancaPaga = inst.cobranca?.status === "pago";
-                        const showButton = hasConfirmedManual || isCobrancaPaga;
-                        if (!showButton) return null;
-                        const tooltipLabel = hasConfirmedManual
-                          ? "Desconfirmar Pagamento"
-                          : "Estornar Pagamento";
-                        const handler = hasConfirmedManual
-                          ? () => handleUnconfirmPayment(inst, idx)
-                          : () => handleRefundCobranca(inst, idx);
-                        return (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
-                                disabled={unconfirmingIdx === idx}
-                                onClick={handler}
-                              >
-                                {unconfirmingIdx === idx ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <DollarSign className="w-4 h-4" />
-                                )}
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top"><p>{tooltipLabel}</p></TooltipContent>
-                          </Tooltip>
-                        );
-                      })()}
-
-                      {/* Baixar recibo */}
-                      {isPaid && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-500/10"
-                              onClick={() => handleDownloadReceipt(inst)}
-                            >
-                              <FileCheck className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Baixar Recibo</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {/* Cancelar parcela */}
-                      {canCancel && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                              disabled={cancellingInstallmentIdx === idx}
-                              onClick={() => setCancelInstallmentDialog({ inst, idx })}
-                            >
-                              {cancellingInstallmentIdx === idx ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Cancelar Parcela</p></TooltipContent>
-                        </Tooltip>
-                      )}
-
-                      {/* Reativar parcela cancelada */}
-                      {isCancelled && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
-                              disabled={cancellingInstallmentIdx === idx}
-                              onClick={() => handleReactivateInstallment(inst, idx)}
-                            >
-                              {cancellingInstallmentIdx === idx ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <RotateCcw className="w-4 h-4" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top"><p>Reativar Parcela</p></TooltipContent>
-                        </Tooltip>
-                      )}
-                    </TooltipProvider>
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-      </div>
-
-      {manualPaymentInst && tenantId && profile && (
-        <ManualPaymentDialog
-          open={!!manualPaymentInst}
-          onOpenChange={(open) => !open && setManualPaymentInst(null)}
-          agreementId={agreementId}
-          installmentNumber={manualPaymentInst.number}
-          installmentKey={manualPaymentInst.key}
-          installmentLabel={manualPaymentInst.label}
-          installmentValue={manualPaymentInst.value}
-          tenantId={tenantId}
-          profileId={profile.id}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
-            onRefresh?.();
-          }}
-        />
-      )}
-      </CollapsibleContent>
-    </Collapsible>
-
-    {/* Date Edit Dialog */}
-    <Dialog open={dateEditDialogOpen} onOpenChange={(o) => {
-      if (!o) {
-        setDateEditDialogOpen(false);
-        setSelectedInstallmentForDateEdit(null);
-        setSelectedDateForEdit(undefined);
-      }
-    }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Editar vencimento da parcela</DialogTitle>
-          <DialogDescription>
-            {selectedInstallmentForDateEdit?.isEntrada
-              ? "Entrada"
-              : selectedInstallmentForDateEdit
-                ? `Parcela ${selectedInstallmentForDateEdit.displayNumber}/${totalInstallments}`
-                : ""}
-            {selectedInstallmentForDateEdit && (
-              <> — Data atual: {formatDate(selectedInstallmentForDateEdit.dueDate.toISOString().split("T")[0])}</>
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-center py-4">
-          <Calendar
-            mode="single"
-            selected={selectedDateForEdit}
-            onSelect={setSelectedDateForEdit}
-            className={cn("p-3 pointer-events-auto")}
+        <div className="relative w-full bg-muted rounded-full h-5 overflow-hidden">
+          <div
+            className="bg-green-500 h-full rounded-full transition-all duration-500"
+            style={{ width: `${progressPercent}%` }}
           />
+          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-foreground mix-blend-difference">
+            {paidCount}/{activeInstallmentsCount} pagas
+          </span>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => {
-            setDateEditDialogOpen(false);
-            setSelectedInstallmentForDateEdit(null);
-            setSelectedDateForEdit(undefined);
-          }}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSaveDateEdit} disabled={savingDate || !selectedDateForEdit}>
-            {savingDate && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Salvar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
 
-    {/* Cancel Installment Confirmation */}
-    <AlertDialog
-      open={!!cancelInstallmentDialog}
-      onOpenChange={(o) => !o && setCancelInstallmentDialog(null)}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Cancelar parcela?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {cancelInstallmentDialog && (
-              <>
-                A parcela{" "}
-                <b>
-                  {cancelInstallmentDialog.inst.isEntrada
-                    ? (cancelInstallmentDialog.inst.entradaCount > 1
+        {/* Boleto Pendente Banner */}
+        {(agreement as any).boleto_pendente && cobrancas.length === 0 && (
+          <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4" />
+            <AlertDescription className="flex items-center justify-between w-full">
+              <span className="text-xs">Boletos pendentes — dados incompletos na criação do acordo.</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-3 gap-1.5 text-xs h-7"
+                disabled={generatingAllBoletos}
+                onClick={handleGenerateAllBoletos}
+              >
+                {generatingAllBoletos ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileBarChart className="w-3 h-3" />}
+                Gerar Boletos
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <CollapsibleContent>
+
+          <div className="max-h-[400px] overflow-y-auto border border-border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[80px]">Parcela</TableHead>
+                  <TableHead>Vencimento</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center w-[140px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {installmentsWithStatus.map((inst, idx) => {
+                  const isCancelled = !!inst.isCancelled;
+                  const hasBoleto = inst.cobranca?.link_boleto;
+                  const hasLinhaDigitavel = inst.cobranca?.linha_digitavel;
+                  const hasPix = inst.cobranca?.pix_copia_cola;
+                  const isPaid = inst.status === "pago";
+                  const canEdit = !isPaid && !isCancelled && inst.status !== "pending_confirmation";
+                  const hasActiveBoleto = !!inst.cobranca && !["cancelado", "substituido", "estornado"].includes(inst.cobranca.status);
+                  const isOnlyEntrada = inst.isEntrada && inst.entradaCount === 1;
+                  const canCancel = !isPaid && !isCancelled && inst.status !== "pending_confirmation"
+                    && !hasActiveBoleto && !isOnlyEntrada
+                    && activeInstallmentsCount > 1;
+
+                  return (
+                    <TableRow key={idx} className={cn(isCancelled && "opacity-60 [&_td]:line-through [&_td]:decoration-muted-foreground")}>
+                      <TableCell className="font-medium text-xs">
+                        {inst.isEntrada
+                          ? (inst.entradaCount > 1 ? `Entrada ${inst.displayNumber}` : "Entrada")
+                          : `${inst.displayNumber}/${totalInstallments}`}
+                      </TableCell>
+
+                      {/* Vencimento + pencil */}
+                      <TableCell className="text-xs">
+                        <span className="inline-flex items-center gap-1">
+                          {formatDate(inst.dueDate.toISOString().split("T")[0])}
+                          {canEdit && (
+                            <TooltipProvider delayDuration={200}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => handleOpenDateEdit(inst)}
+                                    className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
+                                  >
+                                    <Pencil className="w-3 h-3 text-muted-foreground" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Editar Data</p></TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </span>
+                      </TableCell>
+
+                      {/* Valor + pencil */}
+                      <TableCell className="text-right text-xs">
+                        {editingValueIdx === idx ? (
+                          <div className="flex items-center gap-1 justify-end">
+                            <Input
+                              className="h-7 w-24 text-xs"
+                              value={editValueInput}
+                              onChange={e => setEditValueInput(e.target.value)}
+                              placeholder="0,00"
+                              onKeyDown={e => { if (e.key === "Enter") handleEditValue(inst); if (e.key === "Escape") { setEditingValueIdx(null); setEditValueInput(""); } }}
+                              autoFocus
+                            />
+                            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleEditValue(inst)}>
+                              <CheckCircle2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            {formatCurrency(Number(inst.value))}
+                            {canEdit && (
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      onClick={() => {
+                                        setEditingValueIdx(idx);
+                                        setEditValueInput(String(Number(inst.value).toFixed(2)).replace(".", ","));
+                                      }}
+                                      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
+                                    >
+                                      <Pencil className="w-3 h-3 text-muted-foreground" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top"><p>Editar Valor</p></TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </span>
+                        )}
+                      </TableCell>
+
+                      {/* Status */}
+                      <TableCell className="text-center no-underline [text-decoration:none]">
+                        {isCancelled ? (
+                          <Badge variant="outline" className="gap-1 text-[10px] bg-muted text-muted-foreground border-border no-underline [text-decoration:none]">
+                            <XCircle className="w-3.5 h-3.5" /> Cancelada
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className={cn(
+                            "gap-1 text-[10px]",
+                            inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
+                              inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                                inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
+                                  "bg-warning/10 text-warning border-warning/30"
+                          )}>
+                            {statusIcon(inst.status)}
+                            {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
+                          </Badge>
+                        )}
+                      </TableCell>
+
+                      {/* Inline action icons */}
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <TooltipProvider delayDuration={200}>
+                            {/* Gerar/Reemitir Boleto */}
+                            {!isPaid && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-primary hover:text-primary hover:bg-primary/10"
+                                    disabled={generatingIdx === idx}
+                                    onClick={() => handleGenerateBoleto(inst, idx)}
+                                  >
+                                    {generatingIdx === idx ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <FileBarChart className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>{hasBoleto ? "Reemitir Boleto" : "Gerar Boleto"}</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {/* Abrir boleto */}
+                            {hasBoleto && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                                    asChild
+                                  >
+                                    <a href={inst.cobranca.link_boleto} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="w-4 h-4" />
+                                    </a>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>{isPaid ? "2ª Via Boleto" : "Abrir Boleto"}</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {/* Copiar linha digitável */}
+                            {hasLinhaDigitavel && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent"
+                                    onClick={() => handleCopy(inst.cobranca.linha_digitavel, "Linha digitável")}
+                                  >
+                                    <ClipboardCopy className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Copiar Linha Digitável</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {/* Copiar PIX */}
+                            {hasPix && !hasLinhaDigitavel && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent"
+                                    onClick={() => handleCopy(inst.cobranca.pix_copia_cola, "PIX")}
+                                  >
+                                    <ClipboardCopy className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Copiar PIX</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {/* Baixar manualmente (pendente) ou Desconfirmar (pago) */}
+                            {canEdit && tenantId && profile && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-500/10"
+                                    onClick={() => setManualPaymentInst({
+                                      number: inst.number,
+                                      value: Number(inst.value),
+                                      key: inst.customKey,
+                                      label: inst.isEntrada
+                                        ? (inst.entradaCount > 1 ? `Entrada ${inst.entradaIndex + 1}` : "Entrada")
+                                        : `Parcela ${inst.displayNumber}/${totalInstallments}`,
+                                    })}
+                                  >
+                                    <DollarSign className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Baixar Manualmente</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {/* Cancelar baixa pendente */}
+                            {inst.status === "pending_confirmation" && inst.pendingManual && tenantId && profile && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-500/10"
+                                    disabled={cancellingIdx === idx}
+                                    onClick={() => handleCancelPendingPayment(inst, idx)}
+                                  >
+                                    {cancellingIdx === idx ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <DollarSign className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Cancelar Solicitação de Baixa</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {isPaid && tenantId && profile && (() => {
+                              const hasConfirmedManual = manualPayments.some(
+                                (mp: any) => (
+                                  (mp.installment_key && mp.installment_key === inst.customKey) ||
+                                  (!mp.installment_key && mp.installment_number === inst.number)
+                                ) && ["confirmed", "approved"].includes(mp.status)
+                              );
+                              const isCobrancaPaga = inst.cobranca?.status === "pago";
+                              const showButton = hasConfirmedManual || isCobrancaPaga;
+                              if (!showButton) return null;
+                              const tooltipLabel = hasConfirmedManual
+                                ? "Desconfirmar Pagamento"
+                                : "Estornar Pagamento";
+                              const handler = hasConfirmedManual
+                                ? () => handleUnconfirmPayment(inst, idx)
+                                : () => handleRefundCobranca(inst, idx);
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                                      disabled={unconfirmingIdx === idx}
+                                      onClick={handler}
+                                    >
+                                      {unconfirmingIdx === idx ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <DollarSign className="w-4 h-4" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top"><p>{tooltipLabel}</p></TooltipContent>
+                                </Tooltip>
+                              );
+                            })()}
+
+                            {/* Baixar recibo */}
+                            {isPaid && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-500/10"
+                                    onClick={() => handleDownloadReceipt(inst)}
+                                  >
+                                    <FileCheck className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Baixar Recibo</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {/* Cancelar parcela */}
+                            {canCancel && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    disabled={cancellingInstallmentIdx === idx}
+                                    onClick={() => setCancelInstallmentDialog({ inst, idx })}
+                                  >
+                                    {cancellingInstallmentIdx === idx ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Cancelar Parcela</p></TooltipContent>
+                              </Tooltip>
+                            )}
+
+                            {/* Reativar parcela cancelada */}
+                            {isCancelled && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                                    disabled={cancellingInstallmentIdx === idx}
+                                    onClick={() => handleReactivateInstallment(inst, idx)}
+                                  >
+                                    {cancellingInstallmentIdx === idx ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <RotateCcw className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top"><p>Reativar Parcela</p></TooltipContent>
+                              </Tooltip>
+                            )}
+                          </TooltipProvider>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {manualPaymentInst && tenantId && profile && (
+            <ManualPaymentDialog
+              open={!!manualPaymentInst}
+              onOpenChange={(open) => !open && setManualPaymentInst(null)}
+              agreementId={agreementId}
+              installmentNumber={manualPaymentInst.number}
+              installmentKey={manualPaymentInst.key}
+              installmentLabel={manualPaymentInst.label}
+              installmentValue={manualPaymentInst.value}
+              tenantId={tenantId}
+              profileId={profile.id}
+              onSuccess={() => {
+                queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+                onRefresh?.();
+              }}
+            />
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Date Edit Dialog */}
+      <Dialog open={dateEditDialogOpen} onOpenChange={(o) => {
+        if (!o) {
+          setDateEditDialogOpen(false);
+          setSelectedInstallmentForDateEdit(null);
+          setSelectedDateForEdit(undefined);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar vencimento da parcela</DialogTitle>
+            <DialogDescription>
+              {selectedInstallmentForDateEdit?.isEntrada
+                ? "Entrada"
+                : selectedInstallmentForDateEdit
+                  ? `Parcela ${selectedInstallmentForDateEdit.displayNumber}/${totalInstallments}`
+                  : ""}
+              {selectedInstallmentForDateEdit && (
+                <> — Data atual: {formatDate(selectedInstallmentForDateEdit.dueDate.toISOString().split("T")[0])}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center py-4">
+            <Calendar
+              mode="single"
+              selected={selectedDateForEdit}
+              onSelect={setSelectedDateForEdit}
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setDateEditDialogOpen(false);
+              setSelectedInstallmentForDateEdit(null);
+              setSelectedDateForEdit(undefined);
+            }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveDateEdit} disabled={savingDate || !selectedDateForEdit}>
+              {savingDate && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Installment Confirmation */}
+      <AlertDialog
+        open={!!cancelInstallmentDialog}
+        onOpenChange={(o) => !o && setCancelInstallmentDialog(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar parcela?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cancelInstallmentDialog && (
+                <>
+                  A parcela{" "}
+                  <b>
+                    {cancelInstallmentDialog.inst.isEntrada
+                      ? (cancelInstallmentDialog.inst.entradaCount > 1
                         ? `Entrada ${cancelInstallmentDialog.inst.entradaIndex + 1}`
                         : "Entrada")
-                    : `${cancelInstallmentDialog.inst.displayNumber}/${totalInstallments}`}
-                </b>{" "}
-                ({formatCurrency(Number(cancelInstallmentDialog.inst.value))}) será marcada como
-                cancelada. Ela continuará visível na lista, com risco, e será desconsiderada do
-                progresso e do dashboard "Parcelas Programadas". Você poderá reativá-la depois.
-                <br /><br />
-                <span className="text-xs text-muted-foreground">
-                  O valor original do acordo (proposed_total) é preservado para fins de histórico
-                  contratual.
-                </span>
-              </>
-            )}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={cancellingInstallmentIdx !== null}>
-            Voltar
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleConfirmCancelInstallment}
-            disabled={cancellingInstallmentIdx !== null}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            {cancellingInstallmentIdx !== null && (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            )}
-            Cancelar Parcela
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+                      : `${cancelInstallmentDialog.inst.displayNumber}/${totalInstallments}`}
+                  </b>{" "}
+                  ({formatCurrency(Number(cancelInstallmentDialog.inst.value))}) será marcada como
+                  cancelada. Ela continuará visível na lista, com risco, e será desconsiderada do
+                  progresso e do dashboard "Parcelas Programadas". Você poderá reativá-la depois.
+                  <br /><br />
+                  <span className="text-xs text-muted-foreground">
+                    O valor original do acordo (proposed_total) é preservado para fins de histórico
+                    contratual.
+                  </span>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancellingInstallmentIdx !== null}>
+              Voltar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancelInstallment}
+              disabled={cancellingInstallmentIdx !== null}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {cancellingInstallmentIdx !== null && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              Cancelar Parcela
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-    {/* Boleto Pendente Missing Fields Dialog */}
-    <Dialog open={boletoPendenteMissingOpen} onOpenChange={(o) => !o && setBoletoPendenteMissingOpen(false)}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-600">
-            <AlertTriangle className="w-5 h-5" />
-            Complete os dados para gerar os boletos
-          </DialogTitle>
-        </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Preencha os campos faltantes para gerar os boletos deste acordo:
-        </p>
+      {/* Boleto Pendente Missing Fields Dialog */}
+      <Dialog open={boletoPendenteMissingOpen} onOpenChange={(o) => !o && setBoletoPendenteMissingOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="w-5 h-5" />
+              Complete os dados para gerar os boletos
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Preencha os campos faltantes para gerar os boletos deste acordo:
+          </p>
 
-        {(() => {
-          const found = Object.entries(boletoPendenteFound).filter(([key]) => !boletoPendenteMissing.hasOwnProperty(key));
-          return found.length > 0 ? (
-            <div className="bg-muted/50 rounded-md p-3 space-y-1">
-              <p className="text-[10px] uppercase font-medium text-muted-foreground mb-1">Dados encontrados</p>
-              {found.map(([key, val]) => (
-                <div key={key} className="flex items-center gap-2 text-xs">
-                  <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
-                  <span className="text-muted-foreground">{FIELD_LABELS[key] || key}:</span>
-                  <span className="font-medium truncate">{String(val)}</span>
-                </div>
-              ))}
-            </div>
-          ) : null;
-        })()}
+          {(() => {
+            const found = Object.entries(boletoPendenteFound).filter(([key]) => !boletoPendenteMissing.hasOwnProperty(key));
+            return found.length > 0 ? (
+              <div className="bg-muted/50 rounded-md p-3 space-y-1">
+                <p className="text-[10px] uppercase font-medium text-muted-foreground mb-1">Dados encontrados</p>
+                {found.map(([key, val]) => (
+                  <div key={key} className="flex items-center gap-2 text-xs">
+                    <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
+                    <span className="text-muted-foreground">{FIELD_LABELS[key] || key}:</span>
+                    <span className="font-medium truncate">{String(val)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null;
+          })()}
 
+          <div className="space-y-3 py-2">
+            <p className="text-[10px] uppercase font-medium text-muted-foreground">Campos faltantes</p>
+            {Object.keys(boletoPendenteMissing).map((field) => (
+              <div key={field} className="space-y-1">
+                <Label className="text-xs font-medium">{FIELD_LABELS[field] || field}</Label>
+                <Input
+                  value={boletoPendenteMissing[field]}
+                  onChange={(e) => setBoletoPendenteMissing((prev) => ({ ...prev, [field]: e.target.value }))}
+                  placeholder={`Informe o ${(FIELD_LABELS[field] || field).toLowerCase()}`}
+                  className="h-9"
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setBoletoPendenteMissingOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveBoletoPendenteMissing} disabled={savingBoletoPendente}>
+              {savingBoletoPendente ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar e Gerar Boletos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+export default AgreementInstallments;
         <div className="space-y-3 py-2">
           <p className="text-[10px] uppercase font-medium text-muted-foreground">Campos faltantes</p>
           {Object.keys(boletoPendenteMissing).map((field) => (
@@ -1282,8 +1251,8 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
             Salvar e Gerar Boletos
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </DialogContent >
+    </Dialog >
     </>
   );
 };

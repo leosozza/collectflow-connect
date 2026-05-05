@@ -369,13 +369,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     .filter((a: any) => a.status === "completed")
     .reduce((sum: number, a: any) => sum + Number(a.proposed_total), 0);
   const totalPago = totalPagoRecords + totalPagoAcordos;
-  
+
   const pagas = clients.filter((c) => c.status === "pago" && !(c as any).data_devolucao).length;
   const endereco = [client.endereco, client.bairro, client.cidade, client.uf, client.cep].filter(Boolean).join(", ");
 
   // Aggregate multi-contract values
   const modelNames = [...new Set(clients.map(c => c.model_name).filter(Boolean))].join(" / ") || "—";
-  const codContratos = [...new Set(clients.map(c => c.cod_contrato).filter(Boolean))].join(" | ") || "—";
+  const codContratos = [...new Set(clients.map(c => c.cod_contrato).filter(Boolean))].join(" / ") || "—";
 
   // Saldo Devedor: parcelas não-pagas (inclui devolvidas com valor cheio)
   const naoPageos = clients.filter(c => c.status !== "pago" || !!(c as any).data_devolucao);
@@ -504,7 +504,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
         </div>
 
         {/* Linha 2: Grid de informações (estilo CRM) */}
-        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:[grid-template-columns:auto_auto_minmax(0,1fr)_minmax(0,150px)_minmax(0,150px)_auto] lg:divide-x divide-border rounded-lg bg-muted/30 border border-border/60 overflow-hidden">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:auto_auto_minmax(0,1fr)_minmax(0,200px)_auto] lg:divide-x divide-border rounded-lg bg-muted/30 border border-border/60 overflow-hidden">
           <div className="px-3 py-2 min-w-0">
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">CPF</p>
             <p className="text-[13px] font-semibold text-foreground truncate mt-0.5">{formattedCpf}</p>
@@ -525,12 +525,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Credor</p>
             <p className="text-[13px] font-semibold text-foreground truncate mt-0.5" title={client.credor}>
               {client.credor ? client.credor.split(/\s+/).slice(0, 2).join(" ") : "—"}
-            </p>
-          </div>
-          <div className="px-3 py-2 min-w-0">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Contrato(s)</p>
-            <p className="text-[13px] font-semibold text-foreground truncate mt-0.5" title={codContratos}>
-              {codContratos}
             </p>
           </div>
           <div className="px-3 py-2 min-w-0 bg-destructive/5">
@@ -560,7 +554,11 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                   value={client.external_id}
                   onSave={(v) => updateSingleField("external_id", v)}
                 />
-                <InfoItem label="Cod. Contrato(s)" value={codContratos} />
+                <InlineEditableField
+                  label="Cod. Contrato"
+                  value={client.cod_contrato}
+                  onSave={(v) => updateSingleField("cod_contrato", v)}
+                />
                 <InfoItem label="Modelo" value={modelNames} />
                 <InfoItem label="Credor" value={client.credor} />
               </div>

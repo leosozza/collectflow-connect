@@ -36,8 +36,6 @@ const DebtorProfileBadge = ({ clientId, clientCpf, tenantId, currentProfile, onP
         .eq("id", clientId);
       if (error) throw error;
 
-      const { data: { user } } = await supabase.auth.getUser();
-
       await supabase.from("client_events").insert({
         client_cpf: clientCpf.replace(/\D/g, ""),
         tenant_id: tenantId,
@@ -45,12 +43,7 @@ const DebtorProfileBadge = ({ clientId, clientCpf, tenantId, currentProfile, onP
         event_source: "operator",
         event_channel: "whatsapp",
         event_value: newValue,
-        metadata: { 
-          from: currentProfile, 
-          to: newValue,
-          operator_id: user?.id,
-          operator_name: (await supabase.from("profiles").select("full_name").eq("user_id", user?.id).maybeSingle()).data?.full_name
-        },
+        metadata: { from: currentProfile, to: newValue },
       });
 
       onProfileChanged(newValue);
@@ -85,9 +78,8 @@ const DebtorProfileBadge = ({ clientId, clientCpf, tenantId, currentProfile, onP
           <button
             key={p.value}
             onClick={() => handleSelect(p.value)}
-            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-accent/60 transition-colors ${
-              p.value === currentProfile ? "bg-accent" : ""
-            }`}
+            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-accent/60 transition-colors ${p.value === currentProfile ? "bg-accent" : ""
+              }`}
           >
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
             <div className="text-left">

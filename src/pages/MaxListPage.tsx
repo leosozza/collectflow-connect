@@ -835,18 +835,11 @@ const MaxListPage = () => {
       valor_parcela: record.valor_parcela || record.valor_saldo || 0,
       data_vencimento: record.data_vencimento || new Date().toISOString().split("T")[0],
       data_pagamento: record.data_pagamento || null,
-      external_id: (() => {
-        if (record.cod_titulo) return String(record.cod_titulo);
-        const baseId = record.external_id ? String(record.external_id) : "";
-        const contract = record.cod_contrato ? String(record.cod_contrato) : "";
-        const parcel = String(record.numero_parcela || 1);
-        
-        if (baseId) {
-          if (contract && baseId.includes(contract)) return baseId;
-          return `${baseId}-${contract}-${parcel}`.replace(/^-+|-+$/g, '');
-        }
-        return `${contract}-${parcel}`.replace(/^-+|-+$/g, '');
-      })(),
+      external_id: record.cod_titulo
+        ? String(record.cod_titulo)
+        : record.external_id
+          ? String(record.external_id)
+          : `${record.cod_contrato || ""}-${record.numero_parcela || 1}`,
       cod_contrato: record.cod_contrato || "",
       numero_parcela: record.numero_parcela || 1,
       total_parcelas: record.numero_parcela || 1,

@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
         .from("meio_pagamento_mappings")
         .select("external_code, meios_pagamento(nome)")
         .eq("credor_id", credorId);
-      
+
       if (mappings) {
         for (const m of mappings) {
           const nome = (m.meios_pagamento as any)?.nome;
@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
         if (id) {
           paymentTypeToDividaMap.set(ptCode, id);
         } else {
-           console.log(`[maxlist-import] Warning: UI mapping for code ${ptCode} (${tdName}) could not be resolved to a tipo_divida.`);
+          console.log(`[maxlist-import] Warning: UI mapping for code ${ptCode} (${tdName}) could not be resolved to a tipo_divida.`);
         }
       }
     }
@@ -375,18 +375,11 @@ Deno.serve(async (req) => {
         valor_saldo: record.valor_saldo ?? null,
         data_vencimento: record.data_vencimento || new Date().toISOString().split("T")[0],
         data_pagamento: record.data_pagamento || (rawPaymentEffected ? String(rawPaymentEffected).split("T")[0] : null),
-        external_id: (() => {
-          if (record.cod_titulo) return String(record.cod_titulo);
-          const baseId = record.external_id ? String(record.external_id) : "";
-          const contract = record.cod_contrato ? String(record.cod_contrato) : "";
-          const parcel = String(record.numero_parcela || 1);
-          
-          if (baseId) {
-            if (contract && baseId.includes(contract)) return baseId;
-            return `${baseId}-${contract}-${parcel}`.replace(/^-+|-+$/g, '');
-          }
-          return `${contract}-${parcel}`.replace(/^-+|-+$/g, '');
-        })(),
+        external_id: record.cod_titulo
+          ? String(record.cod_titulo)
+          : record.external_id
+            ? String(record.external_id)
+            : `${record.cod_contrato || ""}-${record.numero_parcela || 1}`,
         cod_contrato: record.cod_contrato || "",
         numero_parcela: record.numero_parcela || 1,
         total_parcelas: record.numero_parcela || 1,

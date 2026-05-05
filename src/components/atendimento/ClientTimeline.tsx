@@ -1,24 +1,14 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/formatters";
 import { DISPOSITION_TYPES, type CallDisposition } from "@/services/dispositionService";
-import { 
-  Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, 
-  Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, 
-  Signature, Globe, Headphones, ArrowRightLeft, StickyNote, 
-  AlertTriangle, ThumbsUp, ThumbsDown, CheckCircle2, XCircle
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Clock, PenLine, Save, Inbox, Phone, Play, Pause, User, Bot, Zap, Handshake, CreditCard, Tags, FileEdit, Shield, MessageSquare, Signature, Globe, Headphones, ArrowRightLeft, StickyNote, AlertTriangle } from "lucide-react";
 
 type ActorKind = "user" | "admin" | "workflow" | "ai" | "system" | "portal" | "gateway" | "client" | "unknown";
-type EventCategory = "acordo" | "manual" | "automatico" | "lote";
-type Sentiment = "positive" | "negative" | "neutral";
 
 interface Actor {
   label: string;
@@ -35,8 +25,6 @@ interface TimelineItem {
   actor?: Actor;
   recordingUrl?: string;
   durationSeconds?: number;
-  category: EventCategory;
-  sentiment: Sentiment;
 }
 
 interface CallLog {
@@ -65,23 +53,23 @@ interface ClientObservationsProps {
 
 const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   disposition: { border: "border-amber-200", bg: "bg-amber-50/50", dot: "border-amber-400" },
-  note:        { border: "border-amber-200", bg: "bg-amber-50/50", dot: "border-amber-400" },
-  call:        { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
-  agreement:   { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
-  agreement_created:  { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  note: { border: "border-amber-200", bg: "bg-amber-50/50", dot: "border-amber-400" },
+  call: { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  agreement: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  agreement_created: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
   agreement_approved: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
-  agreement_cancelled:{ border: "border-red-200", bg: "bg-red-50/50", dot: "border-red-400" },
-  agreement_overdue:  { border: "border-orange-200", bg: "bg-orange-50/50", dot: "border-orange-400" },
-  agreement_signed:   { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
-  message:     { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
-  message_sent:{ border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  agreement_cancelled: { border: "border-red-200", bg: "bg-red-50/50", dot: "border-red-400" },
+  agreement_overdue: { border: "border-orange-200", bg: "bg-orange-50/50", dot: "border-orange-400" },
+  agreement_signed: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  message: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
+  message_sent: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
   whatsapp_inbound: { border: "border-green-200", bg: "bg-green-50/50", dot: "border-green-400" },
-  whatsapp_outbound:{ border: "border-green-200", bg: "bg-green-50/50", dot: "border-green-400" },
-  payment:     { border: "border-teal-200", bg: "bg-teal-50/50", dot: "border-teal-400" },
-  system:      { border: "border-slate-200", bg: "bg-slate-50/50", dot: "border-slate-400" },
-  ai:          { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
+  whatsapp_outbound: { border: "border-green-200", bg: "bg-green-50/50", dot: "border-green-400" },
+  payment: { border: "border-teal-200", bg: "bg-teal-50/50", dot: "border-teal-400" },
+  system: { border: "border-slate-200", bg: "bg-slate-50/50", dot: "border-slate-400" },
+  ai: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
   debtor_category: { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
-  field_update:{ border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  field_update: { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
   atendimento_opened: { border: "border-cyan-200", bg: "bg-cyan-50/50", dot: "border-cyan-400" },
   atendimento_closed: { border: "border-slate-200", bg: "bg-slate-50/50", dot: "border-slate-400" },
   channel_switched: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
@@ -92,18 +80,18 @@ const COLOR_MAP: Record<string, { border: string; bg: string; dot: string }> = {
   ai_voice_negotiation_started: { border: "border-purple-200", bg: "bg-purple-50/50", dot: "border-purple-400" },
   manual_payment_requested: { border: "border-yellow-200", bg: "bg-yellow-50/50", dot: "border-yellow-400" },
   manual_payment_confirmed: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
-  manual_payment_rejected:  { border: "border-red-200", bg: "bg-red-50/50", dot: "border-red-400" },
-  payment_confirmed:        { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
-  agreement_completed:      { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
-  agreement_status_completed:{ border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
-  debtor_profile_changed:   { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
-  call_hangup:              { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
-  document_previewed:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
-  document_generated:       { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  manual_payment_rejected: { border: "border-red-200", bg: "bg-red-50/50", dot: "border-red-400" },
+  payment_confirmed: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  agreement_completed: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  agreement_status_completed: { border: "border-emerald-200", bg: "bg-emerald-50/50", dot: "border-emerald-400" },
+  debtor_profile_changed: { border: "border-pink-200", bg: "bg-pink-50/50", dot: "border-pink-400" },
+  call_hangup: { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  document_previewed: { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
+  document_generated: { border: "border-indigo-200", bg: "bg-indigo-50/50", dot: "border-indigo-400" },
   conversation_auto_closed: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
   conversation_transferred: { border: "border-violet-200", bg: "bg-violet-50/50", dot: "border-violet-400" },
   previous_agreement_credit_applied: { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
-  credit_overflow:          { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
+  credit_overflow: { border: "border-blue-200", bg: "bg-blue-50/50", dot: "border-blue-400" },
 };
 
 const toTitleCase = (s: string) =>
@@ -206,14 +194,7 @@ const SOURCE_LABELS: Record<string, string> = {
   negociarie: "Negociarie", portal: "Portal do Devedor",
   ai: "Agente IA", ai_agent: "Agente IA",
   operator: "Operador", admin: "Administrador",
-  system: "Sistema Rivo", workflow: "Fluxo Automático",
-};
-
-const DEBTOR_PROFILE_LABELS: Record<string, string> = {
-  ocasional: "Ocasional",
-  recorrente: "Recorrente",
-  insatisfeito: "Insatisfeito",
-  resistente: "Resistente",
+  system: "Sistema", workflow: "Fluxo Automático",
 };
 
 const AGREEMENT_STATUS_LABELS: Record<string, string> = {
@@ -291,9 +272,9 @@ const InlineAudioPlayer = ({ url }: { url: string }) => {
 };
 
 const ResponsibleLabel = ({ actor }: { actor?: Actor }) => {
-  const a: Actor = actor && actor.label && actor.label !== "Origem desconhecida"
+  const a: Actor = actor && actor.label
     ? actor
-    : { label: "Sistema Rivo", kind: "system" };
+    : { label: "Origem desconhecida", kind: "unknown" };
 
   const iconByKind: Record<ActorKind, React.ReactNode> = {
     user: <User className="w-3 h-3" />,
@@ -379,11 +360,11 @@ const resolveActor = (
   if (userId && profileMap[userId]) {
     return { label: profileMap[userId], kind: "user" };
   }
-  if (meta.operator_name) {
-    return { label: meta.operator_name, kind: "user" };
-  }
   if (meta.agent_name) {
     return { label: meta.agent_name, kind: "user" };
+  }
+  if (meta.operator_name) {
+    return { label: meta.operator_name, kind: "user" };
   }
 
   // Sistema (auto-close, transferências automáticas, etc.)
@@ -396,63 +377,7 @@ const resolveActor = (
     return { label: "Sistema", kind: "system" };
   }
 
-  // Fallback para operador se a fonte for operator mas não temos o nome
-  if (eventSource === "operator") {
-    return { label: "Operador", kind: "user" };
-  }
-
-  return { label: "Sistema Rivo", kind: "system" };
-};
-
-const resolveCategory = (event: any): EventCategory => {
-  const type = event?.event_type || "";
-  const source = event?.event_source || "";
-  const meta = (event?.metadata || {}) as any;
-
-  if (
-    type.startsWith("agreement_") || 
-    type.startsWith("manual_payment_") || 
-    type === "payment_confirmed" ||
-    type === "agreement_broken"
-  ) {
-    return "acordo";
-  }
-
-  if (source === "operator" || source === "admin" || source === "manual") {
-    return "manual";
-  }
-
-  if (
-    source === "maxlist" || 
-    source === "import" || 
-    meta.campaign_id || 
-    meta.campaign_name || 
-    meta.is_bulk
-  ) {
-    return "lote";
-  }
-
-  return "automatico";
-};
-
-const resolveSentiment = (event: any): Sentiment => {
-  const type = event?.event_type || "";
-  
-  const positive = [
-    "agreement_created", "agreement_approved", "agreement_signed", 
-    "agreement_completed", "manual_payment_confirmed", "payment_confirmed",
-    "phone_promoted_hot", "agreement_status_approved", "agreement_status_completed"
-  ];
-  
-  const negative = [
-    "agreement_cancelled", "agreement_overdue", "agreement_broken",
-    "manual_payment_rejected", "send_failed", "credit_overflow",
-    "agreement_status_cancelled", "agreement_status_overdue", "agreement_status_broken"
-  ];
-
-  if (positive.includes(type)) return "positive";
-  if (negative.includes(type)) return "negative";
-  return "neutral";
+  return { label: "Origem desconhecida", kind: "unknown" };
 };
 
 /** Render field_update changes inline */
@@ -479,14 +404,9 @@ const FieldUpdateDetail = ({ metadata }: { metadata: any }) => {
 };
 
 const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: ClientTimelineProps) => {
-  const [filters, setFilters] = useState<Record<EventCategory, boolean>>({
-    acordo: true,
-    manual: true,
-    automatico: true,
-    lote: true,
-  });
-  const [sentiment, setSentiment] = useState<"positive" | "negative" | "all">("all");
+  const [showAll, setShowAll] = useState(false);
 
+  // Fetch client_events when clientCpf is available
   const { data: clientEvents = [] } = useQuery({
     queryKey: ["client-events-timeline", clientCpf],
     queryFn: async () => {
@@ -497,13 +417,14 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         .select("*")
         .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${clientCpf}`)
         .order("created_at", { ascending: false })
-        .limit(300);
+        .limit(200);
       if (error) throw error;
       return data || [];
     },
     enabled: !!clientCpf,
   });
 
+  // Resolve operator names from metadata
   const { data: profileMap = {} } = useQuery({
     queryKey: ["timeline-profiles", clientCpf, clientEvents.length],
     queryFn: async () => {
@@ -513,20 +434,36 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         if (meta?.created_by) userIds.add(meta.created_by);
         if (meta?.updated_by) userIds.add(meta.updated_by);
         if (meta?.operator_id) userIds.add(meta.operator_id);
+        if (meta?.requested_by) userIds.add(meta.requested_by);
+        if (meta?.reviewed_by) userIds.add(meta.reviewed_by);
+        if (meta?.reviewer_id) userIds.add(meta.reviewer_id);
+        if (meta?.confirmed_by) userIds.add(meta.confirmed_by);
       });
+      // Also from props
+      dispositions.forEach((d) => { if (d.operator_id) userIds.add(d.operator_id); });
+
       const ids = [...userIds].filter(Boolean);
       if (ids.length === 0) return {};
-      const { data } = await supabase.from("profiles").select("id, user_id, full_name").or(`user_id.in.(${ids.join(",")}),id.in.(${ids.join(",")})`);
+
+      // Try profiles by user_id first, then by id
+      const { data: byUserId } = await supabase
+        .from("profiles")
+        .select("id, user_id, full_name")
+        .in("user_id", ids);
+      const { data: byId } = await supabase
+        .from("profiles")
+        .select("id, user_id, full_name")
+        .in("id", ids);
+
       const map: Record<string, string> = {};
-      (data || []).forEach((p) => { 
-        if (p.user_id) map[p.user_id] = p.full_name;
-        if (p.id) map[p.id] = p.full_name;
-      });
+      (byUserId || []).forEach((p) => { if (p.user_id && p.full_name) map[p.user_id] = p.full_name; });
+      (byId || []).forEach((p) => { if (p.id && p.full_name) map[p.id] = p.full_name; if (p.user_id && p.full_name) map[p.user_id] = p.full_name; });
       return map;
     },
-    enabled: clientEvents.length > 0,
+    enabled: clientEvents.length > 0 || dispositions.length > 0,
   });
 
+  // Resolve workflow names for events that reference workflow_id
   const { data: workflowMap = {} } = useQuery({
     queryKey: ["timeline-workflows", clientCpf, clientEvents.length],
     queryFn: async () => {
@@ -537,7 +474,10 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       });
       const ids = [...wfIds].filter(Boolean);
       if (ids.length === 0) return {};
-      const { data } = await supabase.from("workflow_flows" as any).select("id, name").in("id", ids);
+      const { data } = await supabase
+        .from("workflow_flows" as any)
+        .select("id, name")
+        .in("id", ids);
       const map: Record<string, string> = {};
       ((data as any[]) || []).forEach((w: any) => { if (w.id && w.name) map[w.id] = w.name; });
       return map;
@@ -545,29 +485,48 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     enabled: clientEvents.length > 0,
   });
 
-  const allItems = useMemo(() => {
-    const items: TimelineItem[] = [];
+  // Build unified items
+  const items: TimelineItem[] = [];
+  const usedEventIds = new Set<string>();
+
+  // If we have client_events, use them as primary source
+  if (clientEvents.length > 0) {
     clientEvents.forEach((e: any) => {
       const meta = (e.metadata || {}) as any;
       const eventType = e.event_type || "system";
-      const actor = resolveActor(e, profileMap, workflowMap);
-      
       const label = eventType === "disposition"
         ? (DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || e.event_value || "Disposição")
-        : (EVENT_TYPE_LABELS[eventType] || "Evento do Sistema");
+        : (EVENT_TYPE_LABELS[eventType] || DISPOSITION_TYPES[e.event_value as keyof typeof DISPOSITION_TYPES] || "Evento do Sistema");
 
       let detail = "";
-      if (eventType === "disposition") detail = meta.notes || "";
-      else if (eventType.startsWith("agreement_")) {
-        if (meta.proposed_total) detail = `${formatCurrency(Number(meta.original_total || 0))} → ${formatCurrency(Number(meta.proposed_total))}`;
-        if (meta.credor) detail = `${meta.credor}${detail ? " — " + detail : ""}`;
+
+      const actor = resolveActor(e, profileMap, workflowMap);
+      const operator = actor.kind === "user" || actor.kind === "admin" ? actor.label.replace(/ \(Admin\)$/, "") : "";
+
+      // Build detail based on type
+      if (eventType === "disposition") {
+        detail = meta.notes || "";
+      } else if (eventType.startsWith("agreement_")) {
+        if (meta.original_total && meta.proposed_total) {
+          detail = `${formatCurrency(Number(meta.original_total))} → ${formatCurrency(Number(meta.proposed_total))}`;
+          if (meta.new_installments) detail += ` (${meta.new_installments}x)`;
+        }
+        if (meta.credor) detail = `${meta.credor} — ${detail}`;
       } else if (eventType === "call") {
         if (meta.duration_seconds) detail = `Duração: ${formatDuration(meta.duration_seconds)}`;
+        if (meta.campaign_name) detail = detail ? `${detail} — ${meta.campaign_name}` : meta.campaign_name;
+      } else if (eventType === "message_sent") {
+        const ch = meta.channel || "whatsapp";
+        detail = `Canal: ${CHANNEL_LABELS[ch] || ch}`;
+      } else if (eventType === "field_update") {
+        const srcKey = (e.event_value || "manual") as string;
+        const source = SOURCE_LABELS[srcKey] || toTitleCase(srcKey);
+        detail = `Fonte: ${source}`;
       } else if (eventType === "whatsapp_inbound" || eventType === "whatsapp_outbound") {
         detail = e.event_value || "";
-      } else if (eventType === "debtor_profile_changed") {
-        const profileLabel = DEBTOR_PROFILE_LABELS[e.event_value as string] || e.event_value;
-        detail = profileLabel ? `Novo perfil: ${profileLabel}` : "Perfil removido";
+      } else if (eventType === "manual_payment_requested" || eventType === "manual_payment_confirmed" || eventType === "manual_payment_rejected") {
+        const pm = meta.payment_method;
+        if (pm) detail = `Forma: ${PAYMENT_METHOD_LABELS[pm] || toTitleCase(pm)}`;
       }
 
       items.push({
@@ -576,213 +535,120 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
         type: eventType,
         title: label,
         detail: detail || undefined,
+        operator: operator || undefined,
         actor,
-        category: resolveCategory(e),
-        sentiment: resolveSentiment(e),
-        recordingUrl: meta.recording_url,
-        durationSeconds: meta.duration_seconds,
+        durationSeconds: eventType === "call" ? meta.duration_seconds : undefined,
+      });
+      usedEventIds.add(e.id);
+    });
+  } else {
+    // Fallback: use props when no client_events
+    dispositions.forEach((d) => {
+      const label = DISPOSITION_TYPES[d.disposition_type as keyof typeof DISPOSITION_TYPES] || d.disposition_type;
+      const opName = d.operator_name || (d.operator_id && profileMap[d.operator_id]) || undefined;
+      items.push({
+        id: `d-${d.id}`,
+        date: d.created_at,
+        type: d.disposition_type === "note" ? "note" : "disposition",
+        title: label,
+        detail: d.notes || undefined,
+        operator: opName,
+        actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
       });
     });
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [clientEvents, profileMap, workflowMap]);
 
-  const filteredItems = useMemo(() => {
-    return allItems.filter(item => {
-      if (!filters[item.category]) return false;
-      if (sentiment === "positive" && item.sentiment !== "positive") return false;
-      if (sentiment === "negative" && item.sentiment !== "negative") return false;
-      if (item.type === "whatsapp_inbound" || item.type === "whatsapp_outbound") return false;
-      return true;
+    agreements.forEach((a: any) => {
+      const opName = a.creator_name || (a.created_by && profileMap[a.created_by]) || undefined;
+      items.push({
+        id: `a-${a.id}`,
+        date: a.created_at,
+        type: "agreement",
+        title: `Acordo ${AGREEMENT_STATUS_LABELS[a.status] || "Registrado"}`,
+        detail: `${formatCurrency(Number(a.original_total))} → ${formatCurrency(Number(a.proposed_total))} (${a.new_installments}x)`,
+        operator: opName,
+        actor: opName ? { label: opName, kind: "user" } : { label: "Sistema", kind: "system" },
+      });
     });
-  }, [allItems, filters, sentiment]);
 
-  const groupedItems = useMemo(() => {
-    const groups: Record<string, TimelineItem[]> = {};
-    filteredItems.forEach(item => {
-      const minute = item.date.slice(0, 16);
-      if (!groups[minute]) groups[minute] = [];
-      groups[minute].push(item);
+    callLogs.forEach((c) => {
+      items.push({
+        id: `call-${c.id}`,
+        date: c.called_at,
+        type: "call",
+        title: `Ligação — ${CALL_STATUS_LABELS[c.status || ""] || "Realizada"}`,
+        detail: c.phone ? `Tel: ${c.phone}` : undefined,
+        operator: c.agent_name || undefined,
+        actor: c.agent_name ? { label: c.agent_name, kind: "user" } : { label: "Discador", kind: "system" },
+        recordingUrl: c.recording_url || undefined,
+        durationSeconds: c.duration_seconds || 0,
+      });
     });
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [filteredItems]);
+  }
 
-  const toggleCategory = (cat: EventCategory) => {
-    setFilters(prev => ({ ...prev, [cat]: !prev[cat] }));
-  };
+  items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const getCategoryColor = (cat: EventCategory) => {
-    const colors: Record<EventCategory, string> = {
-      acordo: "data-[state=checked]:bg-[#4ade80]",
-      manual: "data-[state=checked]:bg-[#3b82f6]",
-      automatico: "data-[state=checked]:bg-[#a855f7]",
-      lote: "data-[state=checked]:bg-[#f97316]",
-    };
-    return colors[cat];
-  };
+  const visibleItems = showAll ? items : items.slice(0, 5);
 
-  const getCategoryTextColor = (cat: EventCategory) => {
-    const colors: Record<EventCategory, string> = {
-      acordo: "text-[#4ade80]",
-      manual: "text-[#3b82f6]",
-      automatico: "text-[#a855f7]",
-      lote: "text-[#f97316]",
-    };
-    return colors[cat];
-  };
+  const getColors = (type: string) => COLOR_MAP[type] || COLOR_MAP.disposition;
 
   return (
-    <Card className="border-none shadow-none bg-transparent overflow-visible">
-      <CardHeader className="px-0 pb-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <CardTitle className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2.5 flex-shrink-0">
-            <Clock className="w-4 h-4" />
-            Histórico de Atendimento
-          </CardTitle>
-
-          <div className="flex flex-wrap items-center gap-4 sm:gap-8 justify-end">
-            {/* Categories Switches */}
-            <div className="flex items-center gap-5 pr-8 border-r border-slate-200">
-              {(Object.keys(filters) as EventCategory[]).map((cat) => (
-                <div key={cat} className="flex flex-col items-center gap-1.5">
-                  <Switch 
-                    checked={filters[cat]} 
-                    onCheckedChange={() => toggleCategory(cat)}
-                    className={cn("scale-90", getCategoryColor(cat))}
-                  />
-                  <span className={cn(
-                    "text-[9px] font-bold uppercase tracking-wider transition-colors",
-                    filters[cat] ? getCategoryTextColor(cat) : "text-slate-500"
-                  )}>
-                    {cat === "automatico" ? "Automático" : toTitleCase(cat)}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Sentiment Filters */}
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "w-9 h-9 rounded-full transition-all",
-                  sentiment === "positive" ? "bg-emerald-50 text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                )}
-                onClick={() => setSentiment(sentiment === "positive" ? "all" : "positive")}
-              >
-                <ThumbsUp className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "w-9 h-9 rounded-full transition-all",
-                  sentiment === "negative" ? "bg-rose-50 text-rose-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-                )}
-                onClick={() => setSentiment(sentiment === "negative" ? "all" : "negative")}
-              >
-                <ThumbsDown className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
+    <Card className="border-border h-full">
+      <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          <Clock className="w-4 h-4" />
+          Histórico de Atendimento
+        </CardTitle>
+        {items.length > 5 && (
+          <button
+            className="text-xs font-medium text-amber-600 hover:text-amber-700 transition-colors"
+            onClick={() => setShowAll(!showAll)}
+          >
+            {showAll ? "Mostrar menos" : "Ver tudo"}
+          </button>
+        )}
       </CardHeader>
-
-      <CardContent className="px-0">
-        {groupedItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 text-center opacity-40">
-            <Inbox className="w-16 h-16 text-slate-300 mb-4" />
-            <p className="text-sm font-medium text-slate-500">Nenhum evento registrado</p>
+      <CardContent>
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Inbox className="w-10 h-10 text-muted-foreground/40 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">Nenhum registro de atendimento</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Os eventos aparecerão aqui conforme o atendimento avança.</p>
           </div>
         ) : (
-          <div className="relative pt-8 w-full max-w-6xl mx-auto">
-            {/* Central Line */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-[2px] bg-slate-100" />
-
-            <div className="space-y-16">
-              {groupedItems.map(([minute, items], idx) => {
-                const isLeft = idx % 2 === 0;
-                const primaryItem = items[0];
-                const sourceLabel = 
-                  primaryItem.actor?.kind === "system" || primaryItem.actor?.kind === "workflow" ? "SISTEMA" : 
-                  primaryItem.actor?.kind === "user" ? "USUÁRIO" :
-                  primaryItem.actor?.kind === "ai" ? "IA RIVO" :
-                  primaryItem.actor?.kind === "portal" ? "PORTAL" :
-                  (primaryItem.actor?.kind || "MANUAL").toUpperCase();
-
+          <div className="relative pl-6">
+            <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
+            <div className="space-y-3">
+              {visibleItems.map((item) => {
+                const colors = getColors(item.type);
+                const meta = item.type === "field_update" ? clientEvents.find((e: any) => `ev-${e.id}` === item.id)?.metadata : null;
                 return (
-                  <div key={minute} className="grid grid-cols-[1fr_80px_1fr] items-center group">
-                    {/* LEFT SIDE */}
-                    <div className={cn("flex flex-col", isLeft ? "items-end pr-10" : "items-start pl-10 order-3")}>
-                      <div className="space-y-4 w-full">
-                        {items.map((item) => (
-                          <div 
-                            key={item.id} 
-                            className={cn(
-                              "relative p-6 rounded-2xl border transition-all duration-300 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-lg hover:-translate-y-0.5",
-                              item.sentiment === "positive" ? "border-emerald-100" : item.sentiment === "negative" ? "border-rose-100" : "border-slate-100",
-                              isLeft ? "text-right" : "text-left"
-                            )}
-                          >
-                            {/* Speech Bubble Tip */}
-                            <div className={cn(
-                              "absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-inherit transform rotate-45",
-                              isLeft ? "-right-[9px] border-r border-t" : "-left-[9px] border-l border-b"
-                            )} />
-
-                            <div className={cn("flex items-center gap-2.5 mb-2", isLeft ? "justify-end" : "justify-start")}>
-                              <span className={cn(
-                                "text-[12px] font-black uppercase tracking-wider flex items-center gap-2",
-                                item.category === "acordo" ? "text-emerald-600" : item.category === "manual" ? "text-blue-600" : item.category === "automatico" ? "text-purple-600" : "text-orange-600"
-                              )}>
-                                {isLeft && item.sentiment === "positive" && <CheckCircle2 className="w-3.5 h-3.5" />}
-                                {isLeft && item.sentiment === "negative" && <XCircle className="w-3.5 h-3.5" />}
-                                {item.title}
-                                {!isLeft && item.sentiment === "positive" && <CheckCircle2 className="w-3.5 h-3.5" />}
-                                {!isLeft && item.sentiment === "negative" && <XCircle className="w-3.5 h-3.5" />}
-                              </span>
-                            </div>
-
-                            {item.detail && (
-                              <p className="text-[13px] text-slate-500 font-medium leading-relaxed mb-3">
-                                {item.detail}
-                              </p>
-                            )}
-
-                            <div className={cn("flex flex-col gap-2 pt-3 border-t border-slate-50", isLeft ? "items-end" : "items-start")}>
-                              {item.actor && <ResponsibleLabel actor={item.actor} />}
-                              {item.type === "call" && item.recordingUrl && (
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-[10px] font-bold text-blue-500 uppercase">Gravação</span>
-                                  <InlineAudioPlayer url={item.recordingUrl} />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                  <div key={item.id} className="relative">
+                    <div className={`absolute -left-6 top-3 w-[14px] h-[14px] rounded-full border-2 bg-card ${colors.dot}`} />
+                    <div className={`border rounded-lg p-3 ${colors.border} ${colors.bg}`}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                          {TYPE_ICON[item.type] || TYPE_ICON.system}
+                          {item.title}
+                          {item.type === "call" && item.durationSeconds !== undefined && item.durationSeconds > 0 && (
+                            <span className="text-xs font-normal text-muted-foreground">({formatDuration(item.durationSeconds)})</span>
+                          )}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                          {new Date(item.date).toLocaleDateString("pt-BR")} — {new Date(item.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                       </div>
-                    </div>
-
-                    {/* CENTRAL ICON */}
-                    <div className="relative z-10 flex justify-center order-2">
-                      <div className={cn(
-                        "w-12 h-12 rounded-full border-[6px] border-white shadow-xl flex items-center justify-center transition-all group-hover:scale-110",
-                        getCategoryColor(primaryItem.category)
-                      )}>
-                        <div className="text-white">
-                          {TYPE_ICON[primaryItem.type] || <Bot className="w-5 h-5" />}
+                      <ResponsibleLabel actor={item.actor} />
+                      {item.type === "field_update" && meta ? (
+                        <FieldUpdateDetail metadata={meta} />
+                      ) : (
+                        item.detail && <p className="text-xs text-muted-foreground mt-1 italic">"{item.detail}"</p>
+                      )}
+                      {item.type === "call" && item.recordingUrl && (
+                        <div className="mt-1.5 flex items-center">
+                          <span className="text-xs text-blue-600 font-medium">Gravação</span>
+                          <InlineAudioPlayer url={item.recordingUrl} />
                         </div>
-                      </div>
-                    </div>
-
-                    {/* META INFO SIDE */}
-                    <div className={cn("flex flex-col opacity-60 group-hover:opacity-100 transition-opacity", isLeft ? "items-start pl-10 order-3" : "items-end pr-10 text-right")}>
-                      <span className="text-[11px] font-black text-slate-800 tracking-widest mb-0.5">
-                        {sourceLabel}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-500 tabular-nums">
-                        {new Date(primaryItem.date).toLocaleDateString("pt-BR")} — {new Date(primaryItem.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                      </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -873,6 +739,44 @@ const ClientObservations = ({ observacoes, onSaveNote, savingNote }: ClientObser
         )}
       </CardContent>
     </Card>
+  );
+};
+
+export default ClientTimeline;
+export { ClientObservations };
+<Save className="w-4 h-4" />
+                Salvar Nota
+              </Button >
+            </div >
+          </div >
+        )}
+
+{
+  parsedNotes.length > 0 ? (
+    <div className="space-y-3">
+      {parsedNotes.map((note) => (
+        <div key={note.id} className="border-l-4 border-amber-400 bg-muted/30 rounded-r-lg p-3">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-[11px] text-muted-foreground">{note.datetime}</span>
+            {note.operator && (
+              <span className="text-[11px] font-semibold text-foreground">{note.operator}</span>
+            )}
+          </div>
+          {note.body && <p className="text-sm text-foreground italic">"{note.body}"</p>}
+        </div>
+      ))}
+    </div>
+  ) : (
+  !onSaveNote && (
+    <div className="flex flex-col items-center justify-center py-8 text-center">
+      <PenLine className="w-8 h-8 text-muted-foreground/40 mb-2" />
+      <p className="text-sm text-muted-foreground">Nenhuma observação</p>
+    </div>
+  )
+)
+}
+      </CardContent >
+    </Card >
   );
 };
 
