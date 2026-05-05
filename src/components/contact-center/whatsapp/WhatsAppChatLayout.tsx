@@ -565,11 +565,11 @@ const WhatsAppChatLayout = () => {
       let has_reopened_agreement = false;
       try {
         if (clientRow?.cpf && tenantId) {
-          const { data: ags } = await supabase
+          const { data: ags } = await (supabase as any)
             .from("agreements")
             .select("status, created_at")
             .eq("tenant_id", tenantId)
-            .eq("cpf", clientRow.cpf)
+            .eq("client_cpf", clientRow.cpf)
             .order("created_at", { ascending: true })
             .limit(50);
           if (ags && ags.length > 0) {
