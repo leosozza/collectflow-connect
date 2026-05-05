@@ -146,6 +146,55 @@ Deno.serve(async (req) => {
       const pushName = msgData.pushName || "";
       const msg = msgData.message;
 
+      // ===== Reaction message — atualiza a mensagem reagida; NÃO cria mensagem nova =====
+      const reaction = msg?.reactionMessage;
+      if (reaction?.key?.id) {
+        try {
+          const targetExternalId = String(reaction.key.id);
+          const emoji = (reaction.text ?? "").toString();
+          const actorJid = msgData.key?.participant || remoteJid || (fromMe ? "me" : "remote");
+
+          const { data: instReact } = await supabase
+            .from("whatsapp_instances")
+            .select("tenant_id")
+            .eq("instance_name", instanceName)
+            .maybeSingle();
+
+          if (instReact?.tenant_id) {
+            const { data: target } = await supabase
+              .from("chat_messages")
+              .select("id, reactions")
+              .eq("tenant_id", instReact.tenant_id)
+              .or(`external_id.eq.${targetExternalId},provider_message_id.eq.${targetExternalId}`)
+              .limit(1)
+              .maybeSingle();
+
+            if (target) {
+              const list = Array.isArray((target as any).reactions) ? [...(target as any).reactions] : [];
+              // WhatsApp permite apenas 1 reação por contato — substituímos a anterior do mesmo ator.
+              const filtered = list.filter((r: any) => r?.actor_jid !== actorJid);
+              if (emoji) {
+                filtered.push({
+                  emoji,
+                  from: fromMe ? "me" : "remote",
+                  actor_jid: actorJid,
+                  ts: reaction.senderTimestampMs ?? Date.now(),
+                });
+              }
+              await supabase.from("chat_messages").update({ reactions: filtered }).eq("id", target.id);
+              console.log(`[provider=unofficial] Reaction "${emoji || "<removed>"}" applied to ${target.id}`);
+            } else {
+              console.log(`[provider=unofficial] Reaction target not found for external_id=${targetExternalId}`);
+            }
+          }
+        } catch (reactErr: any) {
+          console.warn("[provider=unofficial] reaction handling failed:", reactErr.message);
+        }
+        return new Response(JSON.stringify({ ok: true, reaction: reaction.key.id }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       // Protocol REVOKE means a WhatsApp message was deleted for everyone.
       // We never remove the row; we mark it for audit and keep metadata.
       const protocolMessage = msg?.protocolMessage;

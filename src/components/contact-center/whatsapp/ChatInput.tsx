@@ -148,6 +148,24 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
     }
   };
 
+  // Cole de imagem (Ctrl+V) — envia o print como anexo, igual ao botão de clipe.
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+    for (const item of Array.from(items)) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          const ext = (file.type.split("/")[1] || "png").split("+")[0];
+          const named = new File([file], `colado-${Date.now()}.${ext}`, { type: file.type });
+          onSendMedia(named);
+          return;
+        }
+      }
+    }
+  };
+
   const handleEmojiSelect = (emoji: string) => {
     setText((prev) => prev + emoji);
   };
@@ -371,7 +389,8 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
+          onPaste={handlePaste}
+          placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem... (cole imagem com Ctrl+V)"}
           className={`resize-none min-h-[40px] max-h-[180px] overflow-y-auto text-sm rounded-lg leading-5 ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : "bg-card"}`}
           rows={1}
           disabled={disabled}
