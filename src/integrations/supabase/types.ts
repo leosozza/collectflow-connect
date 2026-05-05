@@ -1134,6 +1134,7 @@ export type Database = {
           original_content: string | null
           provider: string | null
           provider_message_id: string | null
+          reactions: Json
           reply_to_message_id: string | null
           status: string
           tenant_id: string
@@ -1158,6 +1159,7 @@ export type Database = {
           original_content?: string | null
           provider?: string | null
           provider_message_id?: string | null
+          reactions?: Json
           reply_to_message_id?: string | null
           status?: string
           tenant_id: string
@@ -1182,6 +1184,7 @@ export type Database = {
           original_content?: string | null
           provider?: string | null
           provider_message_id?: string | null
+          reactions?: Json
           reply_to_message_id?: string | null
           status?: string
           tenant_id?: string
