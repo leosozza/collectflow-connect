@@ -389,7 +389,8 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
+          onPaste={handlePaste}
+          placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem... (cole imagem com Ctrl+V)"}
           className={`resize-none min-h-[40px] max-h-[180px] overflow-y-auto text-sm rounded-lg leading-5 ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : "bg-card"}`}
           rows={1}
           disabled={disabled}
