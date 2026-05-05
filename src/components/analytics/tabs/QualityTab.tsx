@@ -7,6 +7,7 @@ import { EmptyBlock } from "../EmptyBlock";
 import { KpiTile } from "../KpiTile";
 import { AlertTriangle, TrendingDown, Users } from "lucide-react";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
+import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
 
 export const QualityTab = ({ params }: { params: AnalyticsRpcParams }) => {
   const breakage = useQuery({
@@ -57,7 +58,10 @@ export const QualityTab = ({ params }: { params: AnalyticsRpcParams }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-          <h3 className="text-sm font-semibold text-card-foreground mb-3">Quebras por Motivo</h3>
+          <AnalyticsCardHeader 
+            title="Quebras por Motivo" 
+            description="Exibe o motivo pelo qual um acordo quebrou. Se não houver motivo registrado pelo operador, o sistema define como falha automática de sistema."
+          />
           {breakage.isLoading ? (
             <Skeleton className="h-[180px] w-full" />
           ) : (breakage.data || []).length === 0 ? (
@@ -73,9 +77,15 @@ export const QualityTab = ({ params }: { params: AnalyticsRpcParams }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(breakage.data || []).map((r: any, i: number) => (
-                  <TableRow key={i}>
-                    <TableCell className="text-xs font-medium">{r.motivo || "—"}</TableCell>
+                {(breakage.data || []).map((r: any, i: number) => {
+                  let motivo = r.motivo || "Sistema (Automático)";
+                  if (motivo.toLowerCase() === "sem motivo" || motivo === "—" || motivo === "sem_motivo") motivo = "Sistema (Automático)";
+                  if (motivo.toLowerCase() === "manual") motivo = "Operador (Manual)";
+                  if (motivo.toLowerCase() === "auto expired" || motivo.toLowerCase() === "auto_expired") motivo = "Sistema (Expirado)";
+
+                  return (
+                    <TableRow key={i}>
+                      <TableCell className="text-xs font-medium">{motivo}</TableCell>
                     <TableCell className="text-xs text-center">{r.qtd_motivo}</TableCell>
                     <TableCell className="text-xs text-right text-destructive">{formatCurrency(Number(r.valor_perdido || 0))}</TableCell>
                     <TableCell className="text-xs text-right">{Number(r.pct_motivo || 0).toFixed(2)}%</TableCell>
@@ -87,7 +97,10 @@ export const QualityTab = ({ params }: { params: AnalyticsRpcParams }) => {
         </div>
 
         <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-          <h3 className="text-sm font-semibold text-card-foreground mb-3">Quebras por Operador</h3>
+          <AnalyticsCardHeader 
+            title="Quebras por Operador" 
+            description="Mede a retenção da negociação: mostra o volume de acordos fechados pelo operador que foram quebrados e a taxa e valor perdido."
+          />
           {breakageOp.isLoading ? (
             <Skeleton className="h-[180px] w-full" />
           ) : (breakageOp.data || []).length === 0 ? (
@@ -120,7 +133,10 @@ export const QualityTab = ({ params }: { params: AnalyticsRpcParams }) => {
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Top CPFs Recorrentes</h3>
+        <AnalyticsCardHeader 
+          title="Top CPFs Recorrentes" 
+          description="Apresenta os clientes reincidentes que possuem a maior quantidade de acordos e volume negociado durante o período selecionado."
+        />
         {recurrence.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
         ) : topCpfs.length === 0 ? (

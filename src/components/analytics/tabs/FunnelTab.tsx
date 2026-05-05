@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyBlock } from "../EmptyBlock";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
+import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
 
 const STAGE_LABELS: Record<string, string> = {
   base_ativa_periodo: "Base Ativa do Período",
@@ -37,7 +38,10 @@ export const FunnelTab = ({ params }: { params: AnalyticsRpcParams }) => {
   return (
     <div className="space-y-4">
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Funil de Cobrança</h3>
+        <AnalyticsCardHeader 
+          title="Funil de Cobrança" 
+          description="Acompanha o volume de clientes desde a entrada na base até a assinatura e pagamento de acordos. Mede o percentual de retenção em cada etapa da negociação."
+        />
         {funnel.isLoading ? (
           <Skeleton className="h-[280px] w-full" />
         ) : (funnel.data || []).length === 0 || baseQtd === 0 ? (
@@ -72,7 +76,10 @@ export const FunnelTab = ({ params }: { params: AnalyticsRpcParams }) => {
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Drop-off por Credor</h3>
+        <AnalyticsCardHeader 
+          title="Desistência por Credor" 
+          description="Exibe a taxa de perda (clientes que entraram no funil mas não chegaram a pagar) segmentada por credor."
+        />
         {dropoff.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
         ) : (dropoff.data || []).length === 0 ? (
@@ -84,7 +91,7 @@ export const FunnelTab = ({ params }: { params: AnalyticsRpcParams }) => {
                 <TableHead className="text-xs">Credor</TableHead>
                 <TableHead className="text-xs">Etapa</TableHead>
                 <TableHead className="text-xs text-right">Qtd</TableHead>
-                <TableHead className="text-xs text-right">Drop-off</TableHead>
+                <TableHead className="text-xs text-right">Desistência</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

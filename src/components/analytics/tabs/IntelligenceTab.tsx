@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/formatters";
@@ -5,8 +6,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { EmptyBlock } from "../EmptyBlock";
-import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
+import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
 import { format, parseISO } from "date-fns";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 const SCORE_EMPTY = "Score ainda não calculado para este período.";
 
@@ -61,7 +63,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
   const top = useQuery({
     queryKey: ["bi-top-opp", params],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_bi_top_opportunities", { ...params, _limit: 50 } as any);
+      const { data, error } = await supabase.rpc("get_bi_top_opportunities", { ...params, _limit: 100 } as any);
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -82,20 +84,24 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
   const vsResultNumeric = vsResultData.filter((r: any) => r.bucket !== "sem_score");
   const vsResultSem = vsResultData.find((r: any) => r.bucket === "sem_score");
 
+  const [isTopOppOpen, setIsTopOppOpen] = useState(false);
+
   return (
     <div className="space-y-4">
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-          <h3 className="text-sm font-semibold text-card-foreground">Distribuição por Faixa de Score</h3>
+        <AnalyticsCardHeader 
+          title="Distribuição por Faixa de Score" 
+          description="Mostra a quantidade de clientes distribuídos por faixas de propensão a pagamento (Score de 0 a 100). Barras maiores indicam a concentração da carteira."
+        >
           {!dist.isLoading && distData.length > 0 && (
-            <div className="text-right">
+            <div className="text-right mt-1 sm:mt-0">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">Clientes sem score</p>
               <p className="text-sm font-bold text-foreground tabular-nums">
-                {semScoreQtd} <span className="text-xs font-normal text-muted-foreground">({semScorePct.toFixed(1)}%)</span>
+                {semScoreQtd} <span className="text-xs font-normal text-muted-foreground">({semScorePct.toFixed(2)}%)</span>
               </p>
             </div>
           )}
-        </div>
+        </AnalyticsCardHeader>
         {dist.isLoading ? (
           <Skeleton className="h-[260px] w-full" />
         ) : distData.length === 0 ? (
@@ -108,7 +114,7 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
               <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
               <RTooltip
                 contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
-                formatter={(v: number, _: string, ctx: any) => [`${v} clientes (${Number(ctx.payload.pct || 0).toFixed(1)}%)`, "Qtd"]}
+                formatter={(v: number, _: string, ctx: any) => [`${v} clientes (${Number(ctx.payload.pct || 0).toFixed(2)}%)`, "Qtd"]}
               />
               <Bar dataKey="qtd" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -117,7 +123,10 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Score vs Resultado</h3>
+        <AnalyticsCardHeader 
+          title="Score vs Resultado" 
+          description="Cruza as faixas de score com o resultado real da operação (Acordos e Pagamentos). Ajuda a validar se os clientes com score alto realmente performam melhor."
+        />
         {vsResult.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
         ) : vsResultData.length === 0 ? (
@@ -164,11 +173,21 @@ export const IntelligenceTab = ({ params }: { params: AnalyticsRpcParams }) => {
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Top Oportunidades (Score Alto + Valor em Aberto)</h3>
+        <div className="flex items-center gap-2 mb-3 cursor-pointer select-none" onClick={() => setIsTopOppOpen(!isTopOppOpen)}>
+          {isTopOppOpen ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
+          <AnalyticsCardHeader 
+            title="Top Oportunidades (Score Alto + Valor em Aberto)" 
+            description="Exibe os 100 clientes com as melhores chances de conversão no período selecionado para você priorizar os acionamentos."
+          />
+        </div>
         {top.isLoading ? (
           <Skeleton className="h-[260px] w-full" />
         ) : (top.data || []).length === 0 ? (
           <EmptyBlock message={SCORE_EMPTY} />
+        ) : !isTopOppOpen ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            Clique na seta acima para exibir as 100 melhores oportunidades da sua carteira.
+          </div>
         ) : (
           <Table>
             <TableHeader>

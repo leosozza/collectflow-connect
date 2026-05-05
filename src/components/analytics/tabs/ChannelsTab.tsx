@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyBlock } from "../EmptyBlock";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
+import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
 
 const formatSec = (sec: number | null | undefined) => {
   if (sec === null || sec === undefined) return "—";
@@ -17,6 +18,9 @@ const formatSec = (sec: number | null | undefined) => {
 const channelLabel = (c: string) => ({
   whatsapp: "WhatsApp",
   voice: "Ligação",
+  portal: "Portal do Devedor",
+  ai_whatsapp: "IA WhatsApp",
+  ai_voice: "IA Discador",
 }[c] || c);
 
 export const ChannelsTab = ({ params }: { params: AnalyticsRpcParams }) => {
@@ -41,7 +45,10 @@ export const ChannelsTab = ({ params }: { params: AnalyticsRpcParams }) => {
   return (
     <div className="space-y-4">
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Performance por Canal</h3>
+        <AnalyticsCardHeader 
+          title="Performance por Canal" 
+          description="Compara o volume de interações, clientes únicos alcançados, acordos gerados e receita de todos os canais integrados (WhatsApp, Ligação, IA e Portal)."
+        />
         {perf.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
         ) : (perf.data || []).length === 0 ? (
@@ -75,7 +82,10 @@ export const ChannelsTab = ({ params }: { params: AnalyticsRpcParams }) => {
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Tempo de Resposta por Canal</h3>
+        <AnalyticsCardHeader 
+          title="Tempo de Resposta por Canal" 
+          description="Mostra o tempo médio de primeira resposta (SLA) da operação por cada canal. O P50 é a mediana (50% do volume) e o P90 mostra o tempo dos 10% mais demorados."
+        />
         {resp.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
         ) : (resp.data || []).length === 0 ? (

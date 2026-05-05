@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
-import { LucideIcon } from "lucide-react";
+import { LucideIcon, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface KpiTileProps {
   label: string;
@@ -19,13 +20,26 @@ export const KpiTile = ({ label, value, icon: Icon, hint, iconClassName, valueCl
           <Icon className="w-4 h-4 text-primary" />
         </div>
       )}
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
-        {label}
-      </p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
+          {label}
+        </p>
+        {hint && (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="w-3.5 h-3.5 text-muted-foreground/50 hover:text-primary transition-colors cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[220px]">
+                <p className="text-xs">{hint}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
     </div>
     <p className={cn("text-xl font-bold text-foreground tabular-nums leading-tight tracking-tight break-words", valueClassName)}>
       {value}
     </p>
-    {hint && <p className="text-[10px] text-muted-foreground leading-tight">{hint}</p>}
   </div>
 );

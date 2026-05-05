@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { KpiTile } from "../KpiTile";
 import { EmptyBlock } from "../EmptyBlock";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
+import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
 
 const fmt = (d: string) => format(parseISO(d), "dd/MM");
 
@@ -82,7 +83,10 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-card rounded-xl border border-border shadow-sm p-4">
-          <h3 className="text-sm font-semibold text-card-foreground mb-3">Evolução do Período</h3>
+          <AnalyticsCardHeader 
+            title="Evolução do Período" 
+            description="Gráfico de linha comparando o volume financeiro negociado (prometido) versus o recebido (pago) ao longo do período selecionado."
+          />
           {byPeriod.isLoading ? (
             <Skeleton className="h-[260px] w-full" />
           ) : (byPeriod.data || []).length === 0 ? (
@@ -103,7 +107,10 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
         </div>
 
         <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-          <h3 className="text-sm font-semibold text-card-foreground mb-3">Comparativo vs Período Anterior</h3>
+          <AnalyticsCardHeader 
+            title="Comparativo vs Período Anterior" 
+            description="Mede a variação percentual dos indicadores financeiros comparados ao mesmo intervalo de tempo imediatamente anterior (ex: últimos 30 dias vs 30 dias retrasados)."
+          />
           {comparison.isLoading ? (
             <Skeleton className="h-[220px] w-full" />
           ) : (comparison.data || []).length === 0 ? (
@@ -131,7 +138,7 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
                       {hasComparison ? (
                         <p className={`text-[11px] font-semibold flex items-center justify-end gap-0.5 ${up ? "text-success" : "text-destructive"}`}>
                           {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          {v > 0 ? "+" : ""}{v.toFixed(1)}%
+                          {v > 0 ? "+" : ""}{v.toFixed(2)}%
                         </p>
                       ) : (
                         <p className="text-[11px] font-medium text-muted-foreground">— sem comparação</p>
@@ -146,7 +153,10 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Ranking de Receita por Credor (Top 10)</h3>
+        <AnalyticsCardHeader 
+          title="Ranking de Receita por Credor (Top 10)" 
+          description="Lista os 10 credores que mais geraram retorno financeiro, cruzando acordos e ticket médio."
+        />
         {byCredor.isLoading ? (
           <Skeleton className="h-[200px] w-full" />
         ) : (byCredor.data || []).length === 0 ? (

@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyBlock } from "../EmptyBlock";
 import { KpiTile } from "../KpiTile";
+import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
 import { Phone, Trophy, Clock } from "lucide-react";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
 
@@ -58,11 +59,12 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
 
   // Filtra linhas totalmente zeradas (sem atividade real no período).
   const hasActivity = (r: any) =>
-    Number(r.qtd_acordos || 0) > 0 ||
+    (Number(r.qtd_acordos || 0) > 0 ||
     Number(r.total_recebido || 0) > 0 ||
     Number(r.qtd_chamadas || r.qtd_calls || 0) > 0 ||
     Number(r.qtd_quebras || 0) > 0 ||
-    Number(r.talk_time_seconds || 0) > 0;
+    Number(r.talk_time_seconds || 0) > 0) &&
+    !r.operator_name?.toLowerCase().includes("admin");
   const merged = mergedRaw.filter(hasActivity);
 
   // Operadores ativos = somente os que tiveram atividade real
@@ -101,7 +103,10 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-card-foreground mb-3">Ranking de Operadores</h3>
+        <AnalyticsCardHeader 
+          title="Ranking de Operadores" 
+          description="Classifica os operadores em ordem de valor recebido. Fatores como quantidade de chamadas e conversão determinam a eficiência."
+        />
         {isLoading ? (
           <Skeleton className="h-[240px] w-full" />
         ) : merged.length === 0 ? (
