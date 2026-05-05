@@ -57,6 +57,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
     : null;
 
   const metadata = (message as any).metadata as Record<string, any> | null;
+  const reactions = (((message as any).reactions ?? []) as Array<{ emoji: string; from?: string; actor_jid?: string; ts?: number }>).filter(r => r && typeof r.emoji === "string" && r.emoji.length > 0);
   const quotedMeta = metadata?.quoted_message as
     | { direction?: string; message_type?: string; content?: string | null }
     | undefined;
