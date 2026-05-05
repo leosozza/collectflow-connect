@@ -9,6 +9,7 @@ import { EmptyBlock } from "../EmptyBlock";
 import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
 import { format, parseISO } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
 
 const SCORE_EMPTY = "Score ainda não calculado para este período.";
 
