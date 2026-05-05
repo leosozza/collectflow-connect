@@ -518,7 +518,21 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
 
             ) : statusIcons[message.status]
           )}
-        </div>
+        {/* Reactions badge (estilo WhatsApp) */}
+        {reactions.length > 0 && (
+          <div
+            className={`absolute -bottom-2.5 ${isOutbound ? "right-2" : "left-2"} z-10 flex items-center gap-0.5 rounded-full border border-border/60 bg-card px-1.5 py-0.5 text-xs shadow-sm`}
+            title={reactions.map(r => r.emoji).join(" ")}
+          >
+            {Array.from(new Set(reactions.map(r => r.emoji))).slice(0, 3).map((e) => (
+              <span key={e} className="leading-none">{e}</span>
+            ))}
+            {reactions.length > 1 && (
+              <span className="text-[10px] text-muted-foreground ml-0.5">{reactions.length}</span>
+            )}
+          </div>
+        )}
+      </div>
       </div>
 
 
