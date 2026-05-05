@@ -6,6 +6,7 @@ interface WhatsAppGateBannerProps {
   hasDisposition: boolean;
   inboundCount: number;
   threshold: number;
+  reason?: "no_profile" | "reopened_agreement";
   onOpenSidebar: () => void;
   sidebarOpen: boolean;
 }
@@ -15,6 +16,7 @@ const WhatsAppGateBanner = ({
   hasDisposition,
   inboundCount,
   threshold,
+  reason = "no_profile",
   onOpenSidebar,
   sidebarOpen,
 }: WhatsAppGateBannerProps) => {
@@ -80,8 +82,9 @@ const WhatsAppGateBanner = ({
             Envio bloqueado — preenchimento obrigatório
           </p>
           <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 mt-0.5">
-            O cliente já enviou {inboundCount} mensagens (limite: {threshold}). Defina o perfil
-            e ao menos uma tabulação para liberar o envio.
+            {reason === "reopened_agreement"
+              ? "Cliente refez um acordo após quebra. Registre uma tabulação para esta nova negociação."
+              : `O cliente ainda não tem Perfil definido (recebeu ${inboundCount} mensagens). Defina o perfil e selecione ao menos uma tabulação para liberar o envio.`}
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
             <Item

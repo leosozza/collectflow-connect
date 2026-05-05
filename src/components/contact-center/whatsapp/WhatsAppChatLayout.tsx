@@ -552,13 +552,41 @@ const WhatsAppChatLayout = () => {
       setClientInfo(null);
       return;
     }
-    supabase
-      .from("clients")
-      .select("id, nome_completo, valor_parcela, total_parcelas, numero_parcela, credor, cpf, data_vencimento, debtor_profile")
-      .eq("id", selectedConv.client_id)
-      .eq("tenant_id", tenantId!)
-      .single()
-      .then(({ data }) => setClientInfo(data));
+    (async () => {
+      const { data: clientRow } = await supabase
+        .from("clients")
+        .select("id, nome_completo, valor_parcela, total_parcelas, numero_parcela, credor, cpf, data_vencimento, debtor_profile, cpf")
+        .eq("id", selectedConv.client_id!)
+        .eq("tenant_id", tenantId!)
+        .single();
+
+      // Detect "reopened agreement after broken": exists a cancelled agreement
+      // followed by a newer pending/approved agreement for the same CPF.
+      let has_reopened_agreement = false;
+      try {
+        if (clientRow?.cpf && tenantId) {
+          const { data: ags } = await (supabase as any)
+            .from("agreements")
+            .select("status, created_at")
+            .eq("tenant_id", tenantId)
+            .eq("client_cpf", clientRow.cpf)
+            .order("created_at", { ascending: true })
+            .limit(50);
+          if (ags && ags.length > 0) {
+            const firstCancelled = (ags as any[]).find((a) => a.status === "cancelled");
+            if (firstCancelled) {
+              has_reopened_agreement = (ags as any[]).some(
+                (a) =>
+                  ["pending", "approved"].includes(a.status) &&
+                  new Date(a.created_at).getTime() > new Date(firstCancelled.created_at).getTime()
+              );
+            }
+          }
+        }
+      } catch (_) { /* best-effort */ }
+
+      setClientInfo(clientRow ? { ...clientRow, has_reopened_agreement } : clientRow);
+    })();
 
     // Realtime: keep clientInfo (notably debtor_profile) in sync with sidebar edits.
     const clientId = selectedConv.client_id;
@@ -694,7 +722,10 @@ const WhatsAppChatLayout = () => {
     if (inboundCount >= 5 && selectedConv.client_id && clientInfo?.id) {
       const hasDisp = dispositionAssignments.some((a) => a.conversation_id === selectedConv.id);
       const hasProf = !!clientInfo?.debtor_profile;
-      if (!hasDisp || !hasProf) {
+      const hasReopened = !!clientInfo?.has_reopened_agreement;
+      // Gate apenas quando: (sem perfil) OU (acordo refeito após quebra e ainda falta perfil/tabulação).
+      const needsGate = !hasProf || (hasReopened && (!hasProf || !hasDisp));
+      if (needsGate) {
         toast.error("Defina o Perfil do Devedor e selecione ao menos uma Tabulação para enviar mensagens.");
         return;
       }
