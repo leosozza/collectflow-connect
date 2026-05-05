@@ -717,7 +717,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
   const visibleItems = showAll ? filtered : filtered.slice(0, 5);
   const getColors = (type: string) => COLOR_MAP[type] || COLOR_MAP.disposition;
 
-  const FilterChip = ({ active, onClick, color, label, icon }: { active: boolean; onClick: () => void; color: string; label: string; icon?: React.ReactNode }) => (
+  const FilterChip = ({ active, onClick, color, label, icon }: { active: boolean; onClick: () => void; color: string; label?: string; icon?: React.ReactNode }) => (
     <button
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${
@@ -727,7 +727,7 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
       }`}
     >
       {icon}
-      {label}
+      {label ? <span>{label}</span> : null}
     </button>
   );
 
@@ -782,14 +782,12 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
             active={filters.positivas}
             onClick={() => setFilters((f) => ({ ...f, positivas: !f.positivas }))}
             color="bg-green-100 text-green-700 border-green-300"
-            label="Positivas"
             icon={<ThumbsUp className="w-3 h-3" />}
           />
           <FilterChip
             active={filters.negativas}
             onClick={() => setFilters((f) => ({ ...f, negativas: !f.negativas }))}
             color="bg-rose-100 text-rose-700 border-rose-300"
-            label="Negativas"
             icon={<ThumbsDown className="w-3 h-3" />}
           />
         </div>
