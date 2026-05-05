@@ -72,10 +72,10 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
   const totalActivityWithTalk = merged.filter((r: any) => Number(r.talk_time_seconds || 0) > 0);
   const acordosHoraDisplay = totalActivityWithTalk.length > 0
     ? (totalActivityWithTalk.reduce((s: number, r: any) => {
-        const tt = Number(r.talk_time_seconds || 0);
-        const acordos = Number(r.qtd_acordos || 0);
-        return s + (tt > 0 ? acordos / (tt / 3600) : 0);
-      }, 0) / totalActivityWithTalk.length).toFixed(2)
+      const tt = Number(r.talk_time_seconds || 0);
+      const acordos = Number(r.qtd_acordos || 0);
+      return s + (tt > 0 ? acordos / (tt / 3600) : 0);
+    }, 0) / totalActivityWithTalk.length).toFixed(2)
     : "—";
 
   const isLoading = perf.isLoading || eff.isLoading;
@@ -85,7 +85,7 @@ export const PerformanceTab = ({ params }: { params: AnalyticsRpcParams }) => {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         {eff.isLoading ? (
-          <>{[0,1,2].map((i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)}</>
+          <>{[0, 1, 2].map((i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)}</>
         ) : (
           <>
             <KpiTile label="Operadores Ativos" value={operadoresAtivos} icon={Trophy} />

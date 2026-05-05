@@ -371,12 +371,6 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          onPaste={(e) => {
-            if (e.clipboardData.files.length > 0) {
-              e.preventDefault();
-              onSendMedia(e.clipboardData.files[0]);
-            }
-          }}
           placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
           className={`resize-none min-h-[40px] max-h-[180px] overflow-y-auto text-sm rounded-lg leading-5 ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : "bg-card"}`}
           rows={1}
@@ -386,13 +380,12 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           size="icon"
           onClick={handleSend}
           disabled={disabled || !text.trim()}
-          className={`shrink-0 rounded-full h-10 w-10 ${
-            isInternalMode
+          className={`shrink-0 rounded-full h-10 w-10 ${isInternalMode
               ? "bg-yellow-500 hover:bg-yellow-600"
               : conversationStatus === "closed" && text.trim().length > 0
-              ? "bg-amber-500 hover:bg-amber-600 text-white"
-              : "bg-primary hover:bg-primary/90"
-          }`}
+                ? "bg-amber-500 hover:bg-amber-600 text-white"
+                : "bg-primary hover:bg-primary/90"
+            }`}
         >
           <Send className="w-4 h-4" />
         </Button>

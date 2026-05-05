@@ -44,7 +44,7 @@ export const QualityTab = ({ params }: { params: AnalyticsRpcParams }) => {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         {breakage.isLoading || recurrence.isLoading ? (
-          <>{[0,1,2].map((i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)}</>
+          <>{[0, 1, 2].map((i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)}</>
         ) : (
           <>
             <KpiTile label="Total de Quebras" value={totalQuebras} icon={AlertTriangle} valueClassName="text-destructive" />

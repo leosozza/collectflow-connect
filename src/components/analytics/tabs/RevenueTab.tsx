@@ -67,7 +67,7 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {summary.isLoading ? (
-          <>{[0,1,2,3].map((i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)}</>
+          <>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)}</>
         ) : (
           <>
             <KpiTile label="Total Recebido" value={formatCurrency(Number(s?.total_recebido || 0))} icon={DollarSign}
@@ -92,7 +92,7 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
               <LineChart data={(byPeriod.data || []).map((r) => ({ ...r, label: typeof r.period === "string" ? fmt(r.period) : r.period }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                 <RTooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} />
                 <Legend />
                 <Line type="monotone" dataKey="total_negociado" name="Negociado" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
