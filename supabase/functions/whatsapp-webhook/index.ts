@@ -246,10 +246,10 @@ Deno.serve(async (req) => {
       const replyToExternalId: string | null = ctxInfo?.stanzaId || null;
       const quotedPreview = ctxInfo?.quotedMessage
         ? {
-            external_id: replyToExternalId,
-            participant: ctxInfo?.participant || null,
-            ...parseMessagePreview(ctxInfo.quotedMessage),
-          }
+          external_id: replyToExternalId,
+          participant: ctxInfo?.participant || null,
+          ...parseMessagePreview(ctxInfo.quotedMessage),
+        }
         : null;
       if (replyToExternalId) {
         console.log(`[provider=unofficial] Reply detected, stanzaId=${replyToExternalId}`);
@@ -305,12 +305,12 @@ Deno.serve(async (req) => {
           if (b64Resp.ok) {
             const b64Data = await b64Resp.json();
             const b64String = b64Data?.base64 || "";
-            
+
             if (b64String) {
               // base64 may come as "data:audio/ogg;base64,XXXX" or plain base64
               let actualBase64 = b64String;
               let detectedMime = mediaMimeType;
-              
+
               if (b64String.startsWith("data:")) {
                 const dataUrlMatch = b64String.match(/^data:([^;]+);base64,(.+)$/);
                 if (dataUrlMatch) {

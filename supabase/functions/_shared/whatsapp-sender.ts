@@ -5,23 +5,23 @@
 
 function normalizePhoneBR(phone: string): string {
   const digits = phone.replace(/\D/g, "");
-  
+
   // Se já tem 13 dígitos e começa com 55, assumimos que está correto (55 + DDD + 9 + 8 dígitos)
   if (digits.length === 13 && digits.startsWith("55")) return digits;
-  
+
   // Se tem 12 dígitos e começa com 55, falta o nono dígito (55 + DDD + 8 dígitos)
   if (digits.length === 12 && digits.startsWith("55")) {
     return digits.slice(0, 4) + "9" + digits.slice(4);
   }
-  
+
   // Se tem 11 dígitos, assumimos que é DDD + 9 + 8 dígitos (falta o 55)
   if (digits.length === 11) return "55" + digits;
-  
+
   // Se tem 10 dígitos, assumimos que é DDD + 8 dígitos (falta o 55 e o 9)
   if (digits.length === 10) {
     return "55" + digits.slice(0, 2) + "9" + digits.slice(2);
   }
-  
+
   // Fallback: se for um número curto (ex: 8 ou 9 dígitos sem DDD), 
   // não conseguimos normalizar com segurança sem o DDD, então retornamos apenas os dígitos.
   return digits;
@@ -295,21 +295,21 @@ async function sendEvolutionMedia(
 
     console.log(`[evolution-sender] Sending audio via sendWhatsAppAudio: url=${media.mediaUrl.substring(0, 80)}`);
 
-  try {
-    const resp = await fetch(`${instanceUrl}/message/sendWhatsAppAudio/${inst.instance_name}`, {
-      method: "POST",
-      headers: { apikey: instanceKey, "Content-Type": "application/json" },
-      body: JSON.stringify(audioPayload),
-    });
-    const result = await resp.json();
-    if (!resp.ok) {
-      console.error(`[evolution-sender] Audio error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+    try {
+      const resp = await fetch(`${instanceUrl}/message/sendWhatsAppAudio/${inst.instance_name}`, {
+        method: "POST",
+        headers: { apikey: instanceKey, "Content-Type": "application/json" },
+        body: JSON.stringify(audioPayload),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        console.error(`[evolution-sender] Audio error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
+      }
+      return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
+    } catch (err) {
+      console.error("[evolution-sender] Audio network error:", err);
+      return { ok: false, result: { error: `Falha de rede Evolution audio: ${(err as Error).message}` }, providerMessageId: null, provider };
     }
-    return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
-  } catch (err) {
-    console.error("[evolution-sender] Audio network error:", err);
-    return { ok: false, result: { error: `Falha de rede Evolution audio: ${(err as Error).message}` }, providerMessageId: null, provider };
-  }
   }
 
   // Image, video, document use generic sendMedia

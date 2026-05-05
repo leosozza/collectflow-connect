@@ -371,6 +371,12 @@ const ChatInput = ({ onSend, onSendMedia, onSendAudio, onSendInternalNote, quick
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={(e) => {
+            if (e.clipboardData.files.length > 0) {
+              e.preventDefault();
+              onSendMedia(e.clipboardData.files[0]);
+            }
+          }}
           placeholder={isInternalMode ? "Escreva uma nota interna..." : "Digite uma mensagem..."}
           className={`resize-none min-h-[40px] max-h-[180px] overflow-y-auto text-sm rounded-lg leading-5 ${isInternalMode ? "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20" : "bg-card"}`}
           rows={1}
