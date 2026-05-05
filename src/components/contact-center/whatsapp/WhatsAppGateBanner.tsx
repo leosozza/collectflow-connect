@@ -16,6 +16,7 @@ const WhatsAppGateBanner = ({
   hasDisposition,
   inboundCount,
   threshold,
+  reason = "no_profile",
   onOpenSidebar,
   sidebarOpen,
 }: WhatsAppGateBannerProps) => {
