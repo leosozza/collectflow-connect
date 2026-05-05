@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
       console.error(`[send-chat-message] [provider=${providerName}] Send failed:`, JSON.stringify(sendResult.result));
 
       // Persist failed message so it shows in chat with failed status
-      await supabase.rpc("ingest_channel_event", {
+      const { data: failedRpc } = await supabase.rpc("ingest_channel_event", {
         _tenant_id: tenantId,
         _endpoint_id: instanceId,
         _channel_type: conv.channel_type || "whatsapp",
@@ -327,6 +327,34 @@ Deno.serve(async (req) => {
         _actor_type: "human",
         _status: "failed",
       });
+
+      // Stamp error details onto chat_messages.metadata for diagnostics
+      if (failedRpc?.message_id) {
+        try {
+          const { data: existingFailedMsg } = await supabase
+            .from("chat_messages")
+            .select("metadata")
+            .eq("id", failedRpc.message_id)
+            .maybeSingle();
+          const errorMeta = {
+            ...((existingFailedMsg?.metadata as Record<string, unknown>) || {}),
+            sent_by_user_id: userId,
+            send_error: {
+              provider: providerName,
+              media_type: media?.mediaType || null,
+              mime_type: media?.mimeType || null,
+              raw: sendResult.result ?? null,
+              at: new Date().toISOString(),
+            },
+          };
+          await supabase
+            .from("chat_messages")
+            .update({ metadata: errorMeta })
+            .eq("id", failedRpc.message_id);
+        } catch (metaErr) {
+          console.warn("[send-chat-message] failed to stamp error metadata:", metaErr);
+        }
+      }
 
       // Log failure to webhook_logs
       try {
