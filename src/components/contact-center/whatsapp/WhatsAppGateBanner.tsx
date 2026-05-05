@@ -6,6 +6,7 @@ interface WhatsAppGateBannerProps {
   hasDisposition: boolean;
   inboundCount: number;
   threshold: number;
+  reason?: "no_profile" | "reopened_agreement";
   onOpenSidebar: () => void;
   sidebarOpen: boolean;
 }
