@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import TenantServicesTab from "@/components/admin/TenantServicesTab";
 import TenantModulesTab from "@/components/admin/TenantModulesTab";
 import { TenantIntegrationsVault } from "@/components/admin/integrations/TenantIntegrationsVault";
+import { TenantAuditLogs } from "@/components/admin/integrations/TenantAuditLogs";
 import BulkModulesDialog from "@/components/admin/BulkModulesDialog";
 import { Blocks } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
@@ -980,7 +981,10 @@ const SuperAdminPage = () => {
 
             {/* COFRE DE INTEGRAÇÕES */}
             {manageSheet && (
-              <TenantIntegrationsVault tenantId={manageSheet.id} />
+              <div className="space-y-6">
+                <TenantIntegrationsVault tenantId={manageSheet.id} />
+                <TenantAuditLogs tenantId={manageSheet.id} />
+              </div>
             )}
 
             <Separator />

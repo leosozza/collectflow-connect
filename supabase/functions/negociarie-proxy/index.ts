@@ -395,6 +395,31 @@ Deno.serve(async (req) => {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error(`[negociarie-proxy] ERROR: ${message}`);
+
+    // Persistir o erro no audit_logs para auditoria do Super Admin
+    try {
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")! // Usar service role para garantir o log mesmo em falhas de auth
+      );
+
+      await supabaseAdmin.from("audit_logs").insert({
+        tenant_id: (userData as any)?.tenant_id || null,
+        user_id: userId || null,
+        user_name: "Sistema (Edge Function)",
+        action: `negociarie_error_${action}`,
+        entity_type: "integration_error",
+        details: {
+          message,
+          action,
+          params: JSON.stringify(params).substring(0, 500), // Mascarar se necessário, aqui estamos limitando tamanho
+          timestamp: new Date().toISOString()
+        }
+      } as any);
+    } catch (logErr) {
+      console.error("[negociarie-proxy] Falha ao persistir audit_log:", logErr);
+    }
+
     if (message.includes("401") || message.includes("autenticar")) {
       delete cachedTokens[`token_${tenantId}`];
       delete tokenExpiries[`token_${tenantId}`];
