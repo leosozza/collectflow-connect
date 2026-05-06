@@ -373,10 +373,20 @@ function classifyEvent(e: any): { category: TimelineItem["category"]; sentiment:
   const t: string = e.event_type || "";
   const src: string = (e.event_source || "").toLowerCase();
   const meta = e.metadata || {};
+  const sourceType = (meta.source_type || "").toLowerCase();
 
-  // Lote
-  if (meta.batch_id || ["maxlist", "import", "prevention", "regua"].includes(src)) {
-    if (t === "field_update") return { category: "lote", sentiment: null };
+  // WhatsApp outbound de campanha → Lote (prioridade)
+  if (t === "whatsapp_outbound" && (src === "campaign" || sourceType === "campaign")) {
+    return { category: "lote", sentiment: null };
+  }
+  // WhatsApp outbound de régua/workflow → Automático
+  if (t === "whatsapp_outbound" && (["regua", "prevention", "workflow"].includes(src) || ["regua", "prevention", "workflow"].includes(sourceType))) {
+    return { category: "automatico", sentiment: null };
+  }
+
+  // Lote — importações/batch
+  if (meta.batch_id || ["maxlist", "import"].includes(src)) {
+    return { category: "lote", sentiment: null };
   }
 
   // Acordo
@@ -384,6 +394,10 @@ function classifyEvent(e: any): { category: TimelineItem["category"]; sentiment:
     let sentiment: TimelineItem["sentiment"] = null;
     if (t === "agreement_cancelled" || t === "agreement_overdue" || t === "agreement_broken" || t === "manual_payment_rejected") sentiment = "negativo";
     if (t === "agreement_approved" || t === "agreement_completed" || t === "agreement_status_completed" || t === "agreement_signed" || t === "payment_confirmed" || t === "manual_payment_confirmed" || t === "agreement_created") sentiment = "positivo";
+    // agreement_overdue/broken automáticos → automatico
+    if ((t === "agreement_overdue" || t === "agreement_broken") && (src === "system" || src === "auto" || !src)) {
+      return { category: "automatico", sentiment };
+    }
     return { category: "acordo", sentiment };
   }
 
@@ -401,18 +415,24 @@ function classifyEvent(e: any): { category: TimelineItem["category"]; sentiment:
     return { category: "manual", sentiment: dispMeta[code] || null };
   }
 
+  // Encerramento automático
+  if (t === "conversation_auto_closed") return { category: "automatico", sentiment: null };
+
   // Manual humano
-  if (["note", "observation_added", "atendimento_opened", "atendimento_closed", "channel_switched", "document_previewed", "document_generated"].includes(t)) {
+  if (["note", "observation_added", "atendimento_opened", "atendimento_closed", "channel_switched", "document_previewed", "document_generated", "conversation_transferred"].includes(t)) {
     return { category: "manual", sentiment: null };
   }
   if (t === "debtor_profile_changed") {
     return { category: src === "auto_disposition" ? "automatico" : "manual", sentiment: null };
   }
   if (t === "field_update") {
-    if (["maxlist", "import", "negociarie", "asaas", "api"].includes(src)) {
-      return { category: ["maxlist", "import"].includes(src) ? "lote" : "automatico", sentiment: null };
-    }
+    if (["maxlist", "import"].includes(src)) return { category: "lote", sentiment: null };
+    if (["negociarie", "asaas", "api", "auto", "system"].includes(src)) return { category: "automatico", sentiment: null };
     return { category: "manual", sentiment: null };
+  }
+  if (t === "message_sent") {
+    if (["regua", "prevention", "workflow"].includes(src)) return { category: "automatico", sentiment: null };
+    return { category: "automatico", sentiment: null };
   }
 
   // Automático
@@ -484,6 +504,25 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     enabled: clientEvents.length > 0,
   });
 
+  // 3.1) campanhas de WhatsApp
+  const { data: campaignNameMap = {} } = useQuery({
+    queryKey: ["timeline-campaigns", clientCpf, clientEvents.length],
+    queryFn: async () => {
+      const ids = new Set<string>();
+      clientEvents.forEach((e: any) => {
+        const cid = (e.metadata || {})?.campaign_id;
+        if (cid) ids.add(cid);
+      });
+      const arr = [...ids];
+      if (arr.length === 0) return {} as Record<string, string>;
+      const { data } = await supabase.from("whatsapp_campaigns" as any).select("id, name").in("id", arr);
+      const map: Record<string, string> = {};
+      ((data as any[]) || []).forEach((c: any) => { if (c.id && c.name) map[c.id] = c.name; });
+      return map;
+    },
+    enabled: clientEvents.length > 0,
+  });
+
   // 4) lookups (apenas IDs efetivamente referenciados em field_update)
   const { data: lookup = { dividas: {}, devedores: {}, statuses: {}, meios: {}, profiles: {} } } = useQuery({
     queryKey: ["timeline-lookups", clientCpf, clientEvents.length],
@@ -533,48 +572,75 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     const out: TimelineItem[] = [];
 
     if (clientEvents.length > 0) {
-      // 5a) separar WhatsApp brutos para sintetizar
-      const waEvents: any[] = [];
+      // 5a) WhatsApp:
+      //   - mensagens humanas (operador/cliente sem campanha/régua) → DESCARTADAS (vão na aba WhatsApp)
+      //   - outbound de campanha → agrupar por campaign_id como "Disparo em massa" (Lote)
+      //   - outbound de régua/workflow → agrupar por dia como "Mensagem da Régua" (Automático)
       const otherEvents: any[] = [];
+      const campaignBuckets = new Map<string, any[]>();
+      const reguaBuckets = new Map<string, any[]>();
+
       clientEvents.forEach((e: any) => {
-        if (e.event_type === "whatsapp_inbound" || e.event_type === "whatsapp_outbound") waEvents.push(e);
-        else otherEvents.push(e);
+        if (e.event_type !== "whatsapp_inbound" && e.event_type !== "whatsapp_outbound") {
+          otherEvents.push(e);
+          return;
+        }
+        const meta = e.metadata || {};
+        const src = (e.event_source || "").toLowerCase();
+        const sourceType = (meta.source_type || "").toLowerCase();
+
+        if (e.event_type === "whatsapp_outbound" && (src === "campaign" || sourceType === "campaign")) {
+          const cid = meta.campaign_id || "sem-campanha";
+          if (!campaignBuckets.has(cid)) campaignBuckets.set(cid, []);
+          campaignBuckets.get(cid)!.push(e);
+          return;
+        }
+        if (e.event_type === "whatsapp_outbound" && (
+          ["regua", "prevention", "workflow"].includes(src) ||
+          ["regua", "prevention", "workflow"].includes(sourceType)
+        )) {
+          const day = new Date(e.created_at).toISOString().slice(0, 10);
+          const wid = meta.workflow_id || sourceType || src || "regua";
+          const key = `${wid}|${day}`;
+          if (!reguaBuckets.has(key)) reguaBuckets.set(key, []);
+          reguaBuckets.get(key)!.push(e);
+          return;
+        }
+        // Bate-papo humano: descartado da timeline (visível na aba WhatsApp)
       });
 
-      // 5b) agrupar WA em sessões (gap > 30 min)
-      if (waEvents.length > 0) {
-        const sorted = [...waEvents].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-        const GAP = 30 * 60 * 1000;
-        const groups: any[][] = [];
-        let cur: any[] = [];
-        let lastT = 0;
-        sorted.forEach((e) => {
-          const t = new Date(e.created_at).getTime();
-          if (cur.length === 0 || t - lastT <= GAP) cur.push(e);
-          else { groups.push(cur); cur = [e]; }
-          lastT = t;
+      // 5a.1) Cards de campanha
+      campaignBuckets.forEach((evs, cid) => {
+        const last = evs.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b);
+        const campaignName = campaignNameMap[cid] || (cid !== "sem-campanha" ? "Campanha" : "Campanha");
+        out.push({
+          id: `wa-campaign-${cid}-${last.created_at}`,
+          date: last.created_at,
+          type: "whatsapp_session",
+          title: "Disparo de WhatsApp em massa",
+          detail: `${campaignName} · ${evs.length} mensagem(ns)`,
+          actor: { label: "Campanha de WhatsApp", kind: "system" },
+          category: "lote",
+          sentiment: null,
         });
-        if (cur.length) groups.push(cur);
+      });
 
-        groups.forEach((g, idx) => {
-          const startT = g[0].created_at;
-          const endT = g[g.length - 1].created_at;
-          const inbound = g.filter((x) => x.event_type === "whatsapp_inbound").length;
-          const outbound = g.filter((x) => x.event_type === "whatsapp_outbound").length;
-          const startStr = new Date(startT).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-          const endStr = new Date(endT).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-          out.push({
-            id: `wa-${idx}-${endT}`,
-            date: endT,
-            type: "whatsapp_session",
-            title: "Conversa por WhatsApp",
-            detail: `${g.length} mensagens (${outbound} enviadas, ${inbound} recebidas) — ${startStr} às ${endStr}`,
-            actor: { label: "Conversa WhatsApp", kind: "system" },
-            category: "manual",
-            sentiment: null,
-          });
+      // 5a.2) Cards de régua/workflow
+      reguaBuckets.forEach((evs, key) => {
+        const last = evs.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b);
+        const wid = (last.metadata || {}).workflow_id;
+        const wfName = (wid && workflowMap[wid]) || "Régua de Prevenção";
+        out.push({
+          id: `wa-regua-${key}`,
+          date: last.created_at,
+          type: "message_sent",
+          title: "Mensagem enviada pela Régua",
+          detail: `${wfName} · ${evs.length} mensagem(ns)`,
+          actor: { label: wfName, kind: "workflow" },
+          category: "automatico",
+          sentiment: null,
         });
-      }
+      });
 
       // 5c) demais eventos
       otherEvents.forEach((e: any) => {
