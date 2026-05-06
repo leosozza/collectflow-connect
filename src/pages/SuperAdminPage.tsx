@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import TenantServicesTab from "@/components/admin/TenantServicesTab";
 import TenantModulesTab from "@/components/admin/TenantModulesTab";
+import { TenantIntegrationsVault } from "@/components/admin/integrations/TenantIntegrationsVault";
 import BulkModulesDialog from "@/components/admin/BulkModulesDialog";
 import { Blocks } from "lucide-react";
 import { useTenant } from "@/hooks/useTenant";
@@ -974,6 +975,13 @@ const SuperAdminPage = () => {
                 {hasActiveBillingSubscription ? "Assinatura já gerada" : creatingSubscription ? "Gerando assinatura..." : "Gerar assinatura"}
               </Button>
             </div>
+
+            <Separator />
+
+            {/* COFRE DE INTEGRAÇÕES */}
+            {manageSheet && (
+              <TenantIntegrationsVault tenantId={manageSheet.id} />
+            )}
 
             <Separator />
 
