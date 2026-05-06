@@ -553,48 +553,75 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     const out: TimelineItem[] = [];
 
     if (clientEvents.length > 0) {
-      // 5a) separar WhatsApp brutos para sintetizar
-      const waEvents: any[] = [];
+      // 5a) WhatsApp:
+      //   - mensagens humanas (operador/cliente sem campanha/régua) → DESCARTADAS (vão na aba WhatsApp)
+      //   - outbound de campanha → agrupar por campaign_id como "Disparo em massa" (Lote)
+      //   - outbound de régua/workflow → agrupar por dia como "Mensagem da Régua" (Automático)
       const otherEvents: any[] = [];
+      const campaignBuckets = new Map<string, any[]>();
+      const reguaBuckets = new Map<string, any[]>();
+
       clientEvents.forEach((e: any) => {
-        if (e.event_type === "whatsapp_inbound" || e.event_type === "whatsapp_outbound") waEvents.push(e);
-        else otherEvents.push(e);
+        if (e.event_type !== "whatsapp_inbound" && e.event_type !== "whatsapp_outbound") {
+          otherEvents.push(e);
+          return;
+        }
+        const meta = e.metadata || {};
+        const src = (e.event_source || "").toLowerCase();
+        const sourceType = (meta.source_type || "").toLowerCase();
+
+        if (e.event_type === "whatsapp_outbound" && (src === "campaign" || sourceType === "campaign")) {
+          const cid = meta.campaign_id || "sem-campanha";
+          if (!campaignBuckets.has(cid)) campaignBuckets.set(cid, []);
+          campaignBuckets.get(cid)!.push(e);
+          return;
+        }
+        if (e.event_type === "whatsapp_outbound" && (
+          ["regua", "prevention", "workflow"].includes(src) ||
+          ["regua", "prevention", "workflow"].includes(sourceType)
+        )) {
+          const day = new Date(e.created_at).toISOString().slice(0, 10);
+          const wid = meta.workflow_id || sourceType || src || "regua";
+          const key = `${wid}|${day}`;
+          if (!reguaBuckets.has(key)) reguaBuckets.set(key, []);
+          reguaBuckets.get(key)!.push(e);
+          return;
+        }
+        // Bate-papo humano: descartado da timeline (visível na aba WhatsApp)
       });
 
-      // 5b) agrupar WA em sessões (gap > 30 min)
-      if (waEvents.length > 0) {
-        const sorted = [...waEvents].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-        const GAP = 30 * 60 * 1000;
-        const groups: any[][] = [];
-        let cur: any[] = [];
-        let lastT = 0;
-        sorted.forEach((e) => {
-          const t = new Date(e.created_at).getTime();
-          if (cur.length === 0 || t - lastT <= GAP) cur.push(e);
-          else { groups.push(cur); cur = [e]; }
-          lastT = t;
+      // 5a.1) Cards de campanha
+      campaignBuckets.forEach((evs, cid) => {
+        const last = evs.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b);
+        const campaignName = campaignNameMap[cid] || (cid !== "sem-campanha" ? "Campanha" : "Campanha");
+        out.push({
+          id: `wa-campaign-${cid}-${last.created_at}`,
+          date: last.created_at,
+          type: "whatsapp_session",
+          title: "Disparo de WhatsApp em massa",
+          detail: `${campaignName} · ${evs.length} mensagem(ns)`,
+          actor: { label: "Campanha de WhatsApp", kind: "system" },
+          category: "lote",
+          sentiment: null,
         });
-        if (cur.length) groups.push(cur);
+      });
 
-        groups.forEach((g, idx) => {
-          const startT = g[0].created_at;
-          const endT = g[g.length - 1].created_at;
-          const inbound = g.filter((x) => x.event_type === "whatsapp_inbound").length;
-          const outbound = g.filter((x) => x.event_type === "whatsapp_outbound").length;
-          const startStr = new Date(startT).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-          const endStr = new Date(endT).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-          out.push({
-            id: `wa-${idx}-${endT}`,
-            date: endT,
-            type: "whatsapp_session",
-            title: "Conversa por WhatsApp",
-            detail: `${g.length} mensagens (${outbound} enviadas, ${inbound} recebidas) — ${startStr} às ${endStr}`,
-            actor: { label: "Conversa WhatsApp", kind: "system" },
-            category: "manual",
-            sentiment: null,
-          });
+      // 5a.2) Cards de régua/workflow
+      reguaBuckets.forEach((evs, key) => {
+        const last = evs.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b);
+        const wid = (last.metadata || {}).workflow_id;
+        const wfName = (wid && workflowMap[wid]) || "Régua de Prevenção";
+        out.push({
+          id: `wa-regua-${key}`,
+          date: last.created_at,
+          type: "message_sent",
+          title: "Mensagem enviada pela Régua",
+          detail: `${wfName} · ${evs.length} mensagem(ns)`,
+          actor: { label: wfName, kind: "workflow" },
+          category: "automatico",
+          sentiment: null,
         });
-      }
+      });
 
       // 5c) demais eventos
       otherEvents.forEach((e: any) => {
