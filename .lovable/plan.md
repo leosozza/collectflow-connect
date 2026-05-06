@@ -1,100 +1,48 @@
-## Objetivo
+## Diagnóstico
 
-Limpar o **Histórico do Cliente** seguindo a regra: só aparece WhatsApp quando o operador **aceitou** a conversa ou quando ela **foi encerrada** (por operador ou pelo sistema). E categorizar **disparo em massa de WhatsApp** como **Lote**, separando claramente do bate-papo humano.
+O sistema **está realmente disparando apenas para 50** (não é só o número exibido). Reproduzi a causa em `src/pages/CarteiraPage.tsx`.
 
----
+### Causa raiz
 
-## 1) Backend: trigger de `chat_messages` → `client_events` carrega contexto de campanha
+A página da Carteira mantém uma seleção acumulada entre páginas em `selectedIds` / `selectedCpfs` (ex.: você marca 50 na página 1 + 30 na página 2 = 80). Mas o handler que abre o diálogo de WhatsApp só hidrata todos os clientes selecionados **quando o usuário usa "Selecionar todos"**:
 
-Hoje o trigger `trg_client_event_from_chat_message` grava só `direction` + `status` no metadata. As mensagens de campanha (`send-bulk-whatsapp`) já gravam em `chat_messages.metadata`: `source_type='campaign'`, `campaign_id`, `instance_id`, `provider`. Precisamos propagar isso.
-
-**Migração nova** (`supabase/migrations/<novo>.sql`) — recria a função `trg_client_event_from_chat_message`:
-- Continua inserindo `whatsapp_inbound`/`whatsapp_outbound`.
-- `event_source` passa a refletir a origem real:
-  - `campaign` quando `chat_messages.metadata->>'source_type' = 'campaign'`
-  - `regua`/`prevention` quando `metadata->>'source_type' IN ('workflow','prevention','regua')`
-  - `operator` quando `is_internal = true`
-  - `system` caso contrário (ex.: webhook recebido).
-- Metadata acrescenta: `source_type`, `campaign_id`, `instance_id`, `provider` (quando existirem em `chat_messages.metadata`), além de `direction`/`status` que já existem.
-- Sem backfill — eventos antigos seguem como estão; UI tem fallback.
-
-Risco: trigger continua INSERT-only e não muda assinatura. RLS não é afetado.
-
----
-
-## 2) UI: política de exibição de WhatsApp no histórico
-
-Em `src/components/atendimento/ClientTimeline.tsx`, ajustar a construção de `items`:
-
-**A. Eliminar o card sintético "Conversa por WhatsApp"** (hoje gerado a partir do agrupamento de inbound/outbound). O histórico passa a NÃO ter resumo automático de conversa.
-
-**B. Exibir apenas os marcos da conversa**:
-- `atendimento_opened` → "**{Operador}** aceitou conversa via WhatsApp" (quando `event_source=operator`) ou "Cliente iniciou conversa (WhatsApp)" (quando inbound iniciou e ainda não há operador).
-- `atendimento_closed` → "Atendimento encerrado por **{Operador}**".
-- `conversation_auto_closed` → "Conversa encerrada automaticamente (inatividade)".
-- `conversation_transferred` → "Conversa transferida de **{de}** para **{para}**".
-
-Esses marcos vão para a categoria **Manual** (quando o ator é o operador) ou **Automático** (quando é sistema/auto-close).
-
-**C. Disparo em massa (campanha)** — agrupar `whatsapp_outbound` cujo `metadata.source_type='campaign'` em **um único card por `campaign_id`**:
-- Título: "Disparo de WhatsApp em massa".
-- Detalhe: nome da campanha (lookup leve em `whatsapp_campaigns.name` por `campaign_id`) + horário.
-- Ator: "Campanha de WhatsApp" (kind: `system`).
-- Categoria: **Lote**.
-- Sentimento: neutro.
-
-Eventos `whatsapp_outbound` com `source_type IN ('regua','prevention','workflow')` → card único agrupado por régua/dia: "Mensagem enviada pela Régua de Prevenção" → categoria **Automático**.
-
-**D. Mensagens de bate-papo humano** (`whatsapp_inbound` e `whatsapp_outbound` sem `source_type`) → **descartadas da timeline**. Quem precisa do bate-papo abre a aba WhatsApp. Dados continuam no banco.
-
----
-
-## 3) UI: categorização revisada (filtros do topo)
-
-Atualizar `classifyEvent`:
-
-```text
-chip          inclui
--------------------------------------------------------------
-Acordo        agreement_* / payment_confirmed / manual_payment_*
-Manual        disposition / note / observation_added /
-              atendimento_opened|closed (operador) /
-              field_update (operador) /
-              debtor_profile_changed (operador)
-Automático    conversation_auto_closed / agreement_overdue /
-              agreement_broken (auto) / message_sent (régua/workflow) /
-              whatsapp_outbound (source régua/prevention/workflow) /
-              field_update (negociarie/asaas/api/auto)
-Lote          field_update (maxlist/import) /
-              eventos com metadata.batch_id /
-              whatsapp_outbound (source_type=campaign)
-👍/👎        sentimento de disposition / manual_payment_*
+```ts
+// CarteiraPage.tsx, linha 670
+const handleOpenWhatsapp = async () => {
+  if (selectAllFiltered) {
+    const all = await fetchBulkIfNeeded();          // ✅ pega todos
+    ...
+    setResolvedWhatsappClients(...);
+  } else {
+    setResolvedWhatsappClients(uniqueSelectedClients); // ❌ só os da página atual
+  }
+};
 ```
 
-Regra-chave: **um evento só pertence a UMA categoria** — Lote tem prioridade sobre Automático quando ambos se aplicam (ex.: campanha é lote, não automático).
+`uniqueSelectedClients` é derivado de `selectedClients`, que é `displayClients.filter(...)` — ou seja, **somente os clientes da página atual** (PAGE_SIZE = 50). Os 30 marcados em outras páginas são silenciosamente perdidos antes mesmo de chegar ao `WhatsAppBulkDialog`. Como o diálogo recebe só 50, todas as telas (resumo, distribuição por instância, criação da campanha) e o disparo real operam sobre 50.
 
----
+A função utilitária `fetchBulkIfNeeded()` (linha 604) já trata o caso de "seleção acumulada entre páginas" usando `fetchCarteiraClientsByIds`. Ela só não está sendo chamada nesse caminho.
 
-## 4) Não-regressão
+O mesmo padrão incorreto existe em `handleOpenDialer` (linha 660) e `handleOpenEnrich` (linha 685), então o discador e o enriquecimento sofrem do mesmo bug.
 
-- Não mexe em RLS, não muda nenhum payload existente — apenas **acrescenta** chaves no metadata.
-- `client_events` segue completo no banco; mudança é só de UI + enriquecimento do metadata.
-- Aba WhatsApp e demais módulos não são tocados.
+## Correção (apenas frontend)
 
----
+Em `src/pages/CarteiraPage.tsx`, alterar os três handlers para sempre passar pelo `fetchBulkIfNeeded()` quando houver seleção que possa exceder a página atual:
 
-## Aceite
+1. **`handleOpenWhatsapp`** — remover o ramo `else` e sempre chamar `fetchBulkIfNeeded()`, depois deduplicar por CPF como já é feito.
+2. **`handleOpenDialer`** — idem, sempre chamar `fetchBulkIfNeeded()`.
+3. **`handleOpenEnrich`** — idem, sempre chamar `fetchBulkIfNeeded()` e mapear para `{id, cpf, credor}`.
 
-1. Em `/carteira/<cpf>?tab=historico`:
-   - **Não aparecem** mensagens individuais de WhatsApp nem o card "Conversa por WhatsApp X mensagens".
-   - Aparece "**Operador** aceitou conversa via WhatsApp" quando o operador aceitou e "Atendimento encerrado por **Operador**" / "Conversa encerrada automaticamente" no fim.
-   - Disparo de campanha aparece como "Disparo de WhatsApp em massa — {nome}", chip **laranja (Lote)**.
-2. Filtro **Lote** acende campanhas + importações MaxList; filtro **Automático** acende régua/auto-close/quebra automática.
-3. Nenhum evento sai como "Origem desconhecida".
+`fetchBulkIfNeeded()` já tem o atalho rápido: se todos os `selectedIds` estão na página atual, ele filtra localmente sem ida ao backend; só busca via `fetchCarteiraClientsByIds` quando há IDs fora da página. Custo extra para o caso comum: zero.
 
----
+Nada muda no `WhatsAppBulkDialog`, no `whatsappCampaignService` nem nas edge functions de disparo — eles já tratam corretamente N destinatários; só estavam recebendo a lista truncada.
 
-## Arquivos tocados
+## Validação
 
-- `supabase/migrations/<novo>.sql` — recria `trg_client_event_from_chat_message` propagando `source_type`/`campaign_id`/`instance_id`/`provider`.
-- `src/components/atendimento/ClientTimeline.tsx` — remove agrupamento sintético, adiciona agrupamento por campanha, ajusta `classifyEvent` e `resolveActor`, lookup leve em `whatsapp_campaigns(name)`.
+- Selecionar 50 na página 1 + 30 na página 2 → abrir "Disparo WhatsApp" → o resumo deve mostrar **80 selecionados / 80 destinatários únicos** (ou menos, se houver CPF duplicado/sem telefone).
+- A distribuição por instância deve somar 80.
+- Após enviar, conferir em `whatsapp_campaigns` / `campaign_recipients` que o total de destinatários criados é 80.
+
+## Arquivos alterados
+
+- `src/pages/CarteiraPage.tsx` (3 handlers, ~20 linhas)

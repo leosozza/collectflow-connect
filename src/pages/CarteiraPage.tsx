@@ -658,37 +658,25 @@ const CarteiraPage = () => {
   const [resolvedEnrichClients, setResolvedEnrichClients] = useState<{ id: string; cpf: string; credor?: string }[]>([]);
 
   const handleOpenDialer = async () => {
-    if (selectAllFiltered) {
-      const all = await fetchBulkIfNeeded();
-      setResolvedDialerClients(all);
-    } else {
-      setResolvedDialerClients(selectedClients);
-    }
+    const all = await fetchBulkIfNeeded();
+    setResolvedDialerClients(all);
     setDialerOpen(true);
   };
 
   const handleOpenWhatsapp = async () => {
-    if (selectAllFiltered) {
-      const all = await fetchBulkIfNeeded();
-      const cpfMap = new Map<string, GroupedClient>();
-      for (const c of all) {
-        const cpf = c.cpf.replace(/\D/g, "");
-        if (!cpfMap.has(cpf)) cpfMap.set(cpf, c);
-      }
-      setResolvedWhatsappClients(Array.from(cpfMap.values()));
-    } else {
-      setResolvedWhatsappClients(uniqueSelectedClients);
+    const all = await fetchBulkIfNeeded();
+    const cpfMap = new Map<string, GroupedClient>();
+    for (const c of all) {
+      const cpf = c.cpf.replace(/\D/g, "");
+      if (!cpfMap.has(cpf)) cpfMap.set(cpf, c);
     }
+    setResolvedWhatsappClients(Array.from(cpfMap.values()));
     setWhatsappOpen(true);
   };
 
   const handleOpenEnrich = async () => {
-    if (selectAllFiltered) {
-      const all = await fetchBulkIfNeeded();
-      setResolvedEnrichClients(all.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor })));
-    } else {
-      setResolvedEnrichClients(selectedClients.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor })));
-    }
+    const all = await fetchBulkIfNeeded();
+    setResolvedEnrichClients(all.map(c => ({ id: c.id, cpf: c.cpf, credor: c.credor })));
     setEnrichOpen(true);
   };
 
