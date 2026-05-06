@@ -1,48 +1,24 @@
-## Diagnóstico
+## Objetivo
 
-O sistema **está realmente disparando apenas para 50** (não é só o número exibido). Reproduzi a causa em `src/pages/CarteiraPage.tsx`.
+Remover a opção **"Outro"** dos seletores de Meio de Pagamento na confirmação manual, forçando operadores a escolher: PIX, Boleto, Cartão, Dinheiro ou Transferência. Registros históricos já gravados como "Outro" permanecem intactos.
 
-### Causa raiz
+## Alterações (somente frontend)
 
-A página da Carteira mantém uma seleção acumulada entre páginas em `selectedIds` / `selectedCpfs` (ex.: você marca 50 na página 1 + 30 na página 2 = 80). Mas o handler que abre o diálogo de WhatsApp só hidrata todos os clientes selecionados **quando o usuário usa "Selecionar todos"**:
+1. **`src/components/acordos/ManualPaymentDialog.tsx`** (linha 31)
+   - Remover `{ value: "Outro", label: "Outro" }` da lista de opções.
 
-```ts
-// CarteiraPage.tsx, linha 670
-const handleOpenWhatsapp = async () => {
-  if (selectAllFiltered) {
-    const all = await fetchBulkIfNeeded();          // ✅ pega todos
-    ...
-    setResolvedWhatsappClients(...);
-  } else {
-    setResolvedWhatsappClients(uniqueSelectedClients); // ❌ só os da página atual
-  }
-};
-```
+2. **`src/components/acordos/PaymentConfirmationTab.tsx`** (linha 25)
+   - Alterar `PAYMENT_METHODS` para `["PIX", "Boleto", "Cartão", "Dinheiro", "Transferência"]`.
 
-`uniqueSelectedClients` é derivado de `selectedClients`, que é `displayClients.filter(...)` — ou seja, **somente os clientes da página atual** (PAGE_SIZE = 50). Os 30 marcados em outras páginas são silenciosamente perdidos antes mesmo de chegar ao `WhatsAppBulkDialog`. Como o diálogo recebe só 50, todas as telas (resumo, distribuição por instância, criação da campanha) e o disparo real operam sobre 50.
+## O que NÃO será alterado (proteções)
 
-A função utilitária `fetchBulkIfNeeded()` (linha 604) já trata o caso de "seleção acumulada entre páginas" usando `fetchCarteiraClientsByIds`. Ela só não está sendo chamada nesse caminho.
+- **Banco de dados**: nenhuma migração. Linhas existentes com `payment_method = 'Outro'` ficam preservadas.
+- **`BaixasRealizadasPage.tsx`**: o filtro "Meio" é populado dinamicamente a partir dos dados (`useMemo` sobre `rows`), então "Outro" continuará aparecendo no filtro **apenas** enquanto existirem baixas históricas com esse valor — comportamento correto, não quebra nada.
+- **Exportação Excel**: continua funcionando normalmente; o valor é apenas uma string.
+- **Outras ocorrências de "Outro"** no codebase (CRM Leads, CredorForm bancos/gateways, etc.) **não serão tocadas** — são contextos diferentes.
 
-O mesmo padrão incorreto existe em `handleOpenDialer` (linha 660) e `handleOpenEnrich` (linha 685), então o discador e o enriquecimento sofrem do mesmo bug.
+## Validação pós-mudança
 
-## Correção (apenas frontend)
-
-Em `src/pages/CarteiraPage.tsx`, alterar os três handlers para sempre passar pelo `fetchBulkIfNeeded()` quando houver seleção que possa exceder a página atual:
-
-1. **`handleOpenWhatsapp`** — remover o ramo `else` e sempre chamar `fetchBulkIfNeeded()`, depois deduplicar por CPF como já é feito.
-2. **`handleOpenDialer`** — idem, sempre chamar `fetchBulkIfNeeded()`.
-3. **`handleOpenEnrich`** — idem, sempre chamar `fetchBulkIfNeeded()` e mapear para `{id, cpf, credor}`.
-
-`fetchBulkIfNeeded()` já tem o atalho rápido: se todos os `selectedIds` estão na página atual, ele filtra localmente sem ida ao backend; só busca via `fetchCarteiraClientsByIds` quando há IDs fora da página. Custo extra para o caso comum: zero.
-
-Nada muda no `WhatsAppBulkDialog`, no `whatsappCampaignService` nem nas edge functions de disparo — eles já tratam corretamente N destinatários; só estavam recebendo a lista truncada.
-
-## Validação
-
-- Selecionar 50 na página 1 + 30 na página 2 → abrir "Disparo WhatsApp" → o resumo deve mostrar **80 selecionados / 80 destinatários únicos** (ou menos, se houver CPF duplicado/sem telefone).
-- A distribuição por instância deve somar 80.
-- Após enviar, conferir em `whatsapp_campaigns` / `campaign_recipients` que o total de destinatários criados é 80.
-
-## Arquivos alterados
-
-- `src/pages/CarteiraPage.tsx` (3 handlers, ~20 linhas)
+- Abrir `ManualPaymentDialog` (Acordos → confirmar pagamento manual): selector mostra apenas as 5 opções.
+- Abrir `PaymentConfirmationTab`: idem.
+- Página **Baixas Realizadas**: registros antigos com "Outro" continuam visíveis e filtráveis.
