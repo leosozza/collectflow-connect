@@ -268,7 +268,7 @@ async function callProxy(action: string, params: Record<string, unknown> = {}) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ action, ...params }),
+    body: JSON.stringify({ action, creditorId: params.creditorId, ...params }),
   });
 
   const data = await res.json();
@@ -331,6 +331,15 @@ export const negociarieService = {
     // Defense-in-depth: fill any still-missing fields directly from clients table.
     clientData = await enrichClientDataFromClients(agreement.tenant_id, agreement.client_cpf, clientData);
 
+    // Buscar ID do credor pelo nome para roteamento de banco (SaaS)
+    const { data: credorObj } = await supabase
+      .from("credores" as any)
+      .select("id")
+      .eq("tenant_id", agreement.tenant_id)
+      .eq("razao_social", agreement.credor)
+      .maybeSingle();
+    const creditorId = (credorObj as any)?.id;
+
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
     const installmentKey = buildInstallmentKey(agreement.id, installment.number);
 
@@ -346,7 +355,7 @@ export const negociarieService = {
       idParcela,
     });
 
-    const apiResult = await this.novaCobranca(payload);
+    const apiResult = await this.novaCobranca({ ...payload, creditorId });
     const parcelaResult = getPrimaryParcelResult(apiResult);
 
     // Mark previous boletos for this installment as substituido
@@ -411,6 +420,15 @@ export const negociarieService = {
     // Defense-in-depth: fill any still-missing fields directly from clients table.
     clientData = await enrichClientDataFromClients(agreement.tenant_id, agreement.client_cpf, clientData);
 
+    // Buscar ID do credor para roteamento SaaS
+    const { data: credorObj } = await supabase
+      .from("credores" as any)
+      .select("id")
+      .eq("tenant_id", agreement.tenant_id)
+      .eq("razao_social", agreement.credor)
+      .maybeSingle();
+    const creditorId = (credorObj as any)?.id;
+
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
 
     for (const inst of installments) {
@@ -428,7 +446,7 @@ export const negociarieService = {
           idParcela,
         });
 
-        const apiResult = await this.novaCobranca(payload);
+        const apiResult = await this.novaCobranca({ ...payload, creditorId });
         const parcelaResult = getPrimaryParcelResult(apiResult);
 
         // Mark previous boletos as substituido

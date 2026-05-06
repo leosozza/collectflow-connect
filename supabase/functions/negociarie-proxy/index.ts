@@ -11,37 +11,69 @@ const LOGIN_URL = "https://sistema.negociarie.com.br/api/login";
 const cachedTokens: Record<string, string> = {};
 const tokenExpiries: Record<string, number> = {};
 
-async function getNegociarieConfig(supabase: any, tenantId: string) {
-  // 1. Tentar buscar credenciais específicas do tenant no banco
-  const { data: integration } = await supabase
+async function getNegociarieConfig(supabase: any, tenantId: string, creditorId?: string) {
+  // 1. Tentar buscar credenciais específicas do CREDOR (Prioridade Máxima)
+  if (creditorId) {
+    // Verificar se o faturamento direto está ativo para este credor
+    const { data: creditor } = await supabase
+      .from("credores")
+      .select("cobrança_direta_ativa")
+      .eq("id", creditorId)
+      .maybeSingle();
+
+    if (creditor?.cobrança_direta_ativa) {
+      const { data: creditorIntegration } = await supabase
+        .from("tenant_integrations")
+        .select("config")
+        .eq("tenant_id", tenantId)
+        .eq("creditor_id", creditorId)
+        .eq("provider", "negociarie")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (creditorIntegration?.config) {
+        console.log(`[negociarie-proxy] Usando configuração direta do CREDOR: ${creditorId}`);
+        return { 
+          clientId: creditorIntegration.config.client_id, 
+          clientSecret: creditorIntegration.config.client_secret 
+        };
+      }
+    } else {
+      console.log(`[negociarie-proxy] Cobrança direta desativada para o credor ${creditorId}. Usando tenant fallback.`);
+    }
+  }
+
+  // 2. Tentar buscar credenciais específicas do TENANT (Assessoria)
+  const { data: tenantIntegration } = await supabase
     .from("tenant_integrations")
     .select("config")
     .eq("tenant_id", tenantId)
+    .is("creditor_id", null) // Garante que é a chave geral do tenant
     .eq("provider", "negociarie")
     .eq("is_active", true)
     .maybeSingle();
 
-  const config = integration?.config || {};
+  const config = tenantIntegration?.config || {};
   
-  // 2. Usar credenciais do banco ou fallback para ENV (YBRASIL)
+  // 3. Fallback para ENV (YBRASIL)
   const clientId = config.client_id || Deno.env.get("NEGOCIARIE_CLIENT_ID");
   const clientSecret = config.client_secret || Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
 
   if (!clientId || !clientSecret) {
-    throw new Error("Credenciais Negociarie não configuradas para este tenant");
+    throw new Error("Credenciais Negociarie não configuradas para este tenant/credor");
   }
 
   return { clientId, clientSecret };
 }
 
-async function getToken(supabase: any, tenantId: string): Promise<string> {
-  // O cache de token agora precisa ser por tenant para evitar colisão
-  const cacheKey = `token_${tenantId}`;
+async function getToken(supabase: any, tenantId: string, creditorId?: string): Promise<string> {
+  // O cache de token agora precisa ser por tenant + credor para evitar colisão
+  const cacheKey = `token_${tenantId}_${creditorId || "default"}`;
   if (cachedTokens[cacheKey] && Date.now() < tokenExpiries[cacheKey]) {
     return cachedTokens[cacheKey];
   }
 
-  const { clientId, clientSecret } = await getNegociarieConfig(supabase, tenantId);
+  const { clientId, clientSecret } = await getNegociarieConfig(supabase, tenantId, creditorId);
 
   const res = await fetch(LOGIN_URL, {
     method: "POST",
@@ -67,8 +99,8 @@ async function getToken(supabase: any, tenantId: string): Promise<string> {
   return token;
 }
 
-async function negociarieRequest(supabase: any, tenantId: string, method: string, endpoint: string, body?: unknown) {
-  const token = await getToken(supabase, tenantId);
+async function negociarieRequest(supabase: any, tenantId: string, method: string, endpoint: string, body?: unknown, creditorId?: string) {
+  const token = await getToken(supabase, tenantId, creditorId);
   const url = `${NEGOCIARIE_BASE}${endpoint}`;
   const opts: RequestInit = {
     method,

@@ -5,7 +5,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor, triggerExpireAgreementsForCredor } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link, Banknote, ShieldCheck } from "lucide-react";
+import { CreditorIntegrationsVault } from "@/components/admin/integrations/CreditorIntegrationsVault";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -479,56 +480,71 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
           </TabsContent>
 
-          {/* ABA 2 - BANCÁRIO / GATEWAY - Item 9: removed footer message */}
-          <TabsContent value="bancario" className="space-y-4 mt-4">
-            <p className="text-sm font-medium text-foreground">Dados Bancários</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Banco</Label>
-                <Select value={form.banco || ""} onValueChange={v => set("banco", v)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{BANCOS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
-                </Select>
+          {/* ABA 2 - BANCÁRIO / GATEWAY */}
+          <TabsContent value="bancario" className="space-y-6 mt-4">
+            <Card className="p-4 border-border bg-muted/20">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Banknote className="w-5 h-5 text-primary" />
+                  <p className="text-sm font-semibold text-foreground">Configuração Bancária</p>
+                </div>
+                <div className="flex items-center gap-2 bg-background px-3 py-1.5 rounded-full border border-border shadow-sm">
+                  <span className="text-[11px] font-medium text-muted-foreground">Cobrança Direta</span>
+                  <Switch 
+                    checked={form.cobrança_direta_ativa || false} 
+                    onCheckedChange={v => set("cobrança_direta_ativa", v)}
+                  />
+                </div>
               </div>
-              <div><Label>Agência</Label><Input value={form.agencia || ""} onChange={e => set("agencia", e.target.value)} /></div>
-              <div><Label>Conta</Label><Input value={form.conta || ""} onChange={e => set("conta", e.target.value)} /></div>
-              <div>
-                <Label>Tipo de Conta</Label>
-                <Select value={form.tipo_conta || "corrente"} onValueChange={v => set("tipo_conta", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="corrente">Corrente</SelectItem><SelectItem value="poupanca">Poupança</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-2"><Label>Chave PIX</Label><Input value={form.pix_chave || ""} onChange={e => set("pix_chave", e.target.value)} /></div>
-            </div>
 
-            <div className="border-t border-border pt-4">
-              <p className="text-sm font-medium text-foreground mb-3">Gateway de Pagamento</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Gateway Ativo</Label>
-                  <Select value={form.gateway_ativo || ""} onValueChange={v => set("gateway_ativo", v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{GATEWAYS.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
-                  </Select>
+              {form.cobrança_direta_ativa ? (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="mb-6 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 flex gap-3">
+                    <ShieldCheck className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-orange-900 dark:text-orange-200 leading-relaxed">
+                      <strong>Modo Cobrança Direta Ativo:</strong> Ao gerar acordos para este credor, o sistema usará as chaves configuradas abaixo. O dinheiro cairá diretamente na conta deste credor.
+                    </p>
+                  </div>
+                  
+                  {editing?.id ? (
+                    <CreditorIntegrationsVault 
+                      tenantId={tenant?.id || ""} 
+                      creditorId={editing.id} 
+                    />
+                  ) : (
+                    <div className="p-8 text-center border-2 border-dashed rounded-lg bg-background">
+                      <p className="text-sm text-muted-foreground">Salve o credor primeiro para configurar o Cofre.</p>
+                    </div>
+                  )}
                 </div>
-                <div><Label>Token / API Key</Label><Input value={form.gateway_token || ""} onChange={e => set("gateway_token", e.target.value)} type="password" /></div>
-                <div>
-                  <Label>Ambiente</Label>
-                  <Select value={form.gateway_ambiente || "producao"} onValueChange={v => set("gateway_ambiente", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="producao">Produção</SelectItem><SelectItem value="homologacao">Homologação</SelectItem></SelectContent>
-                  </Select>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 opacity-70">
+                  <div>
+                    <Label>Banco</Label>
+                    <Select value={form.banco || ""} onValueChange={v => set("banco", v)} disabled={!form.cobrança_direta_ativa}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>{BANCOS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>Agência</Label><Input value={form.agencia || ""} onChange={e => set("agencia", e.target.value)} disabled={!form.cobrança_direta_ativa} /></div>
+                  <div><Label>Conta</Label><Input value={form.conta || ""} onChange={e => set("conta", e.target.value)} disabled={!form.cobrança_direta_ativa} /></div>
+                  <div>
+                    <Label>Tipo de Conta</Label>
+                    <Select value={form.tipo_conta || "corrente"} onValueChange={v => set("tipo_conta", v)} disabled={!form.cobrança_direta_ativa}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="corrente">Corrente</SelectItem><SelectItem value="poupanca">Poupança</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Chave PIX (Fallback)</Label>
+                    <Input value={form.pix_chave || ""} onChange={e => set("pix_chave", e.target.value)} placeholder="E-mail, CPF ou Aleatória" />
+                  </div>
+                  <p className="col-span-2 text-[10px] text-muted-foreground italic mt-2 text-center">
+                    ℹ️ Como a Cobrança Direta está <strong>desligada</strong>, o sistema usará o banco padrão da assessoria.
+                  </p>
                 </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select value={form.gateway_status || "ativo"} onValueChange={v => set("gateway_status", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem></SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
+              )}
+            </Card>
           </TabsContent>
 
           {/* ABA 3 - NEGOCIAÇÃO */}
