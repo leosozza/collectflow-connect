@@ -8,15 +8,40 @@ const corsHeaders = {
 const NEGOCIARIE_BASE = "https://sistema.negociarie.com.br/api/v2";
 const LOGIN_URL = "https://sistema.negociarie.com.br/api/login";
 
-let cachedToken: string | null = null;
-let tokenExpiry = 0;
+const cachedTokens: Record<string, string> = {};
+const tokenExpiries: Record<string, number> = {};
 
-async function getToken(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiry) return cachedToken;
+async function getNegociarieConfig(supabase: any, tenantId: string) {
+  // 1. Tentar buscar credenciais específicas do tenant no banco
+  const { data: integration } = await supabase
+    .from("tenant_integrations")
+    .select("config")
+    .eq("tenant_id", tenantId)
+    .eq("provider", "negociarie")
+    .eq("is_active", true)
+    .maybeSingle();
 
-  const clientId = Deno.env.get("NEGOCIARIE_CLIENT_ID");
-  const clientSecret = Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
-  if (!clientId || !clientSecret) throw new Error("Credenciais Negociarie não configuradas");
+  const config = integration?.config || {};
+  
+  // 2. Usar credenciais do banco ou fallback para ENV (YBRASIL)
+  const clientId = config.client_id || Deno.env.get("NEGOCIARIE_CLIENT_ID");
+  const clientSecret = config.client_secret || Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Credenciais Negociarie não configuradas para este tenant");
+  }
+
+  return { clientId, clientSecret };
+}
+
+async function getToken(supabase: any, tenantId: string): Promise<string> {
+  // O cache de token agora precisa ser por tenant para evitar colisão
+  const cacheKey = `token_${tenantId}`;
+  if (cachedTokens[cacheKey] && Date.now() < tokenExpiries[cacheKey]) {
+    return cachedTokens[cacheKey];
+  }
+
+  const { clientId, clientSecret } = await getNegociarieConfig(supabase, tenantId);
 
   const res = await fetch(LOGIN_URL, {
     method: "POST",
@@ -34,14 +59,16 @@ async function getToken(): Promise<string> {
   }
 
   const data = await res.json();
-  cachedToken = data.access_token || data.token;
-  if (!cachedToken) throw new Error("Token não retornado pela API Negociarie");
-  tokenExpiry = Date.now() + 50 * 60 * 1000;
-  return cachedToken;
+  const token = data.access_token || data.token;
+  if (!token) throw new Error("Token não retornado pela API Negociarie");
+  
+  cachedTokens[cacheKey] = token;
+  tokenExpiries[cacheKey] = Date.now() + 50 * 60 * 1000;
+  return token;
 }
 
-async function negociarieRequest(method: string, endpoint: string, body?: unknown) {
-  const token = await getToken();
+async function negociarieRequest(supabase: any, tenantId: string, method: string, endpoint: string, body?: unknown) {
+  const token = await getToken(supabase, tenantId);
   const url = `${NEGOCIARIE_BASE}${endpoint}`;
   const opts: RequestInit = {
     method,
@@ -111,15 +138,31 @@ Deno.serve(async (req) => {
     }
 
     const userId = claimsData.claims.sub;
-    const body = await req.json();
-    const { action, ...params } = body;
-    console.log(`[negociarie-proxy] action=${action} user=${userId}`);
+    const { action, ...params } = await req.json();
+    
+    // Buscar o tenant_id do usuário
+    const { data: userData, error: userError } = await supabase
+      .from("tenant_users")
+      .select("tenant_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (userError || !userData?.tenant_id) {
+      console.error("[negociarie-proxy] Tenant not found for user:", userId);
+      return new Response(JSON.stringify({ error: "Usuário não associado a um tenant válido" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const tenantId = userData.tenant_id;
+    console.log(`[negociarie-proxy] action=${action} user=${userId} tenant=${tenantId}`);
 
     let result;
 
     switch (action) {
       case "test-connection": {
-        await getToken();
+        await getToken(supabase, tenantId);
         result = { connected: true, status: 200 };
         break;
       }
@@ -228,17 +271,17 @@ Deno.serve(async (req) => {
 
         console.log("[negociarie-proxy] nova-cobranca id_geral:", cobrancaData.id_geral);
         console.log("[negociarie-proxy] nova-cobranca final payload:", JSON.stringify(cobrancaData));
-        result = await negociarieRequest("POST", "/cobranca/nova", cobrancaData);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/nova", cobrancaData);
         break;
       }
 
       case "nova-pix": {
-        result = await negociarieRequest("POST", "/cobranca/nova-pix", params.data);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/nova-pix", params.data);
         break;
       }
 
       case "nova-cartao": {
-        result = await negociarieRequest("POST", "/cobranca/nova-cartao", params.data);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/nova-cartao", params.data);
         break;
       }
 
@@ -248,23 +291,23 @@ Deno.serve(async (req) => {
         if (params.id_geral) qs.set("id_geral", String(params.id_geral));
         if (params.limit) qs.set("limit", String(params.limit));
         const query = qs.toString() ? `?${qs.toString()}` : "";
-        result = await negociarieRequest("GET", `/cobranca/consulta${query}`);
+        result = await negociarieRequest(supabase, tenantId, "GET", `/cobranca/consulta${query}`);
         break;
       }
 
       case "baixa-manual": {
-        result = await negociarieRequest("POST", "/cobranca/baixa-manual", params.data);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/baixa-manual", params.data);
         break;
       }
 
       case "parcelas-pagas": {
         const data = params.data || new Date().toISOString().split("T")[0];
-        result = await negociarieRequest("GET", `/cobranca/parcelas-pagas?data=${data}`);
+        result = await negociarieRequest(supabase, tenantId, "GET", `/cobranca/parcelas-pagas?data=${data}`);
         break;
       }
 
       case "alteradas-hoje": {
-        result = await negociarieRequest("GET", "/cobranca/alteradas-hoje");
+        result = await negociarieRequest(supabase, tenantId, "GET", "/cobranca/alteradas-hoje");
         break;
       }
 
@@ -272,18 +315,18 @@ Deno.serve(async (req) => {
         const cbUrl = (params.data as any)?.url || (params.data as any)?.url_callback || "";
         const callbackPayload = { url_callback: cbUrl };
         console.log("[negociarie-proxy] Registrando callback:", JSON.stringify(callbackPayload));
-        result = await negociarieRequest("POST", "/cobranca/atualizar-url-callback", callbackPayload);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/atualizar-url-callback", callbackPayload);
         console.log("[negociarie-proxy] Resposta callback:", JSON.stringify(result));
         break;
       }
 
       case "pagamento-credito": {
-        result = await negociarieRequest("POST", "/cobranca/pagamento-credito", params.data);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/pagamento-credito", params.data);
         break;
       }
 
       case "cancelar-pagamento": {
-        result = await negociarieRequest("PATCH", "/cobranca/pagamento-credito/cancelar", params.data);
+        result = await negociarieRequest(supabase, tenantId, "PATCH", "/cobranca/pagamento-credito/cancelar", params.data);
         break;
       }
 
@@ -298,7 +341,7 @@ Deno.serve(async (req) => {
         const idStr = String(idParcela);
         console.log(`[negociarie-proxy] cancelar-cobranca id_parcela=${idStr}`);
         try {
-          result = await negociarieRequest("DELETE", `/cobranca/${encodeURIComponent(idStr)}`);
+          result = await negociarieRequest(supabase, tenantId, "DELETE", `/cobranca/${encodeURIComponent(idStr)}`);
         } catch (e) {
           // 404 means already cancelled / not found — treat as success for idempotency
           const msg = e instanceof Error ? e.message : String(e);
@@ -312,7 +355,7 @@ Deno.serve(async (req) => {
       }
 
       case "inadimplencia-nova": {
-        result = await negociarieRequest("POST", "/inadimplencia/nova", params.data);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/inadimplencia/nova", params.data);
         break;
       }
 
@@ -320,22 +363,22 @@ Deno.serve(async (req) => {
         const qs = new URLSearchParams();
         if (params.cpf) qs.set("cpf", String(params.cpf));
         const query = qs.toString() ? `?${qs.toString()}` : "";
-        result = await negociarieRequest("GET", `/inadimplencia/titulos${query}`);
+        result = await negociarieRequest(supabase, tenantId, "GET", `/inadimplencia/titulos${query}`);
         break;
       }
 
       case "inadimplencia-acordos": {
-        result = await negociarieRequest("GET", "/inadimplencia/acordos");
+        result = await negociarieRequest(supabase, tenantId, "GET", "/inadimplencia/acordos");
         break;
       }
 
       case "inadimplencia-baixa-parcela": {
-        result = await negociarieRequest("POST", "/inadimplencia/baixa-parcela", params.data);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/inadimplencia/baixa-parcela", params.data);
         break;
       }
 
       case "inadimplencia-devolucao": {
-        result = await negociarieRequest("POST", "/inadimplencia/devolucao-titulo", params.data);
+        result = await negociarieRequest(supabase, tenantId, "POST", "/inadimplencia/devolucao-titulo", params.data);
         break;
       }
 
@@ -353,8 +396,8 @@ Deno.serve(async (req) => {
     const message = e instanceof Error ? e.message : String(e);
     console.error(`[negociarie-proxy] ERROR: ${message}`);
     if (message.includes("401") || message.includes("autenticar")) {
-      cachedToken = null;
-      tokenExpiry = 0;
+      delete cachedTokens[`token_${tenantId}`];
+      delete tokenExpiries[`token_${tenantId}`];
     }
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
