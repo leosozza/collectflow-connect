@@ -373,10 +373,20 @@ function classifyEvent(e: any): { category: TimelineItem["category"]; sentiment:
   const t: string = e.event_type || "";
   const src: string = (e.event_source || "").toLowerCase();
   const meta = e.metadata || {};
+  const sourceType = (meta.source_type || "").toLowerCase();
 
-  // Lote
-  if (meta.batch_id || ["maxlist", "import", "prevention", "regua"].includes(src)) {
-    if (t === "field_update") return { category: "lote", sentiment: null };
+  // WhatsApp outbound de campanha → Lote (prioridade)
+  if (t === "whatsapp_outbound" && (src === "campaign" || sourceType === "campaign")) {
+    return { category: "lote", sentiment: null };
+  }
+  // WhatsApp outbound de régua/workflow → Automático
+  if (t === "whatsapp_outbound" && (["regua", "prevention", "workflow"].includes(src) || ["regua", "prevention", "workflow"].includes(sourceType))) {
+    return { category: "automatico", sentiment: null };
+  }
+
+  // Lote — importações/batch
+  if (meta.batch_id || ["maxlist", "import"].includes(src)) {
+    return { category: "lote", sentiment: null };
   }
 
   // Acordo
@@ -384,6 +394,10 @@ function classifyEvent(e: any): { category: TimelineItem["category"]; sentiment:
     let sentiment: TimelineItem["sentiment"] = null;
     if (t === "agreement_cancelled" || t === "agreement_overdue" || t === "agreement_broken" || t === "manual_payment_rejected") sentiment = "negativo";
     if (t === "agreement_approved" || t === "agreement_completed" || t === "agreement_status_completed" || t === "agreement_signed" || t === "payment_confirmed" || t === "manual_payment_confirmed" || t === "agreement_created") sentiment = "positivo";
+    // agreement_overdue/broken automáticos → automatico
+    if ((t === "agreement_overdue" || t === "agreement_broken") && (src === "system" || src === "auto" || !src)) {
+      return { category: "automatico", sentiment };
+    }
     return { category: "acordo", sentiment };
   }
 
@@ -401,18 +415,24 @@ function classifyEvent(e: any): { category: TimelineItem["category"]; sentiment:
     return { category: "manual", sentiment: dispMeta[code] || null };
   }
 
+  // Encerramento automático
+  if (t === "conversation_auto_closed") return { category: "automatico", sentiment: null };
+
   // Manual humano
-  if (["note", "observation_added", "atendimento_opened", "atendimento_closed", "channel_switched", "document_previewed", "document_generated"].includes(t)) {
+  if (["note", "observation_added", "atendimento_opened", "atendimento_closed", "channel_switched", "document_previewed", "document_generated", "conversation_transferred"].includes(t)) {
     return { category: "manual", sentiment: null };
   }
   if (t === "debtor_profile_changed") {
     return { category: src === "auto_disposition" ? "automatico" : "manual", sentiment: null };
   }
   if (t === "field_update") {
-    if (["maxlist", "import", "negociarie", "asaas", "api"].includes(src)) {
-      return { category: ["maxlist", "import"].includes(src) ? "lote" : "automatico", sentiment: null };
-    }
+    if (["maxlist", "import"].includes(src)) return { category: "lote", sentiment: null };
+    if (["negociarie", "asaas", "api", "auto", "system"].includes(src)) return { category: "automatico", sentiment: null };
     return { category: "manual", sentiment: null };
+  }
+  if (t === "message_sent") {
+    if (["regua", "prevention", "workflow"].includes(src)) return { category: "automatico", sentiment: null };
+    return { category: "automatico", sentiment: null };
   }
 
   // Automático
