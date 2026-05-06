@@ -447,7 +447,7 @@ Deno.serve(async (req) => {
 
     if (mode === "update") {
       // === UPDATE MODE: Intelligent reconciliation via Bulk Upsert ===
-      const CHUNK_SIZE = 200;
+      const CHUNK_SIZE = 500;
       for (let i = 0; i < finalRecords.length; i += CHUNK_SIZE) {
         const chunk = finalRecords.slice(i, i + CHUNK_SIZE);
         const externalIds = chunk.map((r: any) => r.external_id);
@@ -636,15 +636,26 @@ Deno.serve(async (req) => {
               }
             }
 
-            // Insert update logs in sub-batches of 200
-            const LOG_BATCH = 200;
-            for (let j = 0; j < updateLogs.length; j += LOG_BATCH) {
-              const logBatch = updateLogs.slice(j, j + LOG_BATCH);
-              const { error: logErr } = await supabase
-                .from("client_update_logs")
-                .insert(logBatch);
-              if (logErr) {
-                console.error(`[maxlist-import] client_update_logs error:`, logErr.message);
+            // Insert update logs — single call when small, batched only if very large
+            if (updateLogs.length > 0) {
+              const LOG_BATCH = 1000;
+              if (updateLogs.length <= LOG_BATCH) {
+                const { error: logErr } = await supabase
+                  .from("client_update_logs")
+                  .insert(updateLogs);
+                if (logErr) {
+                  console.error(`[maxlist-import] client_update_logs error:`, logErr.message);
+                }
+              } else {
+                for (let j = 0; j < updateLogs.length; j += LOG_BATCH) {
+                  const logBatch = updateLogs.slice(j, j + LOG_BATCH);
+                  const { error: logErr } = await supabase
+                    .from("client_update_logs")
+                    .insert(logBatch);
+                  if (logErr) {
+                    console.error(`[maxlist-import] client_update_logs error:`, logErr.message);
+                  }
+                }
               }
             }
             if (updateLogs.length > 0) {
@@ -735,21 +746,26 @@ Deno.serve(async (req) => {
       console.error("[maxlist-import] client_profiles consolidation error:", profileErr.message);
     }
 
-    // Auto-status-sync
+    // Auto-status-sync — fire in background to not block HTTP response
     if (status_cobranca_id === "__auto__") {
-      console.log(`[maxlist-import] Running auto-status-sync for tenant ${tenant_id}`);
+      console.log(`[maxlist-import] Scheduling auto-status-sync (background) for tenant ${tenant_id}`);
+      const syncTask = fetch(`${supabaseUrl}/functions/v1/auto-status-sync`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceRoleKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tenant_id }),
+      }).catch((syncErr: any) => {
+        console.error(`[maxlist-import] auto-status-sync error:`, syncErr?.message);
+      });
       try {
-        await fetch(`${supabaseUrl}/functions/v1/auto-status-sync`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceRoleKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ tenant_id }),
-        });
-      } catch (syncErr: any) {
-        console.error(`[maxlist-import] auto-status-sync error:`, syncErr.message);
-      }
+        // @ts-ignore - EdgeRuntime is provided by Supabase Deno runtime
+        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+          // @ts-ignore
+          EdgeRuntime.waitUntil(syncTask);
+        }
+      } catch { /* noop */ }
     }
 
     const durationMs = Date.now() - startTime;
