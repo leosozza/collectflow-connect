@@ -28,7 +28,8 @@ const PAYMENT_METHODS = [
   { value: "Transferência", label: "Transferência" },
   { value: "Depósito", label: "Depósito" },
   { value: "Dinheiro", label: "Dinheiro" },
-  { value: "Outro", label: "Outro" },
+  { value: "Boleto", label: "Boleto" },
+  { value: "Cartão", label: "Cartão" },
 ];
 
 const formatBR = (n: number) =>
