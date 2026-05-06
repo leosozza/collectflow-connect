@@ -1209,6 +1209,7 @@ const MaxListPage = () => {
                 <span className="font-medium">{Math.min(importProgress, 100).toFixed(2)}%</span>
               </div>
               <Progress value={Math.min(importProgress, 100)} />
+              <p className="text-xs text-muted-foreground">Processando lotes no servidor — para grandes volumes pode levar alguns minutos. Não feche esta janela.</p>
             </div>
           </CardContent>
         </Card>
