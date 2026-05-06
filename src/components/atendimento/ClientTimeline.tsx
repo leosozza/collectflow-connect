@@ -504,6 +504,25 @@ const ClientTimeline = ({ dispositions, agreements, callLogs = [], clientCpf }: 
     enabled: clientEvents.length > 0,
   });
 
+  // 3.1) campanhas de WhatsApp
+  const { data: campaignNameMap = {} } = useQuery({
+    queryKey: ["timeline-campaigns", clientCpf, clientEvents.length],
+    queryFn: async () => {
+      const ids = new Set<string>();
+      clientEvents.forEach((e: any) => {
+        const cid = (e.metadata || {})?.campaign_id;
+        if (cid) ids.add(cid);
+      });
+      const arr = [...ids];
+      if (arr.length === 0) return {} as Record<string, string>;
+      const { data } = await supabase.from("whatsapp_campaigns" as any).select("id, name").in("id", arr);
+      const map: Record<string, string> = {};
+      ((data as any[]) || []).forEach((c: any) => { if (c.id && c.name) map[c.id] = c.name; });
+      return map;
+    },
+    enabled: clientEvents.length > 0,
+  });
+
   // 4) lookups (apenas IDs efetivamente referenciados em field_update)
   const { data: lookup = { dividas: {}, devedores: {}, statuses: {}, meios: {}, profiles: {} } } = useQuery({
     queryKey: ["timeline-lookups", clientCpf, clientEvents.length],
