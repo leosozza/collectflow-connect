@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchMyGoal, fetchGoals } from "@/services/goalService";
+import { fetchMyGoals, fetchGoals } from "@/services/goalService";
 import { Trophy } from "lucide-react";
 import MetaRadialCard from "./MetaRadialCard";
 
