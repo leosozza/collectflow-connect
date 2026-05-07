@@ -231,7 +231,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         ? "pago"
         : isPaidByManual
           ? "pago"
-<<<<<<< HEAD
           : isOverdue ? "vencido" : "pendente";
 
     // Data de pagamento: SEMPRE da fonte canônica (cobrança ou baixa manual que casou).
@@ -246,10 +245,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       }
     }
     return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
-=======
-          : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-    return { ...inst, status, isOverdue, pendingManual, isCancelled: false };
->>>>>>> 1b6fc600 (feat: restore payment date migration and commit contract visibility improvements)
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
