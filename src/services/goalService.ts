@@ -1,3 +1,8 @@
+/**
+ * ⚠ ARQUIVO CRÍTICO — ler `docs/README.md` antes de editar.
+ * Regras: multi-tenant (`tenant_id` obrigatório), `GoalsMode` decide filtro de `credor_id`.
+ * `global` → `IS NULL` | `per_credor` → `IS NOT NULL` | `all` → sem filtro (uso interno).
+ */
 import { supabase } from "@/integrations/supabase/client";
 
 export interface OperatorGoal {

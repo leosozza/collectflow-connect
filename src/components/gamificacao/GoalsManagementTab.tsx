@@ -1,3 +1,8 @@
+/**
+ * ⚠ ARQUIVO CRÍTICO — ler `docs/README.md` antes de editar.
+ * Persiste `tenants.settings.goals_mode`. Toggle Global × Per Credor.
+ * Sempre invalidar queryKeys: `tenant-goals-mode`, `dash-meta-goals-all`, `dash-meta-my-goals`.
+ */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/hooks/useTenant";
