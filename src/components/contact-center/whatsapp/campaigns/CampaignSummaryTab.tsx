@@ -299,10 +299,26 @@ export default function CampaignSummaryTab({ campaign }: Props) {
 
     if (lastChunkAt) {
       const elapsed = now - new Date(lastChunkAt).getTime();
-      const remainingMs = Math.max(0, constants.avgDelayMs - elapsed);
+      const remainingMs = constants.avgDelayMs - elapsed;
+
+      if (remainingMs <= 0) {
+        // Contador zerou — diferenciar "disparando" vs "aguardando worker"
+        const overdueSec = Math.floor(-remainingMs / 1000);
+        if (overdueSec < 8) {
+          return { kind: "dispatching" as const, remainingSec: 0 };
+        }
+        return {
+          kind: "waiting_worker" as const,
+          remainingSec: 0,
+          waitingSec: overdueSec,
+        };
+      }
+
+      // Pausa curta anti-ban: intervalo entre mensagens (não-oficial tem ~11s)
+      const isShortPause = cat === "unofficial" && remainingMs > 5000;
       return {
-        kind: "next" as const,
-        remainingSec: Math.ceil(remainingMs / 1000),
+        kind: isShortPause ? ("short_pause" as const) : ("next" as const),
+        remainingSec: Math.max(1, Math.ceil(remainingMs / 1000)),
       };
     }
 
@@ -311,6 +327,14 @@ export default function CampaignSummaryTab({ campaign }: Props) {
       remainingSec: Math.ceil(constants.avgDelayMs / 1000),
     };
   }, [showRateLimit, meta, campaign.provider_category, tick]);
+
+  const formatCountdown = (sec: number): string => {
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s === 0 ? `${m}min` : `${m}min ${s}s`;
+  };
+
 
   // ----------------- Detect stalled campaign + manual resume -----------------
   // Banner "pausado" SÓ aparece se realmente está sem progresso recente.
