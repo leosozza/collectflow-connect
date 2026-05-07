@@ -154,15 +154,8 @@ async function dispatchOneShot(supabase: any, campaign: any) {
     console.log(`[one-shot] audit_log insert failed (non-fatal): ${e?.message}`);
   }
 
-  // Invoke send-bulk-whatsapp (fire-and-forget)
-  fetch(`${SUPABASE_URL}/functions/v1/send-bulk-whatsapp`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify({ campaign_id: campaign.id }),
-  }).catch((e) => console.log(`[one-shot] invoke failed ${campaign.id}:`, e?.message));
+  // Invoke send-bulk-whatsapp (awaited HTTP)
+  await invokeBulkWorker(campaign.id, "one-shot");
 
   console.log(`[one-shot] dispatched ${campaign.id}`);
 }
