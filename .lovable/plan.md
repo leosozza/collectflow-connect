@@ -1,69 +1,90 @@
-## Objetivo
+## Diagnóstico — Campanha "Disparo carteira 09:34" parou sozinha
 
-Reduzir a lentidão na **atualização de parcelas** do MaxList sem alterar comportamento funcional, sem mexer em regras de negócio, e sem quebrar o que já entregamos hoje (remoção do "Outro", correção dos 80/50, etc.).
+### Estado atual
+- Campanha `a2ccfecb-…596a`, status `sending`, **sent_count=8 / failed=7 / total=70**, **55 destinatários `pending`**.
+- `processing_locked_at = NULL` → nenhum worker está segurando o lock.
+- `progress_metadata.last_chunk_at = 12:38:07Z` → último chunk há mais de 9 minutos. `timed_out=false` (worker morreu sem marcar timeout).
+- Falhas (7): todas `400 Bad Request "exists":false` da Evolution = números sem WhatsApp. Não é causa do travamento, são naturais.
+- 4 instâncias evolution conectadas, todas com `pending` distribuídos (~13–15 cada). Saúde das instâncias OK.
 
-## Princípios de Segurança (o que NÃO será tocado)
+### Causa-raiz identificada
 
-- **Regras de status, derivação de status (`derivedStatus`), `PROTECTED_FIELDS`, `SYNC_FIELDS`** — mantidas idênticas.
-- **Lógica de fallback por CPF + contrato + parcela** (`buildInstallmentMatchKey`, `ambiguousFallbackKeys`) — mantida idêntica.
-- **`tipo_divida_id` protegido**, prioridade de cheque devolvido, e mapeamento `paymentTypeToDividaMap` — mantidos idênticos.
-- **Consolidação de `client_profiles`** — mantida idêntica.
-- **`auto-status-sync`** — continua executando ao final quando `status_cobranca_id === "__auto__"`.
-- **Frontend**: nenhuma quebra nas telas atuais. `MaxListPage.tsx` continua chamando `maxlist-import` da mesma forma; novos parâmetros são **opcionais e retrocompatíveis**.
-- **Contrato de resposta** (`report` com `inserted`, `updated`, `updated_records`, etc.) — mantido idêntico para não quebrar `ImportResultDialog`.
-- **Banco de dados**: nenhuma migração, nenhum índice novo nesta fase (evita risco em produção).
+O **watchdog/dispatcher** do `dispatch-scheduled-campaigns` está re-invocando a campanha a cada minuto (logs: `[dispatcher] watchdog re-invoking a2ccfecb-... (pending=55, lock=null)`), mas **toda chamada para `send-bulk-whatsapp` está retornando HTTP 401** no gateway:
 
-## Otimizações (apenas o que é seguro)
+```
+POST | 401 | …/send-bulk-whatsapp execution_time_ms:160
+POST | 401 | …/send-bulk-whatsapp execution_time_ms:191
+POST | 401 | …/send-bulk-whatsapp execution_time_ms:200
+…  (loop a cada ~60s)
+```
 
-### 1. Aumentar tamanho do chunk de reconciliação (200 → 500)
+Os 401 retornam antes do boot da função (sem logs de execução em `send-bulk-whatsapp`), ou seja, **o gateway está bloqueando antes do handler rodar** — o código nunca chega a checar `isSystemCall`.
 
-**Arquivo**: `supabase/functions/maxlist-import/index.ts`, linha 450
-- `CHUNK_SIZE = 200` → `CHUNK_SIZE = 500`
-- **Por que é seguro**: o `.in("external_id", externalIds)` aceita 500 valores tranquilamente; o upsert também. Reduz round-trips pela metade.
+As três chamadas internas que disparam o worker são feitas via `fetch` direto:
 
-### 2. Paralelizar as duas SELECTs por chunk (existing + fallback)
+1. `dispatch-scheduled-campaigns` → linha 360, 463 (watchdog + recurring)
+2. `send-bulk-whatsapp` self-retrigger no timeout → linha 670
 
-Atualmente, dentro de cada chunk faz-se:
-1. SELECT por `external_id`
-2. SELECT por `cpf` (fallback) — só depois
+Todas enviam apenas:
+```ts
+headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE_KEY}` }
+```
 
-A consulta de fallback **não depende** da primeira além de saber quais CPFs olhar. Manter a ordem atual mas envolver o fallback num `Promise.all` quando possível **não traz ganho** porque depende do resultado anterior. **Decisão: NÃO paralelizar** — manter ordem atual para preservar a lógica de "missingRecords".
+Falta o header **`apikey`**. O gateway de Edge Functions do Supabase, mesmo com `verify_jwt = false`, exige `apikey` (ou que o Authorization seja um JWT de usuário válido). Como o service-role JWT está só no Authorization, sem `apikey`, a borda devolve 401 → o handler nunca roda → o lock não é adquirido → os 55 pendentes ficam parados para sempre.
 
-### 3. Mover `auto-status-sync` para background com `EdgeRuntime.waitUntil`
+A invocação inicial pelo client (`supabase.functions.invoke` na UI) funciona porque o SDK injeta `apikey` automaticamente. Por isso 8 mensagens saíram no início e depois travou.
 
-**Arquivo**: `supabase/functions/maxlist-import/index.ts`, linhas 738-753
-- Envolver o `fetch` em `EdgeRuntime.waitUntil(...)` para que a resposta retorne imediatamente, sem esperar o sync completar.
-- **Por que é seguro**: o sync já é fire-and-forget (sem await do resultado real); apenas evita bloquear a resposta HTTP. Continua executando.
+### Correção proposta
 
-### 4. Consolidar `client_update_logs` em uma única inserção por chunk
+**Edge functions** — adicionar header `apikey` em todas as 3 invocações fetch:
 
-**Arquivo**: `supabase/functions/maxlist-import/index.ts`, linhas 640-649
-- Atualmente já faz batch de 200, mas dentro de cada chunk de 200 raramente passa disso. Trocar o sub-loop por uma única `insert(updateLogs)` quando `updateLogs.length <= 1000`.
-- **Por que é seguro**: mantém exatamente os mesmos registros, só elimina o overhead de loop quando desnecessário.
+`supabase/functions/dispatch-scheduled-campaigns/index.ts` (linhas 358–365 e 461–469):
+```ts
+headers: {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+  apikey: SERVICE_ROLE_KEY,
+}
+```
 
-### 5. Mensagem de progresso mais realista no frontend
+`supabase/functions/send-bulk-whatsapp/index.ts` (linhas 670–678 — self-retrigger):
+```ts
+headers: {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${serviceKey}`,
+  apikey: serviceKey,
+}
+```
 
-**Arquivo**: `src/pages/MaxListPage.tsx`, linhas 874-876 e 954-956
-- Manter o `setInterval` de progresso visual (não mexer na lógica), apenas adicionar texto informativo "Processando lotes no servidor — pode levar alguns minutos para grandes volumes" abaixo da barra.
-- **Por que é seguro**: puramente visual.
+(Mesma correção também resolve o watchdog do `recurring`.)
 
-## Otimizações DESCARTADAS (risco alto)
+**Recuperação imediata da campanha travada**
 
-- ❌ **Passar `rawItems` do frontend** com `skip_fetch: true`: já existe no backend, mas exige mudança no frontend para serializar até ~50.000 registros num POST — risco de payload gigante, timeout do gateway, e mudanças no contrato. **Não fazer agora.**
-- ❌ **Aumentar chunk para 1000**: pode estourar limites do PostgREST em alguns cenários de upsert. 500 é o sweet spot conservador.
-- ❌ **Paralelizar chunks via `Promise.all`**: aumenta risco de deadlocks em upsert concorrente na mesma tabela `clients`. **Não fazer.**
-- ❌ **Remover logs**: necessários para auditoria.
+Após o deploy, basta uma query manual para destravar a campanha atual e o watchdog seguinte do dispatcher (em <1 min) re-invocará e processará os 55 restantes:
 
-## Validação pós-mudança
+```sql
+UPDATE whatsapp_campaigns
+SET processing_locked_at = NULL, processing_locked_by = NULL
+WHERE id = 'a2ccfecb-e3f3-44d0-9f0c-f804d19b596a';
 
-1. Rodar uma atualização pequena (até 500 registros) e conferir:
-   - `inserted`, `updated`, `unchanged` consistentes com execução anterior.
-   - `updated_records` retornado igual ao formato atual.
-   - `ImportResultDialog` abre normalmente.
-2. Rodar uma atualização maior (5.000+ registros) e medir `duration_ms` — esperado ~30-40% menor.
-3. Conferir que `auto-status-sync` é disparado (logs do Edge Function).
-4. Conferir que `client_update_logs` ainda recebe os registros de mudança.
+UPDATE whatsapp_campaign_recipients
+SET status = 'pending', claimed_at = NULL, claimed_by = NULL
+WHERE campaign_id = 'a2ccfecb-e3f3-44d0-9f0c-f804d19b596a'
+  AND status = 'processing';
+```
+(o lock já está null e não há `processing` no momento, mas o script é seguro/idempotente).
 
-## Resumo
+### Validação pós-deploy
 
-Apenas **4 mudanças cirúrgicas** (chunk size, waitUntil, log batch consolidado, texto de UI) que reduzem latência sem alterar nenhuma regra de negócio nem contrato com o frontend. Tudo o que entregamos hoje (Outro removido, correção 80/50) continua funcional.
+1. Abrir logs do `dispatch-scheduled-campaigns` no próximo minuto e confirmar mensagem `watchdog re-invoking …`.
+2. Abrir logs do `send-bulk-whatsapp` e ver `booted` + `[Anti-Ban] Instance …` + `[Campaign] Lock acquired`.
+3. `whatsapp_campaign_recipients` da campanha sair de `pending=55` para zero ao longo dos próximos minutos (4 instâncias × ~12 msgs).
+4. Status final da campanha vira `completed` ou `completed_with_errors`.
+
+### Por que isso só apareceu agora
+
+A correção mais recente trocou alguns invokers internos por `fetch` direto (em vez de `supabase.functions.invoke`) para ganhar fire-and-forget e `EdgeRuntime.waitUntil`. Sem o header `apikey`, qualquer campanha que dependesse do watchdog/self-retrigger (basicamente toda campanha grande que excede os 380 s do edge runtime) ficaria travada após o primeiro chunk. Esta é provavelmente a causa de "parou sozinha" relatado.
+
+### Riscos / efeitos colaterais
+
+Nenhum. Adicionar `apikey` não muda lógica de negócio nem de auth — o handler já segrega `isSystemCall` pelo Bearer service-role. É apenas o gateway que precisa do header extra.

@@ -27,7 +27,7 @@ export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultPro
   const loadConfig = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("tenant_integrations")
         .select("config")
         .eq("tenant_id", tenantId)
@@ -54,7 +54,7 @@ export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultPro
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("tenant_integrations")
         .upsert({
           tenant_id: tenantId,
