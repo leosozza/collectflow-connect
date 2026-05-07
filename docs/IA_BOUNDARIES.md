@@ -36,6 +36,7 @@ A matriz abaixo elimina esse vetor de conflito.
 3. **Após** o push do Antigravity, abra o Lovable e peça:
    *"Analise o que mudou e valide contra `docs/README.md` antes de qualquer nova feature."*
 4. Se ambos editarem o mesmo arquivo crítico (cabeçalho `⚠ ARQUIVO CRÍTICO`), o Lovable é a fonte da verdade.
+5. Quando uma prop for marcada como obrigatória num componente `⚠ ARQUIVO CRÍTICO` (ex.: `tenantId` em `DashboardMetaCard`), nenhuma IA pode removê-la do callsite sem registrar o motivo em `docs/README.md`.
 
 ## Arquivos com cabeçalho `⚠ ARQUIVO CRÍTICO`
 
