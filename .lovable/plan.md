@@ -1,75 +1,84 @@
-## Objetivo
+## Diagnóstico do estado atual
 
-Adicionar em **Gamificação → Gerenciar Metas** um seletor de **modo de meta** por tenant: **Global** (meta única do mês, sem credor) **ou** **Por Credor** (uma meta por credor, somadas para compor a meta do operador). Resolver o efeito colateral disto no Dashboard (bug dos R$ 255.000) sem violar as diretrizes de `docs/README.md`.
+Analisei o repositório após o push do Antigravity:
 
-## Comportamento atual (resumo)
+**Está consistente:**
+- `docs/README.md` (Manual de Governança) presente, com as 4 regras críticas (multi-tenant, vault, metas, financeiro).
+- `docs/rivo-vault/` com os 5 documentos restaurados (Diretrizes, Backend, Integrações, UI/UX, Checklist).
+- `src/components/dashboard/DashboardMetaCard.tsx` importa corretamente `fetchMyGoals`, `fetchGoals` e `fetchTenantGoalsMode` de `@/services/goalService`.
+- `src/services/goalService.ts` exporta as três funções + tipo `GoalsMode` e usa o modo (`global` / `per_credor` / `all`) para filtrar `credor_id IS NULL` ou `IS NOT NULL`.
+- O modo é lido via `fetchTenantGoalsMode(tenantId)` e propagado nas `queryKey`, então a troca em "Gerenciar Metas" invalida e recalcula o card do Dashboard.
 
-- A tela permite criar metas **globais** (`credor_id IS NULL`) **e** **por credor** ao mesmo tempo.
-- O Dashboard (`DashboardMetaCard`) soma **todas** as linhas de `operator_goals` do mês — somando global + per-credor → inflação (R$ 135k + R$ 120k = R$ 255k).
-- Não existe configuração de "modo" por tenant.
+**Conclusão:** o ajuste do Antigravity está alinhado com o que implementamos. Não há mais sobreposição no fluxo de Metas — o R$ 255.000 não deve voltar enquanto o tenant estiver em modo `global` (e mesmo em `per_credor`, agora cada lado soma só o que lhe pertence).
 
-## Comportamento proposto
+---
 
-### 1. Tela "Gerenciar Metas" (UI apenas)
+## Por que aconteceu a sobreposição (root cause)
 
-Adicionar no topo da aba um **toggle/segmented control** com 2 opções:
+Duas IAs editando os **mesmos arquivos** sem um contrato compartilhado:
 
-- **Global** — meta mensal única por operador (estado padrão).
-- **Por Credor** — uma meta por credor; a meta do operador é a **soma** dos credores ativos.
+1. **Antigravity** mexia em camadas de UI/serviço sem saber das regras do Lovable (multi-tenant, separação Carteira × Acordos, status hierárquico).
+2. **Lovable** corrigia, mas não havia documento "lei" no repositório — então a próxima edição do Antigravity reintroduzia o bug (ex.: somar global + per_credor).
+3. Resultado: regressões cíclicas (meta voltou a 255k, tenant `y.brasil` com valores errados, etc.).
 
-Regras visuais:
-- Quando **Global**: esconde o `Select` de credor; tabela mostra "Meta do Mês" (linha única `credor_id IS NULL`).
-- Quando **Por Credor**: aparece o `Select` de credor para criar/editar metas por credor; abaixo da tabela, uma linha de **subtotal** por operador mostrando "Total (soma dos credores): R$ X".
-- O toggle é persistido em `tenant_settings` (chave nova `goals_mode`: `"global" | "per_credor"`) — escrita simples por admin.
+O `docs/README.md` que o Antigravity criou agora resolve o **vetor de comunicação**, mas precisamos formalizar o protocolo de trabalho para não recair.
 
-### 2. Dashboard — corrigir o R$ 255.000
+---
 
-`DashboardMetaCard.tsx` passa a respeitar `goals_mode`:
+## Plano: Protocolo Anti-Sobreposição (sem mudar código)
 
-- Se `goals_mode = "global"` → soma apenas linhas com `credor_id IS NULL` (caso atual mais comum).
-- Se `goals_mode = "per_credor"` → soma apenas linhas com `credor_id IS NOT NULL`.
-- Nunca somar os dois grupos juntos (raiz do bug).
+### 1. Reforçar o Manual de Governança (`docs/README.md`)
+Adicionar 3 seções que faltam para fechar as brechas que já causaram regressões:
 
-`fetchGoals` ganha um parâmetro opcional `mode?: "global" | "per_credor" | "all"` — default `"all"` para não quebrar usos existentes; o Dashboard passa o modo correto.
+- **Separação de domínios**: `clients` (Carteira/dívida original) ≠ `agreements` (acordos comerciais). Nunca misturar nas queries.
+- **Status hierárquico CPF-cêntrico**: ordem `QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > QUEBRA > INADIMPLENTE > EM DIA` — uma única IA não pode reordenar.
+- **Modo de Metas (Global vs Per Credor)**: documentar que a fonte do modo é `tenants.settings.goals_mode` e que `DashboardMetaCard` **deve** filtrar por esse modo. Proibido somar os dois grupos.
 
-### 3. Multi-tenant (diretriz `docs/README.md` §1)
+### 2. Política de "quem edita o quê" (matriz de responsabilidade)
+Criar `docs/IA_BOUNDARIES.md` com a matriz:
 
-- Toda nova query inclui `.eq("tenant_id", tid)` (já é o padrão via `goalService`).
-- A leitura/escrita de `tenant_settings.goals_mode` também filtra por `tenant_id`.
+```text
+Camada                          | Lovable | Antigravity
+--------------------------------|---------|-------------
+src/services/*                  |   ✅    |   ⚠ leitura
+supabase/migrations             |   ✅    |   ❌
+supabase/functions/*            |   ✅    |   ⚠ leitura
+src/components/dashboard/*      |   ✅    |   ✅ (UI only)
+src/components/gamificacao/*    |   ✅    |   ✅ (UI only)
+docs/rivo-vault/*               |   ✅    |   ✅
+RLS / SQL policies              |   ✅    |   ❌
+```
 
-## Detalhes técnicos
+Regra de ouro: **lógica de negócio e schema = Lovable**. **Refino visual e docs = ambos**.
 
-**Arquivos alterados (frontend apenas, sem schema novo):**
-
-- `src/components/gamificacao/GoalsManagementTab.tsx`
-  - Novo `ToggleGroup` "Global | Por Credor" no topo.
-  - Hook `useTenantGoalsMode(tenantId)` para ler/gravar o modo (usa `tenant_settings` existente, chave `goals_mode`).
-  - Esconder/mostrar `Select` de credor conforme o modo.
-  - Forçar `credorFilter = "__global__"` quando modo = Global.
-  - Linha de subtotal por operador no modo "Por Credor".
-
-- `src/services/goalService.ts`
-  - `fetchGoals(year, month, credorId?, tenantId?, mode?)` — `mode` filtra `credor_id IS NULL` ou `IS NOT NULL`.
+### 3. Checklist obrigatório no topo de arquivos críticos
+Adicionar comentário-cabeçalho em 4 arquivos sensíveis (somente comentário, sem alterar código):
 
 - `src/components/dashboard/DashboardMetaCard.tsx`
-  - Lê `goals_mode` do tenant e passa para `fetchGoals`.
-  - Operador (`fetchMyGoals`) idem: filtra conforme o modo.
+- `src/services/goalService.ts`
+- `src/components/gamificacao/GoalsManagementTab.tsx`
+- `src/services/whatsappCampaignService.ts`
 
-**Persistência do modo:**
-- Usar `tenant_settings` (já existe) com chave nova `goals_mode`. **Não** cria coluna nova, **não** mexe em `operator_goals`. Sem migração de schema.
+Formato:
+```ts
+/**
+ * ⚠ ARQUIVO CRÍTICO — ler docs/README.md antes de editar.
+ * Regras: multi-tenant, modo de metas (global|per_credor), nunca somar os dois.
+ */
+```
 
-**Não alterado (para não quebrar nada):**
-- Estrutura de `operator_goals` (campo `credor_id` continua existindo).
-- `awardGoalIfReached`, `fetchMyGoalHistory` (continuam usando `credor_id IS NULL` — comportamento já compatível com modo Global; em Por Credor o histórico/premiação ficam para iteração futura, sinalizado em comentário).
+### 4. Procedimento de sincronização
+Quando você for usar o Antigravity:
+1. Sempre **publicar no Lovable antes** de pedir mudanças no Antigravity (estado limpo).
+2. Antes de fazer push do Antigravity, ele deve ler `docs/README.md` e `docs/IA_BOUNDARIES.md`.
+3. Após push, abrir o Lovable e pedir "analise o que mudou e valide contra docs/README.md" antes de qualquer nova feature.
 
-## Fora de escopo
+---
 
-- Criar nova tabela ou migração de dados existentes.
-- Mudar lógica de premiação por pontos no modo Por Credor (anotar TODO).
-- Mexer em metas de equipe/ranking.
+## Resposta direta às suas perguntas
 
-## Validação
+> **"Está ajustado agora?"**
+Sim. Importações, exports e a lógica de filtro por modo estão íntegras. A meta não vai voltar a 255k enquanto o modo do tenant continuar `global`.
 
-1. Tenant atual (modo Global): Dashboard volta a mostrar R$ 135.000 (não R$ 255.000).
-2. Trocar para "Por Credor" em Gerenciar Metas: tabela mostra subtotal somado; Dashboard passa a somar apenas as metas por credor.
-3. Voltar para Global: Dashboard volta ao estado anterior. Nenhum dado é apagado.
+> **"Como não acontecer de novo?"**
+Aprovar este plano para eu (a) ampliar o `docs/README.md` com as 3 seções faltantes, (b) criar o `docs/IA_BOUNDARIES.md` com a matriz, e (c) adicionar os cabeçalhos `⚠ ARQUIVO CRÍTICO` nos 4 arquivos sensíveis. Tudo só documentação/comentário — zero impacto em runtime.

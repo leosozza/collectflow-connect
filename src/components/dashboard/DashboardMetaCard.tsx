@@ -1,3 +1,8 @@
+/**
+ * ⚠ ARQUIVO CRÍTICO — ler `docs/README.md` antes de editar.
+ * Regras: multi-tenant (sempre `tenant_id`), modo de metas (`global` | `per_credor`).
+ * NUNCA somar os dois grupos de `operator_goals` (causa inflação da meta — bug 255k).
+ */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";

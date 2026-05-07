@@ -1,3 +1,8 @@
+/**
+ * ⚠ ARQUIVO CRÍTICO — ler `docs/README.md` antes de editar.
+ * Regras: multi-tenant, estados de campanha (draft/running/paused/cancelled/completed),
+ * limites Anti-Ban (8–15s por mensagem). Pausar/Retomar/Cancelar via `updateCampaignStatus`.
+ */
 import { supabase } from "@/integrations/supabase/client";
 import { Client } from "@/services/clientService";
 
