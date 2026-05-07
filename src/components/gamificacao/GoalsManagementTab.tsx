@@ -218,16 +218,23 @@ const GoalsManagementTab = () => {
           {operators.map((op: any) => {
             const current = goalMap.get(op.id) || 0;
             const currentPts = pointsMap.get(op.id) || 0;
+            const subtotal = subtotalMap.get(op.id) || 0;
+            const editDisabled = isPerCredor && credorFilter === "__global__";
             return (
               <TableRow key={op.id}>
                 <TableCell className="font-medium">{op.full_name || "Sem nome"}</TableCell>
                 <TableCell>{formatCurrency(current)}</TableCell>
+                {isPerCredor && (
+                  <TableCell className="font-semibold text-primary">{formatCurrency(subtotal)}</TableCell>
+                )}
                 <TableCell>{currentPts}</TableCell>
                 <TableCell className="text-right">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="gap-1.5"
+                    disabled={editDisabled}
+                    title={editDisabled ? "Selecione um credor para editar a meta" : undefined}
                     onClick={() =>
                       setEditing({
                         operatorId: op.id,
@@ -245,7 +252,7 @@ const GoalsManagementTab = () => {
           })}
           {operators.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
+              <TableCell colSpan={isPerCredor ? 5 : 4} className="text-center text-muted-foreground">
                 Nenhum operador encontrado.
               </TableCell>
             </TableRow>
