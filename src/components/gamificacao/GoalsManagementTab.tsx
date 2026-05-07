@@ -70,12 +70,51 @@ const GoalsManagementTab = () => {
     enabled: !!tenant?.id,
   });
 
-  const effectiveCredorId = credorFilter === "__global__" ? null : credorFilter;
-
-  const { data: goals = [] } = useQuery({
-    queryKey: ["goals", year, month, effectiveCredorId],
-    queryFn: () => fetchGoals(year, month, effectiveCredorId),
+  // Tenant goals mode (global vs per_credor)
+  const { data: goalsMode = "global" } = useQuery({
+    queryKey: ["tenant-goals-mode", tenant?.id],
+    queryFn: () => fetchTenantGoalsMode(tenant!.id),
+    enabled: !!tenant?.id,
   });
+
+  const isPerCredor = goalsMode === "per_credor";
+  const effectiveCredorId = isPerCredor
+    ? (credorFilter === "__global__" ? null : credorFilter)
+    : null;
+
+  const setModeMut = useMutation({
+    mutationFn: (mode: "global" | "per_credor") => setTenantGoalsMode(tenant!.id, mode),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tenant-goals-mode"] });
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["goals-all-credores"] });
+      qc.invalidateQueries({ queryKey: ["dash-meta-goals-all"] });
+      qc.invalidateQueries({ queryKey: ["dash-meta-my-goals"] });
+      toast.success("Modo de meta atualizado.");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  // Goals filtered by current credor (or global) — used to render the row meta
+  const { data: goals = [] } = useQuery({
+    queryKey: ["goals", year, month, effectiveCredorId, tenant?.id],
+    queryFn: () => fetchGoals(year, month, effectiveCredorId, tenant?.id),
+    enabled: !!tenant?.id,
+  });
+
+  // For per_credor mode: all goals (any credor) for subtotal per operator
+  const { data: allCredorGoals = [] } = useQuery({
+    queryKey: ["goals-all-credores", year, month, tenant?.id],
+    queryFn: () => fetchGoals(year, month, undefined, tenant?.id, "per_credor"),
+    enabled: !!tenant?.id && isPerCredor,
+  });
+
+  const subtotalMap = new Map<string, number>();
+  if (isPerCredor) {
+    for (const g of allCredorGoals) {
+      subtotalMap.set(g.operator_id, (subtotalMap.get(g.operator_id) || 0) + Number(g.target_amount || 0));
+    }
+  }
 
   const goalMap = new Map(goals.map((g) => [g.operator_id, g.target_amount]));
   const pointsMap = new Map(goals.map((g: any) => [g.operator_id, g.points_reward || 0]));
