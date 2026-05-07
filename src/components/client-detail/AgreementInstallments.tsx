@@ -199,7 +199,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const totalInstallments = installments.length;
   const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
-  let remainingPaid = totalPaidFromClients;
   const installmentsWithStatus = installments.map((inst) => {
     const isCancelled = !!cancelledMap[inst.customKey];
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -211,13 +210,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       return { ...inst, status: "cancelled", isOverdue: false, pendingManual: undefined, isCancelled: true };
     }
 
-    let isPaidManually = false;
-    if (remainingPaid >= instValue) {
-      isPaidManually = true;
-      remainingPaid -= instValue;
-    } else {
-      remainingPaid = 0;
-    }
     const matchesInst = (mp: any) =>
       (mp.installment_key && mp.installment_key === inst.customKey) ||
       (!mp.installment_key && mp.installment_number === inst.number);
@@ -226,8 +218,10 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       (mp: any) => matchesInst(mp) && mp.status === "pending_confirmation"
     );
 
-    const confirmedManualForThis = manualPayments
-      .filter((mp: any) => matchesInst(mp) && ["confirmed", "approved"].includes(mp.status))
+    const confirmedManualMatches = manualPayments.filter(
+      (mp: any) => matchesInst(mp) && ["confirmed", "approved"].includes(mp.status)
+    );
+    const confirmedManualForThis = confirmedManualMatches
       .reduce((s: number, mp: any) => s + Number(mp.amount_paid || 0), 0);
     const isPaidByManual = confirmedManualForThis >= instValue - 0.01;
 
@@ -237,27 +231,17 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         ? "pago"
         : isPaidByManual
           ? "pago"
-          : isPaidManually 
-            ? "pago" 
-            : isOverdue ? "vencido" : "pendente";
+          : isOverdue ? "vencido" : "pendente";
 
-    // FIFO date tracking
+    // Data de pagamento: SEMPRE da fonte canônica (cobrança ou baixa manual que casou).
+    // Sem inferência FIFO — se não há fonte específica, paidAt fica indefinido.
     let paidAt: string | undefined;
     if (status === "pago") {
-      paidAt = inst.cobranca?.data_pagamento;
-      if (!paidAt) {
-        let cumulative = 0;
-        for (let i = 0; i <= installments.indexOf(inst); i++) {
-          cumulative += Number(installments[i].value);
-        }
-        let currentPool = 0;
-        for (const record of allPaymentRecords) {
-          currentPool += record.amount;
-          if (currentPool >= cumulative - 0.01) {
-            paidAt = record.date;
-            break;
-          }
-        }
+      if (inst.cobranca?.data_pagamento) {
+        paidAt = inst.cobranca.data_pagamento;
+      } else if (confirmedManualMatches.length > 0) {
+        const mp = confirmedManualMatches[0];
+        paidAt = mp.payment_date || mp.confirmed_at || mp.created_at;
       }
     }
     return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
