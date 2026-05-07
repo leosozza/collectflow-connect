@@ -222,11 +222,37 @@ export default function CampaignManagementTab() {
     }
   };
 
+  const handlePauseSending = async (id: string) => {
+    try {
+      await pauseSendingCampaign(id);
+      toast.success("Disparo pausado. O worker será interrompido em alguns segundos.");
+      invalidateCampaigns();
+    } catch (e: any) {
+      toast.error("Falha ao pausar: " + (e.message || ""));
+    }
+  };
+
+  const handleResumeSending = async (id: string) => {
+    try {
+      await resumeSendingCampaign(id);
+      toast.success("Disparo retomado.");
+      invalidateCampaigns();
+    } catch (e: any) {
+      toast.error("Falha ao retomar: " + (e.message || ""));
+    }
+  };
+
   const confirmCancel = async () => {
     if (!cancelTarget) return;
     try {
-      await cancelScheduledCampaign(cancelTarget.id);
-      toast.success("Agendamento cancelado.");
+      const isInFlight = cancelTarget.status === "sending" ||
+        (cancelTarget.status === "paused" && cancelTarget.schedule_type !== "recurring");
+      if (isInFlight) {
+        await cancelSendingCampaign(cancelTarget.id);
+      } else {
+        await cancelScheduledCampaign(cancelTarget.id);
+      }
+      toast.success("Campanha cancelada.");
       setCancelTarget(null);
       invalidateCampaigns();
     } catch (e: any) {
