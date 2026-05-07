@@ -358,6 +358,7 @@ async function dispatchRecurring(supabase: any, mother: any) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      apikey: SERVICE_ROLE_KEY,
     },
     body: JSON.stringify({ campaign_id: child.id }),
   }).catch((e) => console.log(`[recurring] invoke failed ${child.id}:`, e?.message));
