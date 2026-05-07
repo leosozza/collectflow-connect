@@ -84,7 +84,6 @@ export const setTenantGoalsMode = async (tenantId: string, mode: "global" | "per
   if (error) throw error;
 };
 
-
 export const fetchMyGoals = async (year: number, month: number, tenantId?: string, mode: GoalsMode = "all"): Promise<OperatorGoal[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
