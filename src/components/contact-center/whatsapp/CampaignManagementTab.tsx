@@ -16,6 +16,9 @@ import {
   fetchCampaignRuns,
   computeNextRunClient,
   RecurrenceRuleFE,
+  pauseSendingCampaign,
+  resumeSendingCampaign,
+  cancelSendingCampaign,
 } from "@/services/whatsappCampaignService";
 import RecurrenceRuleEditor, {
   describeRecurrenceRule,
