@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchRanking, RankingEntry } from "@/services/gamificationService";
+import { fetchRanking, RankingEntry, RankingMetric } from "@/services/gamificationService";
+import { fetchRankingConfigs } from "@/services/rankingConfigService";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
