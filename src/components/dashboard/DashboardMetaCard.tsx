@@ -13,7 +13,6 @@ interface DashboardMetaCardProps {
   monthLabel: string;
   selectedOperatorUserId: string | null; // user_id from global filter
   received: number; // total_recebido from dashboard RPC
-  tenantId: string | null;
 }
 
 const DashboardMetaCard = ({
@@ -22,22 +21,21 @@ const DashboardMetaCard = ({
   monthLabel,
   selectedOperatorUserId,
   received,
-  tenantId,
 }: DashboardMetaCardProps) => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
 
-  // Operator: all goals for the period (summed)
-  const { data: myGoals = [] } = useQuery({
-    queryKey: ["dash-meta-my-goals", year, month, profile?.id, tenantId],
-    queryFn: () => fetchMyGoals(year, month, tenantId || undefined),
+  // Operator: own goal
+  const { data: myGoal } = useQuery({
+    queryKey: ["dash-meta-my-goal", year, month, profile?.id],
+    queryFn: () => fetchMyGoal(year, month),
     enabled: !isTenantAdmin && !!profile?.id,
   });
 
-  // Admin: all goals for the period (unfiltered by creditor to get everything)
+  // Admin: all goals for the period
   const { data: allGoals = [] } = useQuery({
-    queryKey: ["dash-meta-goals-all", year, month, tenantId],
-    queryFn: () => fetchGoals(year, month, undefined, tenantId || undefined), // undefined brings all creditors + global
+    queryKey: ["dash-meta-goals", year, month],
+    queryFn: () => fetchGoals(year, month, null),
     enabled: isTenantAdmin,
   });
 
@@ -57,23 +55,21 @@ const DashboardMetaCard = ({
 
   const { goal, title } = useMemo(() => {
     if (!isTenantAdmin) {
-      const total = myGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
       return {
-        goal: total,
+        goal: Number(myGoal?.target_amount || 0),
         title: "Meta do Mês",
       };
     }
     if (selectedOperatorUserId && selectedProfile?.id) {
-      const opGoals = allGoals.filter((g) => g.operator_id === selectedProfile.id);
-      const total = opGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
+      const opGoal = allGoals.find((g) => g.operator_id === selectedProfile.id);
       return {
-        goal: total,
+        goal: Number(opGoal?.target_amount || 0),
         title: "Meta do Mês",
       };
     }
     const total = allGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
     return { goal: total, title: "Meta do Mês" };
-  }, [isTenantAdmin, myGoals, allGoals, selectedOperatorUserId, selectedProfile]);
+  }, [isTenantAdmin, myGoal, allGoals, selectedOperatorUserId, selectedProfile]);
 
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
 
@@ -109,5 +105,7 @@ const DashboardMetaCard = ({
     </div>
   );
 };
+
+export default DashboardMetaCard;
 
 export default DashboardMetaCard;

@@ -294,7 +294,6 @@ const DashboardPage = () => {
                 selectedOperators.length === 1 ? selectedOperators[0] : null
               }
               received={stats?.total_recebido ?? 0}
-              tenantId={effectiveTenantId}
             />
           </section>
         )}
