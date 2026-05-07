@@ -500,45 +500,72 @@ export default function CampaignSummaryTab({ campaign }: Props) {
       )}
 
       {/* W2.3 — Painel de rate-limit ao vivo */}
-      {showRateLimit && rateInfo && !isStalled && (
-        <Card
-          className={
-            rateInfo.kind === "resting"
-              ? "border-orange-500/40 bg-orange-500/5"
-              : "border-green-500/40 bg-green-500/5"
-          }
-        >
-          <CardContent className="p-3 flex items-center gap-3">
-            {rateInfo.kind === "resting" ? (
-              <Pause className="w-5 h-5 text-orange-600 shrink-0" />
-            ) : (
-              <Clock className="w-5 h-5 text-green-600 shrink-0" />
-            )}
-            <div className="flex-1">
-              <p className="text-sm font-medium">
-                {rateInfo.kind === "resting"
-                  ? `Pausa anti-ban ativa${rateInfo.instanceName ? ` em ${rateInfo.instanceName}` : ""}`
-                  : "Próximo envio em breve"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {rateInfo.kind === "resting"
-                  ? `Retomando em ${rateInfo.remainingSec}s — protege a instância contra bloqueio`
-                  : `~${rateInfo.remainingSec}s para o próximo disparo`}
-              </p>
-            </div>
-            <Badge
-              variant="outline"
-              className={
-                rateInfo.kind === "resting"
-                  ? "border-orange-500/50 text-orange-700"
-                  : "border-green-500/50 text-green-700"
-              }
-            >
-              {rateInfo.kind === "resting" ? "Em pausa" : "Em ritmo"}
-            </Badge>
-          </CardContent>
-        </Card>
-      )}
+      {showRateLimit && rateInfo && !isStalled && (() => {
+        const variants = {
+          next: {
+            cardCls: "border-green-500/40 bg-green-500/5",
+            iconCls: "text-green-600",
+            badgeCls: "border-green-500/50 text-green-700",
+            Icon: Clock,
+            badge: "Em ritmo",
+            title: `Próximo disparo em ${formatCountdown(rateInfo.remainingSec)}`,
+            subtitle: "Ritmo normal de envio",
+          },
+          short_pause: {
+            cardCls: "border-amber-400/40 bg-amber-400/5",
+            iconCls: "text-amber-600",
+            badgeCls: "border-amber-500/50 text-amber-700",
+            Icon: Timer,
+            badge: "Pausa curta",
+            title: `Pausa curta anti-ban — ${formatCountdown(rateInfo.remainingSec)}`,
+            subtitle: "Aguardando intervalo entre mensagens para proteger a instância",
+          },
+          resting: {
+            cardCls: "border-orange-500/40 bg-orange-500/5",
+            iconCls: "text-orange-600",
+            badgeCls: "border-orange-500/50 text-orange-700",
+            Icon: Pause,
+            badge: "Em pausa",
+            title: `Pausa anti-ban ativa${(rateInfo as any).instanceName ? ` em ${(rateInfo as any).instanceName}` : ""}`,
+            subtitle: `Retomando em ${formatCountdown(rateInfo.remainingSec)} — protege a instância contra bloqueio`,
+          },
+          dispatching: {
+            cardCls: "border-green-500/40 bg-green-500/5",
+            iconCls: "text-green-600 animate-spin",
+            badgeCls: "border-green-500/50 text-green-700",
+            Icon: Loader2,
+            badge: "Disparando",
+            title: "Disparando agora...",
+            subtitle: "Enviando próximo lote de mensagens",
+          },
+          waiting_worker: {
+            cardCls: "border-amber-500/40 bg-amber-500/5",
+            iconCls: "text-amber-600",
+            badgeCls: "border-amber-500/50 text-amber-700",
+            Icon: AlertTriangle,
+            badge: "Aguardando",
+            title: "Aguardando retomada do worker",
+            subtitle: `Sem novo envio há ${formatCountdown((rateInfo as any).waitingSec || 0)}. O watchdog retoma em até 1 minuto.`,
+          },
+        } as const;
+        const v = variants[rateInfo.kind];
+        const Icon = v.Icon;
+        return (
+          <Card className={v.cardCls}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <Icon className={`w-5 h-5 shrink-0 ${v.iconCls}`} />
+              <div className="flex-1">
+                <p className="text-sm font-medium">{v.title}</p>
+                <p className="text-xs text-muted-foreground">{v.subtitle}</p>
+              </div>
+              <Badge variant="outline" className={v.badgeCls}>
+                {v.badge}
+              </Badge>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
