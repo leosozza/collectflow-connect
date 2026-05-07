@@ -371,28 +371,91 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     }
   };
 
-  const handleDownloadReceipt = (inst: any) => {
-    const receiptContent = `
-RECIBO DE PAGAMENTO
-====================
-Cliente: ${agreement.client_name}
-CPF: ${cpf}
-Credor: ${agreement.credor}
-Parcela: ${inst.isEntrada ? "Entrada" : `${inst.displayNumber}/${totalInstallments}`}
-Valor: ${formatCurrency(Number(inst.value))}
-Vencimento: ${formatDate(inst.dueDate.toISOString().split("T")[0])}
-Status: Pago
-Data: ${new Date().toLocaleDateString("pt-BR")}
-====================
-    `.trim();
+  const handleDownloadReceipt = async (inst: any) => {
+    try {
+      // Resolve template: credor → tenant → default
+      let templateContent: string | null = null;
+      let templateSource: "credor" | "tenant" | "default" = "default";
+      if (credorReceipt?.template_recibo?.trim()) {
+        templateContent = credorReceipt.template_recibo;
+        templateSource = "credor";
+      } else if (tenantReceiptTemplate?.trim()) {
+        templateContent = tenantReceiptTemplate;
+        templateSource = "tenant";
+      } else if (TEMPLATE_DEFAULTS["template_recibo"]) {
+        templateContent = TEMPLATE_DEFAULTS["template_recibo"];
+        templateSource = "default";
+      }
+      if (!templateContent) {
+        toast({ title: "Modelo de recibo não configurado", variant: "destructive" });
+        return;
+      }
 
-    const blob = new Blob([receiptContent], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `recibo_parcela_${inst.displayNumber}_${cpf}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+      // Find payment date from confirmed manual payment for this installment
+      const confirmed = manualPayments.find(
+        (mp: any) =>
+          ((mp.installment_key && mp.installment_key === inst.customKey) ||
+            (!mp.installment_key && mp.installment_number === inst.number)) &&
+          mp.status === "confirmed"
+      );
+      const paymentDate = confirmed?.payment_date
+        ? formatDate(confirmed.payment_date)
+        : new Date().toLocaleDateString("pt-BR");
+
+      const installmentLabel = inst.isEntrada
+        ? "Entrada"
+        : `${inst.displayNumber}/${totalInstallments}`;
+
+      const vars: Record<string, string> = {
+        "{nome_devedor}": agreement.client_name || "",
+        "{cpf_devedor}": formatCPF(cpf),
+        "{credor}": agreement.credor || "",
+        "{numero_parcela}": String(inst.displayNumber ?? ""),
+        "{total_parcelas}": String(totalInstallments),
+        "{parcela}": installmentLabel,
+        "{valor_parcela}": formatCurrency(Number(inst.value)),
+        "{valor_pago}": formatCurrency(Number(inst.value)),
+        "{data_vencimento}": formatDate(inst.dueDate.toISOString().split("T")[0]),
+        "{data_pagamento}": paymentDate,
+        "{data_atual}": new Date().toLocaleDateString("pt-BR"),
+      };
+
+      const rendered = renderDocument(templateContent, vars, templateSource);
+      const wrappedHtml = wrapDocumentInA4Page({
+        bodyHtml: rendered.html,
+        title: "Recibo de Pagamento",
+        credor: credorReceipt,
+      });
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const safeName = (agreement.client_name || "devedor").replace(/\s+/g, "_");
+      const filename = `recibo_parcela_${inst.displayNumber}_${safeName}_${dateStr}.pdf`;
+
+      await downloadPdf(wrappedHtml, filename);
+
+      // Register event (best effort)
+      if (tenantId) {
+        try {
+          await supabase.from("client_events").insert({
+            tenant_id: tenantId,
+            client_cpf: cpf,
+            event_type: "document_generated",
+            event_source: "system",
+            event_value: "Recibo de Pagamento",
+            metadata: {
+              document_type: "recibo",
+              template_source: templateSource,
+              installment: installmentLabel,
+              agreement_id: agreementId,
+            },
+          });
+        } catch (err) {
+          console.error("Erro ao registrar evento de recibo:", err);
+        }
+      }
+    } catch (err: any) {
+      toast({ title: "Erro ao gerar recibo", description: err.message, variant: "destructive" });
+    }
   };
 
   const handleCopy = (text: string, label: string) => {
