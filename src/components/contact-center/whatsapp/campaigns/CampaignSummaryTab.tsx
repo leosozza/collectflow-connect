@@ -34,6 +34,8 @@ import {
   ServerCrash,
   HelpCircle,
   RotateCcw,
+  Loader2,
+  Timer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
