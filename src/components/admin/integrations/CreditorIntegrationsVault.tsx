@@ -56,7 +56,7 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
   const handleSave = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("tenant_integrations")
         .upsert({
           tenant_id: tenantId,
