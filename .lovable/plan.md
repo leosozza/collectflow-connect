@@ -1,84 +1,42 @@
-## Diagnóstico do estado atual
+## Validação contra `docs/README.md` e `docs/IA_BOUNDARIES.md`
 
-Analisei o repositório após o push do Antigravity:
+### ✅ O que está conforme
 
-**Está consistente:**
-- `docs/README.md` (Manual de Governança) presente, com as 4 regras críticas (multi-tenant, vault, metas, financeiro).
-- `docs/rivo-vault/` com os 5 documentos restaurados (Diretrizes, Backend, Integrações, UI/UX, Checklist).
-- `src/components/dashboard/DashboardMetaCard.tsx` importa corretamente `fetchMyGoals`, `fetchGoals` e `fetchTenantGoalsMode` de `@/services/goalService`.
-- `src/services/goalService.ts` exporta as três funções + tipo `GoalsMode` e usa o modo (`global` / `per_credor` / `all`) para filtrar `credor_id IS NULL` ou `IS NOT NULL`.
-- O modo é lido via `fetchTenantGoalsMode(tenantId)` e propagado nas `queryKey`, então a troca em "Gerenciar Metas" invalida e recalcula o card do Dashboard.
+1. **`src/services/goalService.ts`** — cabeçalho `⚠ ARQUIVO CRÍTICO` presente. `fetchGoals` e `fetchMyGoals` aplicam corretamente `mode === "global" → is("credor_id", null)` e `mode === "per_credor" → not("credor_id", "is", null)`. `fetchTenantGoalsMode` lê `tenants.settings.goals_mode` com default seguro `"global"`. Multi-tenant respeitado em todas as queries (`.eq("tenant_id", tid)`).
 
-**Conclusão:** o ajuste do Antigravity está alinhado com o que implementamos. Não há mais sobreposição no fluxo de Metas — o R$ 255.000 não deve voltar enquanto o tenant estiver em modo `global` (e mesmo em `per_credor`, agora cada lado soma só o que lhe pertence).
+2. **`src/components/gamificacao/GoalsManagementTab.tsx`** — toggle Global × Per Credor persiste via `setTenantGoalsMode` e invalida as queryKeys exigidas pela Regra 7 (`tenant-goals-mode`, `goals`, `goals-all-credores`, `dash-meta-goals-all`, `dash-meta-my-goals`). Coluna "Total (todos credores)" calculada via `subtotalMap` apenas em modo per_credor — não há soma cruzada com global.
 
----
+3. **`docs/README.md`** — Regras 1–8 todas presentes, incluindo a Regra 7 (Modo de Metas) que documenta o bug dos R$ 255.000 e proíbe somar os dois grupos.
 
-## Por que aconteceu a sobreposição (root cause)
+4. **`docs/IA_BOUNDARIES.md`** — matriz de responsabilidade publicada, lista de arquivos críticos correta.
 
-Duas IAs editando os **mesmos arquivos** sem um contrato compartilhado:
+### ⚠ Inconsistência detectada (única)
 
-1. **Antigravity** mexia em camadas de UI/serviço sem saber das regras do Lovable (multi-tenant, separação Carteira × Acordos, status hierárquico).
-2. **Lovable** corrigia, mas não havia documento "lei" no repositório — então a próxima edição do Antigravity reintroduzia o bug (ex.: somar global + per_credor).
-3. Resultado: regressões cíclicas (meta voltou a 255k, tenant `y.brasil` com valores errados, etc.).
+**`src/pages/DashboardPage.tsx` não passa a prop `tenantId` para `<DashboardMetaCard />`.**
 
-O `docs/README.md` que o Antigravity criou agora resolve o **vetor de comunicação**, mas precisamos formalizar o protocolo de trabalho para não recair.
+- `DashboardMetaCard` declara `tenantId: string | null` como **obrigatório** na interface e usa essa prop para:
+  - habilitar a query `tenant-goals-mode` (`enabled: !!tenantId`),
+  - passar para `fetchMyGoals` / `fetchGoals` (multi-tenant — Regra 1).
+- Sem essa prop, o card cai no fallback `mode = "global"` por padrão e o `fetchGoals`/`fetchMyGoals` resolve o tenant via `getMyTenantId()` interno. **Funciona por sorte**, mas viola o contrato (TypeScript deveria estar reclamando — provavelmente está, ou a prop foi removida indevidamente em algum merge).
+- Risco: se um admin estiver em modo de suporte (impersonando outro tenant via `useEffectiveTenantId`), o card vai mostrar a meta do **tenant do próprio usuário**, não do tenant impersonado → regressão silenciosa.
 
----
+### Correção proposta (mínima, 1 linha)
 
-## Plano: Protocolo Anti-Sobreposição (sem mudar código)
+Em `src/pages/DashboardPage.tsx`, no JSX do `<DashboardMetaCard ... />`, adicionar:
 
-### 1. Reforçar o Manual de Governança (`docs/README.md`)
-Adicionar 3 seções que faltam para fechar as brechas que já causaram regressões:
-
-- **Separação de domínios**: `clients` (Carteira/dívida original) ≠ `agreements` (acordos comerciais). Nunca misturar nas queries.
-- **Status hierárquico CPF-cêntrico**: ordem `QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > QUEBRA > INADIMPLENTE > EM DIA` — uma única IA não pode reordenar.
-- **Modo de Metas (Global vs Per Credor)**: documentar que a fonte do modo é `tenants.settings.goals_mode` e que `DashboardMetaCard` **deve** filtrar por esse modo. Proibido somar os dois grupos.
-
-### 2. Política de "quem edita o quê" (matriz de responsabilidade)
-Criar `docs/IA_BOUNDARIES.md` com a matriz:
-
-```text
-Camada                          | Lovable | Antigravity
---------------------------------|---------|-------------
-src/services/*                  |   ✅    |   ⚠ leitura
-supabase/migrations             |   ✅    |   ❌
-supabase/functions/*            |   ✅    |   ⚠ leitura
-src/components/dashboard/*      |   ✅    |   ✅ (UI only)
-src/components/gamificacao/*    |   ✅    |   ✅ (UI only)
-docs/rivo-vault/*               |   ✅    |   ✅
-RLS / SQL policies              |   ✅    |   ❌
+```tsx
+tenantId={effectiveTenantId}
 ```
 
-Regra de ouro: **lógica de negócio e schema = Lovable**. **Refino visual e docs = ambos**.
+Nada mais muda. Sem schema, sem RLS, sem lógica nova — só restaurar o contrato da prop que estava no design original.
 
-### 3. Checklist obrigatório no topo de arquivos críticos
-Adicionar comentário-cabeçalho em 4 arquivos sensíveis (somente comentário, sem alterar código):
+### Recomendação de protocolo (não-código)
 
-- `src/components/dashboard/DashboardMetaCard.tsx`
-- `src/services/goalService.ts`
-- `src/components/gamificacao/GoalsManagementTab.tsx`
-- `src/services/whatsappCampaignService.ts`
+Para evitar que isso se repita, sugiro acrescentar ao `docs/IA_BOUNDARIES.md` uma linha curta na seção "Procedimento de sincronização":
 
-Formato:
-```ts
-/**
- * ⚠ ARQUIVO CRÍTICO — ler docs/README.md antes de editar.
- * Regras: multi-tenant, modo de metas (global|per_credor), nunca somar os dois.
- */
-```
+> 5. Quando uma prop for marcada `⚠ ARQUIVO CRÍTICO` como obrigatória (ex.: `tenantId`), nenhuma IA pode removê-la do callsite sem registrar em `docs/README.md` o motivo.
 
-### 4. Procedimento de sincronização
-Quando você for usar o Antigravity:
-1. Sempre **publicar no Lovable antes** de pedir mudanças no Antigravity (estado limpo).
-2. Antes de fazer push do Antigravity, ele deve ler `docs/README.md` e `docs/IA_BOUNDARIES.md`.
-3. Após push, abrir o Lovable e pedir "analise o que mudou e valide contra docs/README.md" antes de qualquer nova feature.
+### Resposta direta
 
----
-
-## Resposta direta às suas perguntas
-
-> **"Está ajustado agora?"**
-Sim. Importações, exports e a lógica de filtro por modo estão íntegras. A meta não vai voltar a 255k enquanto o modo do tenant continuar `global`.
-
-> **"Como não acontecer de novo?"**
-Aprovar este plano para eu (a) ampliar o `docs/README.md` com as 3 seções faltantes, (b) criar o `docs/IA_BOUNDARIES.md` com a matriz, e (c) adicionar os cabeçalhos `⚠ ARQUIVO CRÍTICO` nos 4 arquivos sensíveis. Tudo só documentação/comentário — zero impacto em runtime.
+- **Tudo o que mudou nas Metas (modo Global × Per Credor) está conforme o protocolo**, exceto o callsite em `DashboardPage.tsx` que esqueceu de passar `tenantId`.
+- Aprove para eu aplicar a correção de 1 linha + a nota de protocolo. Sem qualquer outra alteração.
