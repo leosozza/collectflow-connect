@@ -1,35 +1,53 @@
-## Correção: SSOT em AgreementInstallments.tsx
+# Liberar Financeiro para operadores (escopo: apenas próprios acordos)
 
-Eliminar a lógica FIFO concorrente que está marcando parcelas como pagas sem que tenha havido pagamento real para aquela chave.
+## Diagnóstico
 
-### Arquivo único
-`src/components/client-detail/AgreementInstallments.tsx`
+O operador Gustavo não vê **Financeiro → Acordos em Atraso** porque, em `src/hooks/usePermissions.ts`, o papel `operador` tem `financeiro: []` (nenhuma permissão). Como o menu/rota usa `canViewFinanceiro = hasAny("financeiro")`, o módulo inteiro fica oculto.
 
-### Mudanças
+Boa notícia: o **scoping por operador já está implementado em todo lugar** que importa, e respeita `canViewAllFinanceiro`:
 
-1. **Remover** os memos `allPaymentRecords` e `totalPaidFromClients` (linhas ~128‑143). Ficam órfãos.
+| Tela | Comportamento sem `view_all` |
+|---|---|
+| `AcordosPage` (Aguardando Liberação, Em Atraso, etc.) | Já força `created_by = user.id` quando `!isAdmin` (linhas 70‑77). Operador só vê acordos criados por ele. |
+| `BaixasRealizadasPage` | Já passa `_operator_id: lockedOperatorId` quando `!canViewAll` (linhas 80, 105). |
+| `ConfirmacaoPagamentoPage` | Continua exigindo `canApproveAcordos` — operador **não** aprova pagamentos (correto, evita auto‑aprovação). |
 
-2. **Remover** `let remainingPaid = totalPaidFromClients;` e o bloco `if (remainingPaid >= instValue) { isPaidManually = true; ... } else { remainingPaid = 0; }` (linhas 219, 232‑237).
+Ou seja, **basta conceder `view` (sem `view_all`)** ao papel operador. O escopo "apenas próprios" sai de graça.
 
-3. **Remover** `isPaidManually` da expressão de status (linhas 257‑258). Nova cadeia:
-   ```
-   pending_confirmation → cobranca.status === "pago" → isPaidByManual → isOverdue ? "vencido" : "pendente"
-   ```
+## Mudança
 
-4. **Substituir** o cálculo FIFO de `paidAt` (linhas 262‑278) por:
-   - `inst.cobranca?.data_pagamento`, ou
-   - `payment_date` / `confirmed_at` / `created_at` do `manual_payment` confirmado que casou com a parcela (mesmo predicado `matchesInst`).
-   - Sem fonte → `paidAt` indefinido (UI mostra "—" em vez de inventar data).
+Arquivo único: `src/hooks/usePermissions.ts`
 
-### Não tocar
-- `buildInstallmentSchedule` / `classifyInstallment` (já estritos)
-- RPCs, `manual_payments`, `negociarie_cobrancas`
-- Geração de boletos
-- Edição de data/valor, cancelamento, reativação
-- Outras telas (Acordos, Financeiro, Portal já usam SSOT canônica)
+No bloco `ROLE_DEFAULTS.operador`, trocar:
+```ts
+financeiro: [],
+```
+por:
+```ts
+financeiro: ["view"],
+```
 
-### Resultado esperado para o Renato
-- Entrada: Pago 07/04 (cobrança `:0`)
-- 2/6: **Em Aberto** (não há cobrança nem baixa manual com chave `:1`)
-- 3/6: Pago 07/05 (cobrança `:2`)
-- Progresso: 2/6 (refletindo a realidade)
+Nada mais. Sem `view_all` (não vê dos outros) e sem `manage`. Sem mexer em RLS, RPCs, ou em outras telas.
+
+## Efeito imediato
+
+- Operadores passam a ver o item **Financeiro** no menu.
+- Em **Aguardando Liberação** e **Acordos em Atraso**: enxergam apenas os acordos onde `created_by = seu user_id`.
+- Em **Baixas Realizadas**: a RPC `get_baixas_realizadas` já recebe `_operator_id` travado no próprio user → só baixas dos acordos dele.
+- **Confirmação de Pagamento**: continua oculto para operador (precisa `approve` em `acordos`, que ele não tem).
+- Admins/gerentes/supervisor: sem mudança.
+
+## Fora de escopo
+
+- Não criar novas RPCs, RLS ou fontes de verdade.
+- Não alterar UI das telas Financeiro.
+- Não mudar `view_all` de ninguém.
+- Não mexer em overrides individuais de outros usuários.
+
+## Validação após apply
+
+1. Logar como operador (Gustavo) → menu **Financeiro** aparece.
+2. Abrir `/financeiro/aguardando-liberacao` → lista só acordos criados por ele.
+3. Abrir `/financeiro/baixas` → só baixas de acordos dele; banner "Visualizando suas próprias baixas".
+4. Tentar `/financeiro/confirmacao-pagamento` → redireciona para `/acordos` (esperado).
+5. Logar como admin → continua vendo tudo, dropdown de operador funcional.
