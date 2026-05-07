@@ -65,6 +65,7 @@ export const fetchMyGoal = async (year: number, month: number): Promise<Operator
     .eq("operator_id", profile.id)
     .eq("year", year)
     .eq("month", month)
+    .is("credor_id", null)
     .maybeSingle();
   if (error) throw error;
   return data as OperatorGoal | null;

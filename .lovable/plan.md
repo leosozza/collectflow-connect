@@ -1,73 +1,73 @@
-## Causa raiz
+## Objetivo
 
-Race condition em `src/hooks/useModules.ts` que faz "Contact Center" e "Gamificação" sumirem do menu no primeiro carregamento e voltarem após reabrir.
+Corrigir a aba **Metas** na Gamificação (operador e admin) e garantir exibição correta no Dashboard.
 
-### O que está acontecendo
+---
 
-Em `AppLayout.tsx`, cada item do menu é filtrado por:
-```ts
-permissions.canViewGamificacao && isModuleEnabled("gamificacao")
-permissions.canViewContactCenter && (contactCenterEnabled || ...)
-```
+## 1. Bug: operador vê "Nenhuma meta definida para este mês"
 
-Em `useModules.ts`:
-```ts
-const { data: enabledSlugs = [], isLoading } = useQuery({
-  queryKey: ["enabled-modules", tenant?.id],
-  queryFn: ...,
-  enabled: !!tenant?.id && !isSuperAdmin,   // ⚠️
-});
+**Causa**: `fetchMyGoal` em `src/services/goalService.ts` não filtra `credor_id`. Quando o admin cria meta global (`credor_id = null`) **e** existe qualquer meta por credor para o mesmo operador/mês, `.maybeSingle()` retorna `null` (múltiplas linhas) → operador vê "sem meta".
 
-const isModuleEnabled = (slug) => {
-  if (isSuperAdmin) return true;
-  if (isLoading) return true;            // proteção contra "flash sem menu"
-  return enabledSlugs.includes(slug);
-};
-```
+**Fix**: adicionar `.is("credor_id", null)` em `fetchMyGoal` (a meta exibida ao operador é sempre a global, padrão já usado em `awardGoalIfReached`).
 
-O problema: quando `enabled = false` (tenant ainda não carregou), o React Query coloca a query em estado **`idle`**, não `loading`. Resultado: `isLoading === false` e `enabledSlugs === []`. A função então cai direto em `enabledSlugs.includes(slug) === false` → **todos os itens condicionados a `isModuleEnabled` somem do menu**.
+---
 
-Por que só "Contact Center" e "Gamificação" somem? Porque os outros itens ("Dashboard", "Carteira", "Financeiro", "Automação", "Cadastros") são módulos absorvidos pelo CRM (`CRM_ABSORBED_SLUGS`) ou nem são checados via `isModuleEnabled` — então passam mesmo com `enabledSlugs = []`. "Gamificação" e "Contact Center" são os únicos que dependem do slug específico estar presente.
+## 2. Aba Metas — visão do OPERADOR
 
-Quando você sai e entra de novo, o React Query rehidrata do cache (chave `["enabled-modules", tenant.id]`), os slugs já vêm prontos no primeiro render → menu completo.
+Hoje mostra apenas o gauge do mês atual (ou vazio).
 
-## Correção
+**Novo layout** (mantendo padrão "em linha" da imagem anexa):
 
-Em `src/hooks/useModules.ts`, alterar o guard para também tratar "tenant ainda não disponível" como loading:
+- **Topo**: card com a **meta do mês atual** (gauge + valores recebido/meta/%).
+- **Abaixo**: tabela "Histórico de Metas" com meses anteriores (últimos 6 meses) em linhas:
+  - Colunas: `Mês`, `Meta`, `Recebido`, `Progresso (%)`, `Status` (Atingida / Não atingida).
+  - Dados via `operator_goals` (do operador, `credor_id IS NULL`) + `operator_points` do mesmo período.
+- Se não houver meta no mês atual: manter mensagem, mas ainda exibir histórico abaixo (se existir).
 
-```ts
-const isModuleEnabled = useCallback(
-  (slug: string): boolean => {
-    if (isSuperAdmin) return true;
-    // Enquanto tenant não carregou OU query ainda está rodando,
-    // considera tudo habilitado para evitar sumir item do menu.
-    if (!tenant?.id || isLoading) return true;
+---
 
-    if (CRM_ABSORBED_SLUGS.includes(slug)) {
-      return enabledSlugs.includes("crm") || enabledSlugs.includes(slug);
-    }
-    return enabledSlugs.includes(slug);
-  },
-  [isSuperAdmin, isLoading, enabledSlugs, tenant?.id]
-);
-```
+## 3. Aba Gerenciar → Metas (ADMIN)
 
-Mudança mínima: 1 arquivo, 2 linhas (`!tenant?.id ||` no guard + `tenant?.id` nas deps).
+Filtros (já existem): **Mês**, **Ano**, **Global ou Credor** — manter.
 
-## Por que a correção é segura
+**Tabela atual**: `Operador | Meta Atual | Nova Meta (R$) | Pontos ao bater`
 
-- Não altera lógica para super admin (já retorna `true`).
-- Quando o tenant existir e a query terminar, volta ao comportamento atual (`enabledSlugs.includes`).
-- Não deixa nenhum item indevido visível em runtime real: se o módulo está realmente desabilitado, o `ModuleGuard`/RLS bloqueia a página ao tentar abrir. O guard atual já tem essa filosofia para o estado `isLoading`.
+**Nova tabela**: `Operador | Meta Atual | Pontos ao bater | Ações`
+
+- Remover coluna **"Nova Meta (R$)"**.
+- Adicionar botão **Editar** (ícone lápis) por linha → abre **Dialog** com:
+  - Campo `Meta (R$)` (CurrencyInput pré-preenchido com meta atual).
+  - Campo `Pontos ao bater` (pré-preenchido).
+  - Botões `Cancelar` / `Salvar` → chama `upsertGoal` com mês/ano/credor selecionados.
+- Após salvar: invalidar `["goals", ...]`, `["my-goal", ...]`, `["dash-meta-my-goal", ...]`, `["dash-meta-goals", ...]`.
+- Remover estados `editedGoals` / `editedPoints` e botão "Salvar" global do topo (não precisa mais).
+
+---
+
+## 4. Dashboard — Meta do operador
+
+Após o fix do item 1, `DashboardMetaCard` (que já chama `fetchMyGoal`) passará a exibir corretamente a meta para operadores. Validar visualmente:
+
+- Operador logado → vê sua meta global do mês.
+- Admin sem filtro → soma das metas globais.
+- Admin filtrando 1 operador → meta daquele operador.
+
+Sem alterações de código necessárias além do item 1 (revisar invalidação das queries após salvar no item 3).
+
+---
+
+## Arquivos alterados
+
+- `src/services/goalService.ts` — adicionar `.is("credor_id", null)` em `fetchMyGoal`.
+- `src/components/gamificacao/GoalsTab.tsx` — adicionar histórico de meses anteriores para operador.
+- `src/components/gamificacao/GoalsManagementTab.tsx` — substituir edição inline por botão "Editar" + Dialog; remover coluna "Nova Meta".
+
+Sem mudanças de schema, RLS, RPC ou edge functions.
+
+---
 
 ## Validação
 
-1. Hard refresh em `/dashboard` (Ctrl+F5) — "Gamificação" e "Contact Center" devem aparecer já no primeiro paint.
-2. Abrir uma aba anônima e logar — mesmo comportamento.
-3. Tenant que tem o módulo realmente desabilitado: a página continua bloqueada pelo `ModuleGuard` (verificação real do backend).
-
-## Escopo
-
-- 1 arquivo: `src/hooks/useModules.ts`.
-- Sem mudança de RLS, RPC, edge function ou schema.
-- Sem alteração em `usePermissions`, `useTenant` ou `AppLayout`.
+1. Hard reload em `/gamificacao?tab=goals` como operador com meta de maio/2026 → ver meta no topo + histórico abaixo.
+2. Admin em `Gerenciar → Metas` → editar meta de um operador via Dialog → operador vê valor atualizado imediatamente.
+3. Dashboard do operador exibe gauge da meta corretamente.
