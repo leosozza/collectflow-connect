@@ -1,45 +1,73 @@
-## Causa do erro
+## Causa raiz
 
-O build do Vite está quebrando com:
-```
-src/services/goalService.ts:154:2: ERROR: Unexpected "}"
-```
+Race condition em `src/hooks/useModules.ts` que faz "Contact Center" e "Gamificação" sumirem do menu no primeiro carregamento e voltarem após reabrir.
 
-Ao analisar os dois commits ("ajuste de meta 2" e "correcao final metas tenant"), eles tocaram nos **mesmos arquivos** e o merge deixou **fragmentos duplicados** colados após o final correto das funções/módulos. Não são marcadores `<<<<<<<` desta vez — são linhas órfãs que sobraram do segundo commit.
+### O que está acontecendo
 
-Dois arquivos afetados:
-
-### 1. `src/services/goalService.ts` (linhas 153-158) — bloqueia o build
-A função `awardGoalIfReached` termina corretamente na linha 152 (`};`). Logo abaixo sobraram restos do mesmo trecho duplicado:
+Em `AppLayout.tsx`, cada item do menu é filtrado por:
 ```ts
-_amount: g.points_reward,
-  });
+permissions.canViewGamificacao && isModuleEnabled("gamificacao")
+permissions.canViewContactCenter && (contactCenterEnabled || ...)
+```
 
-await supabase.from("operator_goals").update({ points_awarded: true } as any).eq("id", g.id);
-return true;
+Em `useModules.ts`:
+```ts
+const { data: enabledSlugs = [], isLoading } = useQuery({
+  queryKey: ["enabled-modules", tenant?.id],
+  queryFn: ...,
+  enabled: !!tenant?.id && !isSuperAdmin,   // ⚠️
+});
+
+const isModuleEnabled = (slug) => {
+  if (isSuperAdmin) return true;
+  if (isLoading) return true;            // proteção contra "flash sem menu"
+  return enabledSlugs.includes(slug);
 };
 ```
-Isso é código solto fora de qualquer função → erro de sintaxe.
 
-**Correção:** apagar as linhas 153-158. O resto do arquivo (incluindo `fetchMyGoal` na linha 50, que continua sem `.is("credor_id", null)` conforme sua decisão anterior) fica intacto.
+O problema: quando `enabled = false` (tenant ainda não carregou), o React Query coloca a query em estado **`idle`**, não `loading`. Resultado: `isLoading === false` e `enabledSlugs === []`. A função então cai direto em `enabledSlugs.includes(slug) === false` → **todos os itens condicionados a `isModuleEnabled` somem do menu**.
 
-### 2. `src/components/dashboard/DashboardMetaCard.tsx` (final do arquivo) — duplicação silenciosa
-```tsx
-export default DashboardMetaCard;
+Por que só "Contact Center" e "Gamificação" somem? Porque os outros itens ("Dashboard", "Carteira", "Financeiro", "Automação", "Cadastros") são módulos absorvidos pelo CRM (`CRM_ABSORBED_SLUGS`) ou nem são checados via `isModuleEnabled` — então passam mesmo com `enabledSlugs = []`. "Gamificação" e "Contact Center" são os únicos que dependem do slug específico estar presente.
 
-export default DashboardMetaCard;
+Quando você sai e entra de novo, o React Query rehidrata do cache (chave `["enabled-modules", tenant.id]`), os slugs já vêm prontos no primeiro render → menu completo.
+
+## Correção
+
+Em `src/hooks/useModules.ts`, alterar o guard para também tratar "tenant ainda não disponível" como loading:
+
+```ts
+const isModuleEnabled = useCallback(
+  (slug: string): boolean => {
+    if (isSuperAdmin) return true;
+    // Enquanto tenant não carregou OU query ainda está rodando,
+    // considera tudo habilitado para evitar sumir item do menu.
+    if (!tenant?.id || isLoading) return true;
+
+    if (CRM_ABSORBED_SLUGS.includes(slug)) {
+      return enabledSlugs.includes("crm") || enabledSlugs.includes(slug);
+    }
+    return enabledSlugs.includes(slug);
+  },
+  [isSuperAdmin, isLoading, enabledSlugs, tenant?.id]
+);
 ```
-Duas exportações default. Em runtime o segundo `export default` provavelmente passa, mas é warning/erro do TS e indica o mesmo padrão de merge sujo. **Correção:** manter apenas um `export default DashboardMetaCard;`.
+
+Mudança mínima: 1 arquivo, 2 linhas (`!tenant?.id ||` no guard + `tenant?.id` nas deps).
+
+## Por que a correção é segura
+
+- Não altera lógica para super admin (já retorna `true`).
+- Quando o tenant existir e a query terminar, volta ao comportamento atual (`enabledSlugs.includes`).
+- Não deixa nenhum item indevido visível em runtime real: se o módulo está realmente desabilitado, o `ModuleGuard`/RLS bloqueia a página ao tentar abrir. O guard atual já tem essa filosofia para o estado `isLoading`.
 
 ## Validação
 
-1. Rodar `npx vite build` → deve completar sem erros.
-2. Abrir `/gamificacao?tab=goals` no preview e confirmar que a tela carrega.
-3. Abrir o dashboard e checar que o card "Meta do Mês" continua renderizando.
+1. Hard refresh em `/dashboard` (Ctrl+F5) — "Gamificação" e "Contact Center" devem aparecer já no primeiro paint.
+2. Abrir uma aba anônima e logar — mesmo comportamento.
+3. Tenant que tem o módulo realmente desabilitado: a página continua bloqueada pelo `ModuleGuard` (verificação real do backend).
 
 ## Escopo
 
-- **2 arquivos**, ~7 linhas removidas no total.
-- Sem mexer em lógica, RLS, RPC, edge functions ou outros componentes.
-- Sem reverter os commits — apenas remover lixo de merge.
-- Sem alterar `fetchMyGoal` (mantém divergência conhecida que você optou por não corrigir).
+- 1 arquivo: `src/hooks/useModules.ts`.
+- Sem mudança de RLS, RPC, edge function ou schema.
+- Sem alteração em `usePermissions`, `useTenant` ou `AppLayout`.

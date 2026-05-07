@@ -55,7 +55,9 @@ export const useModules = () => {
   const isModuleEnabled = useCallback(
     (slug: string): boolean => {
       if (isSuperAdmin) return true;
-      if (isLoading) return true;
+      // Enquanto tenant não carregou OU query ainda está rodando,
+      // considera tudo habilitado para evitar sumir item do menu (race condition).
+      if (!tenant?.id || isLoading) return true;
 
       // Absorbed modules: check if CRM is active
       if (CRM_ABSORBED_SLUGS.includes(slug)) {
@@ -64,7 +66,7 @@ export const useModules = () => {
 
       return enabledSlugs.includes(slug);
     },
-    [isSuperAdmin, isLoading, enabledSlugs]
+    [isSuperAdmin, isLoading, enabledSlugs, tenant?.id]
   );
 
   return { enabledSlugs, isLoading, isModuleEnabled };
