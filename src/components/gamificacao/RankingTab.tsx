@@ -53,20 +53,37 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "operator_points", filter: `tenant_id=eq.${tenant.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth] }),
+        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth, metric] }),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "agreements", filter: `tenant_id=eq.${tenant.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth] }),
+        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth, metric] }),
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenant?.id, selectedYear, selectedMonth, queryClient]);
+  }, [tenant?.id, selectedYear, selectedMonth, metric, queryClient]);
 
-  const maxPoints = ranking[0]?.points || 1;
+  const metricLabels: Record<RankingMetric, string> = {
+    points: "Pontos",
+    total_received: "Recebido",
+    payments_count: "Pagamentos",
+    agreements_count: "Acordos",
+  };
+  const metricValueOf = (e: RankingEntry): number => {
+    switch (metric) {
+      case "total_received": return Number(e.total_received) || 0;
+      case "payments_count": return Number(e.payments_count) || 0;
+      case "agreements_count": return Number(e.agreements_count) || 0;
+      default: return Number(e.points) || 0;
+    }
+  };
+  const formatMetric = (v: number) =>
+    metric === "total_received" ? formatCurrency(v) : v.toLocaleString("pt-BR");
+
+  const maxMetric = ranking[0] ? metricValueOf(ranking[0]) || 1 : 1;
 
   return (
     <div className="space-y-4">
