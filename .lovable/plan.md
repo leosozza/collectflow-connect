@@ -1,90 +1,34 @@
-## Diagnóstico — Campanha "Disparo carteira 09:34" parou sozinha
+Hipótese nova: o ajuste anterior adicionou `apikey`, mas a chamada do watchdog continua como `fetch` solto; a função `dispatch-scheduled-campaigns` responde antes do request sair com garantia, então ela registra `watchdogReinvoked=1`, mas o worker `send-bulk-whatsapp` não processa a fila.
 
-### Estado atual
-- Campanha `a2ccfecb-…596a`, status `sending`, **sent_count=8 / failed=7 / total=70**, **55 destinatários `pending`**.
-- `processing_locked_at = NULL` → nenhum worker está segurando o lock.
-- `progress_metadata.last_chunk_at = 12:38:07Z` → último chunk há mais de 9 minutos. `timed_out=false` (worker morreu sem marcar timeout).
-- Falhas (7): todas `400 Bad Request "exists":false` da Evolution = números sem WhatsApp. Não é causa do travamento, são naturais.
-- 4 instâncias evolution conectadas, todas com `pending` distribuídos (~13–15 cada). Saúde das instâncias OK.
+Evidências encontradas:
+- A campanha ainda tem 55 destinatários `pending` e permanece em `sending`.
+- Executei o dispatcher e ele respondeu `watchdogReinvoked: 1`, ou seja, ele acha que reativou a campanha.
+- No código, as chamadas para `send-bulk-whatsapp` em `dispatch-scheduled-campaigns` usam `fetch(...).catch(...)` sem `await`/`waitUntil`, então a execução pode terminar antes da chamada realmente completar.
+- Além disso, o fluxo inicial `dispatchOneShot` ainda está sem o header `apikey`, então campanhas novas também podem falhar no primeiro disparo.
 
-### Causa-raiz identificada
+Plano de correção seguro:
 
-O **watchdog/dispatcher** do `dispatch-scheduled-campaigns` está re-invocando a campanha a cada minuto (logs: `[dispatcher] watchdog re-invoking a2ccfecb-... (pending=55, lock=null)`), mas **toda chamada para `send-bulk-whatsapp` está retornando HTTP 401** no gateway:
+1. Centralizar a invocação interna do worker
+- Criar um helper local em `supabase/functions/dispatch-scheduled-campaigns/index.ts` para chamar `send-bulk-whatsapp` sempre com:
+  - `Content-Type`
+  - `Authorization: Bearer SERVICE_ROLE_KEY`
+  - `apikey: SERVICE_ROLE_KEY`
+- Reutilizar esse helper nos 3 pontos: disparo único, recorrente e watchdog.
 
-```
-POST | 401 | …/send-bulk-whatsapp execution_time_ms:160
-POST | 401 | …/send-bulk-whatsapp execution_time_ms:191
-POST | 401 | …/send-bulk-whatsapp execution_time_ms:200
-…  (loop a cada ~60s)
-```
+2. Garantir que a chamada saia antes da função encerrar
+- Trocar o `fetch` solto por uma chamada aguardada com timeout curto.
+- Aguardar apenas a resposta HTTP inicial do gateway, não o processamento completo da campanha.
+- Registrar no log status HTTP/erro por campanha, para diferenciar “watchdog tentou” de “worker realmente foi chamado”.
 
-Os 401 retornam antes do boot da função (sem logs de execução em `send-bulk-whatsapp`), ou seja, **o gateway está bloqueando antes do handler rodar** — o código nunca chega a checar `isSystemCall`.
+3. Não alterar regra de negócio da campanha
+- Não mudar anti-ban, delay, roteamento de instâncias, seleção de destinatários, template, status final ou cálculo de métricas.
+- Manter a trava `try_lock_campaign` como proteção contra disparo duplicado.
 
-As três chamadas internas que disparam o worker são feitas via `fetch` direto:
+4. Recuperar a campanha da Maria Eduarda
+- Depois do deploy, limpar somente a trava/orfãos dessa campanha se necessário.
+- Reinvocar o dispatcher e validar que os 55 pendentes começam a sair de `pending` para `sent`, `delivered`, `read` ou `failed`.
 
-1. `dispatch-scheduled-campaigns` → linha 360, 463 (watchdog + recurring)
-2. `send-bulk-whatsapp` self-retrigger no timeout → linha 670
-
-Todas enviam apenas:
-```ts
-headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE_KEY}` }
-```
-
-Falta o header **`apikey`**. O gateway de Edge Functions do Supabase, mesmo com `verify_jwt = false`, exige `apikey` (ou que o Authorization seja um JWT de usuário válido). Como o service-role JWT está só no Authorization, sem `apikey`, a borda devolve 401 → o handler nunca roda → o lock não é adquirido → os 55 pendentes ficam parados para sempre.
-
-A invocação inicial pelo client (`supabase.functions.invoke` na UI) funciona porque o SDK injeta `apikey` automaticamente. Por isso 8 mensagens saíram no início e depois travou.
-
-### Correção proposta
-
-**Edge functions** — adicionar header `apikey` em todas as 3 invocações fetch:
-
-`supabase/functions/dispatch-scheduled-campaigns/index.ts` (linhas 358–365 e 461–469):
-```ts
-headers: {
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-  apikey: SERVICE_ROLE_KEY,
-}
-```
-
-`supabase/functions/send-bulk-whatsapp/index.ts` (linhas 670–678 — self-retrigger):
-```ts
-headers: {
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${serviceKey}`,
-  apikey: serviceKey,
-}
-```
-
-(Mesma correção também resolve o watchdog do `recurring`.)
-
-**Recuperação imediata da campanha travada**
-
-Após o deploy, basta uma query manual para destravar a campanha atual e o watchdog seguinte do dispatcher (em <1 min) re-invocará e processará os 55 restantes:
-
-```sql
-UPDATE whatsapp_campaigns
-SET processing_locked_at = NULL, processing_locked_by = NULL
-WHERE id = 'a2ccfecb-e3f3-44d0-9f0c-f804d19b596a';
-
-UPDATE whatsapp_campaign_recipients
-SET status = 'pending', claimed_at = NULL, claimed_by = NULL
-WHERE campaign_id = 'a2ccfecb-e3f3-44d0-9f0c-f804d19b596a'
-  AND status = 'processing';
-```
-(o lock já está null e não há `processing` no momento, mas o script é seguro/idempotente).
-
-### Validação pós-deploy
-
-1. Abrir logs do `dispatch-scheduled-campaigns` no próximo minuto e confirmar mensagem `watchdog re-invoking …`.
-2. Abrir logs do `send-bulk-whatsapp` e ver `booted` + `[Anti-Ban] Instance …` + `[Campaign] Lock acquired`.
-3. `whatsapp_campaign_recipients` da campanha sair de `pending=55` para zero ao longo dos próximos minutos (4 instâncias × ~12 msgs).
-4. Status final da campanha vira `completed` ou `completed_with_errors`.
-
-### Por que isso só apareceu agora
-
-A correção mais recente trocou alguns invokers internos por `fetch` direto (em vez de `supabase.functions.invoke`) para ganhar fire-and-forget e `EdgeRuntime.waitUntil`. Sem o header `apikey`, qualquer campanha que dependesse do watchdog/self-retrigger (basicamente toda campanha grande que excede os 380 s do edge runtime) ficaria travada após o primeiro chunk. Esta é provavelmente a causa de "parou sozinha" relatado.
-
-### Riscos / efeitos colaterais
-
-Nenhum. Adicionar `apikey` não muda lógica de negócio nem de auth — o handler já segrega `isSystemCall` pelo Bearer service-role. É apenas o gateway que precisa do header extra.
+5. Validação final
+- Verificar logs do `dispatch-scheduled-campaigns` mostrando status da chamada ao worker.
+- Verificar logs do `send-bulk-whatsapp` com início do processamento da campanha.
+- Conferir contagem dos destinatários para confirmar que saiu do estado parado.

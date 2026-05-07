@@ -178,8 +178,14 @@ Deno.serve(async (req) => {
   try {
     // Validate auth — allow service-role calls (watchdog/dispatcher/auto-retrigger) to bypass user auth
     const authHeader = req.headers.get("Authorization");
-    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    const isSystemCall = bearerToken === serviceRoleKey;
+    const apikeyHeader = req.headers.get("apikey");
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    const serviceRoleKeyTrim = serviceRoleKey?.trim();
+    const isSystemCall =
+      (!!bearerToken && bearerToken === serviceRoleKeyTrim) ||
+      (!!apikeyHeader && apikeyHeader.trim() === serviceRoleKeyTrim);
+
+    console.log(`[send-bulk-whatsapp] auth check: hasBearer=${!!bearerToken} bearerLen=${bearerToken?.length || 0} svcLen=${serviceRoleKeyTrim?.length || 0} hasApikey=${!!apikeyHeader} isSystemCall=${isSystemCall}`);
 
     let userId: string | null = null;
 
@@ -197,6 +203,7 @@ Deno.serve(async (req) => {
 
       const { data: userData, error: userError } = await userClient.auth.getUser();
       if (userError || !userData?.user) {
+        console.log(`[send-bulk-whatsapp] user auth failed: ${userError?.message || "no user"}`);
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
