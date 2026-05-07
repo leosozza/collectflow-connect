@@ -1,74 +1,123 @@
-# Melhorias visuais no painel de "Próximo disparo" da campanha
 
-## Problema atual
+# Revisão Financeiro — apenas correções de número (sem nova UI)
 
-No `CampaignSummaryTab` o card verde mostra apenas dois estados:
+Removidas todas as sugestões cosméticas e de "melhoria". Foco exclusivo em garantir que **os números mostrados na tela atual reflitam a verdade**, usando as fontes de verdade que já existem (`manual_payments`, `portal_payments`, `negociarie_cobrancas`, `agreements`).
 
-- "Pausa anti-ban ativa — Retomando em Xs" (quando `meta.batch_resting = true`)
-- "Próximo envio em breve — ~Xs para o próximo disparo" (caso contrário)
+## Escopo
 
-Quando o contador chega a `0s` e o próximo chunk demora alguns segundos para realmente disparar (overhead do worker, watchdog, anti-ban entre lotes), o usuário vê "0s para o próximo disparo" parado e acha que travou. Também não diferencia "pausa curta entre mensagens" de "pausa longa anti-ban entre lotes".
+Apenas a aba **Baixas Realizadas** apresenta números computados (RPC `get_baixas_realizadas`). As outras duas abas (Aguardando Liberação / Confirmação de Pagamento) reusam `AcordosPage` e seus números já vêm das mesmas SSOTs usadas no resto do sistema — **não serão tocadas**.
 
-## Objetivo
+## Arquivo órfão `src/pages/FinanceiroPage.tsx` — verificação
 
-Mudança puramente de UI/UX no card de status — sem alterar lógica de envio, anti-ban ou backend. Comunicar com clareza:
+Resultado da varredura por imports:
 
-1. Próximo disparo previsto em X segundos (com unidade certa: s ou min)
-2. Pausa curta anti-ban (entre mensagens da mesma instância)
-3. Pausa longa anti-ban (descanso de lote — `batch_resting`) com nome da instância
-4. "Disparando agora..." quando o contador zera, ao invés de ficar "0s" parado
-5. "Aguardando worker..." se passar muito tempo após o zero sem novo `last_chunk_at`
+```
+src/pages/FinanceiroPage.tsx              (auto-referência)
+src/services/financeService.ts            (consumido SÓ pela própria FinanceiroPage e seus 2 componentes)
+src/components/financeiro/ExpenseForm.tsx (usado SÓ pela FinanceiroPage)
+src/components/financeiro/ExpenseList.tsx (usado SÓ pela FinanceiroPage)
+src/pages/RoadmapPage.tsx                 (apenas texto/menção em string, não import)
+```
 
-## Mudanças (apenas em `CampaignSummaryTab.tsx`)
+Nenhuma rota em `App.tsx` aponta para `FinanceiroPage`. Nenhum menu em `AppLayout.tsx` aponta. **Pode ser removido com segurança**, junto de `ExpenseForm.tsx`, `ExpenseList.tsx` e `financeService.ts` (são todos um cluster órfão). Tabela `expenses` no banco fica intocada.
 
-### 1. Refinar `rateInfo` para expor mais estados
+→ Decisão a confirmar: remover esse cluster ou apenas deixar quieto?
 
-Adicionar novas variantes ao retorno do `useMemo`:
+## Correções de número no RPC `get_baixas_realizadas`
 
-- `kind: "dispatching"` — quando `remainingMs <= 0` e faz < ~8s do último chunk → mostra "Disparando agora..."
-- `kind: "waiting_worker"` — quando `remainingMs <= 0` e faz ≥ 8s sem novo chunk → mostra "Aguardando worker retomar..."
-- `kind: "next"` (existente) — countdown normal > 0
-- `kind: "resting"` (existente) — pausa anti-ban longa
-- `kind: "short_pause"` — pausa curta anti-ban entre mensagens (quando `avgDelayMs` está no intervalo curto, ex.: > 5s e < 30s)
+Bugs reais identificados (cada um produz número errado na tela hoje):
 
-Manter os mesmos inputs (`meta.last_chunk_at`, `meta.batch_resting`, `RATE_CONSTANTS`) — só refinar a classificação.
+### Bug 1 — Entrada errada quando o acordo tem 2 ou 3 entradas
+Hoje:
+```
+valor_original = custom_installment_values->>'entrada'   -- para QUALQUER installment_number=0
+```
+Para baixas marcadas como `entrada_2` ou `entrada_3` (existem 3 registros assim em produção), exibe o valor da 1ª entrada — ou nulo. **Coluna "V. Original" mentirosa.**
 
-### 2. Formatar tempo de forma humana
+Correção (mantém a SSOT `custom_installment_values` que já é usada em todo o sistema):
+```
+valor_original = COALESCE(
+  custom_installment_values ->> NULLIF(installment_key, ''),
+  custom_installment_values ->> 'entrada',
+  a.entrada_value
+)   -- quando installment_number = 0
+```
 
-Helper local `formatCountdown(sec)`:
-- `< 60s` → `"Xs"`
-- `≥ 60s` → `"Xmin Ys"` ou `"~Xmin"`
+### Bug 2 — `total_installments` ignora múltiplas entradas
+Hoje: `1 + new_installments` (assume 1 entrada).
+Acordos com `entrada_2`/`entrada_3` mostram total errado. Hoje a coluna não é exibida na tela, mas é retornada e exportada no Excel ("Origem"/cabeçalhos). Mesmo assim, vamos manter o campo correto para não vazar número errado no export.
 
-### 3. Reescrever o card visual com 4 visuais
+Correção: contar quantas chaves `entrada%` existem em `custom_installment_values` e somar com `new_installments`.
 
-| Estado | Cor / Ícone | Título | Subtítulo |
-|---|---|---|---|
-| `next` | verde / Clock | "Próximo disparo em {tempo}" | "Ritmo normal de envio" |
-| `short_pause` | âmbar suave / Timer | "Pausa curta anti-ban — {tempo}" | "Aguarda intervalo entre mensagens" |
-| `resting` | laranja / Pause | "Pausa anti-ban ativa{ em instância}" | "Retomando em {tempo} — protege contra bloqueio" |
-| `dispatching` | verde + spinner / Loader2 | "Disparando agora..." | "Enviando próximo lote" |
-| `waiting_worker` | âmbar / AlertTriangle | "Aguardando retomada do worker" | "Sem novo envio há {tempo}. Watchdog retoma em até 1 min." |
+### Bug 3 — Atribuição de operador trocada nas baixas manuais
+Hoje:
+```
+operator_id = COALESCE(profile.user_id de mp.requested_by, a.created_by)
+```
+Quando admin solicita a baixa, o "Operador" passa a ser o admin, não quem fechou o acordo. Filtro "Operador" e isolamento por operador (`_operator_id = user.id`) ficam errados — operador deixa de ver a própria baixa.
 
-Badge da direita acompanha: "Em ritmo" / "Pausa curta" / "Em pausa" / "Disparando" / "Aguardando".
+Correção (inverter prioridade):
+```
+operator_id = COALESCE(a.created_by, profile.user_id de mp.requested_by)
+```
+Isso bate com a regra "operador dono do acordo" usada no resto do sistema (Acordos, Ranking de Operadores, Analytics).
 
-### 4. Nunca exibir "0s"
+### Bug 4 — Data do portal pode estar deslocada
+`portal_payments` não tem coluna `paid_at` (verificado). Hoje usa `pp.updated_at::date`, que muda se a linha for atualizada por qualquer motivo após o pagamento. Como **não há SSOT alternativa para a data efetiva** sem criar campo novo, **não será alterado** — manter como está para respeitar a regra "sem nova fonte de verdade".
 
-Sempre que `remainingSec <= 0`, troca para `dispatching` ou `waiting_worker` — assim o relógio nunca trava em zero.
+### Bug 5 — Parcela vazia em portal/negociarie
+Sintoma cosmético ("—"). Não é número errado, é só ausência. Como o usuário pediu "sem alteração na tela", **não será mexido**.
 
-### 5. Tick do contador
+## O que NÃO será feito
 
-Manter o `setInterval(1000)` já existente. Sem novas queries / sem mudança no `refetchInterval` (5s).
+- ❌ Sem badge "Visualizando apenas suas baixas"
+- ❌ Sem mini cards por origem
+- ❌ Sem alteração de título/H1 nas abas reusadas
+- ❌ Sem novas tabelas, colunas ou views
+- ❌ Sem mexer em AcordosPage / Aguardando Liberação / Confirmação de Pagamento
 
-## Fora de escopo
+## Plano de execução
 
-- Lógica de envio, anti-ban, watchdog, edge functions
-- Schema de `progress_metadata`
-- Banner de "Disparo pausado pelo limite" (`isStalled`) — continua igual
-- Outros tabs e KPIs
+1. **Migration SQL**: substituir `get_baixas_realizadas` aplicando Bug 1, Bug 2 e Bug 3.
+2. **Limpeza opcional** (aguardando confirmação do usuário):
+   - Remover `src/pages/FinanceiroPage.tsx`
+   - Remover `src/components/financeiro/ExpenseForm.tsx`
+   - Remover `src/components/financeiro/ExpenseList.tsx`
+   - Remover `src/services/financeService.ts`
 
-## Aceite
+## Detalhe técnico — corpo da nova RPC (resumo)
 
-- Contador nunca fica visível em "0s" parado
-- Card distingue claramente pausa curta (entre mensagens) de pausa longa (anti-ban de lote)
-- Quando zera e leva alguns segundos pra próximo chunk, aparece "Disparando agora..." com spinner
-- Se passa de 8s sem novo chunk, aparece "Aguardando retomada do worker" em âmbar
+```sql
+-- Ramo 'manual':
+valor_original :=
+  CASE
+    WHEN mp.installment_number = 0 THEN COALESCE(
+      a.custom_installment_values ->> NULLIF(mp.installment_key,''),
+      a.custom_installment_values ->> 'entrada',
+      a.entrada_value
+    )
+    ELSE COALESCE(
+      a.custom_installment_values ->> mp.installment_number::text,
+      a.new_installment_value
+    )
+  END;
+
+operator_id := COALESCE(
+  a.created_by,
+  (SELECT user_id FROM profiles WHERE id = mp.requested_by LIMIT 1)
+);
+
+-- Total de parcelas (aplicar nos 3 ramos):
+total_installments :=
+  GREATEST(
+    1,
+    (SELECT COUNT(*) FROM jsonb_object_keys(COALESCE(a.custom_installment_values,'{}'::jsonb)) k
+       WHERE k LIKE 'entrada%')
+  )
+  + COALESCE(a.new_installments, 0);
+```
+
+## Perguntas finais
+
+1. Confirma a inversão da prioridade de `operator_id` para `a.created_by` primeiro (item Bug 3)?
+2. Pode remover o cluster órfão (`FinanceiroPage.tsx` + `ExpenseForm` + `ExpenseList` + `financeService.ts`)? Nada está roteado nem importado fora dele.
