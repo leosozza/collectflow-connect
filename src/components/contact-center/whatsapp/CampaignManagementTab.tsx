@@ -435,6 +435,11 @@ export default function CampaignManagementTab() {
                   {visibleCampaigns.map((c) => {
                     const isScheduled = c.status === "scheduled" || c.status === "paused";
                     const isRecurring = c.schedule_type === "recurring";
+                    const isInFlight =
+                      c.status === "sending" ||
+                      (c.status === "paused" && !isRecurring);
+                    const showActions = (isScheduled || isInFlight) && canManage;
+                    const blockRowClick = isScheduled && !isInFlight;
                     const progress =
                       c.total_unique_recipients > 0
                         ? ((c.sent_count + c.failed_count) / c.total_unique_recipients) * 100
@@ -444,7 +449,7 @@ export default function CampaignManagementTab() {
                       <tr
                         key={c.id}
                         className="border-b border-border hover:bg-muted/30 cursor-pointer transition-colors"
-                        onClick={() => !isScheduled && setSelectedCampaignId(c.id)}
+                        onClick={() => !blockRowClick && setSelectedCampaignId(c.id)}
                       >
                         <td className="p-3 font-medium max-w-[220px] truncate">
                           <div className="flex items-center gap-1.5">
@@ -470,7 +475,7 @@ export default function CampaignManagementTab() {
                         <td className="p-3 text-right">{c.sent_count}</td>
                         <td className="p-3 text-right text-destructive">{c.failed_count}</td>
                         <td className="p-3 w-[220px]">
-                          {isScheduled && c.scheduled_for ? (
+                          {isScheduled && !isInFlight && c.scheduled_for ? (
                             <div className="space-y-0.5">
                               {isRecurring ? (
                                 <>
@@ -527,18 +532,35 @@ export default function CampaignManagementTab() {
                           className="p-3"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {isScheduled && canManage && (
+                          {showActions && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                                   <MoreVertical className="w-4 h-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-52 bg-popover z-50">
-                                <DropdownMenuItem onClick={() => handleFireNow(c.id)}>
-                                  <Zap className="w-4 h-4 mr-2" />
-                                  Disparar agora
-                                </DropdownMenuItem>
+                              <DropdownMenuContent align="end" className="w-56 bg-popover z-50">
+                                {/* In-flight (sending / paused non-recurring) actions */}
+                                {isInFlight && c.status === "sending" && (
+                                  <DropdownMenuItem onClick={() => handlePauseSending(c.id)}>
+                                    <Pause className="w-4 h-4 mr-2" />
+                                    Pausar disparo
+                                  </DropdownMenuItem>
+                                )}
+                                {isInFlight && c.status === "paused" && (
+                                  <DropdownMenuItem onClick={() => handleResumeSending(c.id)}>
+                                    <Play className="w-4 h-4 mr-2" />
+                                    Retomar disparo
+                                  </DropdownMenuItem>
+                                )}
+
+                                {/* Scheduled (not yet started) actions */}
+                                {isScheduled && !isInFlight && (
+                                  <DropdownMenuItem onClick={() => handleFireNow(c.id)}>
+                                    <Zap className="w-4 h-4 mr-2" />
+                                    Disparar agora
+                                  </DropdownMenuItem>
+                                )}
                                 {isRecurring && c.status === "scheduled" && (
                                   <DropdownMenuItem onClick={() => handlePause(c.id)}>
                                     <Pause className="w-4 h-4 mr-2" />
@@ -569,7 +591,7 @@ export default function CampaignManagementTab() {
                                   onClick={() => setCancelTarget(c)}
                                 >
                                   <X className="w-4 h-4 mr-2" />
-                                  Cancelar agendamento
+                                  {isInFlight ? "Cancelar campanha" : "Cancelar agendamento"}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
