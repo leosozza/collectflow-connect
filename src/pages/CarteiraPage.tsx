@@ -276,7 +276,7 @@ const CarteiraPage = () => {
     tipoDividaId: filters.tipoDividaId || undefined,
     scoreRange: filters.scoreRange || undefined,
     debtorProfile: filters.debtorProfile || undefined,
-    operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
+    operatorId: undefined,
     semAcordo: filters.semAcordo || undefined,
     semWhatsapp: filters.semWhatsapp || undefined,
     cadastroDe: filters.cadastroDe || undefined,

@@ -1,53 +1,54 @@
-# Liberar Financeiro para operadores (escopo: apenas próprios acordos)
+# Carteira: remover trava de "Mar Aberto" para operador
 
 ## Diagnóstico
 
-O operador Gustavo não vê **Financeiro → Acordos em Atraso** porque, em `src/hooks/usePermissions.ts`, o papel `operador` tem `financeiro: []` (nenhuma permissão). Como o menu/rota usa `canViewFinanceiro = hasAny("financeiro")`, o módulo inteiro fica oculto.
+Hoje, em `src/pages/CarteiraPage.tsx` linha 279, a listagem força:
 
-Boa notícia: o **scoping por operador já está implementado em todo lugar** que importa, e respeita `canViewAllFinanceiro`:
+```ts
+operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
+```
 
-| Tela | Comportamento sem `view_all` |
-|---|---|
-| `AcordosPage` (Aguardando Liberação, Em Atraso, etc.) | Já força `created_by = user.id` quando `!isAdmin` (linhas 70‑77). Operador só vê acordos criados por ele. |
-| `BaixasRealizadasPage` | Já passa `_operator_id: lockedOperatorId` quando `!canViewAll` (linhas 80, 105). |
-| `ConfirmacaoPagamentoPage` | Continua exigindo `canApproveAcordos` — operador **não** aprova pagamentos (correto, evita auto‑aprovação). |
+Como o operador não tem `carteira.view_full_data`, a RPC `get_carteira_grouped` recebe `_operator_id = <user>` e devolve **só os clientes atribuídos a ele**. Por isso o Vitor pesquisou "Marcela Cristina dos Santos Khouwayer" e a tela mostra "Nenhum cliente encontrado" — a Marcela não está atribuída a ele.
 
-Ou seja, **basta conceder `view` (sem `view_all`)** ao papel operador. O escopo "apenas próprios" sai de graça.
+Não foi mudança recente. A última alteração (Financeiro) não tocou em `carteira`.
 
 ## Mudança
 
-Arquivo único: `src/hooks/usePermissions.ts`
+Arquivo único: `src/pages/CarteiraPage.tsx`, linha 279.
 
-No bloco `ROLE_DEFAULTS.operador`, trocar:
+De:
 ```ts
-financeiro: [],
+operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
 ```
-por:
+Para:
 ```ts
-financeiro: ["view"],
+operatorId: undefined,
 ```
 
-Nada mais. Sem `view_all` (não vê dos outros) e sem `manage`. Sem mexer em RLS, RPCs, ou em outras telas.
+Pronto. A RPC passa a listar todos os clientes do tenant para qualquer papel. RLS de tenant continua intacta (escopo por `tenant_id`).
 
-## Efeito imediato
+## Por que isso é seguro
 
-- Operadores passam a ver o item **Financeiro** no menu.
-- Em **Aguardando Liberação** e **Acordos em Atraso**: enxergam apenas os acordos onde `created_by = seu user_id`.
-- Em **Baixas Realizadas**: a RPC `get_baixas_realizadas` já recebe `_operator_id` travado no próprio user → só baixas dos acordos dele.
-- **Confirmação de Pagamento**: continua oculto para operador (precisa `approve` em `acordos`, que ele não tem).
-- Admins/gerentes/supervisor: sem mudança.
+As travas operacionais que importam **não dependem** desse filtro de listagem — elas vivem em outras camadas e continuam aplicáveis:
+
+| Trava | Onde mora | Continua valendo? |
+|---|---|---|
+| Cliente com **acordo vigente / em negociação** | Hierarquia de status por CPF/Credor (`QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > ...`) e validações de `AgreementForm` / RPCs de criação | Sim, intacta |
+| Concorrência de atendimento (lock) | `lockService` / `useAtendimentoModal` | Sim |
+| Disposições / dados sensíveis | `view_full_data` segue controlando mascaramento de CPF/telefone na UI | Sim |
+| Atribuição em ações em massa | Diálogos de bulk continuam respeitando `operator_id` ao gravar | Sim |
+
+Ou seja: operador **enxerga e pesquisa** qualquer cliente, mas operações que exigem exclusividade continuam barradas pelas regras de status/lock já existentes.
 
 ## Fora de escopo
 
-- Não criar novas RPCs, RLS ou fontes de verdade.
-- Não alterar UI das telas Financeiro.
-- Não mudar `view_all` de ninguém.
-- Não mexer em overrides individuais de outros usuários.
+- Não mexer em RLS, RPCs, ou em `view_full_data` (mascaramento permanece).
+- Não mudar atribuição automática nem lógica de `operator_id` nos clientes.
+- Não alterar Financeiro, Acordos, ou Atendimento.
 
 ## Validação após apply
 
-1. Logar como operador (Gustavo) → menu **Financeiro** aparece.
-2. Abrir `/financeiro/aguardando-liberacao` → lista só acordos criados por ele.
-3. Abrir `/financeiro/baixas` → só baixas de acordos dele; banner "Visualizando suas próprias baixas".
-4. Tentar `/financeiro/confirmacao-pagamento` → redireciona para `/acordos` (esperado).
-5. Logar como admin → continua vendo tudo, dropdown de operador funcional.
+1. Logar como Vitor (operador) → `/carteira` → buscar "Marcela" → cliente aparece.
+2. Abrir o card → vê detalhes (mascaramento de CPF/telefone segue se ele não tiver `view_full_data`).
+3. Tentar formalizar acordo num CPF que já tem **acordo vigente** → bloqueio existente continua disparando.
+4. Logar como admin → sem mudança.
