@@ -544,6 +544,7 @@ const ClientDetailPage = () => {
                       {canReopenParcelas && pagoClients.length > 0 && <TableHead className="w-10"></TableHead>}
                       <TableHead>Parcela</TableHead>
                       <TableHead>Vencimento</TableHead>
+                      <TableHead>Contrato</TableHead>
                       <TableHead>Devolução</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
@@ -586,8 +587,16 @@ const ClientDetailPage = () => {
                               )}
                             </TableCell>
                           )}
-                          <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                          <TableCell>
+                             {tenant?.slug === "ybrasil" && c.cod_contrato && (
+                               <span className="font-mono text-[10px] text-muted-foreground mr-1">
+                                 [{c.cod_contrato}]
+                               </span>
+                             )}
+                             {c.numero_parcela}/{c.total_parcelas}
+                           </TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
+                          <TableCell>{c.cod_contrato || "—"}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
                           <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(pagoLinha)}</TableCell>
