@@ -21,15 +21,15 @@ const GoalsTab = () => {
   const monthLabel = now.toLocaleString("pt-BR", { month: "long", year: "numeric" });
 
   const { data: myGoals = [] } = useQuery({
-    queryKey: ["my-goals", year, month],
-    queryFn: () => fetchMyGoals(year, month),
-    enabled: !isTenantAdmin,
+    queryKey: ["my-goals", year, month, tenant?.id],
+    queryFn: () => fetchMyGoals(year, month, tenant?.id),
+    enabled: !isTenantAdmin && !!tenant?.id,
   });
 
   const { data: allGoals = [] } = useQuery({
-    queryKey: ["goals-all", year, month],
-    queryFn: () => fetchGoals(year, month, undefined),
-    enabled: isTenantAdmin,
+    queryKey: ["goals-all", year, month, tenant?.id],
+    queryFn: () => fetchGoals(year, month, undefined, tenant?.id),
+    enabled: isTenantAdmin && !!tenant?.id,
   });
 
   const { data: operators = [] } = useQuery({
@@ -141,7 +141,7 @@ const GoalsTab = () => {
 
   // Team aggregation
   const teamStats = teams.map(team => {
-    const members = teamMembers.filter(m => m.equipe_id === team.id).map(m => m.profile_id);
+    const members = Array.from(new Set(teamMembers.filter(m => m.equipe_id === team.id).map(m => m.profile_id)));
     const teamGoal = members.reduce((sum, pid) => sum + (operatorGoalMap.get(pid) || 0), 0);
     const teamReceived = members.reduce((sum, pid) => sum + (pointsMap.get(pid) || 0), 0);
     const pct = teamGoal > 0 ? Math.min(100, Math.round((teamReceived / teamGoal) * 100)) : 0;

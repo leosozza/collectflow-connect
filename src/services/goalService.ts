@@ -26,15 +26,16 @@ const getMyTenantId = async (): Promise<string | null> => {
   return (data?.tenant_id as string) || null;
 };
 
-export const fetchGoals = async (year: number, month: number, credorId?: string | null): Promise<OperatorGoal[]> => {
-  const tid = await getMyTenantId();
+export const fetchGoals = async (year: number, month: number, credorId?: string | null, tenantId?: string): Promise<OperatorGoal[]> => {
+  const tid = tenantId || await getMyTenantId();
+  if (!tid) return [];
+
   let query = supabase
     .from("operator_goals")
     .select("*")
+    .eq("tenant_id", tid)
     .eq("year", year)
     .eq("month", month);
-
-  if (tid) query = query.eq("tenant_id", tid);
 
   if (credorId !== undefined) {
     if (credorId === null) {
@@ -49,20 +50,25 @@ export const fetchGoals = async (year: number, month: number, credorId?: string 
   return (data as OperatorGoal[]) || [];
 };
 
-export const fetchMyGoals = async (year: number, month: number): Promise<OperatorGoal[]> => {
+export const fetchMyGoals = async (year: number, month: number, tenantId?: string): Promise<OperatorGoal[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
+
+  const tid = tenantId || await getMyTenantId();
+  if (!tid) return [];
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id")
     .eq("user_id", user.id)
+    .eq("tenant_id", tid)
     .single();
   if (!profile) return [];
 
   const { data, error } = await supabase
     .from("operator_goals")
     .select("*")
+    .eq("tenant_id", tid)
     .eq("operator_id", profile.id)
     .eq("year", year)
     .eq("month", month);

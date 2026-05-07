@@ -13,6 +13,7 @@ interface DashboardMetaCardProps {
   monthLabel: string;
   selectedOperatorUserId: string | null; // user_id from global filter
   received: number; // total_recebido from dashboard RPC
+  tenantId: string | null;
 }
 
 const DashboardMetaCard = ({
@@ -21,21 +22,22 @@ const DashboardMetaCard = ({
   monthLabel,
   selectedOperatorUserId,
   received,
+  tenantId,
 }: DashboardMetaCardProps) => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
 
   // Operator: all goals for the period (summed)
   const { data: myGoals = [] } = useQuery({
-    queryKey: ["dash-meta-my-goals", year, month, profile?.id],
-    queryFn: () => fetchMyGoals(year, month),
+    queryKey: ["dash-meta-my-goals", year, month, profile?.id, tenantId],
+    queryFn: () => fetchMyGoals(year, month, tenantId || undefined),
     enabled: !isTenantAdmin && !!profile?.id,
   });
 
   // Admin: all goals for the period (unfiltered by creditor to get everything)
   const { data: allGoals = [] } = useQuery({
-    queryKey: ["dash-meta-goals-all", year, month],
-    queryFn: () => fetchGoals(year, month, undefined), // undefined brings all creditors + global
+    queryKey: ["dash-meta-goals-all", year, month, tenantId],
+    queryFn: () => fetchGoals(year, month, undefined, tenantId || undefined), // undefined brings all creditors + global
     enabled: isTenantAdmin,
   });
 
