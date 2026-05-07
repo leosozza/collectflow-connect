@@ -65,6 +65,7 @@ export const fetchMyGoal = async (year: number, month: number): Promise<Operator
     .eq("operator_id", profile.id)
     .eq("year", year)
     .eq("month", month)
+    .is("credor_id", null)
     .maybeSingle();
   if (error) throw error;
   return data as OperatorGoal | null;
@@ -149,4 +150,61 @@ export const awardGoalIfReached = async (params: {
 
   await supabase.from("operator_goals").update({ points_awarded: true } as any).eq("id", g.id);
   return true;
+};
+
+export interface OperatorGoalHistoryEntry {
+  year: number;
+  month: number;
+  target_amount: number;
+  total_received: number;
+}
+
+/** Histórico de metas globais (credor_id IS NULL) do operador logado nos últimos N meses. */
+export const fetchMyGoalHistory = async (months = 6): Promise<OperatorGoalHistoryEntry[]> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, tenant_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!profile) return [];
+
+  const now = new Date();
+  const periods: { year: number; month: number }[] = [];
+  for (let i = 1; i <= months; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    periods.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+  }
+  if (periods.length === 0) return [];
+
+  const minYear = Math.min(...periods.map(p => p.year));
+
+  const [{ data: goals }, { data: points }] = await Promise.all([
+    supabase
+      .from("operator_goals")
+      .select("year, month, target_amount")
+      .eq("operator_id", profile.id)
+      .is("credor_id", null)
+      .gte("year", minYear),
+    supabase
+      .from("operator_points")
+      .select("year, month, total_received")
+      .eq("operator_id", profile.id)
+      .eq("tenant_id", (profile as any).tenant_id)
+      .gte("year", minYear),
+  ]);
+
+  const goalMap = new Map((goals || []).map((g: any) => [`${g.year}-${g.month}`, Number(g.target_amount || 0)]));
+  const pointsMap = new Map((points || []).map((p: any) => [`${p.year}-${p.month}`, Number(p.total_received || 0)]));
+
+  return periods
+    .map((p) => ({
+      year: p.year,
+      month: p.month,
+      target_amount: goalMap.get(`${p.year}-${p.month}`) || 0,
+      total_received: pointsMap.get(`${p.year}-${p.month}`) || 0,
+    }))
+    .filter((e) => e.target_amount > 0 || e.total_received > 0);
 };

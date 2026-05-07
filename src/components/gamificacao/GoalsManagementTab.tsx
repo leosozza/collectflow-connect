@@ -9,9 +9,18 @@ import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/formatters";
-import { Save } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
+
+interface EditState {
+  operatorId: string;
+  operatorName: string;
+  amount: number;
+  points: number;
+}
 
 const GoalsManagementTab = () => {
   const { tenant } = useTenant();
@@ -21,19 +30,17 @@ const GoalsManagementTab = () => {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [credorFilter, setCredorFilter] = useState<string>("__global__");
-  const [editedGoals, setEditedGoals] = useState<Record<string, number>>({});
-  const [editedPoints, setEditedPoints] = useState<Record<string, number>>({});
+  const [editing, setEditing] = useState<EditState | null>(null);
 
   const { data: operators = [] } = useQuery({
     queryKey: ["tenant-operators-gamification", tenant?.id],
     queryFn: async () => {
-      // Get enabled participants
       const { data: participants } = await supabase
         .from("gamification_participants")
         .select("profile_id")
         .eq("tenant_id", tenant!.id)
         .eq("enabled", true);
-      
+
       const enabledIds = (participants || []).map((p: any) => p.profile_id);
       if (enabledIds.length === 0) return [];
 
@@ -73,28 +80,26 @@ const GoalsManagementTab = () => {
   const pointsMap = new Map(goals.map((g: any) => [g.operator_id, g.points_reward || 0]));
 
   const saveMut = useMutation({
-    mutationFn: async () => {
-      const opIds = new Set([...Object.keys(editedGoals), ...Object.keys(editedPoints)]);
-      for (const opId of opIds) {
-        const amount = editedGoals[opId] ?? goalMap.get(opId) ?? 0;
-        const pts = editedPoints[opId] ?? pointsMap.get(opId) ?? 0;
-        await upsertGoal({
-          operator_id: opId,
-          year,
-          month,
-          target_amount: amount,
-          tenant_id: tenant!.id,
-          created_by: user!.id,
-          credor_id: effectiveCredorId,
-          points_reward: pts,
-        });
-      }
+    mutationFn: async (e: EditState) => {
+      await upsertGoal({
+        operator_id: e.operatorId,
+        year,
+        month,
+        target_amount: e.amount,
+        tenant_id: tenant!.id,
+        created_by: user!.id,
+        credor_id: effectiveCredorId,
+        points_reward: e.points,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["goals"] });
-      setEditedGoals({});
-      setEditedPoints({});
-      toast.success("Metas salvas!");
+      qc.invalidateQueries({ queryKey: ["my-goal"] });
+      qc.invalidateQueries({ queryKey: ["my-goal-history"] });
+      qc.invalidateQueries({ queryKey: ["dash-meta-my-goal"] });
+      qc.invalidateQueries({ queryKey: ["dash-meta-goals"] });
+      setEditing(null);
+      toast.success("Meta salva!");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -107,7 +112,7 @@ const GoalsManagementTab = () => {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <Select value={String(month)} onValueChange={(v) => { setMonth(Number(v)); setEditedGoals({}); }}>
+        <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
             {months.map((m) => (
@@ -115,7 +120,7 @@ const GoalsManagementTab = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={String(year)} onValueChange={(v) => { setYear(Number(v)); setEditedGoals({}); }}>
+        <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
           <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
           <SelectContent>
             {[year - 1, year, year + 1].map((y) => (
@@ -123,7 +128,7 @@ const GoalsManagementTab = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={credorFilter} onValueChange={(v) => { setCredorFilter(v); setEditedGoals({}); }}>
+        <Select value={credorFilter} onValueChange={setCredorFilter}>
           <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__global__">Global (todos credores)</SelectItem>
@@ -132,11 +137,6 @@ const GoalsManagementTab = () => {
             ))}
           </SelectContent>
         </Select>
-        {(Object.keys(editedGoals).length > 0 || Object.keys(editedPoints).length > 0) && (
-          <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} className="gap-1.5 ml-auto">
-            <Save className="w-3.5 h-3.5" /> Salvar
-          </Button>
-        )}
       </div>
 
       <Table>
@@ -144,8 +144,8 @@ const GoalsManagementTab = () => {
           <TableRow>
             <TableHead>Operador</TableHead>
             <TableHead className="w-40">Meta Atual</TableHead>
-            <TableHead className="w-40">Nova Meta (R$)</TableHead>
-            <TableHead className="w-32">Pontos ao bater</TableHead>
+            <TableHead className="w-40">Pontos ao bater</TableHead>
+            <TableHead className="w-24 text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -155,27 +155,24 @@ const GoalsManagementTab = () => {
             return (
               <TableRow key={op.id}>
                 <TableCell className="font-medium">{op.full_name || "Sem nome"}</TableCell>
-                <TableCell className="text-muted-foreground">{formatCurrency(current)}</TableCell>
-                <TableCell>
-                  <CurrencyInput
-                    value={editedGoals[op.id] ?? 0}
-                    onValueChange={(v) =>
-                      setEditedGoals((prev) => ({ ...prev, [op.id]: v }))
+                <TableCell>{formatCurrency(current)}</TableCell>
+                <TableCell>{currentPts}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() =>
+                      setEditing({
+                        operatorId: op.id,
+                        operatorName: op.full_name || "Sem nome",
+                        amount: current,
+                        points: currentPts,
+                      })
                     }
-                    className="h-8 w-40"
-                    placeholder={String(current)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={editedPoints[op.id] ?? currentPts}
-                    onChange={(e) =>
-                      setEditedPoints((prev) => ({ ...prev, [op.id]: Number(e.target.value) || 0 }))
-                    }
-                    className="h-8 w-28"
-                  />
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Editar
+                  </Button>
                 </TableCell>
               </TableRow>
             );
@@ -189,6 +186,49 @@ const GoalsManagementTab = () => {
           )}
         </TableBody>
       </Table>
+
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar meta — {editing?.operatorName}</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="meta-amount">Meta (R$)</Label>
+                <CurrencyInput
+                  id="meta-amount"
+                  value={editing.amount}
+                  onValueChange={(v) => setEditing((prev) => prev ? { ...prev, amount: v } : prev)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="meta-points">Pontos ao bater</Label>
+                <Input
+                  id="meta-points"
+                  type="number"
+                  min={0}
+                  value={editing.points}
+                  onChange={(e) =>
+                    setEditing((prev) => prev ? { ...prev, points: Number(e.target.value) || 0 } : prev)
+                  }
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)} disabled={saveMut.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => editing && saveMut.mutate(editing)}
+              disabled={saveMut.isPending}
+            >
+              {saveMut.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
