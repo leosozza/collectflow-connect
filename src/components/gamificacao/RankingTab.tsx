@@ -127,7 +127,8 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
           const medal = isTop3 ? medals[entry.position! - 1] : null;
           const name = entry.profile?.full_name || "Operador";
           const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-          const progressPct = Math.round((entry.points / maxPoints) * 100);
+          const entryMetricVal = metricValueOf(entry);
+          const progressPct = Math.round((entryMetricVal / maxMetric) * 100);
           const receiveRate = entry.payments_count > 0
             ? Math.round((entry.payments_count / (entry.payments_count + entry.breaks_count)) * 100)
             : 0;
