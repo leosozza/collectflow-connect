@@ -463,6 +463,47 @@ export async function fireNowScheduledCampaign(campaignId: string): Promise<void
   if (error) throw error;
 }
 
+// ---- In-flight (sending) campaign management ----
+
+export async function pauseSendingCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "paused" })
+    .eq("id", campaignId)
+    .in("status", ["sending"]);
+  if (error) throw error;
+}
+
+export async function resumeSendingCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "sending" })
+    .eq("id", campaignId)
+    .eq("status", "paused");
+  if (error) throw error;
+
+  // Re-trigger the worker to continue processing pending recipients
+  const { error: invokeErr } = await supabase.functions.invoke("send-bulk-whatsapp", {
+    body: { campaign_id: campaignId },
+  });
+  if (invokeErr) throw invokeErr;
+}
+
+export async function cancelSendingCampaign(campaignId: string): Promise<void> {
+  const { error } = await supabase
+    .from("whatsapp_campaigns" as any)
+    .update({ status: "cancelled", completed_at: new Date().toISOString() })
+    .eq("id", campaignId)
+    .in("status", ["sending", "paused", "scheduled"]);
+  if (error) throw error;
+
+  await supabase
+    .from("whatsapp_campaign_recipients" as any)
+    .update({ status: "cancelled" })
+    .eq("campaign_id", campaignId)
+    .in("status", ["pending", "processing"]);
+}
+
 export async function fetchCampaignRuns(parentCampaignId: string): Promise<any[]> {
   const { data, error } = await supabase
     .from("whatsapp_campaign_runs" as any)
