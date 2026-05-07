@@ -241,7 +241,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         paidAt = inst.cobranca.data_pagamento;
       } else if (confirmedManualMatches.length > 0) {
         const mp = confirmedManualMatches[0];
-        paidAt = mp.payment_date || mp.confirmed_at || mp.created_at;
+        paidAt = (mp as any).payment_date || (mp as any).confirmed_at || (mp as any).reviewed_at || (mp as any).created_at;
       }
     }
     return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
