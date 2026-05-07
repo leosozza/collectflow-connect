@@ -16,6 +16,37 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const TZ = "America/Sao_Paulo";
 
+// Centralized invoker for send-bulk-whatsapp. Awaits the HTTP response so the
+// edge runtime does not tear down the worker before the request leaves.
+// Uses EdgeRuntime.waitUntil as a belt-and-suspenders so the dispatcher can
+// still return quickly while guaranteeing the fetch completes.
+async function invokeBulkWorker(campaignId: string, source: string): Promise<void> {
+  const url = `${SUPABASE_URL}/functions/v1/send-bulk-whatsapp`;
+  const doFetch = fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      apikey: SERVICE_ROLE_KEY,
+    },
+    body: JSON.stringify({ campaign_id: campaignId }),
+  })
+    .then(async (r) => {
+      const txt = await r.text().catch(() => "");
+      console.log(`[invoke:${source}] campaign=${campaignId} status=${r.status} body=${txt.slice(0, 200)}`);
+    })
+    .catch((e) => console.log(`[invoke:${source}] campaign=${campaignId} fetch error: ${e?.message}`));
+
+  // Keep runtime alive until the request actually completes.
+  try {
+    // @ts-ignore EdgeRuntime is provided by Supabase Edge Runtime
+    EdgeRuntime.waitUntil(doFetch);
+  } catch { /* non-edge env */ }
+
+  // Also await briefly so we surface failures in dispatcher logs.
+  await doFetch;
+}
+
 // ---------- Recurrence helpers ----------
 
 interface RecurrenceRule {
