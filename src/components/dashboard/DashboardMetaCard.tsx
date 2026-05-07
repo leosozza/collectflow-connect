@@ -13,6 +13,7 @@ interface DashboardMetaCardProps {
   monthLabel: string;
   selectedOperatorUserId: string | null; // user_id from global filter
   received: number; // total_recebido from dashboard RPC
+  tenantId: string | null;
 }
 
 const DashboardMetaCard = ({
@@ -21,21 +22,22 @@ const DashboardMetaCard = ({
   monthLabel,
   selectedOperatorUserId,
   received,
+  tenantId,
 }: DashboardMetaCardProps) => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
 
-  // Operator: own goal
-  const { data: myGoal } = useQuery({
-    queryKey: ["dash-meta-my-goal", year, month, profile?.id],
-    queryFn: () => fetchMyGoal(year, month),
+  // Operator: own goal(s)
+  const { data: myGoals = [] } = useQuery({
+    queryKey: ["dash-meta-my-goals", year, month, profile?.id, tenantId],
+    queryFn: () => fetchMyGoals(year, month, tenantId || undefined),
     enabled: !isTenantAdmin && !!profile?.id,
   });
 
   // Admin: all goals for the period
   const { data: allGoals = [] } = useQuery({
-    queryKey: ["dash-meta-goals", year, month],
-    queryFn: () => fetchGoals(year, month, null),
+    queryKey: ["dash-meta-goals-all", year, month, tenantId],
+    queryFn: () => fetchGoals(year, month, undefined, tenantId || undefined), // undefined brings all creditors + global
     enabled: isTenantAdmin,
   });
 
@@ -55,21 +57,23 @@ const DashboardMetaCard = ({
 
   const { goal, title } = useMemo(() => {
     if (!isTenantAdmin) {
+      const total = myGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
       return {
-        goal: Number(myGoal?.target_amount || 0),
+        goal: total,
         title: "Meta do Mês",
       };
     }
     if (selectedOperatorUserId && selectedProfile?.id) {
-      const opGoal = allGoals.find((g) => g.operator_id === selectedProfile.id);
+      const opGoals = allGoals.filter((g) => g.operator_id === selectedProfile.id);
+      const total = opGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
       return {
-        goal: Number(opGoal?.target_amount || 0),
-        title: "Meta do Mês",
+        goal: total,
+        title: `Meta: ${selectedProfile.full_name}`,
       };
     }
     const total = allGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
-    return { goal: total, title: "Meta do Mês" };
-  }, [isTenantAdmin, myGoal, allGoals, selectedOperatorUserId, selectedProfile]);
+    return { goal: total, title: "Meta da Equipe" };
+  }, [isTenantAdmin, myGoals, allGoals, selectedOperatorUserId, selectedProfile]);
 
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
 

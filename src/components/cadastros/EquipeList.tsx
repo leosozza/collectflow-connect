@@ -24,7 +24,6 @@ const EquipeList = () => {
   const [editing, setEditing] = useState<any>(null);
   const [nome, setNome] = useState("");
   const [liderId, setLiderId] = useState("");
-  const [metaMensal, setMetaMensal] = useState(0);
   const [status, setStatus] = useState("ativa");
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
@@ -60,16 +59,16 @@ const EquipeList = () => {
     onError: () => toast.error("Erro ao excluir"),
   });
 
-  const openNew = () => { setEditing(null); setNome(""); setLiderId(""); setMetaMensal(0); setStatus("ativa"); setSelectedMembers([]); setDialogOpen(true); };
+  const openNew = () => { setEditing(null); setNome(""); setLiderId(""); setStatus("ativa"); setSelectedMembers([]); setDialogOpen(true); };
   const openEdit = async (eq: any) => {
-    setEditing(eq); setNome(eq.nome); setLiderId(eq.lider_id || ""); setMetaMensal(Number(eq.meta_mensal || 0)); setStatus(eq.status);
+    setEditing(eq); setNome(eq.nome); setLiderId(eq.lider_id || ""); setStatus(eq.status);
     try { const membros = await fetchEquipeMembros(eq.id); setSelectedMembers(membros.map((m: any) => m.profile_id)); } catch { setSelectedMembers([]); }
     setDialogOpen(true);
   };
 
   const handleSave = () => {
     if (!nome.trim()) { toast.error("Nome obrigatório"); return; }
-    saveMutation.mutate({ ...(editing?.id ? { id: editing.id } : {}), tenant_id: tenant!.id, nome: nome.trim(), lider_id: liderId || null, meta_mensal: metaMensal, status });
+    saveMutation.mutate({ ...(editing?.id ? { id: editing.id } : {}), tenant_id: tenant!.id, nome: nome.trim(), lider_id: liderId || null, status });
   };
 
   const toggleMember = (id: string) => setSelectedMembers(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
@@ -88,13 +87,12 @@ const EquipeList = () => {
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         {isLoading ? <div className="p-8 text-center text-muted-foreground">Carregando...</div> : filtered.length === 0 ? <div className="p-8 text-center text-muted-foreground text-sm">Nenhuma equipe encontrada</div> : (
           <Table>
-            <TableHeader><TableRow className="bg-muted/50"><TableHead>Equipe</TableHead><TableHead>Líder</TableHead><TableHead>Meta Mensal</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-muted/50"><TableHead>Equipe</TableHead><TableHead>Líder</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
             <TableBody>
               {filtered.map((eq: any) => (
                 <TableRow key={eq.id}>
                   <TableCell className="font-medium"><div className="flex items-center gap-2"><Users className="w-4 h-4 text-muted-foreground" />{eq.nome}</div></TableCell>
                   <TableCell>{getProfileName(eq.lider_id)}</TableCell>
-                  <TableCell>R$ {Number(eq.meta_mensal || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
                   <TableCell><Badge variant={eq.status === "ativa" ? "default" : "secondary"}>{eq.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <Button size="icon" variant="ghost" onClick={() => openEdit(eq)}><Pencil className="w-4 h-4" /></Button>
@@ -124,7 +122,6 @@ const EquipeList = () => {
                 <SelectContent>{profiles.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Meta Mensal (R$)</Label><CurrencyInput value={metaMensal} onValueChange={setMetaMensal} /></div>
             <div><Label>Status</Label>
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
