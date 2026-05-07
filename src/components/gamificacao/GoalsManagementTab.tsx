@@ -134,10 +134,11 @@ const GoalsManagementTab = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["goals-all-credores"] });
       qc.invalidateQueries({ queryKey: ["my-goal"] });
       qc.invalidateQueries({ queryKey: ["my-goal-history"] });
-      qc.invalidateQueries({ queryKey: ["dash-meta-my-goal"] });
-      qc.invalidateQueries({ queryKey: ["dash-meta-goals"] });
+      qc.invalidateQueries({ queryKey: ["dash-meta-my-goals"] });
+      qc.invalidateQueries({ queryKey: ["dash-meta-goals-all"] });
       setEditing(null);
       toast.success("Meta salva!");
     },
