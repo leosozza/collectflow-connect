@@ -107,5 +107,3 @@ const DashboardMetaCard = ({
 };
 
 export default DashboardMetaCard;
-
-export default DashboardMetaCard;

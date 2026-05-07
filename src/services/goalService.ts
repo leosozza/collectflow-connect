@@ -150,9 +150,3 @@ export const awardGoalIfReached = async (params: {
   await supabase.from("operator_goals").update({ points_awarded: true } as any).eq("id", g.id);
   return true;
 };
-_amount: g.points_reward,
-  });
-
-await supabase.from("operator_goals").update({ points_awarded: true } as any).eq("id", g.id);
-return true;
-};
