@@ -125,23 +125,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
-  // Material payment sources only. client_events are audit trail and can duplicate provider rows.
-  const allPaymentRecords = useMemo(() => {
-    const records: Array<{ date: string; amount: number }> = [];
-    manualPayments
-      .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
-      .forEach((mp: any) => records.push({ date: mp.payment_date || mp.confirmed_at || mp.created_at, amount: Number(mp.amount_paid) }));
-    portalPayments.forEach((p: any) => records.push({ date: p.payment_date || p.created_at, amount: Number(p.amount) }));
-    cobrancas
-      .filter((c: any) => c.status === "pago")
-      .forEach((c: any) => records.push({ date: c.data_pagamento || c.updated_at || c.created_at, amount: Number(c.valor_pago ?? c.valor ?? 0) }));
-    return records.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [manualPayments, portalPayments, cobrancas]);
-
-  const totalPaidFromClients = useMemo(() => {
-    return allPaymentRecords.reduce((sum, r) => sum + r.amount, 0);
-  }, [allPaymentRecords]);
-
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
   const cancelledMap: Record<string, any> = (agreement as any).cancelled_installments || {};
