@@ -26,7 +26,15 @@ const getMyTenantId = async (): Promise<string | null> => {
   return (data?.tenant_id as string) || null;
 };
 
-export const fetchGoals = async (year: number, month: number, credorId?: string | null, tenantId?: string): Promise<OperatorGoal[]> => {
+export type GoalsMode = "global" | "per_credor" | "all";
+
+export const fetchGoals = async (
+  year: number,
+  month: number,
+  credorId?: string | null,
+  tenantId?: string,
+  mode: GoalsMode = "all",
+): Promise<OperatorGoal[]> => {
   const tid = tenantId || await getMyTenantId();
   if (!tid) return [];
 
@@ -43,6 +51,10 @@ export const fetchGoals = async (year: number, month: number, credorId?: string 
     } else {
       query = query.eq("credor_id", credorId);
     }
+  } else if (mode === "global") {
+    query = query.is("credor_id", null);
+  } else if (mode === "per_credor") {
+    query = query.not("credor_id", "is", null);
   }
 
   const { data, error } = await query;
@@ -50,7 +62,25 @@ export const fetchGoals = async (year: number, month: number, credorId?: string 
   return (data as OperatorGoal[]) || [];
 };
 
-export const fetchMyGoals = async (year: number, month: number, tenantId?: string): Promise<OperatorGoal[]> => {
+export const fetchTenantGoalsMode = async (tenantId: string): Promise<"global" | "per_credor"> => {
+  const { data } = await supabase
+    .from("tenants")
+    .select("settings")
+    .eq("id", tenantId)
+    .maybeSingle();
+  const m = (data?.settings as any)?.goals_mode;
+  return m === "per_credor" ? "per_credor" : "global";
+};
+
+export const setTenantGoalsMode = async (tenantId: string, mode: "global" | "per_credor"): Promise<void> => {
+  const { data } = await supabase.from("tenants").select("settings").eq("id", tenantId).maybeSingle();
+  const next = { ...((data?.settings as any) || {}), goals_mode: mode };
+  const { error } = await supabase.from("tenants").update({ settings: next } as any).eq("id", tenantId);
+  if (error) throw error;
+};
+
+
+export const fetchMyGoals = async (year: number, month: number, tenantId?: string, mode: GoalsMode = "all"): Promise<OperatorGoal[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
@@ -65,7 +95,7 @@ export const fetchMyGoals = async (year: number, month: number, tenantId?: strin
     .single();
   if (!profile) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("operator_goals")
     .select("*")
     .eq("tenant_id", tid)
@@ -73,6 +103,10 @@ export const fetchMyGoals = async (year: number, month: number, tenantId?: strin
     .eq("year", year)
     .eq("month", month);
 
+  if (mode === "global") query = query.is("credor_id", null);
+  else if (mode === "per_credor") query = query.not("credor_id", "is", null);
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data as OperatorGoal[]) || [];
 };

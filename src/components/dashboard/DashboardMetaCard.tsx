@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchMyGoal, fetchGoals } from "@/services/goalService";
+import { fetchMyGoals, fetchGoals, fetchTenantGoalsMode } from "@/services/goalService";
 import { Trophy } from "lucide-react";
 import MetaRadialCard from "./MetaRadialCard";
 
@@ -27,17 +27,24 @@ const DashboardMetaCard = ({
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
 
+  // Tenant goals mode (global vs per_credor)
+  const { data: goalsMode = "global" } = useQuery({
+    queryKey: ["tenant-goals-mode", tenantId],
+    queryFn: () => fetchTenantGoalsMode(tenantId!),
+    enabled: !!tenantId,
+  });
+
   // Operator: own goal(s)
   const { data: myGoals = [] } = useQuery({
-    queryKey: ["dash-meta-my-goals", year, month, profile?.id, tenantId],
-    queryFn: () => fetchMyGoals(year, month, tenantId || undefined),
+    queryKey: ["dash-meta-my-goals", year, month, profile?.id, tenantId, goalsMode],
+    queryFn: () => fetchMyGoals(year, month, tenantId || undefined, goalsMode),
     enabled: !isTenantAdmin && !!profile?.id,
   });
 
-  // Admin: all goals for the period
+  // Admin: all goals for the period (filtered by tenant goals mode)
   const { data: allGoals = [] } = useQuery({
-    queryKey: ["dash-meta-goals-all", year, month, tenantId],
-    queryFn: () => fetchGoals(year, month, undefined, tenantId || undefined), // undefined brings all creditors + global
+    queryKey: ["dash-meta-goals-all", year, month, tenantId, goalsMode],
+    queryFn: () => fetchGoals(year, month, undefined, tenantId || undefined, goalsMode),
     enabled: isTenantAdmin,
   });
 
