@@ -659,7 +659,54 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
     }
 
     if (timedOut) break;
+    if (abortReason) break;
     if (!anyProcessed) break; // All instances exhausted
+  }
+
+  // ===== Handle user-initiated abort (pause/cancel) =====
+  if (abortReason) {
+    // Release any rows still flagged as "processing" by this worker so the
+    // retomada (resume) ou outras pendências possam continuar.
+    await supabase.from("whatsapp_campaign_recipients")
+      .update({ status: "pending", claimed_at: null, claimed_by: null })
+      .eq("campaign_id", campaignId)
+      .eq("status", "processing");
+
+    if (abortReason === "cancelled") {
+      // Mark remaining pending recipients as cancelled.
+      await supabase.from("whatsapp_campaign_recipients")
+        .update({ status: "cancelled" })
+        .eq("campaign_id", campaignId)
+        .eq("status", "pending");
+      await supabase.from("whatsapp_campaigns").update({
+        status: "cancelled", sent_count: totalSent, failed_count: totalFailed,
+        completed_at: new Date().toISOString(),
+        progress_metadata: {
+          processed: totalSent + totalFailed, remaining: 0,
+          anti_ban_active: true, provider_category: providerCategory,
+          aborted_reason: "cancelled",
+        },
+        updated_at: new Date().toISOString(),
+      }).eq("id", campaignId);
+    } else {
+      // Paused: keep status, persist counters, do NOT auto-retrigger.
+      await supabase.from("whatsapp_campaigns").update({
+        sent_count: totalSent, failed_count: totalFailed,
+        progress_metadata: {
+          processed: totalSent + totalFailed,
+          paused_at: new Date().toISOString(),
+          anti_ban_active: true, provider_category: providerCategory,
+          aborted_reason: "paused",
+        },
+        updated_at: new Date().toISOString(),
+      }).eq("id", campaignId);
+    }
+
+    await supabase.rpc("release_campaign_lock", { _campaign_id: campaignId, _worker_id: workerId });
+    return new Response(
+      JSON.stringify({ status: abortReason, sent: chunkSent, failed: chunkFailed, totalSent, totalFailed }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   // Check remaining
