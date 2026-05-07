@@ -426,16 +426,64 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     }, 0);
   }, [naoPageos, credorData]);
 
-  // Em Aberto: soma direta por parcela elegível (pendente, vencido, em_acordo, devolvido)
-  const totalAberto = clients.reduce((sum, c) => {
-    const isDevolvido = !!(c as any).data_devolucao;
-    const isPago = c.status === "pago" && !isDevolvido;
-    const isCancelado = c.status === "cancelado_maxlist" || c.status === "quebrado";
-    if (isPago || isCancelado) return sum;
-    const valorBase = Number(c.valor_saldo) || Number(c.valor_parcela) || 0;
-    const pago = isDevolvido ? 0 : Number(c.valor_pago) || 0;
-    return sum + Math.max(0, valorBase - pago);
-  }, 0);
+  // ── NOVO: Cálculo de Pagamentos Agregados (Saldo Devedor Dinâmico) ──
+  const { data: aggregatedPayments = 0 } = useQuery({
+    queryKey: ["aggregated-payments", cpf, tenant?.id],
+    queryFn: async () => {
+      if (!tenant?.id || !cpf) return 0;
+      const rawCpf = cpf.replace(/\D/g, "");
+      const fmtCpf = rawCpf.length === 11 ? `${rawCpf.slice(0, 3)}.${rawCpf.slice(3, 6)}.${rawCpf.slice(6, 9)}-${rawCpf.slice(9)}` : rawCpf;
+
+      // 1. Manual Payments (Acordos)
+      const { data: manual } = await supabase
+        .from("manual_payments")
+        .select("amount_paid")
+        .in("status", ["confirmed", "approved"])
+        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${fmtCpf}`);
+
+      // 2. Portal Payments
+      const { data: portal } = await supabase
+        .from("portal_payments")
+        .select("amount")
+        .eq("status", "paid")
+        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${fmtCpf}`);
+
+      // 3. Negociarie Cobrancas
+      const { data: negociarie } = await supabase
+        .from("negociarie_cobrancas")
+        .select("valor_pago")
+        .eq("status", "pago")
+        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${fmtCpf}`);
+
+      const totalManual = (manual || []).reduce((s, p) => s + Number(p.amount_paid || 0), 0);
+      const totalPortal = (portal || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+      const totalNegociarie = (negociarie || []).reduce((s, p) => s + Number(p.valor_pago || 0), 0);
+
+      // 4. Pagamentos diretos nos títulos (já liquidados no ERP/carga)
+      const totalTitlesPaid = clients.reduce((sum, c) => {
+        const isDevolvido = !!(c as any).data_devolucao;
+        if (isDevolvido) return sum;
+        return sum + Number(c.valor_pago || 0);
+      }, 0);
+
+      return totalManual + totalPortal + totalNegociarie + totalTitlesPaid;
+    },
+    enabled: !!tenant?.id && !!cpf && clients.length > 0,
+  });
+
+  // Em Aberto: Dívida Original Total - Todos os Pagamentos
+  const totalAberto = useMemo(() => {
+    const totalDividaOriginal = clients.reduce((sum, c) => {
+      const isDevolvido = !!(c as any).data_devolucao;
+      const isCancelado = c.status === "cancelado_maxlist" || c.status === "quebrado";
+      if (isCancelado) return sum;
+      
+      const valorBase = Number(c.valor_parcela) || Number(c.valor_saldo) || 0;
+      return sum + valorBase;
+    }, 0);
+
+    return Math.max(0, totalDividaOriginal - aggregatedPayments);
+  }, [clients, aggregatedPayments]);
 
   // Tipo de Dívida agregado: moda dos clients (evita usar só client[0] quando há múltiplos tipos)
   const tipoDividaAgregadoId = (() => {
