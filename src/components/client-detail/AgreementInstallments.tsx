@@ -125,21 +125,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
-<<<<<<< HEAD
-=======
-  // Material payment sources only. client_events are audit trail and can duplicate provider rows.
-  const totalPaidFromClients = useMemo(() => {
-    const manualTotal = manualPayments
-      .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
-      .reduce((sum: number, mp: any) => sum + Number(mp.amount_paid || 0), 0);
-    const portalTotal = portalPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-    const cobrancaTotal = cobrancas
-      .filter((c: any) => c.status === "pago")
-      .reduce((sum: number, c: any) => sum + Number(c.valor_pago ?? c.valor ?? 0), 0);
-    return manualTotal + portalTotal + cobrancaTotal;
-  }, [manualPayments, portalPayments, cobrancas]);
-
->>>>>>> 1b6fc600 (feat: restore payment date migration and commit contract visibility improvements)
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
   const cancelledMap: Record<string, any> = (agreement as any).cancelled_installments || {};
@@ -246,7 +231,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         ? "pago"
         : isPaidByManual
           ? "pago"
-<<<<<<< HEAD
           : isOverdue ? "vencido" : "pendente";
 
     // Data de pagamento: SEMPRE da fonte canônica (cobrança ou baixa manual que casou).
@@ -261,10 +245,6 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       }
     }
     return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
-=======
-          : inst.cobranca?.status || (isPaidManually ? "pago" : (isOverdue ? "vencido" : "pendente"));
-    return { ...inst, status, isOverdue, pendingManual, isCancelled: false };
->>>>>>> 1b6fc600 (feat: restore payment date migration and commit contract visibility improvements)
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
