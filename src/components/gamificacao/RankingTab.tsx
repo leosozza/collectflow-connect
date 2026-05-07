@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchRanking, RankingEntry } from "@/services/gamificationService";
+import { fetchRanking, RankingEntry, RankingMetric } from "@/services/gamificationService";
+import { fetchRankingConfigs } from "@/services/rankingConfigService";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,10 +25,23 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedConfigId, setSelectedConfigId] = useState<string>("");
+
+  const { data: configs = [] } = useQuery({
+    queryKey: ["ranking-configs-active"],
+    queryFn: fetchRankingConfigs,
+    staleTime: 60_000,
+  });
+  const activeConfigs = useMemo(() => configs.filter(c => c.is_active), [configs]);
+  const activeConfig = useMemo(
+    () => activeConfigs.find(c => c.id === selectedConfigId) ?? activeConfigs[0],
+    [activeConfigs, selectedConfigId],
+  );
+  const metric: RankingMetric = (activeConfig?.metric as RankingMetric) || "points";
 
   const { data: ranking = [], isLoading } = useQuery({
-    queryKey: ["ranking", selectedYear, selectedMonth],
-    queryFn: () => fetchRanking(selectedYear, selectedMonth),
+    queryKey: ["ranking", selectedYear, selectedMonth, metric],
+    queryFn: () => fetchRanking(selectedYear, selectedMonth, metric),
     refetchOnWindowFocus: true,
   });
 
@@ -39,20 +53,37 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "operator_points", filter: `tenant_id=eq.${tenant.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth] }),
+        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth, metric] }),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "agreements", filter: `tenant_id=eq.${tenant.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth] }),
+        () => queryClient.invalidateQueries({ queryKey: ["ranking", selectedYear, selectedMonth, metric] }),
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tenant?.id, selectedYear, selectedMonth, queryClient]);
+  }, [tenant?.id, selectedYear, selectedMonth, metric, queryClient]);
 
-  const maxPoints = ranking[0]?.points || 1;
+  const metricLabels: Record<RankingMetric, string> = {
+    points: "Pontos",
+    total_received: "Recebido",
+    payments_count: "Pagamentos",
+    agreements_count: "Acordos",
+  };
+  const metricValueOf = (e: RankingEntry): number => {
+    switch (metric) {
+      case "total_received": return Number(e.total_received) || 0;
+      case "payments_count": return Number(e.payments_count) || 0;
+      case "agreements_count": return Number(e.agreements_count) || 0;
+      default: return Number(e.points) || 0;
+    }
+  };
+  const formatMetric = (v: number) =>
+    metric === "total_received" ? formatCurrency(v) : v.toLocaleString("pt-BR");
+
+  const maxMetric = ranking[0] ? metricValueOf(ranking[0]) || 1 : 1;
 
   return (
     <div className="space-y-4">
@@ -77,6 +108,25 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
             ))}
           </SelectContent>
         </Select>
+        {activeConfigs.length > 1 && (
+          <Select value={activeConfig?.id ?? ""} onValueChange={setSelectedConfigId}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Ranking" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeConfigs.map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name} · {metricLabels[(c.metric as RankingMetric) || "points"]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {activeConfig && (
+          <span className="text-xs text-muted-foreground ml-1">
+            Ordenado por <strong className="text-foreground">{metricLabels[metric]}</strong>
+          </span>
+        )}
       </div>
 
       {isLoading && (
@@ -96,7 +146,8 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
           const medal = isTop3 ? medals[entry.position! - 1] : null;
           const name = entry.profile?.full_name || "Operador";
           const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-          const progressPct = Math.round((entry.points / maxPoints) * 100);
+          const entryMetricVal = metricValueOf(entry);
+          const progressPct = Math.round((entryMetricVal / maxMetric) * 100);
           const receiveRate = entry.payments_count > 0
             ? Math.round((entry.payments_count / (entry.payments_count + entry.breaks_count)) * 100)
             : 0;
@@ -155,9 +206,16 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-3xl font-black text-foreground leading-none tracking-tight">
-                    {entry.points.toLocaleString("pt-BR")}
+                    {formatMetric(entryMetricVal)}
                   </p>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">pontos</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">
+                    {metricLabels[metric]}
+                  </p>
+                  {metric !== "points" && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {entry.points.toLocaleString("pt-BR")} pts
+                    </p>
+                  )}
                 </div>
               </div>
 

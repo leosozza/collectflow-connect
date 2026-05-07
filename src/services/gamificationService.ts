@@ -40,7 +40,9 @@ const getMyTenantId = async (): Promise<string | null> => {
   return (data?.tenant_id as string) || null;
 };
 
-export const fetchRanking = async (year: number, month: number): Promise<RankingEntry[]> => {
+export type RankingMetric = "points" | "total_received" | "payments_count" | "agreements_count";
+
+export const fetchRanking = async (year: number, month: number, metric: RankingMetric = "points"): Promise<RankingEntry[]> => {
   const tenantId = await getMyTenantId();
   if (!tenantId) return [];
 
@@ -136,12 +138,32 @@ export const fetchRanking = async (year: number, month: number): Promise<Ranking
     agreementsCountMap.set(profileId, (agreementsCountMap.get(profileId) || 0) + 1);
   });
 
-  return filteredPoints.filter((entry) => profileMap.has(entry.operator_id)).map((entry, idx) => ({
-    ...entry,
-    profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
-    position: idx + 1,
-    agreements_count: agreementsCountMap.get(entry.operator_id) || 0,
-  }));
+  const enriched = filteredPoints
+    .filter((entry) => profileMap.has(entry.operator_id))
+    .map((entry) => ({
+      ...entry,
+      profile: profileMap.get(entry.operator_id) as { full_name: string; avatar_url: string | null } | undefined,
+      agreements_count: agreementsCountMap.get(entry.operator_id) || 0,
+    }));
+
+  const metricValue = (e: typeof enriched[number]) => {
+    switch (metric) {
+      case "total_received": return Number(e.total_received) || 0;
+      case "payments_count": return Number(e.payments_count) || 0;
+      case "agreements_count": return Number(e.agreements_count) || 0;
+      default: return Number(e.points) || 0;
+    }
+  };
+
+  enriched.sort((a, b) => {
+    const diff = metricValue(b) - metricValue(a);
+    if (diff !== 0) return diff;
+    const tr = (Number(b.total_received) || 0) - (Number(a.total_received) || 0);
+    if (tr !== 0) return tr;
+    return (Number(b.points) || 0) - (Number(a.points) || 0);
+  });
+
+  return enriched.map((entry, idx) => ({ ...entry, position: idx + 1 }));
 };
 
 export const fetchMyPoints = async (operatorId: string, year: number, month: number): Promise<OperatorPoints | null> => {
