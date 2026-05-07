@@ -187,9 +187,16 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-3xl font-black text-foreground leading-none tracking-tight">
-                    {entry.points.toLocaleString("pt-BR")}
+                    {formatMetric(entryMetricVal)}
                   </p>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">pontos</p>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">
+                    {metricLabels[metric]}
+                  </p>
+                  {metric !== "points" && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {entry.points.toLocaleString("pt-BR")} pts
+                    </p>
+                  )}
                 </div>
               </div>
 
