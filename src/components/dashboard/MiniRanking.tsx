@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchRanking, RankingEntry } from "@/services/gamificationService";
+import { fetchRanking, RankingEntry, RankingMetric } from "@/services/gamificationService";
+import { fetchRankingConfigs } from "@/services/rankingConfigService";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/formatters";
 import { useGamificationTrigger } from "@/hooks/useGamificationTrigger";
@@ -21,9 +22,19 @@ const MiniRanking = () => {
     triggerGamificationUpdate();
   }, [triggerGamificationUpdate]);
 
+  const { data: configs = [] } = useQuery({
+    queryKey: ["ranking-configs-active"],
+    queryFn: fetchRankingConfigs,
+    staleTime: 60_000,
+  });
+  const metric: RankingMetric = useMemo(() => {
+    const active = configs.find(c => c.is_active);
+    return ((active?.metric as RankingMetric) || "points");
+  }, [configs]);
+
   const { data: ranking = [] } = useQuery({
-    queryKey: ["ranking", now.getFullYear(), now.getMonth() + 1],
-    queryFn: () => fetchRanking(now.getFullYear(), now.getMonth() + 1),
+    queryKey: ["ranking", now.getFullYear(), now.getMonth() + 1, metric],
+    queryFn: () => fetchRanking(now.getFullYear(), now.getMonth() + 1, metric),
     staleTime: 60_000,
   });
 
