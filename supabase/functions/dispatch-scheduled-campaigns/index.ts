@@ -376,16 +376,8 @@ async function dispatchRecurring(supabase: any, mother: any) {
     })
     .eq("id", mother.id);
 
-  // Fire-and-forget dispatcher for child
-  fetch(`${SUPABASE_URL}/functions/v1/send-bulk-whatsapp`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      apikey: SERVICE_ROLE_KEY,
-    },
-    body: JSON.stringify({ campaign_id: child.id }),
-  }).catch((e) => console.log(`[recurring] invoke failed ${child.id}:`, e?.message));
+  // Awaited dispatcher for child
+  await invokeBulkWorker(child.id, "recurring");
 
   console.log(`[recurring] mother=${mother.id} child=${child.id} next=${next}`);
 }
@@ -481,15 +473,7 @@ Deno.serve(async (req) => {
       if ((count || 0) === 0) continue;
 
       console.log(`[dispatcher] watchdog re-invoking ${c.id} (pending=${count}, lock=${c.processing_locked_at || "null"})`);
-      fetch(`${SUPABASE_URL}/functions/v1/send-bulk-whatsapp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-          apikey: SERVICE_ROLE_KEY,
-        },
-        body: JSON.stringify({ campaign_id: c.id }),
-      }).catch((e) => console.log(`[watchdog] invoke failed ${c.id}:`, e?.message));
+      await invokeBulkWorker(c.id, "watchdog");
       watchdogReinvoked++;
     }
 
