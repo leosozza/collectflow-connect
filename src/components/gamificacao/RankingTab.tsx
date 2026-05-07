@@ -25,10 +25,23 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedConfigId, setSelectedConfigId] = useState<string>("");
+
+  const { data: configs = [] } = useQuery({
+    queryKey: ["ranking-configs-active"],
+    queryFn: fetchRankingConfigs,
+    staleTime: 60_000,
+  });
+  const activeConfigs = useMemo(() => configs.filter(c => c.is_active), [configs]);
+  const activeConfig = useMemo(
+    () => activeConfigs.find(c => c.id === selectedConfigId) ?? activeConfigs[0],
+    [activeConfigs, selectedConfigId],
+  );
+  const metric: RankingMetric = (activeConfig?.metric as RankingMetric) || "points";
 
   const { data: ranking = [], isLoading } = useQuery({
-    queryKey: ["ranking", selectedYear, selectedMonth],
-    queryFn: () => fetchRanking(selectedYear, selectedMonth),
+    queryKey: ["ranking", selectedYear, selectedMonth, metric],
+    queryFn: () => fetchRanking(selectedYear, selectedMonth, metric),
     refetchOnWindowFocus: true,
   });
 
