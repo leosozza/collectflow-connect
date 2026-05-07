@@ -115,6 +115,34 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
+  const { data: credorReceipt } = useQuery({
+    queryKey: ["credor-receipt-template", agreement?.credor],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("credores")
+        .select("razao_social, nome_fantasia, cnpj, portal_logo_url, document_logo_url, endereco, numero, complemento, bairro, cidade, uf, cep, email, template_recibo")
+        .or(`razao_social.eq.${agreement.credor},nome_fantasia.eq.${agreement.credor}`)
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!agreement?.credor,
+  });
+
+  const { data: tenantReceiptTemplate } = useQuery({
+    queryKey: ["tenant-receipt-template", tenantId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("document_templates")
+        .select("content")
+        .eq("tenant_id", tenantId!)
+        .eq("type", "recibo")
+        .maybeSingle();
+      return data?.content || null;
+    },
+    enabled: !!tenantId,
+  });
+
   const { data: portalPayments = [] } = useQuery({
     queryKey: ["portal-payments", agreementId],
     queryFn: async () => {
