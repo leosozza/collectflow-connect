@@ -108,6 +108,25 @@ const RankingTab = ({ highlightCurrentUser = true }: RankingTabProps) => {
             ))}
           </SelectContent>
         </Select>
+        {activeConfigs.length > 1 && (
+          <Select value={activeConfig?.id ?? ""} onValueChange={setSelectedConfigId}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Ranking" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeConfigs.map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name} · {metricLabels[(c.metric as RankingMetric) || "points"]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {activeConfig && (
+          <span className="text-xs text-muted-foreground ml-1">
+            Ordenado por <strong className="text-foreground">{metricLabels[metric]}</strong>
+          </span>
+        )}
       </div>
 
       {isLoading && (
