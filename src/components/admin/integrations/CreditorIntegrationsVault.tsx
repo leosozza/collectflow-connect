@@ -27,7 +27,7 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
     if (!creditorId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("tenant_integrations")
         .select("config")
         .eq("tenant_id", tenantId)
