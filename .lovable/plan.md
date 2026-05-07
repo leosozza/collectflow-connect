@@ -1,61 +1,51 @@
-# Corrigir download do Recibo (Bloco de Notas → PDF formatado)
+## Objetivo
 
-## Diagnóstico
+Permitir Pausar, Retomar e Cancelar campanhas que já estão em disparo (status `sending`) — hoje essas ações existem apenas para campanhas recorrentes agendadas. Manter o visual atual (mesma tabela, mesmo menu de 3 pontinhos), só ampliando quando ele aparece e quais ações mostra.
 
-Os "Modelos de Documentos" do credor (Acordo, Recibo, Quitação, etc.) já têm um pipeline correto de PDF em `src/components/client-detail/ClientDocuments.tsx`:
+## O que muda na UI (CampaignManagementTab.tsx)
 
-1. Resolve o template (credor → tenant → padrão) em `resolveTemplate`
-2. Renderiza placeholders via `renderDocument`
-3. Empacota em folha A4 com cabeçalho/rodapé via `wrapDocumentInA4Page`
-4. Gera PDF via `downloadPdf` (html2pdf.js)
+Localização: aba **Contact Center → WhatsApp → Campanhas** (mesma tela do print). Sem mudar layout, cores ou estrutura — só comportamento do menu `MoreVertical` que já existe na coluna final.
 
-**O problema** está em outro lugar: o botão "Baixar Recibo" das parcelas pagas, em `src/components/client-detail/AgreementInstallments.tsx` (linha 342 — `handleDownloadReceipt`), ignora completamente esse pipeline e gera um `Blob` `text/plain` com sufixo `.txt`:
+1. Tornar o menu de ações visível também quando `status` for `sending` (hoje só aparece para `scheduled`/`paused`).
+2. Itens do menu por estado:
+   - `sending` → **Pausar disparo** (Pause), **Cancelar campanha** (X, em vermelho)
+   - `paused` (não-recorrente, com envios pendentes) → **Retomar disparo** (Play), **Cancelar campanha**
+   - `scheduled`/`paused` recorrente → mantém exatamente o que já existe (Disparar agora, Pausar/Retomar recorrência, Editar regra, Ver execuções, Cancelar)
+3. Reaproveitar o `AlertDialog` já existente para confirmar Cancelar (texto adaptado quando a campanha está em execução: "Os envios em andamento serão interrompidos e os destinatários pendentes marcados como cancelados").
+4. Pausar/Retomar disparo funcionam direto no clique com `toast.success`/`toast.error` (sem dialog), igual ao padrão atual de Pausar/Retomar recorrência.
+5. Sem nova tela: o usuário continua acessando os detalhes clicando na linha, como hoje. (Se quiser, podemos no futuro repetir os mesmos botões dentro de `CampaignDetailView` — fora do escopo desta tarefa para não mexer no visual da detalhada.)
 
-```ts
-const blob = new Blob([receiptContent], { type: "text/plain;charset=utf-8" });
-a.download = `recibo_parcela_${inst.displayNumber}_${cpf}.txt`;
-```
+## O que muda no service (src/services/whatsappCampaignService.ts)
 
-É exatamente esse "bloco de notas" que o usuário está vendo. Os outros documentos (Acordo, Quitação, Descrição de Dívida, Notificação) já são gerados em PDF corretamente.
+Adicionar 3 funções novas, sem alterar as existentes (que são específicas de recorrência/agendamento):
 
-## Mudança proposta
+- `pauseSendingCampaign(id)` → `update({ status: "paused" }).eq("id", id).eq("status", "sending")`
+- `resumeSendingCampaign(id)` → muda `status` de `paused` → `sending` e dispara `send-bulk-whatsapp` via `supabase.functions.invoke` com `{ campaign_id }` para o worker retomar de onde parou.
+- `cancelSendingCampaign(id)` → marca campanha como `cancelled` e atualiza recipients `pending`/`processing` para `cancelled` (mesma lógica do `cancelScheduledCampaign`, mas aceitando `sending`/`paused`).
 
-### Arquivo único: `src/components/client-detail/AgreementInstallments.tsx`
+Alternativa mais simples: estender `cancelScheduledCampaign` para aceitar `sending` no `.in("status", [...])` e renomear semanticamente — escolhi manter funções separadas para deixar claro o caso de uso.
 
-Reescrever `handleDownloadReceipt(inst)` para reutilizar o mesmo pipeline de `ClientDocuments`:
+## O que muda no worker (supabase/functions/send-bulk-whatsapp/index.ts)
 
-1. Buscar (via `useQuery` no topo do componente) os dados do credor com os campos de template e endereço — mesmo `select` usado em `ClientDocuments.tsx` (`razao_social, nome_fantasia, cnpj, portal_logo_url, document_logo_url, endereco, numero, complemento, bairro, cidade, uf, cep, email, template_recibo`) filtrando por `client.credor`.
-2. Buscar fallback de templates do tenant (`document_templates` onde `type = 'recibo'`).
-3. No handler:
-   - Resolver template: credor → tenant → `TEMPLATE_DEFAULTS.template_recibo`.
-   - Montar `vars` da parcela específica (sobrescrevendo os globais quando fizer sentido):
-     - `{numero_parcela}` = `inst.displayNumber`
-     - `{total_parcelas}` = `totalInstallments`
-     - `{valor_parcela}` = `formatCurrency(inst.value)`
-     - `{valor_pago}` = `formatCurrency(inst.value)`
-     - `{data_vencimento}` = `formatDate(inst.dueDate)`
-     - `{data_pagamento}` = data confirmada da `manualPayments` correspondente, ou `new Date()` como fallback
-     - `{nome_devedor}`, `{cpf_devedor}`, `{credor}` a partir de `agreement`/`cpf`
-   - Chamar `renderDocument(template, vars, source)`.
-   - Empacotar com `wrapDocumentInA4Page({ bodyHtml, title: "Recibo de Pagamento", credor })`.
-   - Chamar `downloadPdf(wrappedHtml, recibo_parcela_${n}_${cpf}_${data}.pdf)`.
-4. Registrar evento `document_generated` em `client_events` (opcional, para manter paridade com `ClientDocuments`).
+O worker hoje processa em loop sem checar se a campanha foi pausada/cancelada. Adicionar checagem leve:
 
-Remover a geração `text/plain` antiga.
+1. A cada N iterações do `while (true)` (ou no início de cada ciclo round-robin de instâncias), reler `whatsapp_campaigns.status` da campanha atual.
+2. Se `status === "paused"` ou `status === "cancelled"`:
+   - Resetar recipients `processing` deste worker de volta para `pending` (no caso de paused) ou para `cancelled` (no caso de cancelled).
+   - Liberar o lock via `release_campaign_lock`.
+   - Sair do loop sem auto-retrigger.
+3. No caminho de finalização normal, se o status for `cancelled`, não sobrescrever para `completed`.
 
-## Detalhes técnicos
+Isso garante que clicar em "Pausar" interrompe os envios em até alguns segundos, e "Retomar" reinvoca o worker que continua de onde parou (a lógica de claim atômico de recipients pending já suporta isso).
 
-- Imports a adicionar em `AgreementInstallments.tsx`:
-  ```ts
-  import { TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
-  import { renderDocument } from "@/services/documentRenderer";
-  import { downloadPdf } from "@/services/documentPdfService";
-  import { wrapDocumentInA4Page } from "@/services/documentLayoutService";
-  ```
-- Não há mudança de schema, RLS, edge function nem de outros componentes.
-- O componente `ClientDocuments` continua intocado — já funciona.
-- O resto dos botões/fluxos da tela permanecem iguais.
+## Arquivos afetados
 
-## Resultado esperado
+- `src/components/contact-center/whatsapp/CampaignManagementTab.tsx` — ampliar visibilidade do menu, adicionar handlers `handlePauseSending`, `handleResumeSending`, ajustar texto do dialog de cancelar.
+- `src/services/whatsappCampaignService.ts` — 3 funções novas.
+- `supabase/functions/send-bulk-whatsapp/index.ts` — checagem periódica de status no loop principal + tratamento de saída por pause/cancel.
 
-Ao clicar em "Baixar Recibo" em uma parcela paga, o usuário recebe um PDF A4 com cabeçalho (logo + título), corpo renderizado a partir do `template_recibo` do credor (ou herdado do tenant/padrão) e rodapé com dados do credor — idêntico ao padrão visual dos demais documentos.
+## Fora do escopo
+
+- Mudanças no visual/cores/layout da tela.
+- Botões dentro de `CampaignDetailView` (pode ser um próximo passo se desejado).
+- Métricas/relatórios sobre campanhas pausadas.
