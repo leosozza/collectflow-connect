@@ -660,22 +660,35 @@ export default function CampaignManagementTab() {
       {/* Cancel confirmation */}
       <AlertDialog open={!!cancelTarget} onOpenChange={(v) => !v && setCancelTarget(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar agendamento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A campanha <strong>{cancelTarget?.name}</strong> não será executada. Destinatários
-              pendentes serão marcados como cancelados. Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmCancel}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Cancelar agendamento
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {(() => {
+            const inFlight = cancelTarget?.status === "sending" ||
+              (cancelTarget?.status === "paused" && cancelTarget?.schedule_type !== "recurring");
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {inFlight ? "Cancelar campanha em execução?" : "Cancelar agendamento?"}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    A campanha <strong>{cancelTarget?.name}</strong>{" "}
+                    {inFlight
+                      ? "será interrompida. Os envios em andamento podem levar alguns segundos para parar e os destinatários pendentes serão marcados como cancelados."
+                      : "não será executada. Destinatários pendentes serão marcados como cancelados."}{" "}
+                    Esta ação não pode ser desfeita.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Voltar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={confirmCancel}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {inFlight ? "Cancelar campanha" : "Cancelar agendamento"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
         </AlertDialogContent>
       </AlertDialog>
 
