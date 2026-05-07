@@ -151,6 +151,30 @@ const GoalsManagementTab = () => {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-border/60 bg-muted/30 p-3 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-sm font-medium">Modo de meta</div>
+          <div className="text-xs text-muted-foreground">
+            {isPerCredor
+              ? "Por credor — a meta do operador é a soma das metas de todos os credores."
+              : "Global — uma meta única por operador no mês."}
+          </div>
+        </div>
+        <ToggleGroup
+          type="single"
+          value={goalsMode}
+          onValueChange={(v) => v && setModeMut.mutate(v as "global" | "per_credor")}
+          disabled={setModeMut.isPending}
+        >
+          <ToggleGroupItem value="global" className="gap-1.5">
+            <Globe className="w-3.5 h-3.5" /> Global
+          </ToggleGroupItem>
+          <ToggleGroupItem value="per_credor" className="gap-1.5">
+            <Building2 className="w-3.5 h-3.5" /> Por Credor
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
       <div className="flex items-center gap-3 flex-wrap">
         <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
@@ -168,22 +192,24 @@ const GoalsManagementTab = () => {
             ))}
           </SelectContent>
         </Select>
-        <Select value={credorFilter} onValueChange={setCredorFilter}>
-          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__global__">Global (todos credores)</SelectItem>
-            {credores.map((c: any) => (
-              <SelectItem key={c.id} value={c.id}>{c.razao_social}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {isPerCredor && (
+          <Select value={credorFilter} onValueChange={setCredorFilter}>
+            <SelectTrigger className="w-56"><SelectValue placeholder="Selecione o credor" /></SelectTrigger>
+            <SelectContent>
+              {credores.map((c: any) => (
+                <SelectItem key={c.id} value={c.id}>{c.razao_social}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Operador</TableHead>
-            <TableHead className="w-40">Meta Atual</TableHead>
+            <TableHead className="w-40">{isPerCredor ? "Meta (credor)" : "Meta do Mês"}</TableHead>
+            {isPerCredor && <TableHead className="w-44">Total (todos credores)</TableHead>}
             <TableHead className="w-40">Pontos ao bater</TableHead>
             <TableHead className="w-24 text-right">Ações</TableHead>
           </TableRow>
