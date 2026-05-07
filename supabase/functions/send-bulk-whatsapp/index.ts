@@ -453,11 +453,31 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
   // Instead of processing all recipients globally, we round-robin across instances
   // so each instance gets proper cooldown time while others send
 
+  // Helper: re-read campaign status to honor user-initiated pause/cancel mid-flight
+  let lastStatusCheck = 0;
+  let abortReason: "paused" | "cancelled" | null = null;
+  const checkAbort = async () => {
+    const now = Date.now();
+    if (now - lastStatusCheck < 4000) return; // throttle: every ~4s
+    lastStatusCheck = now;
+    const { data: cur } = await supabase
+      .from("whatsapp_campaigns")
+      .select("status")
+      .eq("id", campaignId)
+      .single();
+    if (cur?.status === "paused" || cur?.status === "cancelled") {
+      abortReason = cur.status as "paused" | "cancelled";
+    }
+  };
+
   while (true) {
     if (Date.now() - startTime > MAX_EXECUTION_MS) {
       timedOut = true;
       break;
     }
+
+    await checkAbort();
+    if (abortReason) break;
 
     let anyProcessed = false;
 
@@ -467,6 +487,8 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         timedOut = true;
         break;
       }
+      await checkAbort();
+      if (abortReason) break;
 
       const instanceKey: string = (instId as any) || "__gupshup__";
 
