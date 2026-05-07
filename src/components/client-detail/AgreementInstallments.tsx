@@ -705,7 +705,6 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                 <TableRow className="bg-muted/50">
                   <TableHead className="w-[80px]">Parcela</TableHead>
                   <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-center">Pagamento</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center w-[140px]">Ações</TableHead>
@@ -755,11 +754,6 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                         </span>
                       </TableCell>
 
-                      {/* Pagamento */}
-                      <TableCell className="text-center text-xs whitespace-nowrap">
-                        {inst.status === "pago" ? formatDate(inst.paidAt) : "—"}
-                      </TableCell>
-
                       {/* Valor + pencil */}
                       <TableCell className="text-right text-xs">
                         {editingValueIdx === idx ? (
@@ -778,6 +772,9 @@ Data: ${new Date().toLocaleDateString("pt-BR")}
                           </div>
                         ) : (
                           <span className="inline-flex items-center gap-1">
+                            {tenantId && profile && (agreement as any).tenant?.slug === "ybrasil" && (
+                              <span className="text-[10px] text-muted-foreground mr-1">[CONTRATO]</span>
+                            )}
                             {formatCurrency(Number(inst.value))}
                             {canEdit && (
                               <TooltipProvider delayDuration={200}>

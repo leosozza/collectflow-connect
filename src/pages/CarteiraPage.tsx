@@ -468,7 +468,6 @@ const CarteiraPage = () => {
       CPF: c.cpf,
       Credor: c.credor,
       "1º Vencimento": formatDate(c.data_vencimento),
-      Pagamento: c.data_pagamento ? formatDate(c.data_pagamento) : "—",
       "Valor Total": Number(c.valor_total ?? c.valor_parcela),
       Parcelas: c.parcelas_count ?? 1,
       Score: c.propensity_score ?? "",
@@ -939,7 +938,7 @@ const CarteiraPage = () => {
                         1º Vencimento <SortIcon field="data_vencimento" />
                       </button>
                     </TableHead>
-                    <TableHead className="text-center">Pagamento</TableHead>
+
                     <TableHead className="text-center">Score</TableHead>
                     <TableHead className="text-center">Status Cobrança</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -969,9 +968,7 @@ const CarteiraPage = () => {
                         <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.email || "—") : maskEmail(client.email || "")}</TableCell>
                         <TableCell className="text-muted-foreground">{client.credor}</TableCell>
                         <TableCell>{formatDate(client.data_vencimento)}</TableCell>
-                        <TableCell className="text-center text-xs whitespace-nowrap">
-                          {client.data_pagamento ? formatDate(client.data_pagamento) : "—"}
-                        </TableCell>
+
                         <TableCell className="text-center">
                           <PropensityBadge score={(client as any).propensity_score} />
                         </TableCell>

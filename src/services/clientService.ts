@@ -465,7 +465,6 @@ export interface GroupedClient {
   external_id: string | null;
   all_ids: string[];
   total_count: number;
-  data_pagamento: string | null;
   // Aliases for backward compat
   id: string;
   valor_parcela: number;
@@ -719,7 +718,6 @@ export const fetchAllCarteiraClients = async (
           valor_parcela: Number(r.valor_total),
           allIds: r.all_ids || [r.representative_id],
           propensity_score: r.propensity_score || null,
-          data_pagamento: r.data_pagamento || null,
         });
       }
 
@@ -796,7 +794,6 @@ export const fetchCarteiraClientsByIds = async (
         external_id: earliest.external_id,
         all_ids: allIds,
         total_count: items.length,
-        data_pagamento: earliest.data_quitacao || null,
         id: earliest.id,
         valor_parcela: valorTotal,
         allIds,
