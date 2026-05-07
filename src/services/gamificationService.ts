@@ -40,7 +40,9 @@ const getMyTenantId = async (): Promise<string | null> => {
   return (data?.tenant_id as string) || null;
 };
 
-export const fetchRanking = async (year: number, month: number): Promise<RankingEntry[]> => {
+export type RankingMetric = "points" | "total_received" | "payments_count" | "agreements_count";
+
+export const fetchRanking = async (year: number, month: number, metric: RankingMetric = "points"): Promise<RankingEntry[]> => {
   const tenantId = await getMyTenantId();
   if (!tenantId) return [];
 
