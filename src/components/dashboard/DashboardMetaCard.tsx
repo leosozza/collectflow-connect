@@ -25,17 +25,17 @@ const DashboardMetaCard = ({
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
 
-  // Operator: own goal
-  const { data: myGoal } = useQuery({
-    queryKey: ["dash-meta-my-goal", year, month, profile?.id],
-    queryFn: () => fetchMyGoal(year, month),
+  // Operator: all goals for the period (summed)
+  const { data: myGoals = [] } = useQuery({
+    queryKey: ["dash-meta-my-goals", year, month, profile?.id],
+    queryFn: () => fetchMyGoals(year, month),
     enabled: !isTenantAdmin && !!profile?.id,
   });
 
-  // Admin: all goals for the period
+  // Admin: all goals for the period (unfiltered by creditor to get everything)
   const { data: allGoals = [] } = useQuery({
-    queryKey: ["dash-meta-goals", year, month],
-    queryFn: () => fetchGoals(year, month, null),
+    queryKey: ["dash-meta-goals-all", year, month],
+    queryFn: () => fetchGoals(year, month, undefined), // undefined brings all creditors + global
     enabled: isTenantAdmin,
   });
 
@@ -55,21 +55,23 @@ const DashboardMetaCard = ({
 
   const { goal, title } = useMemo(() => {
     if (!isTenantAdmin) {
+      const total = myGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
       return {
-        goal: Number(myGoal?.target_amount || 0),
+        goal: total,
         title: "Meta do Mês",
       };
     }
     if (selectedOperatorUserId && selectedProfile?.id) {
-      const opGoal = allGoals.find((g) => g.operator_id === selectedProfile.id);
+      const opGoals = allGoals.filter((g) => g.operator_id === selectedProfile.id);
+      const total = opGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
       return {
-        goal: Number(opGoal?.target_amount || 0),
+        goal: total,
         title: "Meta do Mês",
       };
     }
     const total = allGoals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
     return { goal: total, title: "Meta do Mês" };
-  }, [isTenantAdmin, myGoal, allGoals, selectedOperatorUserId, selectedProfile]);
+  }, [isTenantAdmin, myGoals, allGoals, selectedOperatorUserId, selectedProfile]);
 
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
 

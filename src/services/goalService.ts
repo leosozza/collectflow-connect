@@ -36,10 +36,12 @@ export const fetchGoals = async (year: number, month: number, credorId?: string 
 
   if (tid) query = query.eq("tenant_id", tid);
 
-  if (credorId) {
-    query = query.eq("credor_id", credorId);
-  } else {
-    query = query.is("credor_id", null);
+  if (credorId !== undefined) {
+    if (credorId === null) {
+      query = query.is("credor_id", null);
+    } else {
+      query = query.eq("credor_id", credorId);
+    }
   }
 
   const { data, error } = await query;
@@ -47,27 +49,32 @@ export const fetchGoals = async (year: number, month: number, credorId?: string 
   return (data as OperatorGoal[]) || [];
 };
 
-export const fetchMyGoal = async (year: number, month: number): Promise<OperatorGoal | null> => {
+export const fetchMyGoals = async (year: number, month: number): Promise<OperatorGoal[]> => {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (!user) return [];
 
-  // Get profile.id (operator_id is profiles.id, not auth.uid)
   const { data: profile } = await supabase
     .from("profiles")
     .select("id")
     .eq("user_id", user.id)
     .single();
-  if (!profile) return null;
+  if (!profile) return [];
 
   const { data, error } = await supabase
     .from("operator_goals")
     .select("*")
     .eq("operator_id", profile.id)
     .eq("year", year)
-    .eq("month", month)
-    .maybeSingle();
+    .eq("month", month);
+
   if (error) throw error;
-  return data as OperatorGoal | null;
+  return (data as OperatorGoal[]) || [];
+};
+
+/** @deprecated Use fetchMyGoals */
+export const fetchMyGoal = async (year: number, month: number): Promise<OperatorGoal | null> => {
+  const goals = await fetchMyGoals(year, month);
+  return goals.length > 0 ? goals[0] : null;
 };
 
 export const upsertGoal = async (params: {
