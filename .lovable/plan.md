@@ -1,54 +1,58 @@
-# Carteira: remover trava de "Mar Aberto" para operador
+## Causa do erro de publicação
 
-## Diagnóstico
-
-Hoje, em `src/pages/CarteiraPage.tsx` linha 279, a listagem força:
-
-```ts
-operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
+O Vite build está falhando com:
+```
+src/components/client-detail/AgreementInstallments.tsx:128:0: ERROR: Unexpected "<<"
 ```
 
-Como o operador não tem `carteira.view_full_data`, a RPC `get_carteira_grouped` recebe `_operator_id = <user>` e devolve **só os clientes atribuídos a ele**. Por isso o Vitor pesquisou "Marcela Cristina dos Santos Khouwayer" e a tela mostra "Nenhum cliente encontrado" — a Marcela não está atribuída a ele.
+O arquivo `src/components/client-detail/AgreementInstallments.tsx` ficou com **marcadores de conflito de merge não resolvidos** (`<<<<<<< HEAD / ======= / >>>>>>>`) gravados literalmente no código, em dois trechos:
 
-Não foi mudança recente. A última alteração (Financeiro) não tocou em `carteira`.
+- Linhas **128-142** — bloco `totalPaidFromClients` (useMemo).
+- Linhas **249-267** — cálculo de `status` e `paidAt` dentro do `installmentsWithStatus.map`.
 
-## Mudança
+Esses marcadores foram introduzidos no commit `d08b3eab — feat: restore payment date migration and commit contract visibility improvements`. Por isso o publish retorna `build failed with exit status 1`.
 
-Arquivo único: `src/pages/CarteiraPage.tsx`, linha 279.
+Nenhum outro arquivo no `src/` ou `supabase/` tem marcador de conflito (verificado via grep).
 
-De:
+## Resolução proposta (manter o lado HEAD)
+
+O lado **HEAD** é o código correto e em uso pelo restante do componente. O lado mergeado (`>>>>>>> 1b6fc600`) referencia a variável `isPaidManually` que **não existe** na função (só existe `isPaidByManual` na linha 241), então adotá-lo quebraria runtime. O bloco `totalPaidFromClients` do lado mergeado também não é referenciado em nenhum outro lugar do arquivo (grep confirma: 0 usos).
+
+### Bloco 1 (linhas 128-142)
+Remover totalmente o conflito — manter apenas a linha em branco entre o `useQuery` de `portalPayments` e a leitura de `customDates`. O `totalPaidFromClients` calculado no lado mergeado fica fora porque não tem consumidor.
+
+### Bloco 2 (linhas 249-267)
+Manter o trecho HEAD:
 ```ts
-operatorId: (!permissions.canViewFullData && profileId) ? profileId : undefined,
+          : isOverdue ? "vencido" : "pendente";
+
+    let paidAt: string | undefined;
+    if (status === "pago") {
+      if (inst.cobranca?.data_pagamento) {
+        paidAt = inst.cobranca.data_pagamento;
+      } else if (confirmedManualMatches.length > 0) {
+        const mp = confirmedManualMatches[0];
+        paidAt = (mp as any).payment_date || (mp as any).confirmed_at || (mp as any).reviewed_at || (mp as any).created_at;
+      }
+    }
+    return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
 ```
-Para:
-```ts
-operatorId: undefined,
-```
 
-Pronto. A RPC passa a listar todos os clientes do tenant para qualquer papel. RLS de tenant continua intacta (escopo por `tenant_id`).
+Descartar o bloco `=======` … `>>>>>>>` que usa `isPaidManually` (variável inexistente).
 
-## Por que isso é seguro
+## Validação
 
-As travas operacionais que importam **não dependem** desse filtro de listagem — elas vivem em outras camadas e continuam aplicáveis:
+1. Rodar `npx vite build` localmente após o fix — deve completar sem erros.
+2. Abrir um acordo com parcelas pagas (manual + cobrança) na tela de detalhe e conferir que `paidAt` aparece corretamente.
+3. Republicar pelo botão **Update**.
 
-| Trava | Onde mora | Continua valendo? |
-|---|---|---|
-| Cliente com **acordo vigente / em negociação** | Hierarquia de status por CPF/Credor (`QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > ...`) e validações de `AgreementForm` / RPCs de criação | Sim, intacta |
-| Concorrência de atendimento (lock) | `lockService` / `useAtendimentoModal` | Sim |
-| Disposições / dados sensíveis | `view_full_data` segue controlando mascaramento de CPF/telefone na UI | Sim |
-| Atribuição em ações em massa | Diálogos de bulk continuam respeitando `operator_id` ao gravar | Sim |
+## Escopo
 
-Ou seja: operador **enxerga e pesquisa** qualquer cliente, mas operações que exigem exclusividade continuam barradas pelas regras de status/lock já existentes.
+- **1 arquivo, 2 blocos removidos**, ~25 linhas no total.
+- Sem mudança de schema, RLS, RPC, edge function ou outras telas.
+- Sem mexer em `fetchMyGoal` / Meta do Mês (fora do escopo conforme sua decisão anterior).
+- Sem reverter commits.
 
-## Fora de escopo
+## Nota: erros nos logs do edge function
 
-- Não mexer em RLS, RPCs, ou em `view_full_data` (mascaramento permanece).
-- Não mudar atribuição automática nem lógica de `operator_id` nos clientes.
-- Não alterar Financeiro, Acordos, ou Atendimento.
-
-## Validação após apply
-
-1. Logar como Vitor (operador) → `/carteira` → buscar "Marcela" → cliente aparece.
-2. Abrir o card → vê detalhes (mascaramento de CPF/telefone segue se ele não tiver `view_full_data`).
-3. Tentar formalizar acordo num CPF que já tem **acordo vigente** → bloqueio existente continua disparando.
-4. Logar como admin → sem mudança.
+Os logs de `dispatch-scheduled-campaigns` mostram avisos `module "/utf-8-validate@6.0.6/denonext/package.json" not found` e `bufferutil@4.1.0`. Esses são warnings do Deno sobre módulos opcionais do `ws` e **não afetam a publicação do frontend** nem o funcionamento da função (ela continua fazendo "boot" normal logo depois). Sugiro tratar separadamente, se quiser.
