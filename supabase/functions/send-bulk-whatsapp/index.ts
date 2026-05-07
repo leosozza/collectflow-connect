@@ -672,6 +672,7 @@ async function handleCampaignFlow(supabase: any, campaignId: string, tenantId: s
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
         },
         body: JSON.stringify({ campaign_id: campaignId }),
       }).catch((e) => console.log(`[Campaign ${campaignId}] self-retrigger failed:`, e?.message));
