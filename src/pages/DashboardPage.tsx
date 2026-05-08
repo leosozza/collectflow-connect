@@ -301,7 +301,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("kpisGrid") && (
-          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:120ms]">
             <KpisGridCard
               acionadosHoje={acionadosHoje}
               acordosDia={stats?.acordos_dia ?? 0}
