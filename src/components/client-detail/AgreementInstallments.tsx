@@ -802,6 +802,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                   <TableHead>Vencimento</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">Pagamento</TableHead>
                   <TableHead className="text-center w-[140px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -908,6 +909,10 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                             {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
                           </Badge>
                         )}
+                      </TableCell>
+
+                      <TableCell className="text-center text-xs text-muted-foreground font-medium">
+                        {inst.status === "pago" && inst.paidAt ? formatDate(inst.paidAt) : "—"}
                       </TableCell>
 
                       {/* Inline action icons */}

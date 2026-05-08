@@ -933,6 +933,7 @@ const CarteiraPage = () => {
                     <TableHead>Telefone</TableHead>
                     <TableHead>E-mail</TableHead>
                     <TableHead>Credor</TableHead>
+                    <TableHead>Contrato</TableHead>
                     <TableHead>
                       <button className="flex items-center gap-0.5 hover:text-foreground transition-colors" onClick={() => toggleSort("data_vencimento")}>
                         1º Vencimento <SortIcon field="data_vencimento" />
@@ -967,6 +968,7 @@ const CarteiraPage = () => {
                         <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.phone || "—") : maskPhone(client.phone || "")}</TableCell>
                         <TableCell className="text-muted-foreground">{canSeeFullData(client) ? (client.email || "—") : maskEmail(client.email || "")}</TableCell>
                         <TableCell className="text-muted-foreground">{client.credor}</TableCell>
+                        <TableCell className="text-muted-foreground font-medium">{client.cod_contrato || "—"}</TableCell>
                         <TableCell>{formatDate(client.data_vencimento)}</TableCell>
 
                         <TableCell className="text-center">
