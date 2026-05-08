@@ -207,9 +207,16 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
     return points;
   }, [currentMap, previousStart, prevMap, selectedEnd, selectedStart]);
 
+  // Compara o mesmo período: do dia 1 até o mesmo dia do mês atual.
+  // Ex.: hoje é 08/05 → soma do mês anterior considera apenas 01/04 a 08/04.
+  const prevPeriodCutoffDay = useMemo(() => getDate(selectedEnd), [selectedEnd]);
   const prevMonthTotal = useMemo(
-    () => Object.values(prevMap).reduce((sum, v) => sum + Number(v || 0), 0),
-    [prevMap]
+    () =>
+      Object.entries(prevMap).reduce(
+        (sum, [day, v]) => (Number(day) <= prevPeriodCutoffDay ? sum + Number(v || 0) : sum),
+        0,
+      ),
+    [prevMap, prevPeriodCutoffDay],
   );
 
   const hasData = useMemo(
