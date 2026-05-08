@@ -1,10 +1,12 @@
 import { Phone, FileText, CalendarCheck, TrendingDown, Hourglass, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
+import { trendToneClass, type TrendTone } from "@/lib/trendFormat";
 
 interface TrendData {
   value: string;
-  isPositive: boolean;
+  tone: TrendTone;
+  isPositive?: boolean;
   text?: string;
 }
 
@@ -31,9 +33,10 @@ interface TileProps {
   iconBg: string;
   trend?: TrendData | null;
   info?: string;
+  valueSize?: "lg" | "md";
 }
 
-const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps) => (
+const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info, valueSize = "md" }: TileProps) => (
   <div
     title={info}
     className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_2px_8px_-2px_rgb(0_0_0_/_0.08)] transition-shadow px-3 py-2.5 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help"
@@ -46,7 +49,14 @@ const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps)
         <Icon className={cn("w-3 h-3", iconColor)} strokeWidth={2.25} />
       </div>
     </div>
-    <p className="font-bold text-foreground tabular-nums leading-none tracking-tight break-words text-2xl lg:text-[26px] mt-0.5">
+    <p
+      className={cn(
+        "font-bold text-foreground tabular-nums leading-none tracking-tight mt-0.5 truncate",
+        valueSize === "lg"
+          ? "text-3xl lg:text-[34px]"
+          : "text-base lg:text-lg xl:text-xl"
+      )}
+    >
       {value}
     </p>
     {trend ? (
@@ -54,7 +64,7 @@ const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps)
         <span
           className={cn(
             "font-semibold tracking-tight tabular-nums",
-            trend.isPositive ? "text-emerald-600/85" : "text-red-500/85"
+            trendToneClass[trend.tone]
           )}
         >
           {trend.value}
@@ -93,6 +103,7 @@ const KpisGridCard = ({
         Icon={Phone}
         iconColor="text-blue-500"
         iconBg="bg-blue-500/10"
+        valueSize="lg"
         trend={trendAcionados ? { ...trendAcionados, text: "vs ontem" } : null}
         info="CPFs únicos com interação registrada hoje (carteira ou atendimento) que ainda NÃO fecharam acordo."
       />
@@ -102,6 +113,7 @@ const KpisGridCard = ({
         Icon={FileText}
         iconColor="text-emerald-500"
         iconBg="bg-emerald-500/10"
+        valueSize="lg"
         trend={trendAcordosDia ? { ...trendAcordosDia, text: "vs ontem" } : null}
         info="Acordos criados hoje, excluindo cancelados e rejeitados."
       />
@@ -111,6 +123,7 @@ const KpisGridCard = ({
         Icon={CalendarCheck}
         iconColor="text-blue-500"
         iconBg="bg-blue-500/10"
+        valueSize="lg"
         trend={trendAcordosMes ? { ...trendAcordosMes, text: compareLabel } : null}
         info="Acordos criados no mês selecionado, excluindo cancelados e rejeitados."
       />
@@ -120,6 +133,7 @@ const KpisGridCard = ({
         Icon={TrendingDown}
         iconColor="text-red-500"
         iconBg="bg-red-500/10"
+        valueSize="md"
         trend={trendQuebra ? { ...trendQuebra, text: compareLabel } : null}
         info="Parcelas do mês não pagas, em 2 estágios. PROVISÓRIA (4-10 dias de atraso): pode voltar para Pendentes se a data for reagendada, ou para Recebido se for paga. DEFINITIVA (acordo cancelado pelo prazo do cadastro ou atraso > 10 dias): trava como prejuízo e os boletos pendentes são cancelados na Negociarie automaticamente."
       />
@@ -129,6 +143,7 @@ const KpisGridCard = ({
         Icon={Hourglass}
         iconColor="text-amber-500"
         iconBg="bg-amber-500/10"
+        valueSize="md"
         trend={trendPendentes ? { ...trendPendentes, text: compareLabel } : null}
         info="Parcelas do mês ainda não pagas, com vencimento futuro ou atrasado em até 3 dias. A partir do 4º dia de atraso a parcela entra em Quebra (Provisória)."
       />
@@ -138,6 +153,7 @@ const KpisGridCard = ({
         Icon={Wallet}
         iconColor="text-indigo-500"
         iconBg="bg-indigo-500/10"
+        valueSize="md"
         info="Soma das parcelas com vencimento no mês originadas de acordos vivos criados em meses anteriores (entrada + parcelas mensais)."
       />
     </div>
