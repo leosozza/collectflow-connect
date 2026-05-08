@@ -103,6 +103,7 @@ const MetaRadialCard = ({
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
+            style={{ filter: "drop-shadow(0 2px 8px hsl(var(--primary) / 0.35))" }}
           />
         </svg>
 
