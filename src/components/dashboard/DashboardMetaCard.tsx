@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchMyGoals, fetchGoals, fetchTenantGoalsMode } from "@/services/goalService";
 import { Trophy, Target, Wallet } from "lucide-react";
 import MetaRadialCard from "./MetaRadialCard";
+import DashboardCardHeader from "./DashboardCardHeader";
 import { formatCurrency } from "@/lib/formatters";
 
 interface DashboardMetaCardProps {
