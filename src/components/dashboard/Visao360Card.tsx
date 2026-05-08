@@ -123,27 +123,17 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
 
         {/* Linha-resumo: Total Previsto no Mês */}
         <div
-          className="rounded-lg bg-primary/10 border border-primary/30 px-2.5 py-1.5 xl:px-3 xl:py-2 flex items-center justify-between gap-2"
+          className="rounded-lg bg-primary border border-primary px-2.5 py-2 xl:px-3 xl:py-2.5 flex flex-col items-center justify-center gap-0.5 text-primary-foreground shadow-sm"
           style={{ flex: "1.3 1 0%" }}
           title="Soma do Colchão com o Provisionado do mês — previsão total de entrada."
         >
-          <span className="flex items-center gap-1.5 xl:gap-2 min-w-0">
-            <span className="rounded-md p-1 xl:p-1.5 inline-flex shrink-0 bg-primary/20">
-              <Sigma
-                className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-primary"
-                strokeWidth={2.5}
-              />
-            </span>
-            <span className="flex flex-col leading-tight min-w-0">
-              <span className="text-[11px] xl:text-[12px] font-semibold text-foreground truncate">
-                Colchão + Provisionado
-              </span>
-              <span className="text-[9px] xl:text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-                Total Previsto no Mês
-              </span>
+          <span className="flex items-center gap-1.5 xl:gap-2">
+            <Sigma className="w-3.5 h-3.5 xl:w-4 xl:h-4" strokeWidth={2.5} />
+            <span className="text-[11px] xl:text-[12px] font-semibold uppercase tracking-wide">
+              Colchão + Provisionado
             </span>
           </span>
-          <span className="text-base xl:text-lg font-bold tabular-nums text-primary shrink-0">
+          <span className="text-lg xl:text-xl font-bold tabular-nums">
             {formatCurrency(totalPrevisto)}
           </span>
         </div>
