@@ -13,20 +13,15 @@ interface Props {
 export default function AgendamentosHojeCard({ callbacks, showOperator }: Props) {
   return (
     <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
-        <div
-          className="flex items-center gap-2 cursor-help"
-          title="Callbacks/retornos agendados pelos operadores para a data de hoje."
-        >
-          <div className="rounded-lg p-1.5 inline-flex bg-primary/10">
-            <CalendarCheck className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
-          </div>
-          <h2 className="text-[13px] font-semibold text-foreground tracking-tight">Agendamentos para Hoje</h2>
-        </div>
-        <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-2 rounded-full bg-primary/10 text-primary text-[11px] font-semibold tabular-nums">
-          {callbacks.length}
-        </span>
-      </div>
+      <DashboardCardHeader
+        icon={CalendarCheck}
+        title="Agendamentos para Hoje"
+        right={
+          <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-2 rounded-full bg-primary/20 text-primary text-[11px] font-semibold tabular-nums ring-1 ring-primary/40">
+            {callbacks.length}
+          </span>
+        }
+      />
 
       {callbacks.length === 0 ? (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center px-5 py-6 text-muted-foreground">
