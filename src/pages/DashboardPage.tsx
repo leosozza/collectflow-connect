@@ -202,7 +202,7 @@ const DashboardPage = () => {
   const isVisible = (id: DashboardBlockId) => layout.visible[id];
 
   return (
-    <div className="flex flex-col gap-2 xl:gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col gap-2 lg:gap-2.5 xl:gap-3 animate-fade-in h-full min-h-0 overflow-y-auto 2xl:overflow-hidden scrollbar-thin">
       <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
         <div className="min-w-0">
           <h1 className="text-base xl:text-xl font-bold text-foreground leading-tight">Dashboard</h1>
@@ -269,9 +269,9 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2 xl:gap-3">
+      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-12 lg:[grid-template-rows:minmax(240px,auto)_minmax(360px,auto)] 2xl:[grid-template-rows:minmax(0,1fr)_minmax(0,1.4fr)] 2xl:overflow-hidden gap-2 lg:gap-2.5 xl:gap-3">
         {isVisible("metas") && (
-          <section className="min-h-0 h-full lg:col-span-3 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:0ms]">
+          <section className="min-h-[300px] lg:min-h-0 h-full lg:col-span-3 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:0ms]">
             <DashboardMetaCard
               year={filterYear ?? now.getFullYear()}
               month={filterMonth ?? now.getMonth() + 1}
@@ -289,7 +289,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("totalRecebido") && (
-          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:60ms]">
+          <section className="min-h-[300px] lg:min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:60ms]">
             <TotalRecebidoCard
               totalRecebido={stats?.total_recebido ?? 0}
               tenantId={effectiveTenantId}
@@ -301,7 +301,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("kpisGrid") && (
-          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:120ms]">
+          <section className="min-h-[300px] lg:min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:120ms]">
             <KpisGridCard
               acionadosHoje={acionadosHoje}
               acordosDia={stats?.acordos_dia ?? 0}
@@ -314,7 +314,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("visao360") && (
-          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-1 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:180ms]">
+          <section className="min-h-[300px] lg:min-h-0 h-full lg:col-span-3 lg:col-start-1 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:180ms]">
             <Visao360Card
               colchao={stats?.total_projetado ?? 0}
               provisionado={stats?.total_negociado ?? 0}
@@ -329,7 +329,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("parcelas") && (
-          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:240ms]">
+          <section className="min-h-[300px] lg:min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:240ms]">
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
@@ -339,7 +339,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("agendamentos") && (
-          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:300ms]">
+          <section className="min-h-[300px] lg:min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:300ms]">
             <AgendamentosHojeCard
               callbacks={callbacks}
               showOperator={canViewAllAgendados}
