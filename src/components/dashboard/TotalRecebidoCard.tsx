@@ -266,7 +266,7 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
             } else {
               label = `${sign}${abs.toFixed(2).replace(".", ",")}%`;
             }
-            const tooltip = `Variação real: ${diffPct.toFixed(2).replace(".", ",")}% • Mês anterior: ${formatCurrency(prevMonthTotal)}`;
+            const tooltip = `Variação real: ${diffPct.toFixed(2).replace(".", ",")}% • Mesmo período mês anterior (até dia ${String(prevPeriodCutoffDay).padStart(2, "0")}): ${formatCurrency(prevMonthTotal)}`;
             return (
               <span
                 title={tooltip}
