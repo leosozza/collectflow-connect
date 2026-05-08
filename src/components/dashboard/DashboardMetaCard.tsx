@@ -148,16 +148,16 @@ const DashboardMetaCard = ({
 
       {/* Footer com info adicional */}
       {goal > 0 && (
-        <div className="px-4 py-2 shrink-0 border-t border-border/40 bg-muted/30 flex items-center justify-between text-[10px]">
-          <div className="flex flex-col">
-            <span className="text-muted-foreground/70 uppercase tracking-wide">Recebido</span>
-            <span className="font-semibold text-foreground tabular-nums">
+        <div className="px-4 py-2.5 shrink-0 border-t border-border/60 bg-muted/40 flex items-center justify-between gap-3">
+          <div className="flex flex-col leading-tight min-w-0">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wide">Recebido</span>
+            <span className="text-base font-bold text-foreground tabular-nums truncate">
               {formatCurrency(received)}
             </span>
           </div>
-          <div className="flex flex-col items-end">
-            <span className="text-muted-foreground/70 uppercase tracking-wide">Faltam</span>
-            <span className="font-semibold text-primary tabular-nums">
+          <div className="flex flex-col items-end leading-tight min-w-0">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wide">Faltam</span>
+            <span className="text-base font-bold text-primary tabular-nums truncate">
               {formatCurrency(remaining)}
             </span>
           </div>
