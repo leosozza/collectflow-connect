@@ -285,7 +285,6 @@ const DashboardPage = () => {
               }
               received={stats?.total_recebido ?? 0}
               tenantId={effectiveTenantId}
-              colchao={stats?.total_projetado ?? 0}
             />
           </section>
         )}
