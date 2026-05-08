@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { GlassCalendar } from "@/components/ui/glass-calendar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/formatters";
+import DashboardCardHeader from "./DashboardCardHeader";
 
 export interface VencimentoRow {
   agreement_id: string;
