@@ -9,8 +9,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchMyGoals, fetchGoals, fetchTenantGoalsMode } from "@/services/goalService";
-import { Trophy } from "lucide-react";
+import { Trophy, Target } from "lucide-react";
 import MetaRadialCard from "./MetaRadialCard";
+import { formatCurrency } from "@/lib/formatters";
 
 interface DashboardMetaCardProps {
   year: number;
@@ -88,22 +89,32 @@ const DashboardMetaCard = ({
   }, [isTenantAdmin, myGoals, allGoals, selectedOperatorUserId, selectedProfile]);
 
   const pct = goal > 0 ? Math.min(100, Math.round((received / goal) * 100)) : 0;
+  const remaining = Math.max(goal - received, 0);
 
   return (
-    <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col">
-      <div className="px-4 pt-3 pb-2 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="rounded-lg p-1.5 inline-flex bg-primary/10">
-            <Trophy className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
-          </div>
-          <h2 className="text-[13px] font-semibold text-foreground tracking-tight">{title}</h2>
+    <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.15)] transition-shadow w-full h-full min-h-0 flex flex-col">
+      {/* Header escuro RIVO */}
+      <div className="px-4 py-2.5 shrink-0 bg-secondary text-secondary-foreground flex items-center gap-2">
+        <div className="rounded-lg p-1.5 inline-flex bg-primary/15 ring-1 ring-primary/30">
+          <Trophy className="w-3.5 h-3.5 text-primary" strokeWidth={2.5} />
         </div>
+        <h2 className="text-[12px] font-semibold tracking-[0.04em] uppercase text-white/95">
+          {title}
+        </h2>
+        <span className="ml-auto text-[10px] text-white/55 tracking-wide capitalize">
+          {monthLabel}
+        </span>
       </div>
 
       <div className="p-3 flex-1 min-h-0 flex items-center justify-center">
         {goal === 0 ? (
-          <div className="text-center py-4 text-muted-foreground text-xs">
-            Nenhuma meta definida para este período.
+          <div className="flex flex-col items-center justify-center gap-2 text-center py-6">
+            <div className="rounded-full p-3 bg-primary/10">
+              <Target className="w-6 h-6 text-primary/70" strokeWidth={2} />
+            </div>
+            <p className="text-xs text-muted-foreground max-w-[200px]">
+              Nenhuma meta definida para este período.
+            </p>
           </div>
         ) : (
           <MetaRadialCard
@@ -118,6 +129,24 @@ const DashboardMetaCard = ({
           />
         )}
       </div>
+
+      {/* Footer com info adicional */}
+      {goal > 0 && (
+        <div className="px-4 py-2 shrink-0 border-t border-border/40 bg-muted/30 flex items-center justify-between text-[10px]">
+          <div className="flex flex-col">
+            <span className="text-muted-foreground/70 uppercase tracking-wide">Recebido</span>
+            <span className="font-semibold text-foreground tabular-nums">
+              {formatCurrency(received)}
+            </span>
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-muted-foreground/70 uppercase tracking-wide">Faltam</span>
+            <span className="font-semibold text-primary tabular-nums">
+              {formatCurrency(remaining)}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,89 +1,75 @@
-## Objetivo
 
-1. Padronizar **cores de variação %** em todo o sistema: positivo → verde, negativo → vermelho, igual (0%) → azul.
-2. Padronizar **formato de %** em todo o sistema: sempre `XX,XX%` (até 2 casas decimais, vírgula, com sinal `+`/`−`).
-3. Ajustar **hierarquia tipográfica** dos KPIs no Dashboard:
-   - Cards com **R$** (Quebra, Pendentes, Colchão): fonte menor para não quebrar em duas linhas.
-   - Cards com **número puro** (Acionados Hoje, Acordos Dia, Acordos do Mês): fonte maior, número como herói.
+# Refinamento visual: Meta da Equipe + 3 KPIs numéricos
 
-Sem mexer em RLS, schema, edge functions ou regras de negócio (Regra 1 e Regra 7 preservadas).
+Objetivo: trazer estes 4 elementos para a identidade RIVO CONNECT (laranja `--primary` 30 100% 50% sobre fundo escuro `--secondary` 228 24% 13%, Inter, cantos `rounded-2xl`), elevando a hierarquia visual sem alterar lógica, dados ou layout do dashboard.
 
----
+## Princípios de design aplicados
 
-## 1. Util compartilhado de trend (`src/lib/trendFormat.ts` — novo)
+1. **Hierarquia clara**: número grande (valor) + label pequeno em caixa-alta com tracking + delta colorido fino. Já é o padrão do `KpisGridCard`, vamos reforçar.
+2. **Identidade RIVO**: laranja só onde gera ênfase (Meta = card "herói", ícones de KPI numérico em laranja, bordas/glows sutis). Evitar laranja em todos os 4 — perde força.
+3. **Card herói vs cards de apoio**: a Meta vira o card de destaque (gradiente escuro + radial laranja). Os 3 KPIs numéricos seguem o tile minimalista atual, mas com ícone em laranja e número levemente maior.
+4. **Consistência tipográfica**: tabular-nums em todos os números, Inter 700/800 para valor, 500 uppercase tracking-wide para label.
+5. **Microinterações discretas**: hover eleva sombra, ícone respira em 1.05; nada de animação chamativa.
 
-Centraliza o cálculo para o sistema inteiro:
+## Mudanças por card
+
+### 1. `DashboardMetaCard.tsx` (Meta da Equipe) — card herói
 
 ```text
-formatTrendPct(current, previous, { invert?: boolean }) →
-  { value: "+12,34%" | "−5,80%" | "0,00%",
-    tone: "positive" | "negative" | "neutral",
-    raw: number }
-  | null
+┌─────────────────────────────────┐
+│ 🏆 META DA EQUIPE        Maio   │  ← header escuro (--secondary), texto branco
+├─────────────────────────────────┤
+│                                 │
+│         ╭──────────╮            │
+│        │   68%    │             │  ← radial laranja (--primary) com glow
+│        │  R$ 68k  │             │     número branco grande no centro
+│         ╰──────────╯            │
+│                                 │
+│   Meta: R$ 100.000              │  ← chip muted
+│   Faltam: R$ 32.000 (12 dias)   │
+└─────────────────────────────────┘
 ```
 
-Regras:
-- 2 casas decimais sempre, vírgula como separador (pt-BR), com sinal explícito (`+`, `−`, ou nenhum em `0,00%`).
-- `tone`:
-  - `current === previous` (delta 0) → `neutral` (azul).
-  - Caso contrário, `isUp = current > previous`. Se `invert=true` (métricas onde subir é ruim, ex.: Quebra/Pendentes), inverte.
-  - Resultado → `positive` (verde) ou `negative` (vermelho).
-- Edge cases: ambos 0 → retorna `null` (sem trend). `previous = 0` e `current > 0` → `+100,00%` com tone respeitando `invert`.
+- Topo do card vira faixa `bg-secondary` (azul-escuro RIVO) com ícone Trophy laranja e título branco — diferencia do resto do dashboard.
+- `MetaRadialCard`: track em `border/40`, progresso em `--primary` com `drop-shadow` laranja sutil; valor central em `text-foreground` 800.
+- Footer com 2 linhas: "Meta" e "Faltam X em Y dias úteis" (já temos os dados, só formatar).
+- Caso `goal === 0`: empty-state ilustrado com ícone laranja translúcido e CTA visual "Definir meta" (sem mudar lógica — só estilo).
 
-Classes mapeadas:
+### 2/3/4. KPIs `Acionados Hoje`, `Acordos do Dia`, `Acordos do Mês` — em `KpisGridCard.tsx`
+
+Manter o componente `Tile`, ajustar APENAS estes 3 (os 3 monetários ficam como estão):
+
+- **Ícone**: fundo `bg-primary/10`, ícone em `text-primary` (laranja RIVO) — hoje cada um usa cor diferente (azul/verde/azul). Unificar dá identidade.
+- **Número**: subir para `text-[38px] lg:text-[42px]` font-extrabold, `text-foreground`, `tabular-nums`, leading-none.
+- **Label**: `text-[10px] uppercase tracking-[0.08em] text-muted-foreground font-medium` (já está próximo).
+- **Delta**: manter `formatTrendPct` (verde/vermelho/azul, 2 casas) — só reduzir para `text-[10px]` e adicionar mini-ícone trend de 10px.
+- **Borda**: `border-border/50` + acento sutil `before:` linha laranja de 2px no topo-esquerdo (ou ring-1 ring-primary/5 no hover) para amarrar à identidade sem poluir.
+- **Hover**: `hover:border-primary/30 hover:shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.15)]`.
+
 ```text
-positive → text-emerald-600
-negative → text-red-500
-neutral  → text-blue-500
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ 🟧 ACIONADOS │ │ 🟧 ACORDOS   │ │ 🟧 ACORDOS   │
+│      HOJE    │ │     DIA      │ │     MÊS      │
+│              │ │              │ │              │
+│    248       │ │     12       │ │    187       │
+│              │ │              │ │              │
+│ ↑ 12,40% ont │ │ ↑ 5,00% ont  │ │ ↓ 3,20% mês  │
+└──────────────┘ └──────────────┘ └──────────────┘
 ```
 
-## 2. Refactor de `pctDelta` em `DashboardPage.tsx`
+## Arquivos a tocar
 
-Substituir a função local por chamadas a `formatTrendPct`. A interface `TrendData` em `KpisGridCard` ganha `tone: "positive" | "negative" | "neutral"` (mantém `isPositive` por compatibilidade ou removemos — vou remover, já que só `KpisGridCard` consome).
+- `src/components/dashboard/DashboardMetaCard.tsx` — header escuro + footer informativo.
+- `src/components/dashboard/MetaRadialCard.tsx` — paleta para `--primary` + glow.
+- `src/components/dashboard/KpisGridCard.tsx` — props/visual dos 3 tiles superiores (sem mexer nos 3 monetários, sem mexer em lógica/props).
 
-## 3. `KpisGridCard.tsx` — UI ajustada
+Nada fora desses 3 arquivos. Sem migrações, sem mudanças de RPC, sem mudanças de layout no `DashboardPage.tsx`.
 
-Dois tamanhos de tile via prop nova `valueSize?: "lg" | "md"`:
+## O que NÃO muda
 
-- `lg` (números puros): `text-3xl lg:text-[32px] font-bold tracking-tight`.
-  - Aplicado em: Acionados Hoje, Acordos do Dia, Acordos do Mês.
-- `md` (currency): `text-lg lg:text-xl font-bold tracking-tight`, com `whitespace-nowrap` removido e `break-words` substituído por layout que mantém em **uma linha** quando couber.
-  - Aplicado em: Total de Quebra, Pendentes, Colchão de Acordos.
+- Cálculos, queries, RLS, tenant_id, props.
+- Posição/tamanho dos cards no grid.
+- Os outros 3 KPIs monetários (Quebra, Pendentes, Colchão).
+- Cores semânticas dos deltas (verde/vermelho/azul — já é regra do sistema).
 
-Cores do trend agora vêm do `tone`:
-```text
-tone=positive → text-emerald-600/90
-tone=negative → text-red-500/90
-tone=neutral  → text-blue-500/90
-```
-
-Texto auxiliar (`vs mesmo período`, `vs ontem`) continua em `text-muted-foreground/55`.
-
-## 4. Aplicação em outros lugares do sistema
-
-Varredura para usar o mesmo util onde houver "vs mês anterior" / `isPositive` / cálculo de %:
-- `src/components/StatCard.tsx` — atualmente recebe `trend` como `string`. **Não toco** no formato externo (consumidores passam string pronta) — mas vou listar callsites para confirmar que nenhum monta string com 0 casas decimais que conflite com a regra. Se algum monta dinamicamente, redireciono para `formatTrendPct`.
-- `src/components/dashboard/KPICards.tsx` — usa `trend?: number`. Vou padronizar o ícone de tendência para também usar a regra (azul quando 0). Formatação de % aqui não é exibida (só ícone), então só ajusto o `TrendIndicator`.
-- Rápida busca por `%` e `vs mês` em `src/components` e `src/pages` para garantir cobertura. Onde houver `toFixed(0)` em porcentagens visíveis, troco para o util.
-
-Sem alterar componentes que mostram % em outros contextos não-trend (ex.: progresso de meta, comissão), pois a regra do usuário é especificamente para indicadores comparativos.
-
-## 5. Governança
-
-- Sem alteração em queries, RPC, schema, RLS ou edge functions.
-- `tenantId` continua sendo passado em `DashboardMetaCard`.
-- Regra 7 (metas): nada tocado.
-- Apenas `lib/trendFormat.ts` (novo), `DashboardPage.tsx`, `KpisGridCard.tsx`, e ajuste mínimo em `KPICards.tsx`.
-
-## Arquivos afetados
-
-- **novo** `src/lib/trendFormat.ts`
-- `src/pages/DashboardPage.tsx` — usa o util, passa `tone`, e ajusta `valueSize` por tile
-- `src/components/dashboard/KpisGridCard.tsx` — `tone` no trend, prop `valueSize`, classes de fonte por tamanho
-- `src/components/dashboard/KPICards.tsx` — `TrendIndicator` reconhece estado neutro (azul)
-
-## Validação
-
-- Visual no viewport atual (1678×1108): currency em uma linha, números puros maiores e centralizados.
-- Trend: testar mês com delta positivo (verde), negativo (vermelho) e igual (azul).
-- Conferir formatação `+12,34%` / `−5,80%` / `0,00%`.
+Resultado: dashboard com um card herói claro (Meta) e três KPIs numéricos coesos na cor da marca, sem ruído visual nos demais blocos.
