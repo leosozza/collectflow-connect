@@ -226,29 +226,22 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
 
   return (
     <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
-        <div
-          className="flex items-center gap-2 cursor-help"
-          title="Soma de todos os pagamentos confirmados no mês: confirmações manuais, portal de pagamento e Negociarie."
-        >
-          <div className="rounded-lg p-1.5 inline-flex bg-primary/10">
-            <TrendingUp className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
+      <DashboardCardHeader
+        icon={TrendingUp}
+        title="Total Recebido"
+        right={
+          <div className="flex items-center gap-3 text-[10px] text-white/70">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2 h-2 rounded-full bg-blue-400" />
+              Atual
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-px bg-white/40" style={{ borderTop: "1px dashed rgba(255,255,255,0.5)" }} />
+              Mês anterior
+            </span>
           </div>
-          <h2 className="text-[13px] font-semibold text-foreground tracking-tight">Total Recebido</h2>
-        </div>
-        {/* Legenda */}
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground/80">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
-            Atual
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-px bg-slate-400" style={{ borderTop: "1px dashed #94a3b8" }} />
-            Mês anterior
-          </span>
-        </div>
-      </div>
+        }
+      />
 
       <div className="px-4 pb-2 shrink-0">
         <div className="flex items-baseline gap-2 flex-wrap">
