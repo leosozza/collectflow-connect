@@ -1,53 +1,51 @@
-## Diagnóstico
+## Contexto
 
-Sua intuição está correta: o problema é específico de **entradas**, não de parcelas comuns.
+A correção anterior em `agreementInstallmentClassifier.ts` resolveu a Carteira (status global do CPF/credor), mas a tela de detalhe do cliente (`/carteira/<cpf>`) usa **outro componente** com sua própria leitura de cobranças: `src/components/client-detail/AgreementInstallments.tsx`. Esse componente ainda procura a entrada com a chave legada `<agreementId>:0`, enquanto o gerador de boleto persiste como `<agreementId>:entrada` / `entrada_2` / `entrada_3` …
 
-### Caso da Angela (CPF 11411461770)
+Verificação no banco confirmou:
+- 7 entradas pagas via Negociarie usam o formato canônico `:entrada` / `:entrada_N`.
+- **3 dessas entradas** já têm `manual_payments` confirmados pelo operador (porque o sistema mostrava "vencido"), mesmo valor e mesma data aproximada → duplicidade real (ex.: 68b7fd89… R$ 470, 6b88fbd3… R$ 577,20, 16e63dfe… R$ 135,20).
+- O caso da Angela (`c8f5de8f…` R$ 482) não tem baixa manual, será corrigido só pela leitura.
 
-- Acordo `c8f5de8f-55ab-4c71-b36e-714bb1dbe061` (TESS MODELS), status `pending`, entrada R$ 482,00 com vencimento 07/05/2026.
-- Na tabela `negociarie_cobrancas` a entrada está **paga**:
-  - `status: LIQUIDACAO`, `valor_pago: 482`, `data_pagamento: 2026-05-05`
-  - `installment_key: "c8f5de8f-55ab-4c71-b36e-714bb1dbe061:entrada"`
-- Não existe `manual_payments` para esse acordo — então a baixa veio só pelo Negociarie.
-- Mesmo assim a UI mostra a entrada como **vencida**.
+## Mudanças propostas
 
-### Causa raiz
+### 1. Frontend — `src/components/client-detail/AgreementInstallments.tsx`
 
-Em `src/lib/agreementInstallmentClassifier.ts`, dentro de `classifyInstallment`, a busca por cobrança Negociarie monta a chave usando `installment.number`:
+Trocar a montagem do `expectedKey` da entrada para usar a chave canônica e manter retrocompatibilidade:
 
-```ts
-const installmentKey = `${agId}:${installment.number}`;
-const cob = cobrancas.find(c => c.installment_key === installmentKey);
-```
+- Linha 187: para a 1ª entrada, procurar por `${agreementId}:entrada` **e** cair no fallback legado `${agreementId}:0`. Para entradas adicionais, manter `${agreementId}:${customKey}` (já correto).
+- Linha 213: para parcelas comuns manter `:1, :2…` (já correto), só reforçar fallback legado.
 
-Para entradas, `installment.number === 0`, então procura `…:0`. Mas a Negociarie grava a entrada como `…:entrada` (e entradas adicionais como `…:entrada_2`, etc.). Resultado: nunca encontra match para entradas pagas via boleto/PIX Negociarie e a UI cai no fallback de data → "vencido".
+Resultado: a aba Parcelas do detalhe passa a marcar a entrada como **paga** sempre que existir cobrança Negociarie liquidada — para todos os clientes, sem migration.
 
-Parcelas comuns funcionam porque `installment.number` (1, 2, 3…) bate com o sufixo numérico do `installment_key` da Negociarie.
+### 2. Backend — Migration de reconciliação (one-shot)
 
-Observação: a `VirtualInstallment` já carrega `key` no formato canônico (`"entrada"`, `"entrada_2"`, `"1"`, `"2"`…) — basta usar `installment.key` em vez de `installment.number` aqui, igual ao que já é feito no match de `manual_payments`.
+Criar migration que:
 
-## Mudança proposta
+a. Identifica `manual_payments` confirmados de entrada (`installment_key LIKE 'entrada%'` ou `installment_number = 0`) cujo `agreement_id` também tem `negociarie_cobrancas` com `installment_key = '<agId>:<mesma_chave>'` em status `pago/RECEIVED/CONFIRMED` e `valor_pago` ≈ `amount_paid` (tolerância R$ 0,01).
 
-Arquivo único: `src/lib/agreementInstallmentClassifier.ts`
+b. Para cada caso:
+   - Marca o `manual_payments` como `status = 'superseded'` (novo valor permitido pelo enum/string check, ou usa `cancelled` se o constraint não aceitar novo valor — confirmar consultando o tipo da coluna).
+   - Adiciona `metadata.superseded_by = 'negociarie_cobranca'` + `metadata.superseded_at = now()` + `metadata.original_status` para auditoria/reversão.
+   - Insere registro em `audit_logs` (`action = 'manual_payment.superseded_by_negociarie'`, com `tenant_id`, `agreement_id`, valores e ids envolvidos).
 
-Trocar a montagem da chave de cobrança Negociarie para usar `installment.key`:
+c. **Não altera** registros sem cobrança Negociarie equivalente (ou seja, baixas manuais "puras" continuam ativas).
 
-```ts
-const installmentKey = `${agId}:${installment.key}`;
-```
+d. Idempotente: a query usa `WHERE manual_payments.status IN ('confirmed','approved')`, então re-execução não duplica efeito.
 
-Isso passa a casar:
-- `entrada`, `entrada_2`, `entrada_3` → entradas múltiplas pagas via Negociarie
-- `1`, `2`, `3`… → parcelas (comportamento atual preservado, pois `key` numérica == `number`)
+Esperado: 3 registros afetados no tenant atual; varredura cobre todos os tenants.
 
-Nenhuma outra alteração de lógica, RPC, SQL ou UI. Sem mudança de regras de status, sem migração.
+### 3. Validação pós-deploy
 
-## Verificação após o fix
+- Recarregar `/carteira/11411461770?credor=TESS+MODELS…` → entrada R$ 482 deve aparecer **paga** com data 05/05.
+- Para os 3 casos com duplicidade: aba Parcelas mostra a entrada paga (fonte Negociarie) sem somar manual em outras telas.
+- Conferir dashboards Total Recebido / Provisionado: valor não cai (Negociarie já era contado lá) e não dobra.
 
-1. Abrir Carteira → Angela → aba Acordo: a entrada de R$ 482,00 deve aparecer como **paga** (linha verde, sem "vencido").
-2. Conferir que parcelas comuns continuam classificando igual (caso de outro acordo com parcelas baixadas).
-3. Conferir contagem `paid/total` em `countPaidInstallments` para o acordo (entrada paga deve contar).
+## Itens fora deste plano
 
-## Fora de escopo
+- Os "erros de build" mencionados em `AgreementInstallments.tsx:275` e `CarteiraPage.tsx:973` **não aparecem em `tsc --noEmit`** — não há erro real para corrigir. Se você estava vendo um aviso/lint específico, me mande a mensagem exata que eu trato em separado.
 
-Os erros de build atuais (`AgreementInstallments.tsx` linha 275 e `CarteiraPage.tsx` linha 973) são de edições anteriores não relacionadas a entradas. Posso corrigi-los junto na implementação se você quiser, mas não fazem parte deste diagnóstico — me avise se devo incluir.
+## Arquivos tocados
+
+- `src/components/client-detail/AgreementInstallments.tsx` (edit)
+- nova migration SQL (reconciliação one-shot + audit_logs)

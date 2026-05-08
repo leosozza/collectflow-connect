@@ -183,9 +183,13 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     const dueDate = customDates[customKey] ? new Date(customDates[customKey] + "T00:00:00") : defaultDate;
     // Fallback: if only one entrada and no custom value, use entrada_value column
     const value = customValues[customKey] ?? (entradaKeys.length === 1 ? agreement.entrada_value : 0);
-    // Cobranca lookup: first entrada uses :0 (legacy), additional use :entrada_N
-    const expectedKey = idx === 0 ? `${agreementId}:0` : `${agreementId}:${customKey}`;
-    const cobranca = cobrancas.find((c: any) => c.installment_key === expectedKey);
+    // Cobranca lookup: chave canônica é `${agreementId}:${customKey}` (entrada, entrada_2, ...)
+    // Mantém fallback legado `:0` para a primeira entrada (registros antigos).
+    const expectedKey = `${agreementId}:${customKey}`;
+    const legacyEntradaKey = idx === 0 ? `${agreementId}:0` : null;
+    const cobranca =
+      cobrancas.find((c: any) => c.installment_key === expectedKey) ||
+      (legacyEntradaKey ? cobrancas.find((c: any) => c.installment_key === legacyEntradaKey) : undefined);
     installments.push({
       number: 0,
       displayNumber: idx + 1,
