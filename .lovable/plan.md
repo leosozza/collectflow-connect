@@ -1,73 +1,30 @@
-## Mudança no card "Visão 360"
+## Animação de entrada do Dashboard
 
-Reorganizar o card para mostrar 5 linhas, na ordem solicitada, com tamanhos bem distribuídos e usando a identidade visual existente (mesmas cores semânticas, mesmo estilo de barra/ícone).
+Adicionar uma animação leve de entrada quando o usuário acessa `/dashboard`, sem alterar lógica, dados ou layout.
 
-### Nova estrutura do Visão 360
+### Comportamento
 
-| # | Indicador | Origem do dado | Cor / token |
-|---|---|---|---|
-| 1 | **Colchão de Acordos** | `stats.total_projetado` (hoje exibido no `DashboardMetaCard`) | `--primary` (laranja, ícone `Wallet`) |
-| 2 | **Provisionado no Mês** | `stats.total_negociado` (já usado hoje) | `--primary` em tom secundário (ícone `TrendingUp`) |
-| 3 | **Total Previsto no Mês** = Colchão + Provisionado | soma das duas linhas acima | destaque visual: card/linha com fundo levemente preenchido (`bg-primary/10`) e ícone `Layers`/`Sigma`, tipografia maior — funciona como "linha-resumo" |
-| 4 | **Pendentes** | `stats.total_pendente` | `--warning` (ícone `Hourglass`) |
-| 5 | **Quebra** | `stats.total_quebra` | `--destructive` (ícone `TrendingDown`) |
-
-A linha 3 **não** entra no cálculo do `maxValue` da barra (ela é só um total/resumo), para não distorcer as barras dos itens 1, 2, 4 e 5.
-
-### Distribuição de tamanhos dentro do card
-
-```text
-┌─────────────────────────── Visão 360 (header) ──────────────────┐
-│  [ico] Colchão de Acordos ............................ R$ X,XX │  linha normal
-│  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  │
-│                                                                 │
-│  [ico] Provisionado no Mês ........................... R$ X,XX │  linha normal
-│  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  │
-│                                                                 │
-│  ╔═════════════════════════════════════════════════════════════╗│
-│  ║ [ico] Total Previsto no Mês               R$ X,XX (DESTAQUE)║│  linha-resumo
-│  ║ Colchão + Provisionado                                       ║│  bg-primary/10
-│  ╚═════════════════════════════════════════════════════════════╝│
-│                                                                 │
-│  [ico] Pendentes ..................................... R$ X,XX │  linha normal
-│  ▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  │
-│                                                                 │
-│  [ico] Quebra ........................................ R$ X,XX │  linha normal
-│  ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-Proporções verticais aproximadas dentro do `flex-col` do conteúdo:
-- 4 linhas normais (1, 2, 4, 5): cada uma com `flex: 1` (peso 1)
-- 1 linha-resumo (3): `flex: 1.3` (peso 1,3) + `bg-primary/10`, borda sutil `border-primary/30`, sem barra de progresso, valor em fonte maior (`text-base xl:text-lg`)
-- Mesmos tamanhos responsivos já aplicados em `lg`/`xl`/`2xl` (ícone, fonte, padding) — sem alterar densidade adaptativa.
+- Cada um dos 6 cards (sections do grid principal) entra com **fade + slide up** sutil.
+- Entrada **escalonada** (stagger) para criar sensação de fluidez — cada card aparece com ~60ms de atraso em relação ao anterior, na ordem de leitura (esquerda → direita, linha 1 → linha 2).
+- Duração curta (~350ms), `ease-out`. Sem animação ao trocar de filtros/mês — só na montagem inicial da página.
+- Respeita `prefers-reduced-motion`: usuários com movimento reduzido não veem a animação.
 
 ### Mudanças por arquivo
 
-1. **`src/components/dashboard/Visao360Card.tsx`**
-   - Adicionar props `colchao: number` e `provisionado: number` (renomear o atual `provisionado` se necessário) e manter `pendentes`, `quebra`.
-   - Remover o cálculo "Provisionado no Mês" baseado no nome antigo, ajustar para receber os 5 valores conforme tabela.
-   - Renderizar 4 linhas normais + a linha-resumo (Total Previsto = colchao + provisionado) com layout descrito.
-   - `maxValue` calculado só sobre `[colchao, provisionado, pendentes, quebra]`.
-   - Importar ícones extras necessários (`Wallet`, `Layers` ou `Sigma`).
+1. **`src/pages/DashboardPage.tsx`**
+   - Adicionar a classe `animate-fade-in` (já existente em `tailwind.config.ts`) em cada uma das 6 `<section>` do grid (linhas ~274, 292, 304, 317, 332, 342).
+   - Aplicar `animation-delay` inline crescente em cada section (0ms, 60ms, 120ms, 180ms, 240ms, 300ms) usando `style={{ animationDelay: "Xms" }}`.
+   - Adicionar `animation-fill-mode: both` para evitar flicker antes do delay (via classe utilitária `[animation-fill-mode:both]` ou inline style).
 
-2. **`src/pages/DashboardPage.tsx`**
-   - Passar `colchao={stats?.total_projetado ?? 0}` e `provisionado={stats?.total_negociado ?? 0}` para o `Visao360Card` (hoje só passa `provisionado`, `pendentes`, `quebra`).
-   - **Remover** a prop `colchao` do `DashboardMetaCard` (deixa de ser exibida no card de Meta, evitando duplicidade).
-
-3. **`src/components/dashboard/DashboardMetaCard.tsx`**
-   - Remover o chip "Colchão" no canto superior esquerdo (linhas ~113-127) e a prop `colchao`.
-   - Manter o restante do card (gauge, footer Recebido/Faltam) intacto.
+2. Nenhuma mudança em outros componentes — a animação fica isolada na página, sem tocar nos cards individuais.
 
 ### Identidade visual
 
-- Cores via tokens semânticos (`--primary`, `--warning`, `--destructive`); nada hardcoded.
-- Mesmo padrão de "ícone em quadrado tinted + label + valor à direita + barra fina" já usado hoje.
-- Linha-resumo segue o mesmo idioma do chip "Colchão" atual (fundo `primary/10`, borda `primary/30`, valor em destaque).
-- Tipografia, spacing e responsividade seguem o sistema adaptativo (`lg`/`xl`/`2xl`) já existente.
+- Reaproveita o keyframe `fade-in` já definido em `tailwind.config.ts` (translateY 10px → 0 + opacity 0 → 1) — mesmo idioma de animação usado no resto do app.
+- Sem novos keyframes, sem libs adicionais.
 
 ### Fora deste plano
 
-- Mudança no RPC do dashboard ou em qualquer cálculo no backend — todos os valores já vêm do `get_dashboard_stats_v2`.
-- Mudança nos demais cards (Meta continua igual, só perde o chip Colchão).
-- Mudança na ordem/visibilidade de blocos do dashboard.
+- Animações em hover, em troca de filtros/mês, ou em re-fetch de dados.
+- Animações internas dos cards (números contando, barras crescendo).
+- Mudanças de layout, cores ou tipografia.
