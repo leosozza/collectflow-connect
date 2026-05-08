@@ -58,19 +58,6 @@ const MetaRadialCard = ({
 
   return (
     <div className="flex flex-col items-center justify-center gap-2 w-full h-full">
-      {/* Top: meta */}
-      <div className="text-center">
-        <p className="text-[10px] text-muted-foreground leading-tight uppercase tracking-wide">
-          Meta Recebimento
-        </p>
-        <p className="text-lg font-bold text-foreground tabular-nums leading-tight mt-0.5">
-          {formatCurrency(goal)}
-        </p>
-        <p className="text-[9px] text-muted-foreground tabular-nums mt-0.5">
-          {firstDay} à {lastDayStr}
-        </p>
-      </div>
-
       {/* Radial centralizado */}
       <div className="relative shrink-0" style={{ width: size, height: chartH }}>
         <svg
