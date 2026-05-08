@@ -136,10 +136,10 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
             </span>
             <span className="flex flex-col leading-tight min-w-0">
               <span className="text-[11px] xl:text-[12px] font-semibold text-foreground truncate">
-                Total Previsto no Mês
+                Colchão + Provisionado
               </span>
               <span className="text-[9px] xl:text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-                Colchão + Provisionado
+                Total Previsto no Mês
               </span>
             </span>
           </span>
