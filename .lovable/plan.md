@@ -1,48 +1,78 @@
 ## Diagnóstico
 
-**Não foi corrigido.** As correções recentes só trataram o caso da entrada (chave `:entrada`). O bug que você descreve (pagar parcela em atraso e o sistema marcar a parcela do mês corrente como paga também) tem origem no **algoritmo FIFO** em `src/components/client-detail/AgreementInstallments.tsx` (linhas 240-282).
+O dashboard usa `h-full overflow-hidden` no root + grid de 2 linhas com altura fixa (`grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)]`). Em monitores menores (17", tipicamente 1366×768 ou 1600×900) a soma de paddings, alturas mínimas dos cards e densidade dos textos passa do espaço disponível e os cards são cortados (Visão 360 mostra só 2-3 linhas, header dos cards "espreme" os badges, tabela de parcelas perde linhas).
 
-### Como o bug acontece hoje
+Restrição: **não podemos adicionar barra de rolagem**. Solução = densidade adaptativa que sempre cabe na viewport.
 
-1. O componente monta um pool com **todos** os `manual_payments` confirmados do acordo, ordenados por data, sem olhar `installment_key`/`installment_number`.
-2. Para cada parcela (em ordem 1, 2, 3…), ele consome do pool até preencher o valor da parcela.
-3. Resultado: um pagamento registrado pelo operador com `installment_key = "2"` (parcela de maio) é **engolido pela parcela 1** (que ainda estava em aberto). A parcela 1 fica marcada como "pago" com a data errada, e a parcela 2 segue em aberto. Em casos onde o valor pago cobre as duas (ex.: pagamento "junto" ou parcela 1 já tinha baixa parcial), as duas aparecem pagas.
-4. Em outras telas (Carteira, dashboards) o `agreementInstallmentClassifier.ts` faz o match correto por `installment_key` — por isso o problema só aparece na aba **Parcelas** do detalhe do cliente.
+## Estratégia
+
+Criar 3 níveis de densidade automáticos baseados em breakpoint + altura disponível:
+
+| Tier | Gatilho | Comportamento |
+|---|---|---|
+| **Compacto** | `lg` (1024-1279px) **ou** altura < 800px | Padding reduzido, fontes -10%, charts mais baixos, tabela com menos linhas visíveis |
+| **Padrão** | `xl` (1280-1535px) | Densidade atual |
+| **Confortável** | `2xl+` (≥1536px) | Espaços generosos como hoje no monitor grande |
+
+Tudo continua `overflow-hidden` (sem scrollbar). Quem se adapta é a densidade interna.
 
 ## Mudanças propostas
 
-### 1. Frontend — `AgreementInstallments.tsx` (linhas 238-285)
+### 1. `src/components/AppLayout.tsx` (linha 391)
 
-Reescrever a etapa FIFO para **respeitar o alvo do pagamento**:
+Reduzir padding do `<main>` em telas baixas/médias:
+- Antes: `p-4 lg:p-6`
+- Depois: `p-3 xl:p-4 2xl:p-6`
 
-- **Passo A — match direto:** para cada `manual_payment` confirmado que tenha `installment_key` (ou `installment_number` legado), aplicar o valor exclusivamente na parcela alvo. Acumular `paidByManual` e `lastManualDate` apenas naquela parcela.
-- **Passo B — pool residual (FIFO restrito):** o que sobrar (pagamento sem `installment_key` nem `installment_number`, ou excedente de uma parcela quitada) entra num pool secundário aplicado FIFO **só nas parcelas que ainda não foram totalmente quitadas** (Negociarie + manual direto).
-- Manter o comentário `RIVO_FIX` explicando a nova ordem (alvo > FIFO residual) para evitar regressão.
+Ganha ~16-32px de altura útil.
 
-Isso elimina o vazamento entre parcelas e garante que a data de pagamento exibida seja a da baixa real daquela parcela.
+### 2. `src/pages/DashboardPage.tsx` (linha 272)
 
-### 2. Reconciliação retroativa (one-shot, somente leitura + relatório)
+Ajustar grid para reagir mais cedo + gap menor:
+- `gap-3` → `gap-2 xl:gap-3`
+- Adicionar uma classe `dashboard-compact` no root quando `xl` não bate, controlando densidade dos filhos via CSS (token `--dash-scale`).
 
-Antes de qualquer UPDATE em massa, rodar uma query de auditoria que liste, por tenant/acordo, os `manual_payments` confirmados onde:
-- `installment_key`/`installment_number` aponta para parcela X, **mas**
-- a tela atual estaria atribuindo o valor a uma parcela Y diferente (ex.: parcela anterior em aberto na mesma data).
+Header (linha 206): em `lg` esconder o subtítulo "Bem-vindo, ..." e reduzir botões para `h-7 text-[11px]`.
 
-Saída: tabela com `agreement_id`, `manual_payment_id`, parcela alvo declarada, parcela onde o FIFO encaixou, valor, data. Você revisa antes de qualquer correção em dado.
+### 3. Cards individuais — reduzir densidade no breakpoint `lg`
 
-> Nenhum dado precisa ser alterado no banco — a correção é só de exibição/cálculo no front. A query serve para confirmar quais clientes podem ter exibido o status errado historicamente.
+Aplicar utilitários responsivos (`lg:` para compacto, `xl:` para padrão):
 
-### 3. Validação
+- **`DashboardMetaCard.tsx`**: reduzir tamanho do gauge (de `w-44 h-44` → `lg:w-32 lg:h-32 xl:w-44 xl:h-44`), padding `lg:p-2 xl:p-3`.
+- **`TotalRecebidoCard.tsx`**: valor principal de `text-[26px]` → `lg:text-[20px] xl:text-[26px]`; chart altura mínima reduzida; legenda esconde texto em `lg`, mantém só pontos.
+- **`KpisGridCard.tsx` (Tile)**: número grande de `text-[34px] lg:text-[40px] xl:text-[44px]` → `text-[26px] xl:text-[34px] 2xl:text-[40px]`; padding `lg:px-2 lg:py-2 xl:px-3 xl:py-3`.
+- **`Visao360Card.tsx`**: barras mais baixas, espaço entre itens reduzido, fonte do valor `lg:text-sm xl:text-base`.
+- **`ParcelasProgramadasCard.tsx`**: linha da tabela `py-1.5` em `lg`, fonte `text-xs`, esconder coluna "Credor" abaixo de `xl` (já temos nome + parcela + valor + status), badges menores.
+- **`AgendamentosHojeCard.tsx`**: padding e ícone menores em `lg`.
 
-- Reproduzir um caso conhecido (cliente com parcela vencida 30/04 paga em maio e parcela de maio em aberto): aba **Parcelas** deve mostrar parcela 30/04 como **paga** com a data correta, e parcela de maio permanecer como **vigente**/`vencida`.
-- Conferir que casos de pagamento "junto" (1 baixa cobrindo várias parcelas) ainda funcionam — a parcela alvo recebe primeiro, o restante alimenta o pool residual.
-- Verificar dashboards e Carteira: como já usam `agreementInstallmentClassifier.ts` (match exato), nenhum número agregado deve mudar — só a aba Parcelas.
+### 4. Densidade dos headers dos cards (`DashboardCardHeader.tsx`)
+
+Reduzir altura do header (`py-2.5 lg:py-1.5 xl:py-2.5`) e fonte do título (`text-sm lg:text-xs xl:text-sm`). Ganha 8-12px por card × 6 cards.
+
+### 5. Validação visual
+
+Testar nas larguras-alvo após a mudança:
+- 1366×768 (notebook 14")
+- 1600×900 (monitor 17" típico)
+- 1920×1080 (Full HD)
+- 2560×1440 (monitor grande atual do usuário)
+
+Em todas: nenhum scrollbar interno, todos os cards visíveis com conteúdo legível, tabela de parcelas com pelo menos 5 linhas.
 
 ## Itens fora deste plano
 
-- Backfill / UPDATE em `manual_payments` (não é necessário; o problema é de leitura).
-- Mudanças no `agreementInstallmentClassifier.ts` (já faz match exato).
+- Mobile/tablet (< 1024px): o dashboard já cai pra `grid-cols-1` empilhado e essa parte continua igual (com scroll natural da página, fora do escopo "sem scrollbar" que vale para desktop).
+- Refazer cards individuais ou mudar gráficos.
+- Mudar a ordem/visibilidade dos blocos.
 
 ## Arquivos tocados
 
-- `src/components/client-detail/AgreementInstallments.tsx` (edit do bloco FIFO)
-- query SQL de auditoria one-shot (sem migration)
+- `src/components/AppLayout.tsx`
+- `src/pages/DashboardPage.tsx`
+- `src/components/dashboard/DashboardCardHeader.tsx`
+- `src/components/dashboard/DashboardMetaCard.tsx`
+- `src/components/dashboard/TotalRecebidoCard.tsx`
+- `src/components/dashboard/KpisGridCard.tsx`
+- `src/components/dashboard/Visao360Card.tsx`
+- `src/components/dashboard/ParcelasProgramadasCard.tsx`
+- `src/components/dashboard/AgendamentosHojeCard.tsx`
