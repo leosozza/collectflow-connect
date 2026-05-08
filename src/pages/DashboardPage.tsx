@@ -284,6 +284,7 @@ const DashboardPage = () => {
               }
               received={stats?.total_recebido ?? 0}
               tenantId={effectiveTenantId}
+              colchao={stats?.total_projetado ?? 0}
             />
           </section>
         )}
@@ -307,7 +308,6 @@ const DashboardPage = () => {
               acordosMes={stats?.acordos_mes ?? 0}
               quebra={stats?.total_quebra ?? 0}
               pendentes={stats?.total_pendente ?? 0}
-              colchao={stats?.total_projetado ?? 0}
               trendAcionados={trendAcionados}
               trendAcordosDia={trendAcordosDia}
               trendAcordosMes={trendAcordosMes}

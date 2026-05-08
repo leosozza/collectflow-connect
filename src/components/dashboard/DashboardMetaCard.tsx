@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchMyGoals, fetchGoals, fetchTenantGoalsMode } from "@/services/goalService";
-import { Trophy, Target } from "lucide-react";
+import { Trophy, Target, Wallet } from "lucide-react";
 import MetaRadialCard from "./MetaRadialCard";
 import { formatCurrency } from "@/lib/formatters";
 
@@ -20,6 +20,7 @@ interface DashboardMetaCardProps {
   selectedOperatorUserId: string | null; // user_id from global filter
   received: number; // total_recebido from dashboard RPC
   tenantId: string | null;
+  colchao?: number;
 }
 
 const DashboardMetaCard = ({
@@ -29,6 +30,7 @@ const DashboardMetaCard = ({
   selectedOperatorUserId,
   received,
   tenantId,
+  colchao = 0,
 }: DashboardMetaCardProps) => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
@@ -106,7 +108,23 @@ const DashboardMetaCard = ({
         </span>
       </div>
 
-      <div className="p-3 flex-1 min-h-0 flex items-center justify-center">
+      <div className="relative p-3 flex-1 min-h-0 flex items-center justify-center">
+        {/* Colchão — discreto no canto superior esquerdo */}
+        {goal > 0 && colchao > 0 && (
+          <div
+            className="absolute top-2 left-3 flex flex-col leading-tight"
+            title="Parcelas com vencimento no mês originadas de acordos criados em meses anteriores (entrada + parcelas mensais)."
+          >
+            <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/70 font-medium">
+              <Wallet className="w-2.5 h-2.5 text-primary/60" strokeWidth={2.25} />
+              Colchão
+            </span>
+            <span className="text-xs font-semibold text-foreground tabular-nums mt-0.5">
+              {formatCurrency(colchao)}
+            </span>
+          </div>
+        )}
+
         {goal === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 text-center py-6">
             <div className="rounded-full p-3 bg-primary/10">
