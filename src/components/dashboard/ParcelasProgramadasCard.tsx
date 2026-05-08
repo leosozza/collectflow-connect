@@ -84,7 +84,7 @@ export default function ParcelasProgramadasCard({
       />
 
       {/* Banner data centralizado */}
-      <div className="px-3 pb-2.5 shrink-0 flex items-center justify-center">
+      <div className="px-3 pt-2.5 pb-2 shrink-0 flex items-center justify-center">
         <div className="inline-flex items-center bg-blue-500 hover:bg-blue-600 transition-colors rounded-full px-0.5 py-0.5 gap-0 shadow-sm">
           <Button
             size="icon"
