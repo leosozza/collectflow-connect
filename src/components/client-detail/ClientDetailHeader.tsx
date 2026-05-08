@@ -48,14 +48,21 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const InfoItem = ({ label, value, className }: { label: string; value: React.ReactNode; className?: string }) => (
-  <div className={className}>
-    <p className="text-xs text-muted-foreground uppercase font-medium mb-1">{label}</p>
-    <p className="text-sm font-semibold text-foreground">{value || "—"}</p>
+const InfoItem = ({ label, value }: { label: string; value: string | null }) => (
+  <div className="min-w-0">
+    <p className="text-xs text-muted-foreground uppercase font-medium mb-1 truncate">{label}</p>
+    <p className="text-sm font-semibold text-foreground truncate" title={value || ""}>{value || "—"}</p>
   </div>
 );
 
-const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcordo, backTo }: ClientDetailHeaderProps) => {
+const ClientDetailHeader = ({
+  client,
+  clients,
+  cpf,
+  agreements,
+  onFormalizarAcordo,
+  backTo,
+}: ClientDetailHeaderProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
@@ -554,10 +561,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                   value={client.external_id}
                   onSave={(v) => updateSingleField("external_id", v)}
                 />
-                <InlineEditableField
-                  label="Cod. Contrato"
-                  value={client.cod_contrato}
-                  onSave={(v) => updateSingleField("cod_contrato", v)}
+                <InfoItem 
+                  label="Cod. Contrato" 
+                  value={codContratos} 
                 />
                 <InfoItem label="Modelo" value={modelNames} />
                 <InfoItem label="Credor" value={client.credor} />
