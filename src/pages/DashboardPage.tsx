@@ -329,7 +329,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("parcelas") && (
-          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-2">
+          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:240ms]">
             <ParcelasProgramadasCard
               vencimentos={vencimentos}
               browseDate={browseDate}
