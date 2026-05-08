@@ -83,6 +83,7 @@ const KpisGridCard = ({
   trendAcordosMes,
   trendQuebra,
   trendPendentes,
+  compareLabel = "vs mês anterior",
 }: Props) => {
   return (
     <div className="grid grid-cols-3 grid-rows-2 gap-2 h-full min-h-0">
