@@ -136,7 +136,7 @@ export default function ParcelasProgramadasCard({
                 <TableHead className="h-8 xl:h-9 px-3 xl:px-4 text-[10px] xl:text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Nome
                 </TableHead>
-                <TableHead className="hidden xl:table-cell h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="hidden 2xl:table-cell h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Credor
                 </TableHead>
                 <TableHead className="h-8 xl:h-9 px-2 xl:px-4 text-center text-[10px] xl:text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -167,15 +167,16 @@ export default function ParcelasProgramadasCard({
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
                     className="border-b border-border/30 hover:bg-muted/30 transition-colors"
                   >
-                    <TableCell className="py-1.5 xl:py-2 px-3 xl:px-4 text-[12px] xl:text-sm font-medium">
+                    <TableCell className="py-1.5 xl:py-2 px-3 xl:px-4 text-[12px] xl:text-sm font-medium max-w-[200px]">
                       <Link
                         to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
-                        className="text-primary hover:underline underline-offset-2"
+                        className="text-primary hover:underline underline-offset-2 truncate block"
+                        title={v.client_name}
                       >
                         {v.client_name}
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell py-2 px-4 text-sm text-muted-foreground">
+                    <TableCell className="hidden 2xl:table-cell py-2 px-4 text-sm text-muted-foreground">
                       <span className="truncate">{credorShort}</span>
                     </TableCell>
                     <TableCell className="py-1.5 xl:py-2 px-2 xl:px-4 text-center text-[12px] xl:text-sm font-semibold text-foreground tabular-nums">
