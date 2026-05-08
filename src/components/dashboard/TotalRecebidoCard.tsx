@@ -252,7 +252,7 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
 
       <div className="px-3 pt-2 pb-1.5 xl:px-4 xl:pt-3 xl:pb-2 shrink-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <p className="text-[20px] xl:text-[26px] font-semibold text-primary tabular-nums leading-none tracking-tight">
+          <p className="text-[20px] lg:text-[22px] xl:text-[26px] font-semibold text-primary tabular-nums leading-none tracking-tight">
             {formatCurrency(totalRecebido)}
           </p>
           {diffPct !== null ? (() => {

@@ -37,7 +37,7 @@ const DashboardMetaCard = ({
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
   const bp = useBreakpoint();
-  const radialSize = bp === "2xl" ? 230 : bp === "xl" ? 190 : 150;
+  const radialSize = bp === "2xl" ? 220 : bp === "xl" ? 180 : bp === "lg" ? 150 : 140;
 
   // Tenant goals mode (global vs per_credor)
   const { data: goalsMode = "global" } = useQuery({
