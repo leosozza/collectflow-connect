@@ -1,80 +1,53 @@
-## Refinamento visual do Dashboard — padrão RIVO
+## Diagnóstico
 
-Aplicar o padrão visual do header escuro do card "META DA EQUIPE" a todos os cards, melhorar legibilidade, reduzir espaçamento e reorganizar blocos. **Sem alterar lógica/RPCs/dados** — apenas UI.
+Sua intuição está correta: o problema é específico de **entradas**, não de parcelas comuns.
 
-### 1. Header padronizado (escuro RIVO)
+### Caso da Angela (CPF 11411461770)
 
-Criar componente reutilizável `src/components/dashboard/DashboardCardHeader.tsx`:
-- Fundo `bg-secondary` (escuro RIVO), texto `text-white/95`
-- Ícone em chip `bg-primary/15 ring-1 ring-primary/30` com cor `text-primary`
-- Título em uppercase `tracking-[0.04em]` 12px
-- Slot direito para badges/legendas/chips (mês, contadores)
-- Mesmo header já usado em `DashboardMetaCard`; extrair para reuso.
+- Acordo `c8f5de8f-55ab-4c71-b36e-714bb1dbe061` (TESS MODELS), status `pending`, entrada R$ 482,00 com vencimento 07/05/2026.
+- Na tabela `negociarie_cobrancas` a entrada está **paga**:
+  - `status: LIQUIDACAO`, `valor_pago: 482`, `data_pagamento: 2026-05-05`
+  - `installment_key: "c8f5de8f-55ab-4c71-b36e-714bb1dbe061:entrada"`
+- Não existe `manual_payments` para esse acordo — então a baixa veio só pelo Negociarie.
+- Mesmo assim a UI mostra a entrada como **vencida**.
 
-Aplicar nos cards:
-- `TotalRecebidoCard` — slot direito = legenda "Atual / Mês anterior"
-- `ParcelasProgramadasCard` — slot direito = chips "A receber" / "Recebido" (mantém cores azul/verde)
-- `AgendamentosHojeCard` — slot direito = badge contador
-- `Visao360Card` — slot direito = label do mês
-- `KpisGridCard` — cada tile recebe um header escuro compacto (ou se mantém estilo orange-strip atual; ver seção 4)
+### Causa raiz
 
-### 2. `DashboardMetaCard` — melhorar legibilidade
+Em `src/lib/agreementInstallmentClassifier.ts`, dentro de `classifyInstallment`, a busca por cobrança Negociarie monta a chave usando `installment.number`:
 
-- Aumentar footer "Recebido" / "Faltam":
-  - Label: `text-[11px]` (era 10px)
-  - Valor: `text-base font-bold` tabular-nums (era 10px)
-  - Footer com `py-2.5` e separador mais nítido
-- Manter chip "Colchão" como está (já destacado).
-
-### 3. `Visao360Card` — repaginar mantendo essência
-
-- Aplicar header escuro padrão.
-- Substituir 3 barras horizontais finas por **layout de 3 linhas tipo "stat row"**:
-  - Cada linha: ícone colorido + label + barra mais grossa (h-2.5) + valor à direita destacado.
-  - Gap maior, melhor hierarquia.
-- Remover legenda redundante do rodapé (já visível em cada linha).
-- Cores: primary (provisionado), amber (pendentes), red (quebra) via tokens HSL no `index.css` se ainda não existirem (`--warning`, `--destructive` já existem; usar `hsl(var(--destructive))` e adicionar `--warning` se faltar).
-
-### 4. `KpisGridCard` — manter números grandes, adicionar cor
-
-- Manter layout vertical (3 tiles empilhados) e tamanhos de fonte do número (texto 34–44px atual, agradou).
-- Adicionar gradiente sutil de fundo por tile usando token primário (`bg-gradient-to-br from-primary/5 to-transparent`) e borda esquerda colorida 3px (substitui a barrinha atual).
-- Header de cada tile fica com mini-faixa escura no topo (versão compacta do header padrão) — opcional, ou manter o atual layout limpo. **Decisão:** manter sem header escuro nos tiles (são KPIs unitários, header escuro polui); aplicar apenas tinta/gradiente leve.
-
-### 5. Reorganização do grid
-
-Trocar posição de **Agendamentos** ↔ **Visão 360**:
-
-```text
-Linha 1: [Meta 3col]            [TotalRecebido 6col]    [KpisGrid 3col]
-Linha 2: [Visão 360 3col]       [Parcelas 6col]         [Agendamentos 3col]
+```ts
+const installmentKey = `${agId}:${installment.number}`;
+const cob = cobrancas.find(c => c.installment_key === installmentKey);
 ```
 
-Ajustar `lg:col-start` em `DashboardPage.tsx`:
-- `visao360`: `lg:col-start-1 lg:row-start-2`
-- `agendamentos`: `lg:col-start-10 lg:row-start-2`
+Para entradas, `installment.number === 0`, então procura `…:0`. Mas a Negociarie grava a entrada como `…:entrada` (e entradas adicionais como `…:entrada_2`, etc.). Resultado: nunca encontra match para entradas pagas via boleto/PIX Negociarie e a UI cai no fallback de data → "vencido".
 
-### 6. Redução de espaçamento
+Parcelas comuns funcionam porque `installment.number` (1, 2, 3…) bate com o sufixo numérico do `installment_key` da Negociarie.
 
-- Padding interno dos cards: `p-4` → `p-3` onde aplicável.
-- Gap do grid principal: manter `gap-3`.
-- Cards com listas (Parcelas, Agendamentos): reduzir `pt-3` do header para `pt-2` (header escuro já dá respiro visual).
+Observação: a `VirtualInstallment` já carrega `key` no formato canônico (`"entrada"`, `"entrada_2"`, `"1"`, `"2"`…) — basta usar `installment.key` em vez de `installment.number` aqui, igual ao que já é feito no match de `manual_payments`.
 
-### Arquivos afetados (apenas UI)
+## Mudança proposta
 
-- `src/components/dashboard/DashboardCardHeader.tsx` (novo, reutilizável)
-- `src/components/dashboard/DashboardMetaCard.tsx` (refatorar para usar header novo + footer maior)
-- `src/components/dashboard/TotalRecebidoCard.tsx` (header novo, mantém chart)
-- `src/components/dashboard/ParcelasProgramadasCard.tsx` (header novo, chips no slot)
-- `src/components/dashboard/AgendamentosHojeCard.tsx` (header novo)
-- `src/components/dashboard/Visao360Card.tsx` (repaginar layout interno + header novo)
-- `src/components/dashboard/KpisGridCard.tsx` (gradiente sutil + borda colorida)
-- `src/pages/DashboardPage.tsx` (swap visao360 ↔ agendamentos no grid)
-- `src/index.css` (adicionar token `--warning` se ausente)
+Arquivo único: `src/lib/agreementInstallmentClassifier.ts`
 
-### Não-objetivos
+Trocar a montagem da chave de cobrança Negociarie para usar `installment.key`:
 
-- Não mexer em RPCs / SQL / dados.
-- Não alterar comportamento de filtros, navegação ou permissões.
-- Não adicionar/remover métricas.
-- Manter responsividade atual (`lg:` breakpoints inalterados; mobile continua coluna única).
+```ts
+const installmentKey = `${agId}:${installment.key}`;
+```
+
+Isso passa a casar:
+- `entrada`, `entrada_2`, `entrada_3` → entradas múltiplas pagas via Negociarie
+- `1`, `2`, `3`… → parcelas (comportamento atual preservado, pois `key` numérica == `number`)
+
+Nenhuma outra alteração de lógica, RPC, SQL ou UI. Sem mudança de regras de status, sem migração.
+
+## Verificação após o fix
+
+1. Abrir Carteira → Angela → aba Acordo: a entrada de R$ 482,00 deve aparecer como **paga** (linha verde, sem "vencido").
+2. Conferir que parcelas comuns continuam classificando igual (caso de outro acordo com parcelas baixadas).
+3. Conferir contagem `paid/total` em `countPaidInstallments` para o acordo (entrada paga deve contar).
+
+## Fora de escopo
+
+Os erros de build atuais (`AgreementInstallments.tsx` linha 275 e `CarteiraPage.tsx` linha 973) são de edições anteriores não relacionadas a entradas. Posso corrigi-los junto na implementação se você quiser, mas não fazem parte deste diagnóstico — me avise se devo incluir.

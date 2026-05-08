@@ -142,8 +142,9 @@ export function classifyInstallment(
     return "pago";
   }
 
-  // Check negociarie cobrancas
-  const installmentKey = `${agId}:${installment.number}`;
+  // Check negociarie cobrancas — use canonical installment.key (entrada, entrada_2, 1, 2, ...)
+  // so entradas pagas via Negociarie batem com installment_key "<agId>:entrada".
+  const installmentKey = `${agId}:${installment.key}`;
   const cob = cobrancas.find(c => c.installment_key === installmentKey);
   if (cob) {
     if (cob.status === "pago" || cob.status === "RECEIVED" || cob.status === "CONFIRMED") {
