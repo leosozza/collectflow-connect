@@ -110,21 +110,7 @@ const DashboardMetaCard = ({
       />
 
       <div className="relative p-2 xl:p-3 flex-1 min-h-0 flex items-center justify-center">
-        {/* Colchão — chip destacado no canto superior esquerdo */}
-        {goal > 0 && colchao > 0 && (
-          <div
-            className="absolute top-1.5 left-1.5 xl:top-2 xl:left-2 flex flex-col leading-tight bg-primary/10 border border-primary/30 rounded-lg px-2 py-1 xl:px-2.5 xl:py-1.5 shadow-sm"
-            title="Parcelas com vencimento no mês originadas de acordos criados em meses anteriores (entrada + parcelas mensais)."
-          >
-            <span className="flex items-center gap-1 text-[9px] xl:text-[10px] uppercase tracking-[0.08em] text-primary font-semibold">
-              <Wallet className="w-3 h-3 text-primary" strokeWidth={2.5} />
-              Colchão
-            </span>
-            <span className="text-xs xl:text-sm font-bold text-foreground tabular-nums mt-0.5">
-              {formatCurrency(colchao)}
-            </span>
-          </div>
-        )}
+        {/* Colchão movido para o card Visão 360 */}
 
         {goal === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 text-center py-4 xl:py-6">
