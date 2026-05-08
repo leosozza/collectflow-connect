@@ -314,11 +314,17 @@ const DashboardPage = () => {
             />
           </section>
         )}
-        {isVisible("agendamentos") && (
+        {isVisible("visao360") && (
           <section className="min-h-0 h-full lg:col-span-3 lg:col-start-1 lg:row-start-2">
-            <AgendamentosHojeCard
-              callbacks={callbacks}
-              showOperator={canViewAllAgendados}
+            <Visao360Card
+              provisionado={stats?.total_negociado ?? 0}
+              pendentes={stats?.total_pendente ?? 0}
+              quebra={stats?.total_quebra ?? 0}
+              monthLabel={new Date(
+                filterYear ?? now.getFullYear(),
+                (filterMonth ?? now.getMonth() + 1) - 1,
+                1
+              ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
             />
           </section>
         )}
@@ -332,17 +338,11 @@ const DashboardPage = () => {
             />
           </section>
         )}
-        {isVisible("visao360") && (
+        {isVisible("agendamentos") && (
           <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-2">
-            <Visao360Card
-              provisionado={stats?.total_negociado ?? 0}
-              pendentes={stats?.total_pendente ?? 0}
-              quebra={stats?.total_quebra ?? 0}
-              monthLabel={new Date(
-                filterYear ?? now.getFullYear(),
-                (filterMonth ?? now.getMonth() + 1) - 1,
-                1
-              ).toLocaleString("pt-BR", { month: "long", year: "numeric" })}
+            <AgendamentosHojeCard
+              callbacks={callbacks}
+              showOperator={canViewAllAgendados}
             />
           </section>
         )}
