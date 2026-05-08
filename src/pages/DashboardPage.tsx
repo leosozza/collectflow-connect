@@ -202,7 +202,7 @@ const DashboardPage = () => {
   const isVisible = (id: DashboardBlockId) => layout.visible[id];
 
   return (
-    <div className="flex flex-col gap-2 xl:gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col gap-2 lg:gap-2.5 xl:gap-3 animate-fade-in h-full min-h-0 overflow-y-auto 2xl:overflow-hidden scrollbar-thin">
       <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
         <div className="min-w-0">
           <h1 className="text-base xl:text-xl font-bold text-foreground leading-tight">Dashboard</h1>
@@ -269,7 +269,7 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2 xl:gap-3">
+      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-12 lg:auto-rows-[minmax(240px,auto)] 2xl:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] 2xl:auto-rows-auto 2xl:overflow-hidden gap-2 lg:gap-2.5 xl:gap-3">
         {isVisible("metas") && (
           <section className="min-h-0 h-full lg:col-span-3 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:0ms]">
             <DashboardMetaCard
