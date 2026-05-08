@@ -231,6 +231,12 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const totalInstallments = installments.length;
   const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
+  // Algoritmo FIFO para distribuição de pagamentos manuais
+  let manualPool = manualPayments
+    .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
+    .sort((a, b) => new Date(a.payment_date || a.created_at).getTime() - new Date(b.payment_date || b.created_at).getTime())
+    .map(mp => ({ ...mp, remaining: Number(mp.amount_paid || 0) }));
+
   const installmentsWithStatus = installments.map((inst) => {
     const isCancelled = !!cancelledMap[inst.customKey];
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -242,40 +248,51 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       return { ...inst, status: "cancelled", isOverdue: false, pendingManual: undefined, isCancelled: true };
     }
 
-    const matchesInst = (mp: any) =>
-      (mp.installment_key && mp.installment_key === inst.customKey) ||
-      (!mp.installment_key && mp.installment_number === inst.number);
-
+    // 1. Verificar se está pago via Negociarie (Cobranca oficial)
+    const isPaidByCobranca = inst.cobranca?.status === "pago";
+    
+    // 2. Verificar se há baixa pendente específica
     const pendingManual = manualPayments.find(
-      (mp: any) => matchesInst(mp) && mp.status === "pending_confirmation"
+      (mp: any) => (
+        (mp.installment_key && mp.installment_key === inst.customKey) ||
+        (!mp.installment_key && mp.installment_number === inst.number)
+      ) && mp.status === "pending_confirmation"
     );
 
-    const confirmedManualMatches = manualPayments.filter(
-      (mp: any) => matchesInst(mp) && ["confirmed", "approved"].includes(mp.status)
-    );
-    const confirmedManualForThis = confirmedManualMatches
-      .reduce((s: number, mp: any) => s + Number(mp.amount_paid || 0), 0);
-    const isPaidByManual = confirmedManualForThis >= instValue - 0.01;
+    // 3. Lógica FIFO para pagamentos manuais confirmados
+    let paidByManual = 0;
+    let lastManualDate: string | undefined;
+
+    // Tenta quitar esta parcela usando o saldo disponível no pool de pagamentos manuais
+    for (const mp of manualPool) {
+      if (paidByManual < instValue - 0.01) {
+        const need = instValue - paidByManual;
+        const take = Math.min(mp.remaining, need);
+        mp.remaining -= take;
+        paidByManual += take;
+        if (take > 0) {
+          lastManualDate = mp.payment_date || mp.confirmed_at || mp.created_at;
+        }
+      }
+    }
+
+    const isPaidByManual = paidByManual >= instValue - 0.01;
+    const isPaid = isPaidByCobranca || isPaidByManual;
 
     const status = pendingManual
       ? "pending_confirmation"
-      : inst.cobranca?.status === "pago"
+      : isPaid
         ? "pago"
-        : isPaidByManual
-          ? "pago"
-          : isOverdue ? "vencido" : "pendente";
+        : isOverdue ? "vencido" : "pendente";
 
-    // Data de pagamento: SEMPRE da fonte canônica (cobrança ou baixa manual que casou).
-    // Sem inferência FIFO — se não há fonte específica, paidAt fica indefinido.
+    // Data de pagamento: Fonte Negociarie tem prioridade, depois FIFO manual.
     let paidAt: string | undefined;
-    if (status === "pago") {
-      if (inst.cobranca?.data_pagamento) {
-        paidAt = inst.cobranca.data_pagamento;
-      } else if (confirmedManualMatches.length > 0) {
-        const mp = confirmedManualMatches[0];
-        paidAt = (mp as any).payment_date || (mp as any).confirmed_at || (mp as any).reviewed_at || (mp as any).created_at;
-      }
+    if (isPaid) {
+      paidAt = isPaidByCobranca 
+        ? inst.cobranca?.data_pagamento 
+        : lastManualDate;
     }
+
     return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
   });
 
