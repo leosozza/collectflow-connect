@@ -33,12 +33,9 @@ const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps)
   return (
     <div
       title={info}
-      className="relative bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] transition-all px-3 py-3 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help hover:border-primary/30 hover:shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.18)]"
+      className="relative bg-gradient-to-br from-primary/[0.06] via-card to-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] transition-all px-3 py-3 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help hover:border-primary/40 hover:shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.22)]"
     >
-      <span
-        aria-hidden
-        className="absolute top-0 left-0 h-[2px] w-8 bg-primary rounded-r-full"
-      />
+      <span aria-hidden className="absolute top-0 left-0 bottom-0 w-[3px] bg-primary rounded-r-full" />
       <div className="min-w-0 flex items-start justify-between gap-2">
         <p className="text-[10px] text-muted-foreground/80 font-medium leading-tight truncate tracking-[0.06em] uppercase">
           {label}

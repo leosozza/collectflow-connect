@@ -1,65 +1,80 @@
-## Visão 360 — Card unificado no Dashboard
+## Refinamento visual do Dashboard — padrão RIVO
 
-Criar um novo card **Visão 360** no Dashboard que une 3 indicadores monetários em barras horizontais comparativas (estilo do mockup enviado): título no topo, barras horizontais com cor + valor, legenda compacta no rodapé.
+Aplicar o padrão visual do header escuro do card "META DA EQUIPE" a todos os cards, melhorar legibilidade, reduzir espaçamento e reorganizar blocos. **Sem alterar lógica/RPCs/dados** — apenas UI.
 
-### Indicadores
+### 1. Header padronizado (escuro RIVO)
 
-1. **Provisionado no Mês** (azul/primário) — nova métrica.
-2. **Pendentes** (âmbar) — `stats.total_pendente` (já existe).
-3. **Quebra** (vermelho) — `stats.total_quebra` (já existe).
+Criar componente reutilizável `src/components/dashboard/DashboardCardHeader.tsx`:
+- Fundo `bg-secondary` (escuro RIVO), texto `text-white/95`
+- Ícone em chip `bg-primary/15 ring-1 ring-primary/30` com cor `text-primary`
+- Título em uppercase `tracking-[0.04em]` 12px
+- Slot direito para badges/legendas/chips (mês, contadores)
+- Mesmo header já usado em `DashboardMetaCard`; extrair para reuso.
 
-### Definição de "Provisionado no Mês" (nova métrica)
+Aplicar nos cards:
+- `TotalRecebidoCard` — slot direito = legenda "Atual / Mês anterior"
+- `ParcelasProgramadasCard` — slot direito = chips "A receber" / "Recebido" (mantém cores azul/verde)
+- `AgendamentosHojeCard` — slot direito = badge contador
+- `Visao360Card` — slot direito = label do mês
+- `KpisGridCard` — cada tile recebe um header escuro compacto (ou se mantém estilo orange-strip atual; ver seção 4)
 
-Para todos os acordos **criados dentro do mês/ano selecionado** (`agreements.created_at` no período, excluindo `cancelled` e `rejected`, respeitando filtros de operador/tenant):
+### 2. `DashboardMetaCard` — melhorar legibilidade
 
-- Se o acordo tem **entrada (`down_payment` > 0)** → soma a entrada.
-- Se **não tem entrada** → soma o valor da **1ª parcela** do acordo.
+- Aumentar footer "Recebido" / "Faltam":
+  - Label: `text-[11px]` (era 10px)
+  - Valor: `text-base font-bold` tabular-nums (era 10px)
+  - Footer com `py-2.5` e separador mais nítido
+- Manter chip "Colchão" como está (já destacado).
 
-A data de vencimento da entrada/1ª parcela é irrelevante — o que importa é a data de criação do acordo. Isso difere de `total_projetado` (Colchão), que é baseado em parcelas com vencimento dentro do mês.
+### 3. `Visao360Card` — repaginar mantendo essência
 
-### Backend — Migration
+- Aplicar header escuro padrão.
+- Substituir 3 barras horizontais finas por **layout de 3 linhas tipo "stat row"**:
+  - Cada linha: ícone colorido + label + barra mais grossa (h-2.5) + valor à direita destacado.
+  - Gap maior, melhor hierarquia.
+- Remover legenda redundante do rodapé (já visível em cada linha).
+- Cores: primary (provisionado), amber (pendentes), red (quebra) via tokens HSL no `index.css` se ainda não existirem (`--warning`, `--destructive` já existem; usar `hsl(var(--destructive))` e adicionar `--warning` se faltar).
 
-Criar/atualizar a RPC `get_dashboard_stats_v2` para retornar um novo campo `total_provisionado_mes` (e `total_provisionado_mes_anterior` para o trend), seguindo o mesmo padrão dos demais campos:
+### 4. `KpisGridCard` — manter números grandes, adicionar cor
 
-- Filtros: `tenant_id`, opcional `_user_id` / `_user_ids`, `_year`, `_month`.
-- Lógica: para cada `agreement` criado no mês selecionado e não cancelado/rejeitado:
-  - `provisionado_unit = COALESCE(NULLIF(down_payment, 0), valor_da_primeira_parcela)`
-- Soma agregada → `total_provisionado_mes`.
-- Replicar para o mês anterior → `total_provisionado_mes_anterior`.
+- Manter layout vertical (3 tiles empilhados) e tamanhos de fonte do número (texto 34–44px atual, agradou).
+- Adicionar gradiente sutil de fundo por tile usando token primário (`bg-gradient-to-br from-primary/5 to-transparent`) e borda esquerda colorida 3px (substitui a barrinha atual).
+- Header de cada tile fica com mini-faixa escura no topo (versão compacta do header padrão) — opcional, ou manter o atual layout limpo. **Decisão:** manter sem header escuro nos tiles (são KPIs unitários, header escuro polui); aplicar apenas tinta/gradiente leve.
 
-A "1ª parcela" será obtida da tabela de parcelas do acordo (a estrutura exata será confirmada na implementação — provavelmente `agreement_installments` ordenadas por número/data, pegando a primeira não-entrada). Se o backend já tiver função utilitária para isso, reutilizamos.
+### 5. Reorganização do grid
 
-### Frontend
+Trocar posição de **Agendamentos** ↔ **Visão 360**:
 
-**Novo componente** `src/components/dashboard/Visao360Card.tsx`
-- Props: `provisionado`, `pendentes`, `quebra`, `monthLabel`, opcionalmente `trends`.
-- Header: título "Visão 360" + subtítulo com o mês.
-- Corpo: 3 barras horizontais (`div` com `width %` proporcional ao maior valor entre os três), com label à esquerda e `formatCurrency` à direita; cores via tokens semânticos (primary, amber-500, red-500 já no design system).
-- Rodapé: legenda compacta com bolinha colorida + nome + valor.
-
-**`KpisGridCard.tsx`** — remover os tiles "Total de Quebra" e "Pendentes" e suas props/trends. Restam só os 3 KPIs numéricos (Acionados Hoje, Acordos Dia, Acordos Mês) em `grid-cols-3` numa única linha.
-
-**`DashboardPage.tsx`**
-- Adicionar `total_provisionado_mes` e `total_provisionado_mes_anterior` na interface `DashboardStats`.
-- Renderizar `<Visao360Card />` no grid (linha 2, col 10–12 — slot que vai liberar com a remoção dos KPIs monetários do KpisGrid).
-- Passar o novo `provisionado={stats.total_provisionado_mes}` etc.
-
-**`useDashboardLayout.ts`** — adicionar `"visao360"` em `DashboardBlockId` com default `visible: true`.
-
-**`CustomizeDashboardDialog.tsx`** — adicionar o label "Visão 360" no dialog de customização.
-
-### Layout final do Dashboard
-
-```
-Linha 1: [Meta 3col]          [TotalRecebido 6col]  [KpisGrid 3col]
-Linha 2: [Agendamentos 3col]  [Parcelas 6col]       [Visão 360 3col]
+```text
+Linha 1: [Meta 3col]            [TotalRecebido 6col]    [KpisGrid 3col]
+Linha 2: [Visão 360 3col]       [Parcelas 6col]         [Agendamentos 3col]
 ```
 
-### Arquivos afetados
+Ajustar `lg:col-start` em `DashboardPage.tsx`:
+- `visao360`: `lg:col-start-1 lg:row-start-2`
+- `agendamentos`: `lg:col-start-10 lg:row-start-2`
 
-- Migration SQL: atualizar `get_dashboard_stats_v2` para retornar `total_provisionado_mes` + comparativo.
-- `src/components/dashboard/Visao360Card.tsx` (novo).
-- `src/components/dashboard/KpisGridCard.tsx` (remove 2 tiles).
-- `src/pages/DashboardPage.tsx` (interface + render + props).
-- `src/hooks/useDashboardLayout.ts` (novo bloco).
-- `src/components/dashboard/CustomizeDashboardDialog.tsx` (label).
+### 6. Redução de espaçamento
+
+- Padding interno dos cards: `p-4` → `p-3` onde aplicável.
+- Gap do grid principal: manter `gap-3`.
+- Cards com listas (Parcelas, Agendamentos): reduzir `pt-3` do header para `pt-2` (header escuro já dá respiro visual).
+
+### Arquivos afetados (apenas UI)
+
+- `src/components/dashboard/DashboardCardHeader.tsx` (novo, reutilizável)
+- `src/components/dashboard/DashboardMetaCard.tsx` (refatorar para usar header novo + footer maior)
+- `src/components/dashboard/TotalRecebidoCard.tsx` (header novo, mantém chart)
+- `src/components/dashboard/ParcelasProgramadasCard.tsx` (header novo, chips no slot)
+- `src/components/dashboard/AgendamentosHojeCard.tsx` (header novo)
+- `src/components/dashboard/Visao360Card.tsx` (repaginar layout interno + header novo)
+- `src/components/dashboard/KpisGridCard.tsx` (gradiente sutil + borda colorida)
+- `src/pages/DashboardPage.tsx` (swap visao360 ↔ agendamentos no grid)
+- `src/index.css` (adicionar token `--warning` se ausente)
+
+### Não-objetivos
+
+- Não mexer em RPCs / SQL / dados.
+- Não alterar comportamento de filtros, navegação ou permissões.
+- Não adicionar/remover métricas.
+- Manter responsividade atual (`lg:` breakpoints inalterados; mobile continua coluna única).
