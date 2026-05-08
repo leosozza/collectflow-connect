@@ -314,7 +314,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("visao360") && (
-          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-1 lg:row-start-2">
+          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-1 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:180ms]">
             <Visao360Card
               colchao={stats?.total_projetado ?? 0}
               provisionado={stats?.total_negociado ?? 0}
