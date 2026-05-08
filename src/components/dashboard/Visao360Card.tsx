@@ -128,7 +128,7 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
           title="Soma do Colchão com o Provisionado do mês — previsão total de entrada."
         >
           <span className="text-[11px] xl:text-[12px] font-semibold uppercase tracking-wide">
-            Colchão + Provisionado
+            Projeção Receita do Mês
           </span>
           <span className="text-lg xl:text-xl font-bold tabular-nums">
             {formatCurrency(totalPrevisto)}
