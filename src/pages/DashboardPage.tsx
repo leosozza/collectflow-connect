@@ -202,20 +202,20 @@ const DashboardPage = () => {
   const isVisible = (id: DashboardBlockId) => layout.visible[id];
 
   return (
-    <div className="flex flex-col gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col gap-2 xl:gap-3 animate-fade-in h-full min-h-0 overflow-hidden">
       <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground text-xs mt-0.5">
+        <div className="min-w-0">
+          <h1 className="text-base xl:text-xl font-bold text-foreground leading-tight">Dashboard</h1>
+          <p className="hidden xl:block text-muted-foreground text-xs mt-0.5">
             Bem-vindo, {profile?.full_name || "Operador"}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 xl:gap-2 flex-wrap">
           {permissions.canViewRelatorios && (
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 h-8 text-xs border-primary/40 text-primary hover:bg-primary/10"
+              className="gap-1.5 h-7 xl:h-8 text-[11px] xl:text-xs border-primary/40 text-primary hover:bg-primary/10"
               onClick={() => navigate("/relatorios")}
             >
               <FileText className="w-3.5 h-3.5" />
@@ -225,7 +225,7 @@ const DashboardPage = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 h-8 text-xs border-primary/40 text-primary hover:bg-primary/10"
+            className="gap-1.5 h-7 xl:h-8 text-[11px] xl:text-xs border-primary/40 text-primary hover:bg-primary/10"
             onClick={() => navigate("/analytics")}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -236,14 +236,14 @@ const DashboardPage = () => {
             selected={selectedYears}
             onChange={setSelectedYears}
             allLabel="Ano"
-            className="w-[120px]"
+            className="w-[100px] xl:w-[120px]"
           />
           <MultiSelect
             options={monthOptions}
             selected={selectedMonths}
             onChange={setSelectedMonths}
             allLabel="Mês"
-            className="w-[130px]"
+            className="w-[110px] xl:w-[130px]"
           />
           {canViewAll && (
             <MultiSelect
@@ -251,7 +251,7 @@ const DashboardPage = () => {
               selected={selectedOperators}
               onChange={setSelectedOperators}
               allLabel="Todos"
-              className="w-[160px]"
+              className="w-[140px] xl:w-[160px]"
               searchable
               searchPlaceholder="Buscar operador..."
             />
@@ -259,17 +259,17 @@ const DashboardPage = () => {
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 h-8 text-xs text-muted-foreground hover:text-foreground"
+            className="gap-1.5 h-7 xl:h-8 text-[11px] xl:text-xs text-muted-foreground hover:text-foreground"
             onClick={() => setCustomizeOpen(true)}
             title="Personalizar Dashboard"
           >
             <Settings2 className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Personalizar</span>
+            <span className="hidden 2xl:inline">Personalizar</span>
           </Button>
         </div>
       </div>
 
-      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3">
+      <div className="grid flex-1 min-h-0 overflow-hidden grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] gap-2 xl:gap-3">
         {isVisible("metas") && (
           <section className="min-h-0 h-full lg:col-span-3 lg:row-start-1">
             <DashboardMetaCard

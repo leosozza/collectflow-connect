@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchMyGoals, fetchGoals, fetchTenantGoalsMode } from "@/services/goalService";
 import { Trophy, Target, Wallet } from "lucide-react";
@@ -35,6 +36,8 @@ const DashboardMetaCard = ({
 }: DashboardMetaCardProps) => {
   const { profile } = useAuth();
   const { isTenantAdmin } = useTenant();
+  const bp = useBreakpoint();
+  const radialSize = bp === "2xl" ? 230 : bp === "xl" ? 190 : 150;
 
   // Tenant goals mode (global vs per_credor)
   const { data: goalsMode = "global" } = useQuery({
@@ -106,29 +109,29 @@ const DashboardMetaCard = ({
         }
       />
 
-      <div className="relative p-3 flex-1 min-h-0 flex items-center justify-center">
+      <div className="relative p-2 xl:p-3 flex-1 min-h-0 flex items-center justify-center">
         {/* Colchão — chip destacado no canto superior esquerdo */}
         {goal > 0 && colchao > 0 && (
           <div
-            className="absolute top-2 left-2 flex flex-col leading-tight bg-primary/10 border border-primary/30 rounded-lg px-2.5 py-1.5 shadow-sm"
+            className="absolute top-1.5 left-1.5 xl:top-2 xl:left-2 flex flex-col leading-tight bg-primary/10 border border-primary/30 rounded-lg px-2 py-1 xl:px-2.5 xl:py-1.5 shadow-sm"
             title="Parcelas com vencimento no mês originadas de acordos criados em meses anteriores (entrada + parcelas mensais)."
           >
-            <span className="flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] text-primary font-semibold">
+            <span className="flex items-center gap-1 text-[9px] xl:text-[10px] uppercase tracking-[0.08em] text-primary font-semibold">
               <Wallet className="w-3 h-3 text-primary" strokeWidth={2.5} />
               Colchão
             </span>
-            <span className="text-sm font-bold text-foreground tabular-nums mt-0.5">
+            <span className="text-xs xl:text-sm font-bold text-foreground tabular-nums mt-0.5">
               {formatCurrency(colchao)}
             </span>
           </div>
         )}
 
         {goal === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 text-center py-6">
-            <div className="rounded-full p-3 bg-primary/10">
-              <Target className="w-6 h-6 text-primary/70" strokeWidth={2} />
+          <div className="flex flex-col items-center justify-center gap-2 text-center py-4 xl:py-6">
+            <div className="rounded-full p-2 xl:p-3 bg-primary/10">
+              <Target className="w-5 h-5 xl:w-6 xl:h-6 text-primary/70" strokeWidth={2} />
             </div>
-            <p className="text-xs text-muted-foreground max-w-[200px]">
+            <p className="text-[11px] xl:text-xs text-muted-foreground max-w-[200px]">
               Nenhuma meta definida para este período.
             </p>
           </div>
@@ -140,7 +143,7 @@ const DashboardMetaCard = ({
             monthLabel={monthLabel}
             year={year}
             month={month}
-            size={230}
+            size={radialSize}
             duration={1.4}
           />
         )}
@@ -148,16 +151,16 @@ const DashboardMetaCard = ({
 
       {/* Footer com info adicional */}
       {goal > 0 && (
-        <div className="px-4 py-2.5 shrink-0 border-t border-border/60 bg-muted/40 flex items-center justify-between gap-3">
+        <div className="px-3 py-1.5 xl:px-4 xl:py-2.5 shrink-0 border-t border-border/60 bg-muted/40 flex items-center justify-between gap-3">
           <div className="flex flex-col leading-tight min-w-0">
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wide">Recebido</span>
-            <span className="text-base font-bold text-foreground tabular-nums truncate">
+            <span className="text-[10px] xl:text-[11px] text-muted-foreground uppercase tracking-wide">Recebido</span>
+            <span className="text-sm xl:text-base font-bold text-foreground tabular-nums truncate">
               {formatCurrency(received)}
             </span>
           </div>
           <div className="flex flex-col items-end leading-tight min-w-0">
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wide">Faltam</span>
-            <span className="text-base font-bold text-primary tabular-nums truncate">
+            <span className="text-[10px] xl:text-[11px] text-muted-foreground uppercase tracking-wide">Faltam</span>
+            <span className="text-sm xl:text-base font-bold text-primary tabular-nums truncate">
               {formatCurrency(remaining)}
             </span>
           </div>

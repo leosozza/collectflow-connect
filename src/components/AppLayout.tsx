@@ -388,7 +388,7 @@ const AppLayout = () => {
         </header>
         {isSuperAdmin && <SupportModeAppBanner />}
 
-        <main className={`flex-1 overflow-auto ${isFullBleedRoute ? "" : "p-4 lg:p-6"}`}>
+        <main className={`flex-1 overflow-auto ${isFullBleedRoute ? "" : "p-3 xl:p-4 2xl:p-6"}`}>
           <Outlet />
         </main>
       </div>

@@ -133,19 +133,19 @@ export default function ParcelasProgramadasCard({
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="border-b border-border hover:bg-transparent">
-                <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-8 xl:h-9 px-3 xl:px-4 text-[10px] xl:text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Nome
                 </TableHead>
-                <TableHead className="h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="hidden xl:table-cell h-9 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Credor
                 </TableHead>
-                <TableHead className="h-9 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-8 xl:h-9 px-2 xl:px-4 text-center text-[10px] xl:text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Parcela
                 </TableHead>
-                <TableHead className="h-9 px-4 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-8 xl:h-9 px-2 xl:px-4 text-right text-[10px] xl:text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Valor
                 </TableHead>
-                <TableHead className="h-9 px-4 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <TableHead className="h-8 xl:h-9 px-2 xl:px-4 text-center text-[10px] xl:text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Status
                 </TableHead>
               </TableRow>
@@ -167,7 +167,7 @@ export default function ParcelasProgramadasCard({
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
                     className="border-b border-border/30 hover:bg-muted/30 transition-colors"
                   >
-                    <TableCell className="py-2 px-4 text-sm font-medium">
+                    <TableCell className="py-1.5 xl:py-2 px-3 xl:px-4 text-[12px] xl:text-sm font-medium">
                       <Link
                         to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
                         className="text-primary hover:underline underline-offset-2"
@@ -175,18 +175,18 @@ export default function ParcelasProgramadasCard({
                         {v.client_name}
                       </Link>
                     </TableCell>
-                    <TableCell className="py-2 px-4 text-sm text-muted-foreground">
+                    <TableCell className="hidden xl:table-cell py-2 px-4 text-sm text-muted-foreground">
                       <span className="truncate">{credorShort}</span>
                     </TableCell>
-                    <TableCell className="py-2 px-4 text-center text-sm font-semibold text-foreground tabular-nums">
+                    <TableCell className="py-1.5 xl:py-2 px-2 xl:px-4 text-center text-[12px] xl:text-sm font-semibold text-foreground tabular-nums">
                       {v.total_parcelas ? `${v.numero_parcela}/${v.total_parcelas}` : "—"}
                     </TableCell>
-                    <TableCell className="py-2 px-4 text-sm text-right text-foreground tabular-nums">
+                    <TableCell className="py-1.5 xl:py-2 px-2 xl:px-4 text-[12px] xl:text-sm text-right text-foreground tabular-nums">
                       {formatCurrency(Number(v.valor_parcela))}
                     </TableCell>
-                    <TableCell className="py-2 px-4 text-center">
+                    <TableCell className="py-1.5 xl:py-2 px-2 xl:px-4 text-center">
                       <span
-                        className={`inline-flex items-center justify-center min-w-[88px] rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${statusClass}`}
+                        className={`inline-flex items-center justify-center min-w-[72px] xl:min-w-[88px] rounded-full px-2 xl:px-2.5 py-0.5 text-[9px] xl:text-[10px] font-medium uppercase tracking-wide ${statusClass}`}
                       >
                         {statusLabel}
                       </span>

@@ -53,7 +53,7 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
                 const cpf = cb.client_cpf?.replace(/\D/g, "") || "";
                 return (
                   <TableRow key={cb.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="py-2.5 px-4 text-[12px] font-medium">
+                    <TableCell className="py-1.5 xl:py-2.5 px-3 xl:px-4 text-[11px] xl:text-[12px] font-medium">
                       {cpf ? (
                         <Link
                           to={`/carteira/${encodeURIComponent(cpf)}`}
@@ -70,10 +70,10 @@ export default function AgendamentosHojeCard({ callbacks, showOperator }: Props)
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="py-2.5 px-4 text-[12px] text-muted-foreground tabular-nums">
+                    <TableCell className="py-1.5 xl:py-2.5 px-2 xl:px-4 text-[11px] xl:text-[12px] text-muted-foreground tabular-nums">
                       {format(cbTime, "dd/MM/yyyy")}
                     </TableCell>
-                    <TableCell className="py-2.5 px-4 text-[12px] text-right font-semibold tabular-nums">
+                    <TableCell className="py-1.5 xl:py-2.5 px-2 xl:px-4 text-[11px] xl:text-[12px] text-right font-semibold tabular-nums">
                       {format(cbTime, "HH:mm")}
                     </TableCell>
                   </TableRow>
