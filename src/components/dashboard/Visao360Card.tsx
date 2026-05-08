@@ -23,6 +23,15 @@ interface Indicator {
 const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: Props) => {
   const totalPrevisto = colchao + provisionado;
 
+  const [mounted, setMounted] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  });
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   const indicators: Indicator[] = [
     {
       key: "colchao",
