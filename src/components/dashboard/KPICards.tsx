@@ -13,9 +13,10 @@ interface Props {
 }
 
 const TrendIndicator = ({ trend }: { trend?: number }) => {
-  if (trend === undefined || trend === 0) return <Minus className="w-3 h-3 text-muted-foreground" />;
-  if (trend > 0) return <TrendingUp className="w-3 h-3 text-success" />;
-  return <TrendingDown className="w-3 h-3 text-destructive" />;
+  if (trend === undefined) return <Minus className="w-3 h-3 text-muted-foreground" />;
+  if (trend === 0) return <Minus className="w-3 h-3 text-blue-500" />;
+  if (trend > 0) return <TrendingUp className="w-3 h-3 text-emerald-600" />;
+  return <TrendingDown className="w-3 h-3 text-red-500" />;
 };
 
 const KPICards = ({ kpis }: Props) => {
