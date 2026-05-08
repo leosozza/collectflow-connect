@@ -330,6 +330,7 @@ const DashboardPage = () => {
               trendAcordosMes={trendAcordosMes}
               trendQuebra={trendQuebra}
               trendPendentes={trendPendentes}
+              compareLabel={compareLabel}
             />
           </section>
         )}
