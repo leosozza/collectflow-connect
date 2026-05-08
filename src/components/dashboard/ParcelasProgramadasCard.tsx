@@ -48,48 +48,40 @@ export default function ParcelasProgramadasCard({
 
   return (
     <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2 shrink-0">
-        <div
-          className="flex items-center gap-2 min-w-0 cursor-help"
-          title="Parcelas com vencimento na data selecionada. Use as setas e o calendário para navegar entre dias e ver o que está a receber e o que já foi pago."
-        >
-          <div className="rounded-lg p-1.5 inline-flex bg-primary/10 shrink-0">
-            <CalendarClock className="w-3.5 h-3.5 text-primary" strokeWidth={2.25} />
-          </div>
-          <h2 className="text-[13px] font-semibold text-foreground tracking-tight truncate">Parcelas Programadas</h2>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {/* A receber */}
-          <div className="flex items-center gap-1.5 rounded-xl px-2 py-1 bg-blue-500/10">
-            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded-md bg-blue-500 text-white text-[10px] font-semibold tabular-nums">
-              {qtdAndamento}
-            </span>
-            <div className="flex flex-col items-start leading-tight">
-              <span className="text-[9px] font-medium uppercase tracking-wide text-blue-500/90">
-                A receber
+      <DashboardCardHeader
+        icon={CalendarClock}
+        title="Parcelas Programadas"
+        right={
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 rounded-lg px-2 py-0.5 bg-blue-500/20 ring-1 ring-blue-400/30">
+              <span className="flex items-center justify-center h-4 min-w-[18px] px-1 rounded bg-blue-500 text-white text-[10px] font-semibold tabular-nums">
+                {qtdAndamento}
               </span>
-              <span className="text-xs font-semibold text-blue-600 tabular-nums">
-                {formatCurrency(totalDia)}
+              <div className="flex flex-col items-start leading-tight">
+                <span className="text-[8px] font-medium uppercase tracking-wide text-blue-200">
+                  A receber
+                </span>
+                <span className="text-[11px] font-semibold text-white tabular-nums">
+                  {formatCurrency(totalDia)}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg px-2 py-0.5 bg-emerald-500/20 ring-1 ring-emerald-400/30">
+              <span className="flex items-center justify-center h-4 min-w-[18px] px-1 rounded bg-emerald-500 text-white text-[10px] font-semibold tabular-nums">
+                {qtdPagas}
               </span>
+              <div className="flex flex-col items-start leading-tight">
+                <span className="text-[8px] font-medium uppercase tracking-wide text-emerald-200">
+                  Recebido
+                </span>
+                <span className="text-[11px] font-semibold text-white tabular-nums">
+                  {formatCurrency(totalRecebido)}
+                </span>
+              </div>
             </div>
           </div>
-          {/* Recebido */}
-          <div className="flex items-center gap-1.5 rounded-xl px-2 py-1 bg-emerald-500/10">
-            <span className="flex items-center justify-center h-5 min-w-[20px] px-1 rounded-md bg-emerald-500 text-white text-[10px] font-semibold tabular-nums">
-              {qtdPagas}
-            </span>
-            <div className="flex flex-col items-start leading-tight">
-              <span className="text-[9px] font-medium uppercase tracking-wide text-emerald-600/90">
-                Recebido
-              </span>
-              <span className="text-xs font-semibold text-emerald-600 tabular-nums">
-                {formatCurrency(totalRecebido)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Banner data centralizado */}
       <div className="px-3 pb-2.5 shrink-0 flex items-center justify-center">
