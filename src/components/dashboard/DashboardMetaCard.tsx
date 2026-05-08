@@ -96,18 +96,15 @@ const DashboardMetaCard = ({
 
   return (
     <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.15)] transition-shadow w-full h-full min-h-0 flex flex-col">
-      {/* Header escuro RIVO */}
-      <div className="px-4 py-2.5 shrink-0 bg-secondary text-secondary-foreground flex items-center gap-2">
-        <div className="rounded-lg p-1.5 inline-flex bg-primary/15 ring-1 ring-primary/30">
-          <Trophy className="w-3.5 h-3.5 text-primary" strokeWidth={2.5} />
-        </div>
-        <h2 className="text-[12px] font-semibold tracking-[0.04em] uppercase text-white/95">
-          {title}
-        </h2>
-        <span className="ml-auto text-[10px] text-white/55 tracking-wide capitalize">
-          {monthLabel}
-        </span>
-      </div>
+      <DashboardCardHeader
+        icon={Trophy}
+        title={title}
+        right={
+          <span className="text-[10px] text-white/60 tracking-wide capitalize">
+            {monthLabel}
+          </span>
+        }
+      />
 
       <div className="relative p-3 flex-1 min-h-0 flex items-center justify-center">
         {/* Colchão — chip destacado no canto superior esquerdo */}
