@@ -235,12 +235,23 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const totalInstallments = installments.length;
   const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
-  // RIVO_FIX: Algoritmo FIFO OBRIGATORIO para distribuicao de pagamentos manuais. 
-  // NAO REMOVER: Essencial para acuracia das datas de pagamento nas parcelas.
-  let manualPool = manualPayments
+  // RIVO_FIX v2: Pagamentos manuais respeitam o ALVO declarado (installment_key/number).
+  // Passo A: match direto na parcela alvo. Passo B: pool residual FIFO só para pagamentos
+  // sem alvo (legado) ou excedente. NÃO REMOVER — evita vazamento entre parcelas
+  // (ex.: pagamento da parcela 2 sendo engolido pela parcela 1 vencida).
+  const confirmedManual = manualPayments
     .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
     .sort((a, b) => new Date(a.payment_date || a.created_at).getTime() - new Date(b.payment_date || b.created_at).getTime())
     .map(mp => ({ ...mp, remaining: Number(mp.amount_paid || 0) }));
+
+  // Pool residual: pagamentos sem installment_key e sem installment_number válido.
+  const residualPool = confirmedManual.filter(
+    (mp: any) => !mp.installment_key && (mp.installment_number === null || mp.installment_number === undefined),
+  );
+  // Pagamentos com alvo definido — aplicados diretamente na parcela correspondente.
+  const targetedPayments = confirmedManual.filter(
+    (mp: any) => mp.installment_key || mp.installment_number !== null,
+  );
 
   const installmentsWithStatus = installments.map((inst) => {
     const isCancelled = !!cancelledMap[inst.customKey];
@@ -264,20 +275,35 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       ) && mp.status === "pending_confirmation"
     );
 
-    // 3. Lógica FIFO para pagamentos manuais confirmados
+    // 3a. Pagamentos manuais COM alvo declarado (installment_key/number) — match direto.
     let paidByManual = 0;
     let lastManualDate: string | undefined;
+    for (const mp of targetedPayments) {
+      const matchesKey = mp.installment_key && mp.installment_key === inst.customKey;
+      const matchesNumber = !mp.installment_key && mp.installment_number === inst.number;
+      if (!matchesKey && !matchesNumber) continue;
+      if (mp.remaining <= 0) continue;
+      if (paidByManual >= instValue - 0.01) break;
+      const need = instValue - paidByManual;
+      const take = Math.min(mp.remaining, need);
+      mp.remaining -= take;
+      paidByManual += take;
+      if (take > 0) {
+        lastManualDate = mp.payment_date || (mp as any).confirmed_at || mp.created_at;
+      }
+    }
 
-    // Tenta quitar esta parcela usando o saldo disponível no pool de pagamentos manuais
-    for (const mp of manualPool) {
-      if (paidByManual < instValue - 0.01) {
-        const need = instValue - paidByManual;
-        const take = Math.min(mp.remaining, need);
-        mp.remaining -= take;
-        paidByManual += take;
-        if (take > 0) {
-          lastManualDate = mp.payment_date || (mp as any).confirmed_at || mp.created_at;
-        }
+    // 3b. Pool residual FIFO — só pagamentos sem alvo (legado). NÃO consome excedente
+    // de pagamentos com alvo (esse excedente fica reservado à parcela alvo declarada).
+    for (const mp of residualPool) {
+      if (paidByManual >= instValue - 0.01) break;
+      if (mp.remaining <= 0) continue;
+      const need = instValue - paidByManual;
+      const take = Math.min(mp.remaining, need);
+      mp.remaining -= take;
+      paidByManual += take;
+      if (take > 0) {
+        lastManualDate = mp.payment_date || (mp as any).confirmed_at || mp.created_at;
       }
     }
 
