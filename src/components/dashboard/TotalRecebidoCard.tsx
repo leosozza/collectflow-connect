@@ -243,7 +243,7 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
         }
       />
 
-      <div className="px-4 pb-2 shrink-0">
+      <div className="px-4 pt-3 pb-2 shrink-0">
         <div className="flex items-baseline gap-2 flex-wrap">
           <p className="text-[26px] font-semibold text-primary tabular-nums leading-none tracking-tight">
             {formatCurrency(totalRecebido)}
