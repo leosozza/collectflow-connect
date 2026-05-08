@@ -20,6 +20,7 @@ import TotalRecebidoCard from "@/components/dashboard/TotalRecebidoCard";
 import AgendamentosHojeCard from "@/components/dashboard/AgendamentosHojeCard";
 import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardDialog";
 import KpisGridCard from "@/components/dashboard/KpisGridCard";
+import Visao360Card from "@/components/dashboard/Visao360Card";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
 
 const generateYearOptions = () => {
@@ -306,13 +307,9 @@ const DashboardPage = () => {
               acionadosHoje={acionadosHoje}
               acordosDia={stats?.acordos_dia ?? 0}
               acordosMes={stats?.acordos_mes ?? 0}
-              quebra={stats?.total_quebra ?? 0}
-              pendentes={stats?.total_pendente ?? 0}
               trendAcionados={trendAcionados}
               trendAcordosDia={trendAcordosDia}
               trendAcordosMes={trendAcordosMes}
-              trendQuebra={trendQuebra}
-              trendPendentes={trendPendentes}
               compareLabel={compareLabel}
             />
           </section>
