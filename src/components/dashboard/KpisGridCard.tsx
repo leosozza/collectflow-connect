@@ -44,7 +44,7 @@ const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps)
           <Icon className={cn("w-3 h-3", iconColor)} strokeWidth={2.25} />
         </div>
       </div>
-      <p className="font-extrabold text-foreground tabular-nums leading-[1.05] tracking-tight mt-0.5 truncate text-[22px] lg:text-[24px] xl:text-[26px] 2xl:text-[38px]">
+      <p className="font-extrabold text-foreground tabular-nums leading-[1.1] tracking-tight mt-0.5 text-[20px] lg:text-[22px] xl:text-[26px] 2xl:text-[38px]">
         {value}
       </p>
       {trend ? (
