@@ -6,7 +6,8 @@ export type DashboardBlockId =
   | "totalRecebido"
   | "kpisGrid"
   | "agendamentos"
-  | "parcelas";
+  | "parcelas"
+  | "visao360";
 
 export interface DashboardLayout {
   visible: Record<DashboardBlockId, boolean>;
@@ -20,6 +21,7 @@ export const ALL_DASHBOARD_BLOCKS: DashboardBlockId[] = [
   "kpisGrid",
   "agendamentos",
   "parcelas",
+  "visao360",
 ];
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
@@ -29,6 +31,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
     kpisGrid: true,
     agendamentos: true,
     parcelas: true,
+    visao360: true,
   },
   order: [
     "metas",
@@ -36,10 +39,11 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
     "kpisGrid",
     "agendamentos",
     "parcelas",
+    "visao360",
   ],
 };
 
-const STORAGE_PREFIX = "rivo:dashboard-layout:v8";
+const STORAGE_PREFIX = "rivo:dashboard-layout:v9";
 
 function sanitize(raw: any): DashboardLayout {
   try {

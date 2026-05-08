@@ -31,14 +31,16 @@ const LABELS: Record<DashboardBlockId, string> = {
   kpisGrid: "KPIs",
   agendamentos: "Agendamentos para Hoje",
   parcelas: "Parcelas Programadas",
+  visao360: "Visão 360",
 };
 
 const DESCRIPTIONS: Record<DashboardBlockId, string> = {
   metas: "Progresso da meta mensal (velocímetro)",
   totalRecebido: "Gráfico de recebimentos",
-  kpisGrid: "Acionados, acordos, quebra, pendentes e colchão",
+  kpisGrid: "Acionados Hoje, Acordos do Dia e do Mês",
   agendamentos: "Callbacks agendados para hoje",
   parcelas: "Vencimentos do dia",
+  visao360: "Provisionado, Pendentes e Quebra em barras comparativas",
 };
 
 export default function CustomizeDashboardDialog({
