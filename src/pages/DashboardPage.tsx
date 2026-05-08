@@ -269,7 +269,7 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-12 lg:auto-rows-[minmax(240px,auto)] 2xl:grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)] 2xl:auto-rows-auto 2xl:overflow-hidden gap-2 lg:gap-2.5 xl:gap-3">
+      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-12 lg:[grid-template-rows:minmax(240px,auto)_minmax(360px,auto)] 2xl:[grid-template-rows:minmax(0,1fr)_minmax(0,1.4fr)] 2xl:overflow-hidden gap-2 lg:gap-2.5 xl:gap-3">
         {isVisible("metas") && (
           <section className="min-h-[300px] lg:min-h-0 h-full lg:col-span-3 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:0ms]">
             <DashboardMetaCard
