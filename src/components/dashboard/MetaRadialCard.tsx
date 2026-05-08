@@ -130,6 +130,19 @@ const MetaRadialCard = ({
           100%
         </div>
       </div>
+
+      {/* Bottom: meta */}
+      <div className="text-center">
+        <p className="text-[9px] text-muted-foreground leading-tight uppercase tracking-wide">
+          Meta Recebimento
+        </p>
+        <p className="text-base font-bold text-foreground tabular-nums leading-tight mt-0.5">
+          {formatCurrency(goal)}
+        </p>
+        <p className="text-[9px] text-muted-foreground/70 tabular-nums mt-0.5">
+          {firstDay} à {lastDayStr}
+        </p>
+      </div>
     </div>
   );
 };
