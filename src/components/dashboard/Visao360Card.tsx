@@ -27,8 +27,8 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
       key: "colchao",
       label: "Colchão de Acordos",
       value: colchao,
-      color: "hsl(var(--primary))",
-      bg: "hsl(var(--primary) / 0.10)",
+      color: "hsl(217 91% 55%)",
+      bg: "hsl(217 91% 55% / 0.10)",
       Icon: Wallet,
     },
     {
