@@ -819,6 +819,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                   <TableHead>Vencimento</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">Pagamento</TableHead>
                   <TableHead className="text-center w-[140px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -914,24 +915,21 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                             <XCircle className="w-3.5 h-3.5" /> Cancelada
                           </Badge>
                         ) : (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <Badge variant="outline" className={cn(
-                              "gap-1 text-[10px]",
-                              inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
-                                inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
-                                  inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
-                                    "bg-warning/10 text-warning border-warning/30"
-                            )}>
-                              {statusIcon(inst.status)}
-                              {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
-                            </Badge>
-                            {inst.status === "pago" && inst.paidAt && (
-                              <span className="text-[9px] text-green-600 font-medium">
-                                {formatDate(inst.paidAt)}
-                              </span>
-                            )}
-                          </div>
+                          <Badge variant="outline" className={cn(
+                            "gap-1 text-[10px]",
+                            inst.status === "pago" ? "bg-green-500/10 text-green-600 border-green-500/30" :
+                              inst.status === "vencido" ? "bg-destructive/10 text-destructive border-destructive/30" :
+                                inst.status === "pending_confirmation" ? "bg-blue-500/10 text-blue-600 border-blue-500/30" :
+                                  "bg-warning/10 text-warning border-warning/30"
+                          )}>
+                            {statusIcon(inst.status)}
+                            {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
+                          </Badge>
                         )}
+                      </TableCell>
+
+                      <TableCell className="text-center text-xs text-muted-foreground font-medium">
+                        {inst.status === "pago" && inst.paidAt ? formatDate(inst.paidAt) : "—"}
                       </TableCell>
 
                       {/* Inline action icons */}
