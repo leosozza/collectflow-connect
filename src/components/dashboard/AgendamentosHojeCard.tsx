@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { CalendarCheck } from "lucide-react";
 import { Table, TableBody, TableCell, TableRow, TableHead, TableHeader } from "@/components/ui/table";
 import type { ScheduledCallback } from "@/hooks/useScheduledCallbacks";
+import DashboardCardHeader from "./DashboardCardHeader";
 
 interface Props {
   callbacks: ScheduledCallback[];
