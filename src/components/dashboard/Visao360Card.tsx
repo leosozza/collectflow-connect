@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Eye, TrendingUp, Hourglass, TrendingDown, Wallet, Sigma } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 import DashboardCardHeader from "./DashboardCardHeader";
