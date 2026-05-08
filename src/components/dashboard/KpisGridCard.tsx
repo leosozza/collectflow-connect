@@ -111,7 +111,7 @@ const KpisGridCard = ({
         Icon={CalendarCheck}
         iconColor="text-blue-500"
         iconBg="bg-blue-500/10"
-        trend={trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : null}
+        trend={trendAcordosMes ? { ...trendAcordosMes, text: compareLabel } : null}
         info="Acordos criados no mês selecionado, excluindo cancelados e rejeitados."
       />
       <Tile
@@ -120,7 +120,7 @@ const KpisGridCard = ({
         Icon={TrendingDown}
         iconColor="text-red-500"
         iconBg="bg-red-500/10"
-        trend={trendQuebra ? { ...trendQuebra, text: "vs mês anterior" } : null}
+        trend={trendQuebra ? { ...trendQuebra, text: compareLabel } : null}
         info="Parcelas do mês não pagas, em 2 estágios. PROVISÓRIA (4-10 dias de atraso): pode voltar para Pendentes se a data for reagendada, ou para Recebido se for paga. DEFINITIVA (acordo cancelado pelo prazo do cadastro ou atraso > 10 dias): trava como prejuízo e os boletos pendentes são cancelados na Negociarie automaticamente."
       />
       <Tile
@@ -129,7 +129,7 @@ const KpisGridCard = ({
         Icon={Hourglass}
         iconColor="text-amber-500"
         iconBg="bg-amber-500/10"
-        trend={trendPendentes ? { ...trendPendentes, text: "vs mês anterior" } : null}
+        trend={trendPendentes ? { ...trendPendentes, text: compareLabel } : null}
         info="Parcelas do mês ainda não pagas, com vencimento futuro ou atrasado em até 3 dias. A partir do 4º dia de atraso a parcela entra em Quebra (Provisória)."
       />
       <Tile
