@@ -105,7 +105,7 @@ const KpisGridCard = ({
         Icon={CalendarCheck}
         iconColor="text-primary"
         iconBg="bg-primary/10"
-        trend={trendAcordosMes ? { ...trendAcordosMes, text: compareLabel } : null}
+        trend={trendAcordosMes ? { ...trendAcordosMes, text: "vs mês anterior" } : null}
         info="Acordos criados no mês selecionado, excluindo cancelados e rejeitados."
       />
     </div>
