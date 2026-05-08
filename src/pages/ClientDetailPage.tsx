@@ -545,6 +545,7 @@ const ClientDetailPage = () => {
                       <TableHead>Parcela</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Devolução</TableHead>
+                      {/* RIVO_FIX: Coluna obrigatoria */}
                       <TableHead>Contrato</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead className="text-right">Pago</TableHead>
@@ -590,6 +591,7 @@ const ClientDetailPage = () => {
                           <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
+                          {/* RIVO_FIX: Valor obrigatorio */}
                           <TableCell className="text-muted-foreground font-medium">{c.cod_contrato || "—"}</TableCell>
                           <TableCell className="text-right">{formatCurrency(valorEfetivo)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(pagoLinha)}</TableCell>

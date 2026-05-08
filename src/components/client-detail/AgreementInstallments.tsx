@@ -231,7 +231,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const totalInstallments = installments.length;
   const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
-  // Algoritmo FIFO para distribuição de pagamentos manuais
+  // RIVO_FIX: Algoritmo FIFO OBRIGATORIO para distribuicao de pagamentos manuais. 
+  // NAO REMOVER: Essencial para acuracia das datas de pagamento nas parcelas.
   let manualPool = manualPayments
     .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
     .sort((a, b) => new Date(a.payment_date || a.created_at).getTime() - new Date(b.payment_date || b.created_at).getTime())
@@ -819,6 +820,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                   <TableHead>Vencimento</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  {/* RIVO_FIX: Coluna obrigatoria */}
                   <TableHead className="text-center">Pagamento</TableHead>
                   <TableHead className="text-center w-[140px]">Ações</TableHead>
                 </TableRow>
@@ -928,6 +930,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                         )}
                       </TableCell>
 
+                      {/* RIVO_FIX: Coluna obrigatoria */}
                       <TableCell className="text-center text-xs text-muted-foreground font-medium">
                         {inst.status === "pago" && inst.paidAt ? formatDate(inst.paidAt) : "—"}
                       </TableCell>
