@@ -289,7 +289,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("totalRecebido") && (
-          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-1">
+          <section className="min-h-0 h-full lg:col-span-6 lg:col-start-4 lg:row-start-1 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:60ms]">
             <TotalRecebidoCard
               totalRecebido={stats?.total_recebido ?? 0}
               tenantId={effectiveTenantId}
