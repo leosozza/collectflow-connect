@@ -109,17 +109,17 @@ const DashboardMetaCard = ({
       </div>
 
       <div className="relative p-3 flex-1 min-h-0 flex items-center justify-center">
-        {/* Colchão — discreto no canto superior esquerdo */}
+        {/* Colchão — chip destacado no canto superior esquerdo */}
         {goal > 0 && colchao > 0 && (
           <div
-            className="absolute top-2 left-3 flex flex-col leading-tight"
+            className="absolute top-2 left-2 flex flex-col leading-tight bg-primary/10 border border-primary/30 rounded-lg px-2.5 py-1.5 shadow-sm"
             title="Parcelas com vencimento no mês originadas de acordos criados em meses anteriores (entrada + parcelas mensais)."
           >
-            <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.08em] text-muted-foreground/70 font-medium">
-              <Wallet className="w-2.5 h-2.5 text-primary/60" strokeWidth={2.25} />
+            <span className="flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] text-primary font-semibold">
+              <Wallet className="w-3 h-3 text-primary" strokeWidth={2.5} />
               Colchão
             </span>
-            <span className="text-xs font-semibold text-foreground tabular-nums mt-0.5">
+            <span className="text-sm font-bold text-foreground tabular-nums mt-0.5">
               {formatCurrency(colchao)}
             </span>
           </div>
