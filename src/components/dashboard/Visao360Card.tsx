@@ -1,8 +1,9 @@
-import { Eye, TrendingUp, Hourglass, TrendingDown } from "lucide-react";
+import { Eye, TrendingUp, Hourglass, TrendingDown, Wallet, Sigma } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 import DashboardCardHeader from "./DashboardCardHeader";
 
 interface Props {
+  colchao: number;
   provisionado: number;
   pendentes: number;
   quebra: number;
@@ -13,13 +14,23 @@ interface Indicator {
   key: string;
   label: string;
   value: number;
-  color: string; // HSL string
-  bg: string; // bg/tint
+  color: string;
+  bg: string;
   Icon: React.ElementType;
 }
 
-const Visao360Card = ({ provisionado, pendentes, quebra, monthLabel }: Props) => {
+const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: Props) => {
+  const totalPrevisto = colchao + provisionado;
+
   const indicators: Indicator[] = [
+    {
+      key: "colchao",
+      label: "Colchão de Acordos",
+      value: colchao,
+      color: "hsl(var(--primary))",
+      bg: "hsl(var(--primary) / 0.10)",
+      Icon: Wallet,
+    },
     {
       key: "provisionado",
       label: "Provisionado no Mês",
@@ -28,6 +39,9 @@ const Visao360Card = ({ provisionado, pendentes, quebra, monthLabel }: Props) =>
       bg: "hsl(var(--primary) / 0.10)",
       Icon: TrendingUp,
     },
+  ];
+
+  const lowerIndicators: Indicator[] = [
     {
       key: "pendentes",
       label: "Pendentes",
@@ -46,7 +60,49 @@ const Visao360Card = ({ provisionado, pendentes, quebra, monthLabel }: Props) =>
     },
   ];
 
-  const maxValue = Math.max(...indicators.map((i) => i.value), 1);
+  const allBars = [...indicators, ...lowerIndicators];
+  const maxValue = Math.max(...allBars.map((i) => i.value), 1);
+
+  const renderRow = ({ key, label, value, color, bg, Icon }: Indicator) => {
+    const widthPct = Math.max((value / maxValue) * 100, value > 0 ? 4 : 0);
+    return (
+      <div key={key} className="space-y-1 flex-1 min-h-0 flex flex-col justify-center">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 xl:gap-2 min-w-0">
+            <span
+              className="rounded-md p-1 xl:p-1.5 inline-flex shrink-0"
+              style={{ backgroundColor: bg }}
+            >
+              <Icon
+                className="w-3 h-3 xl:w-3.5 xl:h-3.5"
+                style={{ color }}
+                strokeWidth={2.5}
+              />
+            </span>
+            <span className="text-[11px] xl:text-[12px] font-medium text-foreground truncate">
+              {label}
+            </span>
+          </span>
+          <span
+            className="text-[12px] xl:text-sm font-bold tabular-nums shrink-0"
+            style={{ color }}
+          >
+            {formatCurrency(value)}
+          </span>
+        </div>
+        <div className="h-1.5 xl:h-2 w-full rounded-full bg-muted/50 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${widthPct}%`,
+              backgroundColor: color,
+              boxShadow: `0 1px 6px ${color}`,
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] w-full h-full min-h-0 flex flex-col overflow-hidden">
@@ -62,47 +118,37 @@ const Visao360Card = ({ provisionado, pendentes, quebra, monthLabel }: Props) =>
         }
       />
 
-      <div className="flex flex-col justify-center gap-2.5 xl:gap-4 flex-1 min-h-0 p-3 xl:p-4">
-        {indicators.map(({ key, label, value, color, bg, Icon }) => {
-          const widthPct = Math.max((value / maxValue) * 100, value > 0 ? 4 : 0);
-          return (
-            <div key={key} className="space-y-1 xl:space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 xl:gap-2 min-w-0">
-                  <span
-                    className="rounded-md p-1 xl:p-1.5 inline-flex shrink-0"
-                    style={{ backgroundColor: bg }}
-                  >
-                    <Icon
-                      className="w-3 h-3 xl:w-3.5 xl:h-3.5"
-                      style={{ color }}
-                      strokeWidth={2.5}
-                    />
-                  </span>
-                  <span className="text-[11px] xl:text-[12px] font-medium text-foreground truncate">
-                    {label}
-                  </span>
-                </span>
-                <span
-                  className="text-[12px] xl:text-sm font-bold tabular-nums shrink-0"
-                  style={{ color }}
-                >
-                  {formatCurrency(value)}
-                </span>
-              </div>
-              <div className="h-2 xl:h-2.5 w-full rounded-full bg-muted/50 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${widthPct}%`,
-                    backgroundColor: color,
-                    boxShadow: `0 1px 6px ${color}`,
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
+      <div className="flex flex-col gap-2 xl:gap-2.5 flex-1 min-h-0 p-3 xl:p-4">
+        {indicators.map(renderRow)}
+
+        {/* Linha-resumo: Total Previsto no Mês */}
+        <div
+          className="rounded-lg bg-primary/10 border border-primary/30 px-2.5 py-1.5 xl:px-3 xl:py-2 flex items-center justify-between gap-2"
+          style={{ flex: "1.3 1 0%" }}
+          title="Soma do Colchão com o Provisionado do mês — previsão total de entrada."
+        >
+          <span className="flex items-center gap-1.5 xl:gap-2 min-w-0">
+            <span className="rounded-md p-1 xl:p-1.5 inline-flex shrink-0 bg-primary/20">
+              <Sigma
+                className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-primary"
+                strokeWidth={2.5}
+              />
+            </span>
+            <span className="flex flex-col leading-tight min-w-0">
+              <span className="text-[11px] xl:text-[12px] font-semibold text-foreground truncate">
+                Total Previsto no Mês
+              </span>
+              <span className="text-[9px] xl:text-[10px] uppercase tracking-wide text-muted-foreground truncate">
+                Colchão + Provisionado
+              </span>
+            </span>
+          </span>
+          <span className="text-base xl:text-lg font-bold tabular-nums text-primary shrink-0">
+            {formatCurrency(totalPrevisto)}
+          </span>
+        </div>
+
+        {lowerIndicators.map(renderRow)}
       </div>
     </div>
   );
