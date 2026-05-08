@@ -276,7 +276,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         mp.remaining -= take;
         paidByManual += take;
         if (take > 0) {
-          lastManualDate = mp.payment_date || mp.confirmed_at || mp.created_at;
+          lastManualDate = mp.payment_date || (mp as any).confirmed_at || mp.created_at;
         }
       }
     }
