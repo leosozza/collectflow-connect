@@ -20,6 +20,7 @@ interface Props {
   trendAcordosMes?: TrendData | null;
   trendQuebra?: TrendData | null;
   trendPendentes?: TrendData | null;
+  compareLabel?: string;
 }
 
 interface TileProps {
