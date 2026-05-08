@@ -469,6 +469,7 @@ export interface GroupedClient {
   id: string;
   valor_parcela: number;
   allIds: string[];
+  cod_contrato?: string | null;
 }
 
 export interface CarteiraFilters {
