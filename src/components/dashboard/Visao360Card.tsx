@@ -35,8 +35,8 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
       key: "provisionado",
       label: "Provisionado no Mês",
       value: provisionado,
-      color: "hsl(var(--primary))",
-      bg: "hsl(var(--primary) / 0.10)",
+      color: "hsl(var(--success))",
+      bg: "hsl(var(--success) / 0.10)",
       Icon: TrendingUp,
     },
   ];
