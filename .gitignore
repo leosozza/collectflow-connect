@@ -24,5 +24,4 @@ dist-ssr
 *.sw?
 
 # Obsidian
-**/.obsidian/
-**/.trash/
+docs/rivo-vault/
