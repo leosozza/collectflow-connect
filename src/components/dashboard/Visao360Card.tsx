@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Eye, TrendingUp, Hourglass, TrendingDown, Wallet, Sigma } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
 import DashboardCardHeader from "./DashboardCardHeader";
@@ -21,6 +22,15 @@ interface Indicator {
 
 const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: Props) => {
   const totalPrevisto = colchao + provisionado;
+
+  const [mounted, setMounted] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  });
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const indicators: Indicator[] = [
     {
@@ -92,9 +102,10 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
         </div>
         <div className="h-1.5 xl:h-2 w-full rounded-full bg-muted/50 overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="h-full rounded-full"
             style={{
-              width: `${widthPct}%`,
+              width: `${mounted ? widthPct : 0}%`,
+              transition: "width 2.5s cubic-bezier(0.22, 1, 0.36, 1)",
               backgroundImage: `linear-gradient(90deg, ${color} 0%, color-mix(in srgb, ${color} 65%, white) 100%)`,
               boxShadow: `0 1px 6px ${color}`,
             }}

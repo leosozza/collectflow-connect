@@ -130,7 +130,7 @@ const DashboardMetaCard = ({
             year={year}
             month={month}
             size={radialSize}
-            duration={1.4}
+            duration={2.5}
           />
         )}
       </div>
