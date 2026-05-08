@@ -127,11 +127,8 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
           style={{ flex: "1.3 1 0%" }}
           title="Soma do Colchão com o Provisionado do mês — previsão total de entrada."
         >
-          <span className="flex items-center gap-1.5 xl:gap-2">
-            <Sigma className="w-3.5 h-3.5 xl:w-4 xl:h-4" strokeWidth={2.5} />
-            <span className="text-[11px] xl:text-[12px] font-semibold uppercase tracking-wide">
-              Colchão + Provisionado
-            </span>
+          <span className="text-[11px] xl:text-[12px] font-semibold uppercase tracking-wide">
+            Colchão + Provisionado
           </span>
           <span className="text-lg xl:text-xl font-bold tabular-nums">
             {formatCurrency(totalPrevisto)}
