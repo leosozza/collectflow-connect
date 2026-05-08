@@ -37,29 +37,29 @@ const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps)
     title={info}
     className="bg-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] hover:shadow-[0_2px_8px_-2px_rgb(0_0_0_/_0.08)] transition-shadow px-3 py-2.5 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help"
   >
-    <div className="min-w-0">
-      <div className={cn("rounded-lg p-1.5 inline-flex shrink-0 mb-1.5", iconBg)}>
-        <Icon className={cn("w-3.5 h-3.5", iconColor)} strokeWidth={2.25} />
-      </div>
-      <p className="text-[10.5px] text-muted-foreground/90 font-medium leading-tight mb-0.5 truncate tracking-tight">
+    <div className="min-w-0 flex items-start justify-between gap-2">
+      <p className="text-[10px] text-muted-foreground/80 font-medium leading-tight truncate tracking-wide uppercase">
         {label}
       </p>
-      <p className="font-semibold text-foreground tabular-nums leading-tight tracking-tight break-words text-[15px]">
-        {value}
-      </p>
+      <div className={cn("rounded-md p-1 inline-flex shrink-0", iconBg)}>
+        <Icon className={cn("w-3 h-3", iconColor)} strokeWidth={2.25} />
+      </div>
     </div>
+    <p className="font-bold text-foreground tabular-nums leading-none tracking-tight break-words text-2xl lg:text-[26px] mt-0.5">
+      {value}
+    </p>
     {trend ? (
-      <div className="mt-1 text-[9.5px] flex items-center gap-1 flex-wrap leading-tight">
+      <div className="mt-1 text-[10px] flex items-center gap-1 flex-wrap leading-tight">
         <span
           className={cn(
             "font-semibold tracking-tight tabular-nums",
-            trend.isPositive ? "text-emerald-600" : "text-red-500"
+            trend.isPositive ? "text-emerald-600/85" : "text-red-500/85"
           )}
         >
           {trend.value}
         </span>
         {trend.text && (
-          <span className="text-muted-foreground/70 font-normal truncate">
+          <span className="text-muted-foreground/55 font-normal truncate">
             {trend.text}
           </span>
         )}
