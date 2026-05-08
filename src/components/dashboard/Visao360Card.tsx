@@ -95,7 +95,7 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
             className="h-full rounded-full transition-all duration-500"
             style={{
               width: `${widthPct}%`,
-              backgroundColor: color,
+              backgroundImage: `linear-gradient(90deg, ${color} 0%, color-mix(in srgb, ${color} 65%, white) 100%)`,
               boxShadow: `0 1px 6px ${color}`,
             }}
           />
