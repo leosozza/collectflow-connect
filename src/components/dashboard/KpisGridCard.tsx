@@ -33,7 +33,7 @@ const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps)
   return (
     <div
       title={info}
-      className="relative bg-gradient-to-br from-primary/[0.06] via-card to-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] transition-all px-3 py-3 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help hover:border-primary/40 hover:shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.22)]"
+      className="relative bg-gradient-to-br from-primary/[0.06] via-card to-card rounded-2xl border border-border/50 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.04)] transition-all px-2 py-2 xl:px-3 xl:py-3 flex flex-col justify-between min-w-0 h-full overflow-hidden cursor-help hover:border-primary/40 hover:shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.22)]"
     >
       <span aria-hidden className="absolute top-0 left-0 bottom-0 w-[3px] bg-primary rounded-r-full" />
       <div className="min-w-0 flex items-start justify-between gap-2">
@@ -44,7 +44,7 @@ const Tile = ({ label, value, Icon, iconColor, iconBg, trend, info }: TileProps)
           <Icon className={cn("w-3 h-3", iconColor)} strokeWidth={2.25} />
         </div>
       </div>
-      <p className="font-extrabold text-foreground tabular-nums leading-none tracking-tight mt-0.5 truncate text-[34px] lg:text-[40px] xl:text-[44px]">
+      <p className="font-extrabold text-foreground tabular-nums leading-none tracking-tight mt-0.5 truncate text-[24px] xl:text-[34px] 2xl:text-[42px]">
         {value}
       </p>
       {trend ? (

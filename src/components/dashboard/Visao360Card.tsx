@@ -62,35 +62,35 @@ const Visao360Card = ({ provisionado, pendentes, quebra, monthLabel }: Props) =>
         }
       />
 
-      <div className="flex flex-col justify-center gap-4 flex-1 min-h-0 p-4">
+      <div className="flex flex-col justify-center gap-2.5 xl:gap-4 flex-1 min-h-0 p-3 xl:p-4">
         {indicators.map(({ key, label, value, color, bg, Icon }) => {
           const widthPct = Math.max((value / maxValue) * 100, value > 0 ? 4 : 0);
           return (
-            <div key={key} className="space-y-1.5">
+            <div key={key} className="space-y-1 xl:space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2 min-w-0">
+                <span className="flex items-center gap-1.5 xl:gap-2 min-w-0">
                   <span
-                    className="rounded-md p-1.5 inline-flex shrink-0"
+                    className="rounded-md p-1 xl:p-1.5 inline-flex shrink-0"
                     style={{ backgroundColor: bg }}
                   >
                     <Icon
-                      className="w-3.5 h-3.5"
+                      className="w-3 h-3 xl:w-3.5 xl:h-3.5"
                       style={{ color }}
                       strokeWidth={2.5}
                     />
                   </span>
-                  <span className="text-[12px] font-medium text-foreground truncate">
+                  <span className="text-[11px] xl:text-[12px] font-medium text-foreground truncate">
                     {label}
                   </span>
                 </span>
                 <span
-                  className="text-sm font-bold tabular-nums shrink-0"
+                  className="text-[12px] xl:text-sm font-bold tabular-nums shrink-0"
                   style={{ color }}
                 >
                   {formatCurrency(value)}
                 </span>
               </div>
-              <div className="h-2.5 w-full rounded-full bg-muted/50 overflow-hidden">
+              <div className="h-2 xl:h-2.5 w-full rounded-full bg-muted/50 overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{

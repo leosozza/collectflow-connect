@@ -250,9 +250,9 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
         }
       />
 
-      <div className="px-4 pt-3 pb-2 shrink-0">
+      <div className="px-3 pt-2 pb-1.5 xl:px-4 xl:pt-3 xl:pb-2 shrink-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <p className="text-[26px] font-semibold text-primary tabular-nums leading-none tracking-tight">
+          <p className="text-[20px] xl:text-[26px] font-semibold text-primary tabular-nums leading-none tracking-tight">
             {formatCurrency(totalRecebido)}
           </p>
           {diffPct !== null ? (() => {
@@ -270,7 +270,7 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
             return (
               <span
                 title={tooltip}
-                className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                className={`inline-flex items-center gap-1 text-[11px] xl:text-xs font-semibold ${
                   isPositive ? "text-emerald-600" : "text-red-600"
                 }`}
               >
@@ -280,11 +280,11 @@ export default function TotalRecebidoCard({ totalRecebido, tenantId, year, month
                   <TrendingDown className="w-3 h-3" />
                 )}
                 {label}
-                <span className="text-muted-foreground font-normal">vs mês anterior</span>
+                <span className="hidden xl:inline text-muted-foreground font-normal">vs mês anterior</span>
               </span>
             );
           })() : (
-            <span className="text-xs text-muted-foreground">— vs mês anterior</span>
+            <span className="text-[11px] xl:text-xs text-muted-foreground">— vs mês anterior</span>
           )}
         </div>
       </div>
