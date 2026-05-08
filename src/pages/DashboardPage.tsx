@@ -209,6 +209,12 @@ const DashboardPage = () => {
   const trendQuebra = stats ? pctDelta(stats.total_quebra ?? 0, stats.total_quebra_mes_anterior ?? 0, true) : null;
   const trendPendentes = stats ? pctDelta(stats.total_pendente ?? 0, stats.total_pendente_mes_anterior ?? 0, true) : null;
 
+  const targetYear = filterYear ?? now.getFullYear();
+  const targetMonth = filterMonth ?? now.getMonth() + 1;
+  const isCurrentMonth =
+    targetYear === now.getFullYear() && targetMonth === now.getMonth() + 1;
+  const compareLabel = isCurrentMonth ? "vs mesmo período" : "vs mês anterior";
+
   const isVisible = (id: DashboardBlockId) => layout.visible[id];
 
   return (
