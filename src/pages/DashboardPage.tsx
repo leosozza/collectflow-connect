@@ -339,7 +339,7 @@ const DashboardPage = () => {
           </section>
         )}
         {isVisible("agendamentos") && (
-          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-2">
+          <section className="min-h-0 h-full lg:col-span-3 lg:col-start-10 lg:row-start-2 motion-safe:animate-fade-in [animation-fill-mode:both] motion-safe:[animation-delay:300ms]">
             <AgendamentosHojeCard
               callbacks={callbacks}
               showOperator={canViewAllAgendados}
