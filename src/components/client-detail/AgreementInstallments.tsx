@@ -275,20 +275,35 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       ) && mp.status === "pending_confirmation"
     );
 
-    // 3. Lógica FIFO para pagamentos manuais confirmados
+    // 3a. Pagamentos manuais COM alvo declarado (installment_key/number) — match direto.
     let paidByManual = 0;
     let lastManualDate: string | undefined;
+    for (const mp of targetedPayments) {
+      const matchesKey = mp.installment_key && mp.installment_key === inst.customKey;
+      const matchesNumber = !mp.installment_key && mp.installment_number === inst.number;
+      if (!matchesKey && !matchesNumber) continue;
+      if (mp.remaining <= 0) continue;
+      if (paidByManual >= instValue - 0.01) break;
+      const need = instValue - paidByManual;
+      const take = Math.min(mp.remaining, need);
+      mp.remaining -= take;
+      paidByManual += take;
+      if (take > 0) {
+        lastManualDate = mp.payment_date || (mp as any).confirmed_at || mp.created_at;
+      }
+    }
 
-    // Tenta quitar esta parcela usando o saldo disponível no pool de pagamentos manuais
-    for (const mp of manualPool) {
-      if (paidByManual < instValue - 0.01) {
-        const need = instValue - paidByManual;
-        const take = Math.min(mp.remaining, need);
-        mp.remaining -= take;
-        paidByManual += take;
-        if (take > 0) {
-          lastManualDate = mp.payment_date || (mp as any).confirmed_at || mp.created_at;
-        }
+    // 3b. Pool residual FIFO — só pagamentos sem alvo (legado). NÃO consome excedente
+    // de pagamentos com alvo (esse excedente fica reservado à parcela alvo declarada).
+    for (const mp of residualPool) {
+      if (paidByManual >= instValue - 0.01) break;
+      if (mp.remaining <= 0) continue;
+      const need = instValue - paidByManual;
+      const take = Math.min(mp.remaining, need);
+      mp.remaining -= take;
+      paidByManual += take;
+      if (take > 0) {
+        lastManualDate = mp.payment_date || (mp as any).confirmed_at || mp.created_at;
       }
     }
 
