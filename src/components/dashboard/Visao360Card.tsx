@@ -129,14 +129,14 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
         }
       />
 
-      <div className="flex flex-col gap-2 xl:gap-2.5 flex-1 min-h-0 p-3 xl:p-4">
+      <div className="flex flex-col gap-2 lg:gap-2 xl:gap-2.5 flex-1 min-h-0 p-3 lg:p-3 xl:p-4">
         {indicators.map(renderRow)}
 
         {/* Linha-resumo: Total Previsto no Mês */}
         <div
-          className="relative overflow-hidden rounded-xl px-3 py-2 xl:px-4 xl:py-2.5 flex flex-col items-center justify-center gap-0.5 text-primary-foreground shadow-[0_6px_20px_-6px_hsl(var(--primary)/0.55)] ring-1 ring-primary/30"
+          className="relative overflow-hidden rounded-xl px-3 py-2 lg:px-3 lg:py-2 xl:px-4 xl:py-2.5 flex flex-col items-center justify-center gap-0.5 text-primary-foreground shadow-[0_6px_20px_-6px_hsl(var(--primary)/0.55)] ring-1 ring-primary/30"
           style={{
-            flex: "1.3 1 0%",
+            flex: "1.15 1 0%",
             backgroundImage:
               "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.85) 55%, hsl(24 95% 45%) 100%)",
           }}
@@ -154,7 +154,7 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
           <span className="relative text-[10px] xl:text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-foreground/90">
             Projeção Receita do Mês
           </span>
-          <span className="relative text-lg xl:text-2xl font-extrabold tabular-nums tracking-tight drop-shadow-[0_1px_0_hsl(0_0%_0%/0.15)]">
+          <span className="relative text-base lg:text-lg xl:text-2xl font-extrabold tabular-nums tracking-tight drop-shadow-[0_1px_0_hsl(0_0%_0%/0.15)]">
             {formatCurrency(totalPrevisto)}
           </span>
         </div>
