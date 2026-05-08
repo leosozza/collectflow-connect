@@ -235,12 +235,23 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const totalInstallments = installments.length;
   const activeInstallmentsCount = installments.filter((i) => !cancelledMap[i.customKey]).length;
 
-  // RIVO_FIX: Algoritmo FIFO OBRIGATORIO para distribuicao de pagamentos manuais. 
-  // NAO REMOVER: Essencial para acuracia das datas de pagamento nas parcelas.
-  let manualPool = manualPayments
+  // RIVO_FIX v2: Pagamentos manuais respeitam o ALVO declarado (installment_key/number).
+  // Passo A: match direto na parcela alvo. Passo B: pool residual FIFO só para pagamentos
+  // sem alvo (legado) ou excedente. NÃO REMOVER — evita vazamento entre parcelas
+  // (ex.: pagamento da parcela 2 sendo engolido pela parcela 1 vencida).
+  const confirmedManual = manualPayments
     .filter((mp: any) => ["confirmed", "approved"].includes(mp.status))
     .sort((a, b) => new Date(a.payment_date || a.created_at).getTime() - new Date(b.payment_date || b.created_at).getTime())
     .map(mp => ({ ...mp, remaining: Number(mp.amount_paid || 0) }));
+
+  // Pool residual: pagamentos sem installment_key e sem installment_number válido.
+  const residualPool = confirmedManual.filter(
+    (mp: any) => !mp.installment_key && (mp.installment_number === null || mp.installment_number === undefined),
+  );
+  // Pagamentos com alvo definido — aplicados diretamente na parcela correspondente.
+  const targetedPayments = confirmedManual.filter(
+    (mp: any) => mp.installment_key || mp.installment_number !== null,
+  );
 
   const installmentsWithStatus = installments.map((inst) => {
     const isCancelled = !!cancelledMap[inst.customKey];
