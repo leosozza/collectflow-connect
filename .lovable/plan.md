@@ -1,78 +1,73 @@
-## Diagnóstico
+## Mudança no card "Visão 360"
 
-O dashboard usa `h-full overflow-hidden` no root + grid de 2 linhas com altura fixa (`grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)]`). Em monitores menores (17", tipicamente 1366×768 ou 1600×900) a soma de paddings, alturas mínimas dos cards e densidade dos textos passa do espaço disponível e os cards são cortados (Visão 360 mostra só 2-3 linhas, header dos cards "espreme" os badges, tabela de parcelas perde linhas).
+Reorganizar o card para mostrar 5 linhas, na ordem solicitada, com tamanhos bem distribuídos e usando a identidade visual existente (mesmas cores semânticas, mesmo estilo de barra/ícone).
 
-Restrição: **não podemos adicionar barra de rolagem**. Solução = densidade adaptativa que sempre cabe na viewport.
+### Nova estrutura do Visão 360
 
-## Estratégia
+| # | Indicador | Origem do dado | Cor / token |
+|---|---|---|---|
+| 1 | **Colchão de Acordos** | `stats.total_projetado` (hoje exibido no `DashboardMetaCard`) | `--primary` (laranja, ícone `Wallet`) |
+| 2 | **Provisionado no Mês** | `stats.total_negociado` (já usado hoje) | `--primary` em tom secundário (ícone `TrendingUp`) |
+| 3 | **Total Previsto no Mês** = Colchão + Provisionado | soma das duas linhas acima | destaque visual: card/linha com fundo levemente preenchido (`bg-primary/10`) e ícone `Layers`/`Sigma`, tipografia maior — funciona como "linha-resumo" |
+| 4 | **Pendentes** | `stats.total_pendente` | `--warning` (ícone `Hourglass`) |
+| 5 | **Quebra** | `stats.total_quebra` | `--destructive` (ícone `TrendingDown`) |
 
-Criar 3 níveis de densidade automáticos baseados em breakpoint + altura disponível:
+A linha 3 **não** entra no cálculo do `maxValue` da barra (ela é só um total/resumo), para não distorcer as barras dos itens 1, 2, 4 e 5.
 
-| Tier | Gatilho | Comportamento |
-|---|---|---|
-| **Compacto** | `lg` (1024-1279px) **ou** altura < 800px | Padding reduzido, fontes -10%, charts mais baixos, tabela com menos linhas visíveis |
-| **Padrão** | `xl` (1280-1535px) | Densidade atual |
-| **Confortável** | `2xl+` (≥1536px) | Espaços generosos como hoje no monitor grande |
+### Distribuição de tamanhos dentro do card
 
-Tudo continua `overflow-hidden` (sem scrollbar). Quem se adapta é a densidade interna.
+```text
+┌─────────────────────────── Visão 360 (header) ──────────────────┐
+│  [ico] Colchão de Acordos ............................ R$ X,XX │  linha normal
+│  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  │
+│                                                                 │
+│  [ico] Provisionado no Mês ........................... R$ X,XX │  linha normal
+│  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  │
+│                                                                 │
+│  ╔═════════════════════════════════════════════════════════════╗│
+│  ║ [ico] Total Previsto no Mês               R$ X,XX (DESTAQUE)║│  linha-resumo
+│  ║ Colchão + Provisionado                                       ║│  bg-primary/10
+│  ╚═════════════════════════════════════════════════════════════╝│
+│                                                                 │
+│  [ico] Pendentes ..................................... R$ X,XX │  linha normal
+│  ▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  │
+│                                                                 │
+│  [ico] Quebra ........................................ R$ X,XX │  linha normal
+│  ▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-## Mudanças propostas
+Proporções verticais aproximadas dentro do `flex-col` do conteúdo:
+- 4 linhas normais (1, 2, 4, 5): cada uma com `flex: 1` (peso 1)
+- 1 linha-resumo (3): `flex: 1.3` (peso 1,3) + `bg-primary/10`, borda sutil `border-primary/30`, sem barra de progresso, valor em fonte maior (`text-base xl:text-lg`)
+- Mesmos tamanhos responsivos já aplicados em `lg`/`xl`/`2xl` (ícone, fonte, padding) — sem alterar densidade adaptativa.
 
-### 1. `src/components/AppLayout.tsx` (linha 391)
+### Mudanças por arquivo
 
-Reduzir padding do `<main>` em telas baixas/médias:
-- Antes: `p-4 lg:p-6`
-- Depois: `p-3 xl:p-4 2xl:p-6`
+1. **`src/components/dashboard/Visao360Card.tsx`**
+   - Adicionar props `colchao: number` e `provisionado: number` (renomear o atual `provisionado` se necessário) e manter `pendentes`, `quebra`.
+   - Remover o cálculo "Provisionado no Mês" baseado no nome antigo, ajustar para receber os 5 valores conforme tabela.
+   - Renderizar 4 linhas normais + a linha-resumo (Total Previsto = colchao + provisionado) com layout descrito.
+   - `maxValue` calculado só sobre `[colchao, provisionado, pendentes, quebra]`.
+   - Importar ícones extras necessários (`Wallet`, `Layers` ou `Sigma`).
 
-Ganha ~16-32px de altura útil.
+2. **`src/pages/DashboardPage.tsx`**
+   - Passar `colchao={stats?.total_projetado ?? 0}` e `provisionado={stats?.total_negociado ?? 0}` para o `Visao360Card` (hoje só passa `provisionado`, `pendentes`, `quebra`).
+   - **Remover** a prop `colchao` do `DashboardMetaCard` (deixa de ser exibida no card de Meta, evitando duplicidade).
 
-### 2. `src/pages/DashboardPage.tsx` (linha 272)
+3. **`src/components/dashboard/DashboardMetaCard.tsx`**
+   - Remover o chip "Colchão" no canto superior esquerdo (linhas ~113-127) e a prop `colchao`.
+   - Manter o restante do card (gauge, footer Recebido/Faltam) intacto.
 
-Ajustar grid para reagir mais cedo + gap menor:
-- `gap-3` → `gap-2 xl:gap-3`
-- Adicionar uma classe `dashboard-compact` no root quando `xl` não bate, controlando densidade dos filhos via CSS (token `--dash-scale`).
+### Identidade visual
 
-Header (linha 206): em `lg` esconder o subtítulo "Bem-vindo, ..." e reduzir botões para `h-7 text-[11px]`.
+- Cores via tokens semânticos (`--primary`, `--warning`, `--destructive`); nada hardcoded.
+- Mesmo padrão de "ícone em quadrado tinted + label + valor à direita + barra fina" já usado hoje.
+- Linha-resumo segue o mesmo idioma do chip "Colchão" atual (fundo `primary/10`, borda `primary/30`, valor em destaque).
+- Tipografia, spacing e responsividade seguem o sistema adaptativo (`lg`/`xl`/`2xl`) já existente.
 
-### 3. Cards individuais — reduzir densidade no breakpoint `lg`
+### Fora deste plano
 
-Aplicar utilitários responsivos (`lg:` para compacto, `xl:` para padrão):
-
-- **`DashboardMetaCard.tsx`**: reduzir tamanho do gauge (de `w-44 h-44` → `lg:w-32 lg:h-32 xl:w-44 xl:h-44`), padding `lg:p-2 xl:p-3`.
-- **`TotalRecebidoCard.tsx`**: valor principal de `text-[26px]` → `lg:text-[20px] xl:text-[26px]`; chart altura mínima reduzida; legenda esconde texto em `lg`, mantém só pontos.
-- **`KpisGridCard.tsx` (Tile)**: número grande de `text-[34px] lg:text-[40px] xl:text-[44px]` → `text-[26px] xl:text-[34px] 2xl:text-[40px]`; padding `lg:px-2 lg:py-2 xl:px-3 xl:py-3`.
-- **`Visao360Card.tsx`**: barras mais baixas, espaço entre itens reduzido, fonte do valor `lg:text-sm xl:text-base`.
-- **`ParcelasProgramadasCard.tsx`**: linha da tabela `py-1.5` em `lg`, fonte `text-xs`, esconder coluna "Credor" abaixo de `xl` (já temos nome + parcela + valor + status), badges menores.
-- **`AgendamentosHojeCard.tsx`**: padding e ícone menores em `lg`.
-
-### 4. Densidade dos headers dos cards (`DashboardCardHeader.tsx`)
-
-Reduzir altura do header (`py-2.5 lg:py-1.5 xl:py-2.5`) e fonte do título (`text-sm lg:text-xs xl:text-sm`). Ganha 8-12px por card × 6 cards.
-
-### 5. Validação visual
-
-Testar nas larguras-alvo após a mudança:
-- 1366×768 (notebook 14")
-- 1600×900 (monitor 17" típico)
-- 1920×1080 (Full HD)
-- 2560×1440 (monitor grande atual do usuário)
-
-Em todas: nenhum scrollbar interno, todos os cards visíveis com conteúdo legível, tabela de parcelas com pelo menos 5 linhas.
-
-## Itens fora deste plano
-
-- Mobile/tablet (< 1024px): o dashboard já cai pra `grid-cols-1` empilhado e essa parte continua igual (com scroll natural da página, fora do escopo "sem scrollbar" que vale para desktop).
-- Refazer cards individuais ou mudar gráficos.
-- Mudar a ordem/visibilidade dos blocos.
-
-## Arquivos tocados
-
-- `src/components/AppLayout.tsx`
-- `src/pages/DashboardPage.tsx`
-- `src/components/dashboard/DashboardCardHeader.tsx`
-- `src/components/dashboard/DashboardMetaCard.tsx`
-- `src/components/dashboard/TotalRecebidoCard.tsx`
-- `src/components/dashboard/KpisGridCard.tsx`
-- `src/components/dashboard/Visao360Card.tsx`
-- `src/components/dashboard/ParcelasProgramadasCard.tsx`
-- `src/components/dashboard/AgendamentosHojeCard.tsx`
+- Mudança no RPC do dashboard ou em qualquer cálculo no backend — todos os valores já vêm do `get_dashboard_stats_v2`.
+- Mudança nos demais cards (Meta continua igual, só perde o chip Colchão).
+- Mudança na ordem/visibilidade de blocos do dashboard.
