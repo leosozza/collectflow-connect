@@ -5,6 +5,7 @@ import { ComposedChart, Area, Line, ResponsiveContainer, Tooltip, XAxis } from "
 import { format, startOfMonth, endOfMonth, subMonths, getDate, getDaysInMonth, isSameMonth } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/formatters";
+import DashboardCardHeader from "./DashboardCardHeader";
 
 interface Props {
   totalRecebido: number;
