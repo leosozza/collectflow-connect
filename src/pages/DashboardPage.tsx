@@ -52,26 +52,9 @@ interface DashboardStats {
   total_pendente_mes_anterior: number;
 }
 
-function pctDelta(
-  current: number,
-  previous: number,
-  invert = false
-): { value: string; isPositive: boolean } | null {
-  const c = Number(current) || 0;
-  const p = Number(previous) || 0;
-  if (p === 0 && c === 0) return null;
-  if (p === 0) {
-    return { value: "+100%", isPositive: !invert };
-  }
-  const pct = ((c - p) / p) * 100;
-  const rounded = Math.round(pct);
-  const sign = rounded > 0 ? "+" : "";
-  const isUp = rounded >= 0;
-  return {
-    value: `${sign}${rounded}%`,
-    isPositive: invert ? !isUp : isUp,
-  };
-}
+import { formatTrendPct } from "@/lib/trendFormat";
+const pctDelta = (current: number, previous: number, invert = false) =>
+  formatTrendPct(current, previous, { invert });
 
 async function callDashboardStats(params: Record<string, unknown>) {
   const { data, error } = await supabase.rpc("get_dashboard_stats_v2" as any, params as any);
