@@ -49,6 +49,18 @@ export function useTenantSetupStatus() {
         return { steps: [], completedCount: 0, totalCount: 0, criticalPending: 0, setupCompletedAt: null };
       }
 
+      const probe = async (table: string, extra?: (q: any) => any): Promise<boolean> => {
+        try {
+          let q = supabase.from(table as any).select("id").eq("tenant_id", tenantId).limit(1);
+          if (extra) q = extra(q);
+          const { data, error } = await q;
+          if (error) return false;
+          return (data?.length || 0) > 0;
+        } catch {
+          return false;
+        }
+      };
+
       const [
         tenantRow,
         credoresCount,
@@ -59,12 +71,12 @@ export function useTenantSetupStatus() {
         dispositionsCount,
         operatorsCount,
         whatsappCount,
-        integrationsCount,
-        clientsCount,
-        clientsStatusCount,
-        workflowsCount,
+        hasClients,
+        hasClientsClassified,
+        hasAsaasCustomer,
+        hasNegociarie,
       ] = await Promise.all([
-        supabase.from("tenants").select("name, cnpj, logo_url, setup_completed_at, setup_steps_state").eq("id", tenantId).maybeSingle(),
+        supabase.from("tenants").select("name, cnpj, logo_url, setup_completed_at, setup_steps_state, settings").eq("id", tenantId).maybeSingle(),
         safeCount("credores", tenantId),
         safeCount("tipos_devedor", tenantId),
         safeCount("tipos_divida", tenantId),
@@ -73,10 +85,10 @@ export function useTenantSetupStatus() {
         safeCount("call_disposition_types", tenantId),
         safeCount("tenant_users", tenantId, (q) => q.eq("role", "operador")),
         safeCount("whatsapp_instances", tenantId),
-        safeCount("integration_tokens", tenantId),
-        safeCount("clients", tenantId),
-        safeCount("clients", tenantId, (q) => q.neq("status", "pendente")),
-        safeCount("workflow_flows", tenantId),
+        probe("clients"),
+        probe("clients", (q) => q.neq("status", "pendente")),
+        probe("asaas_customers"),
+        probe("negociarie_cobrancas"),
       ]);
 
       const t: any = tenantRow.data || {};
@@ -91,12 +103,18 @@ export function useTenantSetupStatus() {
           ? "Logo recomendado (opcional)"
           : "Dados principais preenchidos";
 
-      // Etapa 2 — Cadastros base
-      const cadastrosMin = credoresCount > 0 && (tiposDevedorCount + tiposDividaCount + statusCobrancaCount) > 0;
-      const cadastrosFull = credoresCount > 0 && tiposDevedorCount > 0 && tiposDividaCount > 0 && statusCobrancaCount > 0 && scriptsCount > 0 && dispositionsCount > 0;
+      // Etapa 2 — Cadastros base (scripts/dispositions são opcionais e só aparecem no detalhe)
+      const tiposTotal = tiposDevedorCount + tiposDividaCount + statusCobrancaCount;
+      const cadastrosFull = credoresCount > 0 && tiposTotal > 0;
+      const cadastrosMin = credoresCount > 0 && tiposTotal === 0;
+      const extras: string[] = [];
+      if (scriptsCount > 0) extras.push(`${scriptsCount} script(s)`);
+      if (dispositionsCount > 0) extras.push(`${dispositionsCount} disposition(s)`);
       const cadastrosDetail = credoresCount === 0
         ? "Nenhum credor cadastrado"
-        : `${credoresCount} credor(es), ${tiposDevedorCount + tiposDividaCount + statusCobrancaCount} tipos/status${scriptsCount > 0 ? `, ${scriptsCount} script(s)` : ""}`;
+        : tiposTotal === 0
+          ? `${credoresCount} credor(es), faltam tipos/status`
+          : `${credoresCount} credor(es), ${tiposTotal} tipos/status${extras.length ? `, ${extras.join(", ")}` : ""}`;
 
       // Etapa 3 — Equipe
       const equipeOk = operatorsCount > 0;
@@ -106,22 +124,28 @@ export function useTenantSetupStatus() {
       const canaisOk = whatsappCount > 0 || !!manualSteps.canais;
       const canaisDetail = whatsappCount > 0 ? `${whatsappCount} instância(s) de WhatsApp` : "Nenhum canal conectado";
 
-      // Etapa 5 — Gateways
-      const gatewaysOk = integrationsCount > 0 || !!manualSteps.gateways;
-      const gatewaysDetail = integrationsCount > 0 ? `${integrationsCount} integração(ões) ativa(s)` : "Nenhum gateway configurado";
+      // Etapa 5 — Gateways: credenciais ficam em tenants.settings (JSONB) ou refletidas em uso
+      const settings = (t.settings || {}) as Record<string, any>;
+      const gatewayProviders: string[] = [];
+      const hasCobcloud = !!(settings.cobcloud_token_client || settings.cobcloud_token_company || settings.cobcloud_token_assessoria);
+      const hasAsaas = !!settings.asaas_api_key || hasAsaasCustomer;
+      const hasNegociarieKey = !!(settings.negociarie_api_key || settings.negociarie_token) || hasNegociarie;
+      if (hasCobcloud) gatewayProviders.push("Cobcloud");
+      if (hasAsaas) gatewayProviders.push("Asaas");
+      if (hasNegociarieKey) gatewayProviders.push("Negociarie");
+      const gatewaysOk = gatewayProviders.length > 0 || !!manualSteps.gateways;
+      const gatewaysDetail = gatewayProviders.length > 0
+        ? `${gatewayProviders.join(" + ")} ativo(s)`
+        : "Nenhum gateway configurado";
 
-      // Etapa 6 — Carteira
-      const carteiraOk = clientsCount > 0;
-      const carteiraInProgress = clientsCount > 0 && clientsStatusCount === 0;
-      const carteiraDetail = clientsCount === 0
+      // Etapa 6 — Carteira (probe leve, evita count exact em tabelas grandes)
+      const carteiraOk = hasClients;
+      const carteiraInProgress = hasClients && !hasClientsClassified;
+      const carteiraDetail = !hasClients
         ? "Carteira vazia"
         : carteiraInProgress
-          ? `${clientsCount} parcela(s), aguardando classificação de status`
-          : `${clientsCount} parcela(s) carregadas`;
-
-      // Etapa 7 — Automação
-      const automacaoOk = workflowsCount > 0 || !!manualSteps.automacao;
-      const automacaoDetail = workflowsCount > 0 ? `${workflowsCount} workflow(s)` : "Nenhuma automação configurada";
+          ? "Aguardando classificação de status"
+          : "Carteira ativa";
 
       const steps: SetupStep[] = [
         {
@@ -178,16 +202,6 @@ export function useTenantSetupStatus() {
           ctaPath: "/carteira",
           ctaLabel: "Importar carteira",
         },
-        {
-          id: "automacao",
-          title: "Automação e workflows",
-          description: "Disparos automáticos, régua de cobrança e score",
-          detail: automacaoDetail,
-          status: automacaoOk ? "complete" : "pending",
-          ctaPath: "/automacao",
-          ctaLabel: "Configurar automação",
-          optional: true,
-        },
       ];
 
       const completedCount = steps.filter((s) => s.status === "complete").length;
@@ -205,7 +219,7 @@ export function useTenantSetupStatus() {
   });
 
   return {
-    ...(query.data || { steps: [], completedCount: 0, totalCount: 7, criticalPending: 7, setupCompletedAt: null }),
+    ...(query.data || { steps: [], completedCount: 0, totalCount: 6, criticalPending: 6, setupCompletedAt: null }),
     loading: query.isLoading,
     refetch: query.refetch,
   };
