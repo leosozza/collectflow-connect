@@ -9,10 +9,11 @@ import {
   Campaign,
   fetchCampaignParticipants,
   updateCampaign,
+  recalculateCampaignScores,
   METRIC_OPTIONS,
   PERIOD_OPTIONS,
 } from "@/services/campaignService";
-import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2, Calendar } from "lucide-react";
+import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2, Calendar, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import CampaignCountdown from "./CampaignCountdown";
 import { hasValidCampaignDates, isCampaignActive, getCampaignEndMs } from "./campaignTime";
@@ -38,6 +39,22 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
   const { isTenantAdmin, tenant } = useTenant();
   const queryClient = useQueryClient();
   const [archiving, setArchiving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+
+  const handleRecalculate = async () => {
+    setRecalculating(true);
+    try {
+      const r = await recalculateCampaignScores(campaign.id);
+      toast.success(`Ranking recalculado (${r?.updated ?? 0} participante(s))`);
+      queryClient.invalidateQueries({ queryKey: ["campaigns", tenant?.id] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erro ao recalcular";
+      toast.error(msg);
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   const { data: participants = [] } = useQuery({
     queryKey: ["campaign-participants", campaign.id],
@@ -207,17 +224,31 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
           <p className="text-xs text-muted-foreground text-center py-2">Sem participantes ainda</p>
         )}
 
-        {expired && isTenantAdmin && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2 border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-            onClick={handleArchive}
-            disabled={archiving}
-          >
-            {archiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-            Mover para encerradas
-          </Button>
+        {isTenantAdmin && (
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={handleRecalculate}
+              disabled={recalculating}
+            >
+              {recalculating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Recalcular ranking
+            </Button>
+            {expired && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-2 border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                onClick={handleArchive}
+                disabled={archiving}
+              >
+                {archiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                Mover para encerradas
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
