@@ -60,13 +60,26 @@ const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
     };
   }, [tenant?.id, queryClient]);
 
-  const active = useMemo(() => campaigns.filter(isCampaignActive), [campaigns]);
-  const others = useMemo(() => campaigns.filter((c) => !isCampaignActive(c)), [campaigns]);
+  // "Ativas" agora inclui campanhas vencidas que ainda não foram arquivadas (status=ativa, end_date<hoje).
+  // Estas aparecem no fim do bloco com banner "CAMPANHA ENCERRADA" e — para admin — botão "Mover para encerradas".
+  const visibleActive = useMemo(() => {
+    const list = campaigns.filter(isCampaignVisibleInActive);
+    // ordena: ativas reais primeiro (por end_date asc), depois vencidas (por end_date desc)
+    return list.sort((a, b) => {
+      const aActive = isCampaignActive(a);
+      const bActive = isCampaignActive(b);
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      const aEnd = getCampaignEndMs(a);
+      const bEnd = getCampaignEndMs(b);
+      return aActive ? aEnd - bEnd : bEnd - aEnd;
+    });
+  }, [campaigns]);
+  const archived = useMemo(() => campaigns.filter((c) => !isCampaignVisibleInActive(c)), [campaigns]);
 
   // Trigger a server-side recalc of every active campaign on mount (idle,
   // dedup'd 60s). Closes the gap between the 30-min cron `gamification-recalc-tick`
   // and the live UI. Realtime then re-renders the cards once `score` changes.
-  useRefreshActiveCampaignScores(active);
+  useRefreshActiveCampaignScores(visibleActive.filter(isCampaignActive));
 
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Carregando...</p>;
@@ -75,30 +88,35 @@ const CampaignsTab = ({ highlightCurrentUser = true }: CampaignsTabProps) => {
     <div className="space-y-6">
       <div>
         <h3 className="text-sm font-semibold mb-3">Campanhas Ativas</h3>
-        {active.length === 0 ? (
+        {visibleActive.length === 0 ? (
           <p className="text-xs text-muted-foreground py-4">Nenhuma campanha ativa no momento.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {active.map((c) => (
-              <CampaignCard key={c.id} campaign={c} currentUserId={highlightCurrentUser ? profile?.id : undefined} />
+            {visibleActive.map((c) => (
+              <CampaignCard
+                key={c.id}
+                campaign={c}
+                currentUserId={highlightCurrentUser ? profile?.id : undefined}
+                expired={isCampaignExpiredButNotArchived(c)}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {others.length > 0 && (
+      {archived.length > 0 && (
         <Collapsible open={othersOpen} onOpenChange={setOthersOpen}>
           <CollapsibleTrigger
             className="flex items-center justify-between w-full px-3 py-2 rounded-md border border-border bg-card hover:bg-muted/40 transition-colors"
           >
             <span className="text-sm font-semibold text-foreground">
-              Campanhas encerradas <span className="text-muted-foreground font-normal">({others.length})</span>
+              Campanhas encerradas <span className="text-muted-foreground font-normal">({archived.length})</span>
             </span>
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${othersOpen ? "rotate-180" : ""}`} />
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-3">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {others.map((c) => (
+              {archived.map((c) => (
                 <CampaignCard key={c.id} campaign={c} currentUserId={highlightCurrentUser ? profile?.id : undefined} />
               ))}
             </div>
