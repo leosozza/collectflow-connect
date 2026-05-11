@@ -136,7 +136,16 @@ const App = () => (
               <Route path="central-empresa" element={<TenantSettingsPage />} />
               <Route path="integracao" element={<ModuleGuard module="integracoes"><IntegracaoPage /></ModuleGuard>} />
               <Route path="perfil" element={<PerfilPage />} />
-              <Route path="gamificacao" element={<ModuleGuard module="gamificacao"><GamificacaoPage /></ModuleGuard>} />
+              <Route path="gamificacao" element={<ModuleGuard module="gamificacao"><GamificacaoPage /></ModuleGuard>}>
+                <Route path="ranking" element={<RankingTab highlightCurrentUser />} />
+                <Route path="campanhas" element={<CampaignsTab highlightCurrentUser />} />
+                <Route path="conquistas" element={<AchievementsTab />} />
+                <Route path="metas" element={<GoalsTab />} />
+                <Route path="loja" element={<ShopTab />} />
+                <Route path="carteira" element={<WalletTab />} />
+                <Route path="historico" element={<PointsHistoryTab />} />
+                <Route path="gerenciar" element={<ManageSubTabs />} />
+              </Route>
               <Route path="automacao" element={<ModuleGuard module="automacao"><AutomacaoPage /></ModuleGuard>} />
               <Route path="relatorios" element={<ModuleGuard module="relatorios"><RelatoriosPage /></ModuleGuard>} />
               <Route path="acordos" element={<AcordosPage />} />
