@@ -55,7 +55,9 @@ const isCampaignActive = (campaign: Campaign) => {
 const GamificacaoPage = () => {
   const { profile } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const [urlTab, setUrlTab] = useUrlState("tab", "");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
   const year = now.getFullYear();
