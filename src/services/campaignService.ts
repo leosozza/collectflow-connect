@@ -49,6 +49,7 @@ export const METRIC_OPTIONS = [
   { value: "maior_valor_recebido", label: "Maior valor recebido" },
   { value: "negociado_e_recebido", label: "Negociado e recebido na janela" },
   { value: "maior_valor_promessas", label: "Maior valor de promessas" },
+  { value: "maior_valor_primeira_parcela", label: "Maior valor de primeira parcela" },
   { value: "maior_qtd_acordos", label: "Maior quantidade de acordos" },
 ];
 
@@ -393,6 +394,26 @@ async function computeCampaignScoreFallback(params: {
   if (metric === "maior_valor_promessas") {
     const { data } = await addCredor(supabase.from("agreements").select("proposed_total").eq("tenant_id", tenantId).eq("created_by", authUid).in("status", ["pending", "approved"] as any).gte("created_at", startDate).lt("created_at", endExclusiveStr));
     return (data || []).reduce((s: number, a: any) => s + Number(a.proposed_total || 0), 0);
+  }
+
+  if (metric === "maior_valor_primeira_parcela") {
+    const { data } = await addCredor(
+      supabase
+        .from("agreements")
+        .select("entrada_value, new_installment_value, custom_installment_values")
+        .eq("tenant_id", tenantId)
+        .eq("created_by", authUid)
+        .in("status", ["pending", "approved"] as any)
+        .gte("created_at", startDate)
+        .lt("created_at", endExclusiveStr)
+    );
+    return (data || []).reduce((s: number, a: any) => {
+      const entrada = Number(a.entrada_value || 0);
+      if (entrada > 0) return s + entrada;
+      const civ = Array.isArray(a.custom_installment_values) ? a.custom_installment_values : null;
+      const first = civ && civ.length > 0 ? Number(civ[0]) : NaN;
+      return s + (isFinite(first) && first > 0 ? first : Number(a.new_installment_value || 0));
+    }, 0);
   }
 
   return 0;

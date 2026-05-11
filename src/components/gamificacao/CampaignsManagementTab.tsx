@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Plus, Pencil, Trash2, Trophy, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { isCampaignActive } from "./campaignTime";
+import { isCampaignActive, isCampaignVisibleInActive, isCampaignExpiredButNotArchived } from "./campaignTime";
 import { useRefreshActiveCampaignScores } from "./useRefreshActiveCampaignScores";
 
 const CampaignsManagementTab = () => {
@@ -77,8 +77,8 @@ const CampaignsManagementTab = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const activeCampaigns = useMemo(() => campaigns.filter(isCampaignActive), [campaigns]);
-  const otherCampaigns = useMemo(() => campaigns.filter((c) => !isCampaignActive(c)), [campaigns]);
+  const activeCampaigns = useMemo(() => campaigns.filter(isCampaignVisibleInActive), [campaigns]);
+  const otherCampaigns = useMemo(() => campaigns.filter((c) => !isCampaignVisibleInActive(c)), [campaigns]);
 
   // Mesma lógica da CampaignsTab: dispara recálculo server-side em background
   // assim que a aba abre, fechando a janela de 30 min do cron.
@@ -100,7 +100,7 @@ const CampaignsManagementTab = () => {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {activeCampaigns.map((c) => (
               <div key={c.id} className="relative group">
-                <CampaignCard campaign={c} />
+                <CampaignCard campaign={c} expired={isCampaignExpiredButNotArchived(c)} />
                 <div className="absolute top-2 right-10 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                   <Button
                     size="icon"

@@ -12,7 +12,7 @@ import {
   METRIC_OPTIONS,
   PERIOD_OPTIONS,
 } from "@/services/campaignService";
-import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2 } from "lucide-react";
+import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import CampaignCountdown from "./CampaignCountdown";
 import { hasValidCampaignDates, isCampaignActive, getCampaignEndMs } from "./campaignTime";
@@ -137,6 +137,13 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
           <Badge variant="outline" className="text-[10px]">{metricLabel}</Badge>
           <Badge variant="outline" className="text-[10px]">{periodLabel}</Badge>
         </div>
+
+        {datesValid && (
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1.5">
+            <Calendar className="w-3 h-3" />
+            <span>{formatBR(campaign.start_date)} → {formatBR(campaign.end_date)}</span>
+          </div>
+        )}
 
         {isActive && datesValid && !isNaN(endMs) && (
           <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-gradient-to-br from-muted/40 to-muted/10 border border-border/50 px-3 py-2">
