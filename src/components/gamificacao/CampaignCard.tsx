@@ -226,33 +226,49 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
           <p className="text-xs text-muted-foreground text-center py-2">Sem participantes ainda</p>
         )}
 
-        {isTenantAdmin && (
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full gap-2"
-              onClick={handleRecalculate}
-              disabled={recalculating}
-            >
-              {recalculating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-              Recalcular ranking
-            </Button>
-            {expired && (
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={() => setAuditOpen(true)}
+          >
+            <Search className="w-3.5 h-3.5" />
+            Conferência
+          </Button>
+          {isTenantAdmin && (
+            <>
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full gap-2 border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                onClick={handleArchive}
-                disabled={archiving}
+                className="w-full gap-2"
+                onClick={handleRecalculate}
+                disabled={recalculating}
               >
-                {archiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-                Mover para encerradas
+                {recalculating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Recalcular ranking
               </Button>
-            )}
-          </div>
-        )}
+              {expired && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2 border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={handleArchive}
+                  disabled={archiving}
+                >
+                  {archiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                  Mover para encerradas
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </CardContent>
+      <CampaignAuditDialog
+        campaign={campaign}
+        open={auditOpen}
+        onOpenChange={setAuditOpen}
+      />
     </Card>
   );
 });
