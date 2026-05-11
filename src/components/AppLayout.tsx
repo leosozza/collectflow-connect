@@ -143,7 +143,7 @@ const AppLayout = () => {
             <Link
               to="/setup"
               onClick={() => setSidebarOpen(false)}
-              title={collapsed ? "Setup do tenant" : undefined}
+              title={collapsed ? "Setup" : undefined}
               className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
                 location.pathname === "/setup"
                   ? "bg-primary text-primary-foreground"
@@ -152,7 +152,7 @@ const AppLayout = () => {
             >
               <div className="flex items-center gap-3 min-w-0">
                 <Rocket className="w-5 h-5 flex-shrink-0" />
-                {!collapsed && <span className="truncate">Setup do tenant</span>}
+                {!collapsed && <span className="truncate">Setup</span>}
               </div>
               {!collapsed && setupStatus.criticalPending > 0 && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">
