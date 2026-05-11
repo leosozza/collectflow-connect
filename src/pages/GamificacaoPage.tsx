@@ -372,7 +372,7 @@ const GamificacaoPage = () => {
   );
 };
 
-const ManageSubTabs = () => {
+export const ManageSubTabs = () => {
   const [sub, setSub] = useState("manage-campaigns");
   return (
     <Tabs value={sub} onValueChange={setSub}>
