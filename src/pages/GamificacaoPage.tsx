@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useUrlState } from "@/hooks/useUrlState";
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -13,26 +13,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3, History, Calculator, HelpCircle } from "lucide-react";
 import ScoringRulesTab from "@/components/gamificacao/ScoringRulesTab";
-import RankingTab from "@/components/gamificacao/RankingTab";
-import AchievementsTab from "@/components/gamificacao/AchievementsTab";
-import CampaignsTab from "@/components/gamificacao/CampaignsTab";
-import GoalsTab from "@/components/gamificacao/GoalsTab";
-import ShopTab from "@/components/gamificacao/ShopTab";
-import WalletTab from "@/components/gamificacao/WalletTab";
-import PointsHistoryTab from "@/components/gamificacao/PointsHistoryTab";
-import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
-import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
 import CampaignsManagementTab from "@/components/gamificacao/CampaignsManagementTab";
-import ShopManagementTab from "@/components/gamificacao/ShopManagementTab";
+import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
+import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
 import RankingManagementTab from "@/components/gamificacao/RankingManagementTab";
+import ShopManagementTab from "@/components/gamificacao/ShopManagementTab";
 import ParticipantsManagementTab from "@/components/gamificacao/ParticipantsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
-const adminTabs = ["ranking", "campaigns", "achievements", "goals", "manage"];
-const operatorTabs = ["ranking", "campaigns", "achievements", "goals", "shop", "wallet", "history"];
+
+// Mapa de aba legada (?tab=...) para sub-rota nova.
+const LEGACY_TAB_TO_PATH: Record<string, string> = {
+  ranking: "ranking",
+  campaigns: "campanhas",
+  achievements: "conquistas",
+  goals: "metas",
+  shop: "loja",
+  wallet: "carteira",
+  history: "historico",
+  manage: "gerenciar",
+};
 
 const isValidDate = (s?: string | null) => {
   if (!s) return false;
