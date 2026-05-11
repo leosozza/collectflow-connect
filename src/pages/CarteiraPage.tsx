@@ -364,10 +364,10 @@ const CarteiraPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["recent-imports"] });
-      toast.success("Cliente cadastrado!");
+      toast.success("Parcela cadastrada!");
       setFormOpen(false);
     },
-    onError: (err: any) => toast.error(err?.message || "Erro ao cadastrar cliente"),
+    onError: (err: any) => toast.error(err?.message || "Erro ao cadastrar parcela"),
   });
 
   const updateMutation = useMutation({
@@ -375,11 +375,11 @@ const CarteiraPage = () => {
       updateClient(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Cliente atualizado!");
+      toast.success("Parcela atualizada!");
       setFormOpen(false);
       setEditingClient(null);
     },
-    onError: () => toast.error("Erro ao atualizar cliente"),
+    onError: () => toast.error("Erro ao atualizar parcela"),
   });
 
   const hasAssignedCredor = useMemo(() => {
@@ -687,7 +687,7 @@ const CarteiraPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Carteira</h1>
           <p className="text-muted-foreground text-sm">
-            Gerencie as parcelas, pagamentos e clientes
+            Gerencie suas carteiras de cobrança — cada linha agrupa as parcelas de um CPF
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -740,7 +740,7 @@ const CarteiraPage = () => {
           )}
           <Button onClick={() => { setEditingClient(null); setFormOpen(true); }} size="sm" className="gap-1.5">
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Novo Cliente</span>
+            <span className="hidden sm:inline">Nova Parcela</span>
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1072,7 +1072,7 @@ const CarteiraPage = () => {
       <Dialog open={formOpen} onOpenChange={handleCloseForm}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingClient ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
+            <DialogTitle>{editingClient ? "Editar Parcela" : "Nova Parcela"}</DialogTitle>
           </DialogHeader>
           <ClientForm
             defaultValues={editingClient || undefined}
