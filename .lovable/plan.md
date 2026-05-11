@@ -1,43 +1,63 @@
 ## Objetivo
 
-Garantir que o ranking das campanhas reflita a configuração atual, mesmo após edições e em campanhas encerradas.
+Adicionar um botão **"Conferência"** no card da campanha que abre um modal listando, por operador, os acordos/recebimentos que compõem o valor final do ranking — permitindo auditar como cada participante chegou ao número exibido.
 
 ---
 
-## 1. Auto-recálculo ao editar campanha
+## 1. Novo serviço de conferência
 
-Em `src/components/gamificacao/CampaignsManagementTab.tsx`, no `saveMut.mutationFn`:
+Em `src/services/campaignService.ts`, criar `fetchCampaignAuditDetails(campaignId)` que reaproveita a mesma lógica de filtros do `computeCampaignScoreFallback` (mesma janela `start_date`/`end_date`, mesmos credores via `campaign_credores`, mesmo `created_by = authUid` por participante), porém retornando **as linhas detalhadas** ao invés do total.
 
-- Após `updateCampaign(editing.id, data)` e antes de salvar credores/participantes, comparar campos sensíveis:
-  - `metric`, `start_date`, `end_date`, `end_time`
-- Também detectar mudança no conjunto de credores (`credorIds` vs. `editing.credores`).
-- Se algum mudou, marcar `shouldRecalc = true`.
-- Após `saveCampaignCredores` e `saveCampaignParticipants`, se `shouldRecalc`, chamar `await recalculateCampaignScores(campaignId)`.
-- Toast diferenciado: "Campanha atualizada e ranking recalculado" vs. "Campanha atualizada".
-- Invalidar também `["campaign-participants"]` (já feito).
+Para cada participante da campanha, retorna:
 
-Para criação nova, não precisa recalcular (não há participantes/score ainda).
+```
+{
+  operator_id, operator_name, score, rows: [
+    { date, client_name, client_cpf, credor, value, source }
+  ], computed_total
+}
+```
 
----
+Mapeamento por métrica (espelhando a função existente):
 
-## 2. Botão manual "Recalcular ranking" no card (admin)
+- `maior_valor_recebido` / `negociado_e_recebido`: linhas de `manual_payments` + `portal_payments` + `negociarie_cobrancas` dos `agreement_ids` do operador, com `value = amount_paid|amount|valor_pago` e `source` indicando origem do pagamento. Enriquecer com `client_name`/`client_cpf` via join no `agreements`.
+- `maior_qtd_acordos`: linhas de `agreements` (1 por acordo, `value = 1`).
+- `maior_valor_promessas`: linhas de `agreements` com `value = proposed_total`.
+- `maior_valor_primeira_parcela`: linhas de `agreements` com `value = entrada_value > 0 ? entrada : (custom_installment_values[0] || new_installment_value)` e `source = "entrada"|"1ª parcela"`.
 
-Em `src/components/gamificacao/CampaignCard.tsx`:
+Limite defensivo `range(0, 999)` por consulta (já é o padrão no fallback). Sem alteração no SQL/RPC do backend.
 
-- Importar `RefreshCw` do lucide e `recalculateCampaignScores` do service.
-- Adicionar estado local `recalculating`.
-- Adicionar handler `handleRecalculate` que chama `recalculateCampaignScores(campaign.id)`, invalida `["campaigns", tenant?.id]` e `["campaign-participants", campaign.id]`, com toast de sucesso/erro.
-- Renderizar botão `outline` `size="sm"` discreto:
-  - Visível apenas quando `isTenantAdmin`
-  - Posicionado no `CardContent`, abaixo do ranking, antes do botão "Mover para encerradas" (ou ao lado dele em flex quando ambos existem)
-  - Texto: "Recalcular ranking", ícone `RefreshCw` (spin enquanto `recalculating`)
+## 2. Novo componente `CampaignAuditDialog.tsx`
 
-Funciona em campanhas ativas, expiradas-aguardando-arquivamento e encerradas (o RPC já permite — não restringe por status, só por `can_access_tenant`).
+Em `src/components/gamificacao/`, criar dialog com:
 
----
+- Header: nome da campanha, métrica, período, credores.
+- Conteúdo: `Accordion` (um item por operador, ordenado pelo score atual) mostrando:
+  - Cabeçalho com nome, score persistido e total recalculado em tempo real (badge de aviso se divergirem — útil para sinalizar que falta recálculo).
+  - `Table` com colunas: Data, Cliente, CPF, Credor, Origem, Valor.
+  - Rodapé com soma das linhas.
+- Estado vazio amigável quando o operador não tiver linhas.
+- Loading via `useQuery` com `queryKey: ["campaign-audit", campaignId]`.
+
+## 3. Integração no `CampaignCard.tsx`
+
+- Importar `Search` (lucide) e o novo dialog.
+- Estado local `auditOpen`.
+- Adicionar **um novo botão** `outline size="sm"` rotulado **"Conferência"** dentro do bloco existente de ações no `CardContent`. Mostrar para **todos** os usuários (não restringir a admin) — qualquer participante pode auditar o próprio ranking.
+- Posicionar antes do botão "Recalcular ranking" no bloco `isTenantAdmin`, e também como botão único quando não-admin. Estrutura:
+  - Sempre renderizar o botão Conferência (fora do `if (isTenantAdmin)`).
+  - Manter Recalcular e Arquivar dentro do bloco admin.
+- Clicar abre o `CampaignAuditDialog` passando `campaign` inteiro.
 
 ## Fora do escopo
 
-- Mudar comportamento do cron de backend.
-- Recalcular automaticamente todas as encerradas históricas (admin pode usar o botão manual).
-- Logs de auditoria do recálculo manual.
+- Exportar a conferência para CSV/Excel (pode ser feito numa próxima iteração).
+- Criar RPC server-side para a auditoria — a versão client-side já reusa a mesma lógica do fallback de recálculo e é suficiente para conferência por campanha.
+- Alterar a forma de cálculo de qualquer métrica.
+
+## Detalhes técnicos
+
+- Reaproveitar `fetchCampaignCredorNames` já exportável (ou exportar como helper).
+- O mapeamento `operator_id → authUid` já existe em `recalculateCampaignScoresFallback`; extrair para helper compartilhado `getParticipantAuthUidMap(campaignId, tenantId)`.
+- Para enriquecer client/credor nos pagamentos: 1 query em `agreements` por lote de IDs (`select id, client_name, client_cpf, credor`) e join em memória.
+- Formatadores: usar `formatBR` (já existe no card) e `Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })`.
