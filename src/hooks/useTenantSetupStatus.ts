@@ -219,7 +219,7 @@ export function useTenantSetupStatus() {
   });
 
   return {
-    ...(query.data || { steps: [], completedCount: 0, totalCount: 7, criticalPending: 7, setupCompletedAt: null }),
+    ...(query.data || { steps: [], completedCount: 0, totalCount: 6, criticalPending: 6, setupCompletedAt: null }),
     loading: query.isLoading,
     refetch: query.refetch,
   };
