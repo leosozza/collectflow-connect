@@ -5904,6 +5904,8 @@ export type Database = {
           plan_id: string | null
           primary_color: string | null
           settings: Json | null
+          setup_completed_at: string | null
+          setup_steps_state: Json
           slug: string
           status: string
           updated_at: string | null
@@ -5918,6 +5920,8 @@ export type Database = {
           plan_id?: string | null
           primary_color?: string | null
           settings?: Json | null
+          setup_completed_at?: string | null
+          setup_steps_state?: Json
           slug: string
           status?: string
           updated_at?: string | null
@@ -5932,6 +5936,8 @@ export type Database = {
           plan_id?: string | null
           primary_color?: string | null
           settings?: Json | null
+          setup_completed_at?: string | null
+          setup_steps_state?: Json
           slug?: string
           status?: string
           updated_at?: string | null
