@@ -98,26 +98,12 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
           : "border-border"
       }
     >
-      {expired && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-destructive/15 via-destructive/10 to-orange-500/10 border-b border-destructive/20">
-          <AlertTriangle className="w-4 h-4 text-destructive animate-pulse shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-bold tracking-wider text-destructive uppercase">
-              Campanha encerrada
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              Encerrou em {formatBR(campaign.end_date)}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2 space-y-1.5">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="text-base">{campaign.title}</CardTitle>
+          <div className="min-w-0 flex-1">
+            <CardTitle className="text-base leading-tight">{campaign.title}</CardTitle>
             {campaign.description && (
-              <p className="text-xs text-muted-foreground mt-1">{campaign.description}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{campaign.description}</p>
             )}
           </div>
           {!datesValid ? (
@@ -135,37 +121,41 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
         </div>
 
         {!datesValid && (
-          <p className="text-[11px] text-destructive mt-1">
+          <p className="text-[11px] text-destructive">
             Edite a campanha para corrigir as datas de início/fim.
           </p>
         )}
 
-        {/* Credores badges */}
-        {campaign.credores && campaign.credores.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {campaign.credores.map((c) => (
-              <Badge key={c.credor_id} variant="outline" className="text-[10px] gap-1 bg-muted/50">
-                <Building2 className="w-2.5 h-2.5" />
-                {c.razao_social || "Credor"}
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-          <Badge variant="outline" className="text-[10px]">{metricLabel}</Badge>
-          <Badge variant="outline" className="text-[10px]">{periodLabel}</Badge>
+        {/* Metadados compactos: credores + métrica + período em linha única */}
+        <div className="flex flex-wrap items-center gap-1">
+          {campaign.credores?.map((c) => (
+            <Badge key={c.credor_id} variant="outline" className="text-[10px] gap-1 bg-muted/50 h-5 px-1.5 font-normal">
+              <Building2 className="w-2.5 h-2.5" />
+              <span className="truncate max-w-[140px]">{c.razao_social || "Credor"}</span>
+            </Badge>
+          ))}
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">{metricLabel}</Badge>
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">{periodLabel}</Badge>
         </div>
 
         {datesValid && (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1.5">
-            <Calendar className="w-3 h-3" />
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <Calendar className="w-3 h-3 shrink-0" />
             <span>{formatBR(campaign.start_date)} → {formatBR(campaign.end_date)}</span>
+            {expired && (
+              <>
+                <span className="text-border">·</span>
+                <span className="flex items-center gap-1 text-destructive font-medium">
+                  <AlertTriangle className="w-3 h-3" />
+                  Encerrou em {formatBR(campaign.end_date)}
+                </span>
+              </>
+            )}
           </div>
         )}
 
         {isActive && datesValid && !isNaN(endMs) && (
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-gradient-to-br from-muted/40 to-muted/10 border border-border/50 px-3 py-2">
+          <div className="flex items-center justify-between gap-2 rounded-md bg-gradient-to-br from-muted/40 to-muted/10 border border-border/50 px-2.5 py-1.5 mt-1">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
               Termina em
             </span>
@@ -174,10 +164,10 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
         )}
 
         {expired && winner && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-gradient-to-br from-yellow-500/15 via-amber-400/10 to-orange-500/10 border border-yellow-500/30 px-3 py-2">
+          <div className="flex items-center gap-2 rounded-md bg-gradient-to-br from-yellow-500/15 via-amber-400/10 to-orange-500/10 border border-yellow-500/30 px-2.5 py-1.5 mt-1">
             <Crown className="w-4 h-4 text-yellow-500 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Vencedor</p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium leading-none">Vencedor</p>
               <p className="text-xs font-semibold truncate">{winner.profile?.full_name || "Operador"}</p>
             </div>
             <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400">
@@ -187,17 +177,17 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
         )}
       </CardHeader>
 
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2 pt-0">
         {campaign.prize_description && (
-          <div className="flex items-start gap-2 text-xs bg-muted/50 rounded-md p-2">
-            <Gift className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
-            <span>{campaign.prize_description}</span>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Gift className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="truncate">{campaign.prize_description}</span>
           </div>
         )}
 
         {participants.length > 0 ? (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+          <div className="space-y-0.5">
+            <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
               <Trophy className="w-3 h-3" /> {expired ? "Ranking final" : "Ranking"}
             </p>
             {participants.slice(0, 5).map((p, idx) => {
@@ -205,9 +195,9 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
               return (
                 <div
                   key={p.id}
-                  className={`flex items-center gap-2 text-sm rounded-md px-2 py-1 ${isMe ? "bg-primary/10 font-semibold" : ""}`}
+                  className={`flex items-center gap-2 text-sm rounded-md px-2 py-0.5 ${isMe ? "bg-primary/10 font-semibold" : ""}`}
                 >
-                  <span className="w-6 text-center">{idx < 3 ? medals[idx] : `${idx + 1}º`}</span>
+                  <span className="w-5 text-center text-xs">{idx < 3 ? medals[idx] : `${idx + 1}º`}</span>
                   <Avatar className="w-5 h-5">
                     <AvatarFallback className="text-[10px]">
                       {(p.profile?.full_name || "?").charAt(0)}
@@ -223,14 +213,14 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
             )}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground text-center py-2">Sem participantes ainda</p>
+          <p className="text-xs text-muted-foreground text-center py-1">Sem participantes ainda</p>
         )}
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/50">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="w-full gap-2"
+            className="h-7 px-2 gap-1.5 text-xs flex-1 min-w-[110px]"
             onClick={() => setAuditOpen(true)}
           >
             <Search className="w-3.5 h-3.5" />
@@ -239,25 +229,25 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
           {isTenantAdmin && (
             <>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="w-full gap-2"
+                className="h-7 px-2 gap-1.5 text-xs flex-1 min-w-[110px]"
                 onClick={handleRecalculate}
                 disabled={recalculating}
               >
                 {recalculating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                Recalcular ranking
+                Recalcular
               </Button>
               {expired && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="w-full gap-2 border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                  className="h-7 px-2 gap-1.5 text-xs flex-1 min-w-[110px] text-destructive hover:bg-destructive/10 hover:text-destructive"
                   onClick={handleArchive}
                   disabled={archiving}
                 >
                   {archiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-                  Mover para encerradas
+                  Arquivar
                 </Button>
               )}
             </>

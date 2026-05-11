@@ -1,63 +1,59 @@
-## Objetivo
+## Análise atual
 
-Adicionar um botão **"Conferência"** no card da campanha que abre um modal listando, por operador, os acordos/recebimentos que compõem o valor final do ranking — permitindo auditar como cada participante chegou ao número exibido.
+O `CampaignCard` está com bastante "ar" e elementos repetidos verticalmente, criando a sensação de poluição vista no print:
 
----
+1. **Header denso e empilhado**: título, descrição, badge de status, badges de credores, badges de métrica/período e linha de datas — cada um em uma linha própria. Para 3 cards lado a lado, isso empurra o ranking muito para baixo.
+2. **Bloco de countdown** ocupa altura cheia mesmo quando a campanha está encerrada (no encerrado, o vencedor já cumpre o papel).
+3. **Bloco do prêmio** (`Gift`) duplica visualmente o badge "Premio R$" — é uma faixa cinza separada do header.
+4. **Botões de ação verticais** (Conferência / Recalcular / Mover) ocupam 3 linhas cheias `w-full`, o que estica o card para baixo sem necessidade.
+5. **Faixa "CAMPANHA ENCERRADA"** no topo + Badge "Encerrada" no header são redundantes.
+6. **Espaçamentos**: `CardHeader pb-3` + `CardContent space-y-3` + paddings internos dos sub-blocos somam muito.
 
-## 1. Novo serviço de conferência
+## Proposta de reorganização (somente visual)
 
-Em `src/services/campaignService.ts`, criar `fetchCampaignAuditDetails(campaignId)` que reaproveita a mesma lógica de filtros do `computeCampaignScoreFallback` (mesma janela `start_date`/`end_date`, mesmos credores via `campaign_credores`, mesmo `created_by = authUid` por participante), porém retornando **as linhas detalhadas** ao invés do total.
+Mantém ordem lógica: Identidade → Contexto (credor/métrica/datas) → Estado (countdown OU vencedor) → Prêmio → Ranking → Ações.
 
-Para cada participante da campanha, retorna:
+### Header compacto
 
-```
-{
-  operator_id, operator_name, score, rows: [
-    { date, client_name, client_cpf, credor, value, source }
-  ], computed_total
-}
-```
+- Título + Badge de status na mesma linha (já está). Reduzir `pb-3` → `pb-2`.
+- **Mesclar a faixa "Campanha encerrada"**: remover faixa superior cheia e usar apenas um pequeno alerta inline ao lado da data ("Encerrou em dd/mm"), aproveitando a borda esquerda destrutiva (`border-l-4`) que já marca visualmente o estado.
+- **Linha única de metadados**: juntar credor + métrica + período + datas numa única linha flex-wrap com badges menores (`text-[10px]`, `h-5`), separadores `·`. Reduz 3-4 linhas para 1-2.
+- Descrição opcional permanece logo abaixo do título, com `line-clamp-1` para não inflar.
 
-Mapeamento por métrica (espelhando a função existente):
+### Bloco de estado (countdown / vencedor)
 
-- `maior_valor_recebido` / `negociado_e_recebido`: linhas de `manual_payments` + `portal_payments` + `negociarie_cobrancas` dos `agreement_ids` do operador, com `value = amount_paid|amount|valor_pago` e `source` indicando origem do pagamento. Enriquecer com `client_name`/`client_cpf` via join no `agreements`.
-- `maior_qtd_acordos`: linhas de `agreements` (1 por acordo, `value = 1`).
-- `maior_valor_promessas`: linhas de `agreements` com `value = proposed_total`.
-- `maior_valor_primeira_parcela`: linhas de `agreements` com `value = entrada_value > 0 ? entrada : (custom_installment_values[0] || new_installment_value)` e `source = "entrada"|"1ª parcela"`.
+- Countdown: manter visual, reduzir `py-2 → py-1.5` e `mt-3 → mt-2`.
+- Vencedor (encerrada): mantém destaque dourado mas com altura menor (`py-1.5`).
+- Mutuamente exclusivos: já estão.
 
-Limite defensivo `range(0, 999)` por consulta (já é o padrão no fallback). Sem alteração no SQL/RPC do backend.
+### Prêmio
 
-## 2. Novo componente `CampaignAuditDialog.tsx`
+- Integrar como linha enxuta logo acima do ranking: ícone `Gift` + texto inline (sem caixa de fundo separada). Se `prize_description` vazio, ocultar.
 
-Em `src/components/gamificacao/`, criar dialog com:
+### Ranking
 
-- Header: nome da campanha, métrica, período, credores.
-- Conteúdo: `Accordion` (um item por operador, ordenado pelo score atual) mostrando:
-  - Cabeçalho com nome, score persistido e total recalculado em tempo real (badge de aviso se divergirem — útil para sinalizar que falta recálculo).
-  - `Table` com colunas: Data, Cliente, CPF, Credor, Origem, Valor.
-  - Rodapé com soma das linhas.
-- Estado vazio amigável quando o operador não tiver linhas.
-- Loading via `useQuery` com `queryKey: ["campaign-audit", campaignId]`.
+- Mantém top 5 e medalhas. Reduzir `space-y-1.5 → space-y-1` e `px-2 py-1 → px-2 py-0.5`. Avatar e nome inalterados.
 
-## 3. Integração no `CampaignCard.tsx`
+### Ações
 
-- Importar `Search` (lucide) e o novo dialog.
-- Estado local `auditOpen`.
-- Adicionar **um novo botão** `outline size="sm"` rotulado **"Conferência"** dentro do bloco existente de ações no `CardContent`. Mostrar para **todos** os usuários (não restringir a admin) — qualquer participante pode auditar o próprio ranking.
-- Posicionar antes do botão "Recalcular ranking" no bloco `isTenantAdmin`, e também como botão único quando não-admin. Estrutura:
-  - Sempre renderizar o botão Conferência (fora do `if (isTenantAdmin)`).
-  - Manter Recalcular e Arquivar dentro do bloco admin.
-- Clicar abre o `CampaignAuditDialog` passando `campaign` inteiro.
+- **Reagrupar em uma única linha horizontal** com botões `size="sm"` lado a lado (`flex gap-2`), ícone + label curta. Em telas estreitas, `flex-wrap` mantém responsividade.
+  - Todos: `Conferência`
+  - Admin: + `Recalcular`
+  - Admin + expired: + `Arquivar`
+- Botões com `variant="ghost"` + borda sutil para reduzir peso visual, mantendo a hierarquia (CTA principal continua sendo o título/ranking).
 
-## Fora do escopo
+### Espaçamentos globais
 
-- Exportar a conferência para CSV/Excel (pode ser feito numa próxima iteração).
-- Criar RPC server-side para a auditoria — a versão client-side já reusa a mesma lógica do fallback de recálculo e é suficiente para conferência por campanha.
-- Alterar a forma de cálculo de qualquer métrica.
+- `CardHeader`: `pb-2`, gaps internos `gap-1.5`.
+- `CardContent`: `space-y-2 pt-0`.
+- Faixa de encerrada superior: remover; manter só `border-l-4 border-l-destructive` + badge "Encerrada" no header + linha "Encerrou em dd/mm" inline ao lado das datas.
 
-## Detalhes técnicos
+## Arquivos a alterar
 
-- Reaproveitar `fetchCampaignCredorNames` já exportável (ou exportar como helper).
-- O mapeamento `operator_id → authUid` já existe em `recalculateCampaignScoresFallback`; extrair para helper compartilhado `getParticipantAuthUidMap(campaignId, tenantId)`.
-- Para enriquecer client/credor nos pagamentos: 1 query em `agreements` por lote de IDs (`select id, client_name, client_cpf, credor`) e join em memória.
-- Formatadores: usar `formatBR` (já existe no card) e `Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })`.
+- `src/components/gamificacao/CampaignCard.tsx` — única alteração necessária. Sem mudanças em serviços, lógica, props ou no `CampaignsManagementTab`.
+
+## Fora de escopo
+
+- Não muda comportamento, queries, lógica de cálculo, nem o diálogo de Conferência.
+- Não muda o grid (`sm:grid-cols-2 lg:grid-cols-3`) — responsividade preservada.
+- Não remove botões (Conferência, Recalcular, Arquivar continuam disponíveis nos mesmos contextos).
