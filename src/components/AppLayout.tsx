@@ -27,7 +27,9 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Receipt,
+  Rocket,
 } from "lucide-react";
+import { useTenantSetupStatus } from "@/hooks/useTenantSetupStatus";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import UpdateButton from "@/components/system/UpdateButton";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -46,6 +48,8 @@ const AppLayout = () => {
   const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
   const permissions = usePermissions();
   const { isModuleEnabled } = useModules();
+  const setupStatus = useTenantSetupStatus();
+  const showSetupMenu = isTenantAdmin && !setupStatus.loading && setupStatus.setupCompletedAt === null;
   const { celebrationNotification, dismissCelebration } = useNotifications();
   const campaignCelebration = useCampaignCelebrations();
   const navigate = useNavigate();
