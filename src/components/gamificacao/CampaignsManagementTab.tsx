@@ -4,7 +4,8 @@ import { useTenant } from "@/hooks/useTenant";
 import { useAuth } from "@/hooks/useAuth";
 import {
   fetchCampaigns, createCampaign, updateCampaign, deleteCampaign,
-  saveCampaignCredores, saveCampaignParticipants, closeCampaignAndAward, Campaign,
+  saveCampaignCredores, saveCampaignParticipants, closeCampaignAndAward,
+  recalculateCampaignScores, Campaign,
 } from "@/services/campaignService";
 import CampaignForm from "./CampaignForm";
 import CampaignCard from "./CampaignCard";
