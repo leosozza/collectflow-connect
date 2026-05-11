@@ -81,15 +81,39 @@ const GamificacaoPage = () => {
     };
   }, [triggerGamificationUpdate]);
 
-  const allowedTabs = isTenantAdmin ? adminTabs : operatorTabs;
-  const defaultTab = isTenantAdmin ? "ranking" : "goals";
-  const currentTab = urlTab && allowedTabs.includes(urlTab) ? urlTab : defaultTab;
+  const adminPaths = ["ranking", "campanhas", "conquistas", "metas", "gerenciar"];
+  const operatorPaths = ["ranking", "campanhas", "conquistas", "metas", "loja", "carteira", "historico"];
+  const allowedPaths = isTenantAdmin ? adminPaths : operatorPaths;
+  const defaultPath = isTenantAdmin ? "ranking" : "metas";
 
+  // Sub-rota atual a partir da URL.
+  const currentSub = (() => {
+    const seg = location.pathname.replace(/^\/gamificacao\/?/, "").split("/")[0];
+    return seg || "";
+  })();
+
+  // Redireciona /gamificacao puro ou aba inválida para o default.
   useEffect(() => {
-    if (urlTab && !allowedTabs.includes(urlTab)) {
-      setUrlTab(defaultTab);
+    if (location.pathname === "/gamificacao" || location.pathname === "/gamificacao/") {
+      navigate(`/gamificacao/${defaultPath}`, { replace: true });
+      return;
     }
-  }, [urlTab, defaultTab, setUrlTab, isTenantAdmin]);
+    if (currentSub && !allowedPaths.includes(currentSub)) {
+      navigate(`/gamificacao/${defaultPath}`, { replace: true });
+    }
+  }, [location.pathname, currentSub, defaultPath, allowedPaths, navigate]);
+
+  // Compat: ?tab=campaigns → /gamificacao/campanhas
+  useEffect(() => {
+    const legacy = searchParams.get("tab");
+    if (legacy && LEGACY_TAB_TO_PATH[legacy]) {
+      const next = LEGACY_TAB_TO_PATH[legacy];
+      const params = new URLSearchParams(searchParams);
+      params.delete("tab");
+      setSearchParams(params, { replace: true });
+      navigate(`/gamificacao/${next}`, { replace: true });
+    }
+  }, [searchParams, setSearchParams, navigate]);
 
   const { data: myPoints } = useQuery({
     queryKey: ["my-points", profile?.id, year, month],
