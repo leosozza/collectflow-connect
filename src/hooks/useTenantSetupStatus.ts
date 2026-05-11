@@ -49,6 +49,18 @@ export function useTenantSetupStatus() {
         return { steps: [], completedCount: 0, totalCount: 0, criticalPending: 0, setupCompletedAt: null };
       }
 
+      const probe = async (table: string, extra?: (q: any) => any): Promise<boolean> => {
+        try {
+          let q = supabase.from(table as any).select("id").eq("tenant_id", tenantId).limit(1);
+          if (extra) q = extra(q);
+          const { data, error } = await q;
+          if (error) return false;
+          return (data?.length || 0) > 0;
+        } catch {
+          return false;
+        }
+      };
+
       const [
         tenantRow,
         credoresCount,
@@ -59,12 +71,12 @@ export function useTenantSetupStatus() {
         dispositionsCount,
         operatorsCount,
         whatsappCount,
-        integrationsCount,
-        clientsCount,
-        clientsStatusCount,
-        workflowsCount,
+        hasClients,
+        hasClientsClassified,
+        hasAsaasCustomer,
+        hasNegociarie,
       ] = await Promise.all([
-        supabase.from("tenants").select("name, cnpj, logo_url, setup_completed_at, setup_steps_state").eq("id", tenantId).maybeSingle(),
+        supabase.from("tenants").select("name, cnpj, logo_url, setup_completed_at, setup_steps_state, settings").eq("id", tenantId).maybeSingle(),
         safeCount("credores", tenantId),
         safeCount("tipos_devedor", tenantId),
         safeCount("tipos_divida", tenantId),
@@ -73,10 +85,10 @@ export function useTenantSetupStatus() {
         safeCount("call_disposition_types", tenantId),
         safeCount("tenant_users", tenantId, (q) => q.eq("role", "operador")),
         safeCount("whatsapp_instances", tenantId),
-        safeCount("integration_tokens", tenantId),
-        safeCount("clients", tenantId),
-        safeCount("clients", tenantId, (q) => q.neq("status", "pendente")),
-        safeCount("workflow_flows", tenantId),
+        probe("clients"),
+        probe("clients", (q) => q.neq("status", "pendente")),
+        probe("asaas_customers"),
+        probe("negociarie_cobrancas"),
       ]);
 
       const t: any = tenantRow.data || {};
