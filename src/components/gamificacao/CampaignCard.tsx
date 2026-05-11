@@ -13,9 +13,10 @@ import {
   METRIC_OPTIONS,
   PERIOD_OPTIONS,
 } from "@/services/campaignService";
-import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2, Calendar, RefreshCw } from "lucide-react";
+import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2, Calendar, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import CampaignCountdown from "./CampaignCountdown";
+import CampaignAuditDialog from "./CampaignAuditDialog";
 import { hasValidCampaignDates, isCampaignActive, getCampaignEndMs } from "./campaignTime";
 
 interface CampaignCardProps {
