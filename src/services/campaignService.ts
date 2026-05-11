@@ -418,3 +418,183 @@ async function computeCampaignScoreFallback(params: {
 
   return 0;
 }
+
+// ============================================================
+// Conferência (audit details per participant)
+// ============================================================
+
+export interface CampaignAuditRow {
+  date: string;
+  client_name: string | null;
+  client_cpf: string | null;
+  credor: string | null;
+  source: string;
+  value: number;
+}
+
+export interface CampaignAuditOperator {
+  operator_id: string;
+  operator_name: string;
+  persisted_score: number;
+  computed_total: number;
+  rows: CampaignAuditRow[];
+}
+
+export const fetchCampaignAuditDetails = async (
+  campaignId: string
+): Promise<{ metric: string; operators: CampaignAuditOperator[] }> => {
+  const { data: campaign, error: campErr } = await supabase
+    .from("gamification_campaigns")
+    .select("id, tenant_id, metric, start_date, end_date")
+    .eq("id", campaignId)
+    .single();
+  if (campErr) throw campErr;
+  if (!campaign) throw new Error("Campanha não encontrada");
+
+  const tenantId = (campaign as any).tenant_id as string;
+  const metric = (campaign as any).metric as string;
+  const startDate = (campaign as any).start_date as string;
+  const endDate = (campaign as any).end_date as string;
+  const endExclusive = new Date(endDate + "T00:00:00");
+  endExclusive.setDate(endExclusive.getDate() + 1);
+  const endExclusiveStr = endExclusive.toISOString().slice(0, 10);
+
+  const credorNames = await fetchCampaignCredorNames(campaignId, tenantId);
+
+  const participants = await fetchCampaignParticipants(campaignId);
+  if (participants.length === 0) return { metric, operators: [] };
+
+  const { data: profilesData } = await supabase
+    .from("profiles")
+    .select("id, user_id, full_name")
+    .eq("tenant_id", tenantId)
+    .in("id", participants.map((p) => p.operator_id));
+  const authUidMap = new Map<string, { authUid: string; name: string }>(
+    (profilesData || []).map((p: any) => [p.id, { authUid: p.user_id || p.id, name: p.full_name || "Operador" }])
+  );
+
+  const operators: CampaignAuditOperator[] = [];
+  for (const p of participants) {
+    const info = authUidMap.get(p.operator_id) || { authUid: p.operator_id, name: p.profile?.full_name || "Operador" };
+    const rows = await computeCampaignAuditRows({
+      metric,
+      tenantId,
+      authUid: info.authUid,
+      startDate,
+      endExclusiveStr,
+      credorNames,
+    });
+    const computed_total = rows.reduce((s, r) => s + Number(r.value || 0), 0);
+    operators.push({
+      operator_id: p.operator_id,
+      operator_name: info.name,
+      persisted_score: Number(p.score || 0),
+      computed_total,
+      rows,
+    });
+  }
+
+  operators.sort((a, b) => b.computed_total - a.computed_total);
+  return { metric, operators };
+};
+
+async function computeCampaignAuditRows(params: {
+  metric: string;
+  tenantId: string;
+  authUid: string;
+  startDate: string;
+  endExclusiveStr: string;
+  credorNames: string[] | null;
+}): Promise<CampaignAuditRow[]> {
+  const { metric, tenantId, authUid, startDate, endExclusiveStr, credorNames } = params;
+  const addCredor = <T extends any>(q: T): T => (credorNames ? (q as any).in("credor", credorNames) : q);
+
+  if (metric === "maior_valor_recebido" || metric === "negociado_e_recebido") {
+    let agreementsQuery = addCredor(
+      supabase.from("agreements")
+        .select("id, client_name, client_cpf, credor, created_at")
+        .eq("tenant_id", tenantId)
+        .eq("created_by", authUid)
+    );
+    if (metric === "negociado_e_recebido") {
+      agreementsQuery = agreementsQuery
+        .not("status", "in", "(rejected,cancelled)")
+        .gte("created_at", startDate)
+        .lt("created_at", endExclusiveStr);
+    }
+    const { data: agreements } = await agreementsQuery.range(0, 999);
+    const agreementList = (agreements || []) as any[];
+    if (agreementList.length === 0) return [];
+    const agreementIds = agreementList.map((a) => a.id);
+    const agreementMap = new Map(agreementList.map((a) => [a.id, a]));
+
+    const [manual, portal, negociarie] = await Promise.all([
+      supabase.from("manual_payments").select("agreement_id, amount_paid, payment_date").eq("tenant_id", tenantId).in("agreement_id", agreementIds).in("status", ["confirmed", "approved"] as any).gte("payment_date", startDate).lt("payment_date", endExclusiveStr),
+      supabase.from("portal_payments").select("agreement_id, amount, updated_at").eq("tenant_id", tenantId).in("agreement_id", agreementIds).eq("status", "paid").gte("updated_at", startDate).lt("updated_at", endExclusiveStr),
+      supabase.from("negociarie_cobrancas").select("agreement_id, valor_pago, data_pagamento").eq("tenant_id", tenantId).in("agreement_id", agreementIds).eq("status", "pago").gte("data_pagamento", startDate).lt("data_pagamento", endExclusiveStr),
+    ]);
+
+    const rows: CampaignAuditRow[] = [];
+    for (const r of (manual.data || []) as any[]) {
+      const a = agreementMap.get(r.agreement_id) || {};
+      rows.push({ date: r.payment_date, client_name: a.client_name || null, client_cpf: a.client_cpf || null, credor: a.credor || null, source: "Manual", value: Number(r.amount_paid || 0) });
+    }
+    for (const r of (portal.data || []) as any[]) {
+      const a = agreementMap.get(r.agreement_id) || {};
+      rows.push({ date: r.updated_at, client_name: a.client_name || null, client_cpf: a.client_cpf || null, credor: a.credor || null, source: "Portal", value: Number(r.amount || 0) });
+    }
+    for (const r of (negociarie.data || []) as any[]) {
+      const a = agreementMap.get(r.agreement_id) || {};
+      rows.push({ date: r.data_pagamento, client_name: a.client_name || null, client_cpf: a.client_cpf || null, credor: a.credor || null, source: "Negociarie", value: Number(r.valor_pago || 0) });
+    }
+    return rows.sort((a, b) => (a.date < b.date ? 1 : -1));
+  }
+
+  if (metric === "maior_qtd_acordos") {
+    const { data } = await addCredor(
+      supabase.from("agreements")
+        .select("id, client_name, client_cpf, credor, created_at")
+        .eq("tenant_id", tenantId).eq("created_by", authUid)
+        .not("status", "in", "(rejected,cancelled)")
+        .gte("created_at", startDate).lt("created_at", endExclusiveStr)
+    ).range(0, 999);
+    return ((data || []) as any[]).map((a) => ({
+      date: a.created_at, client_name: a.client_name, client_cpf: a.client_cpf, credor: a.credor, source: "Acordo", value: 1,
+    }));
+  }
+
+  if (metric === "maior_valor_promessas") {
+    const { data } = await addCredor(
+      supabase.from("agreements")
+        .select("client_name, client_cpf, credor, proposed_total, created_at")
+        .eq("tenant_id", tenantId).eq("created_by", authUid)
+        .in("status", ["pending", "approved"] as any)
+        .gte("created_at", startDate).lt("created_at", endExclusiveStr)
+    ).range(0, 999);
+    return ((data || []) as any[]).map((a) => ({
+      date: a.created_at, client_name: a.client_name, client_cpf: a.client_cpf, credor: a.credor, source: "Promessa", value: Number(a.proposed_total || 0),
+    }));
+  }
+
+  if (metric === "maior_valor_primeira_parcela") {
+    const { data } = await addCredor(
+      supabase.from("agreements")
+        .select("client_name, client_cpf, credor, entrada_value, new_installment_value, custom_installment_values, created_at")
+        .eq("tenant_id", tenantId).eq("created_by", authUid)
+        .in("status", ["pending", "approved"] as any)
+        .gte("created_at", startDate).lt("created_at", endExclusiveStr)
+    ).range(0, 999);
+    return ((data || []) as any[]).map((a) => {
+      const entrada = Number(a.entrada_value || 0);
+      if (entrada > 0) {
+        return { date: a.created_at, client_name: a.client_name, client_cpf: a.client_cpf, credor: a.credor, source: "Entrada", value: entrada };
+      }
+      const civ = Array.isArray(a.custom_installment_values) ? a.custom_installment_values : null;
+      const first = civ && civ.length > 0 ? Number(civ[0]) : NaN;
+      const value = isFinite(first) && first > 0 ? first : Number(a.new_installment_value || 0);
+      return { date: a.created_at, client_name: a.client_name, client_cpf: a.client_cpf, credor: a.credor, source: "1ª parcela", value };
+    });
+  }
+
+  return [];
+}
