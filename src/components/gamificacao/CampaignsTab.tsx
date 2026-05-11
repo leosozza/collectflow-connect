@@ -7,7 +7,7 @@ import CampaignCard from "./CampaignCard";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { isCampaignActive } from "./campaignTime";
+import { isCampaignActive, isCampaignExpiredButNotArchived, isCampaignVisibleInActive, getCampaignEndMs } from "./campaignTime";
 import { useRefreshActiveCampaignScores } from "./useRefreshActiveCampaignScores";
 
 interface CampaignsTabProps {
