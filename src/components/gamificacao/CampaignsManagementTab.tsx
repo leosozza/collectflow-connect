@@ -79,6 +79,8 @@ const CampaignsManagementTab = () => {
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const deleteMut = useMutation({
     mutationFn: deleteCampaign,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns"] });
