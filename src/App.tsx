@@ -135,9 +135,9 @@ const App = () => (
               <Route path="integracao" element={<ModuleGuard module="integracoes"><IntegracaoPage /></ModuleGuard>} />
               <Route path="perfil" element={<PerfilPage />} />
               <Route path="gamificacao" element={<ModuleGuard module="gamificacao"><GamificacaoPage /></ModuleGuard>}>
-                <Route path="ranking" element={<RankingTab highlightCurrentUser />} />
-                <Route path="campanhas" element={<CampaignsTab highlightCurrentUser />} />
-                <Route path="conquistas" element={<AchievementsTab />} />
+                <Route path="ranking" element={<RankingRoute />} />
+                <Route path="campanhas" element={<CampaignsRoute />} />
+                <Route path="conquistas" element={<AchievementsRoute />} />
                 <Route path="metas" element={<GoalsTab />} />
                 <Route path="loja" element={<ShopTab />} />
                 <Route path="carteira" element={<WalletTab />} />
