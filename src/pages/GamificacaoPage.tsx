@@ -329,79 +329,45 @@ const GamificacaoPage = () => {
       </div>
       )}
 
-      {/* Tabs */}
-      <Tabs defaultValue={defaultTab} onValueChange={setUrlTab} value={currentTab}>
-        <TabsList className="w-full sm:w-auto flex-wrap">
-          <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
-            <Trophy className="w-3.5 h-3.5" /> Ranking
-          </TabsTrigger>
-          <TabsTrigger value="campaigns" className="flex-1 sm:flex-none gap-1.5">
-            <Flame className="w-3.5 h-3.5" /> Campanhas
-          </TabsTrigger>
-          <TabsTrigger value="achievements" className="flex-1 sm:flex-none gap-1.5">
-            <Star className="w-3.5 h-3.5" /> Conquistas
-          </TabsTrigger>
-          <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
-            <Target className="w-3.5 h-3.5" /> Metas
-          </TabsTrigger>
-          {!isTenantAdmin && (
-            <>
-              <TabsTrigger value="shop" className="flex-1 sm:flex-none gap-1.5">
-                <ShoppingBag className="w-3.5 h-3.5" /> Loja
-              </TabsTrigger>
-              <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
-                <Coins className="w-3.5 h-3.5" /> Carteira
-              </TabsTrigger>
-              <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
-                <History className="w-3.5 h-3.5" /> Histórico
-              </TabsTrigger>
-            </>
-          )}
-          {isTenantAdmin && (
-            <TabsTrigger value="manage" className="flex-1 sm:flex-none gap-1.5">
-              <Settings className="w-3.5 h-3.5" /> Gerenciar
-            </TabsTrigger>
-          )}
-        </TabsList>
+      {/* Tabs como rotas reais */}
+      <nav className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1 w-full sm:w-fit">
+        {[
+          { to: "ranking", label: "Ranking", icon: Trophy, show: true },
+          { to: "campanhas", label: "Campanhas", icon: Flame, show: true },
+          { to: "conquistas", label: "Conquistas", icon: Star, show: true },
+          { to: "metas", label: "Metas", icon: Target, show: true },
+          { to: "loja", label: "Loja", icon: ShoppingBag, show: !isTenantAdmin },
+          { to: "carteira", label: "Carteira", icon: Coins, show: !isTenantAdmin },
+          { to: "historico", label: "Histórico", icon: History, show: !isTenantAdmin },
+          { to: "gerenciar", label: "Gerenciar", icon: Settings, show: isTenantAdmin },
+        ]
+          .filter((t) => t.show)
+          .map((t) => {
+            const Icon = t.icon;
+            return (
+              <NavLink
+                key={t.to}
+                to={`/gamificacao/${t.to}`}
+                className={({ isActive }) =>
+                  cn(
+                    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    "flex-1 sm:flex-none",
+                    isActive
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )
+                }
+              >
+                <Icon className="w-3.5 h-3.5" /> {t.label}
+              </NavLink>
+            );
+          })}
+      </nav>
 
-        <TabsContent value="ranking" className="mt-4">
-          {currentTab === "ranking" && <RankingTab highlightCurrentUser={!isTenantAdmin} />}
-        </TabsContent>
-
-        <TabsContent value="campaigns" className="mt-4">
-          {currentTab === "campaigns" && <CampaignsTab highlightCurrentUser={!isTenantAdmin} />}
-        </TabsContent>
-
-        <TabsContent value="achievements" className="mt-4">
-          {currentTab === "achievements" && <AchievementsTab isAdmin={isTenantAdmin} />}
-        </TabsContent>
-
-        <TabsContent value="goals" className="mt-4">
-          {currentTab === "goals" && <GoalsTab />}
-        </TabsContent>
-
-        {!isTenantAdmin && (
-          <>
-            <TabsContent value="shop" className="mt-4">
-              {currentTab === "shop" && <ShopTab />}
-            </TabsContent>
-
-            <TabsContent value="wallet" className="mt-4">
-              {currentTab === "wallet" && <WalletTab />}
-            </TabsContent>
-
-            <TabsContent value="history" className="mt-4">
-              {currentTab === "history" && <PointsHistoryTab />}
-            </TabsContent>
-          </>
-        )}
-
-        {isTenantAdmin && (
-          <TabsContent value="manage" className="mt-4">
-            {currentTab === "manage" && <ManageSubTabs />}
-          </TabsContent>
-        )}
-      </Tabs>
+      <div className="mt-4">
+        <Outlet />
+      </div>
     </div>
   );
 };
