@@ -33,7 +33,12 @@ import AtendimentoPage from "./pages/AtendimentoPage";
 import ContactCenterPage from "./pages/ContactCenterPage";
 import PerfilPage from "./pages/PerfilPage";
 import RoadmapPage from "./pages/RoadmapPage";
-import GamificacaoPage from "./pages/GamificacaoPage";
+import GamificacaoPage, { ManageSubTabs } from "./pages/GamificacaoPage";
+import { RankingRoute, CampaignsRoute, AchievementsRoute } from "./components/gamificacao/RouteWrappers";
+import GoalsTab from "./components/gamificacao/GoalsTab";
+import ShopTab from "./components/gamificacao/ShopTab";
+import WalletTab from "./components/gamificacao/WalletTab";
+import PointsHistoryTab from "./components/gamificacao/PointsHistoryTab";
 import NotFound from "./pages/NotFound";
 import ModuleGuard from "./components/ModuleGuard";
 import ApiDocsPage from "./pages/ApiDocsPage";
@@ -129,7 +134,16 @@ const App = () => (
               <Route path="central-empresa" element={<TenantSettingsPage />} />
               <Route path="integracao" element={<ModuleGuard module="integracoes"><IntegracaoPage /></ModuleGuard>} />
               <Route path="perfil" element={<PerfilPage />} />
-              <Route path="gamificacao" element={<ModuleGuard module="gamificacao"><GamificacaoPage /></ModuleGuard>} />
+              <Route path="gamificacao" element={<ModuleGuard module="gamificacao"><GamificacaoPage /></ModuleGuard>}>
+                <Route path="ranking" element={<RankingRoute />} />
+                <Route path="campanhas" element={<CampaignsRoute />} />
+                <Route path="conquistas" element={<AchievementsRoute />} />
+                <Route path="metas" element={<GoalsTab />} />
+                <Route path="loja" element={<ShopTab />} />
+                <Route path="carteira" element={<WalletTab />} />
+                <Route path="historico" element={<PointsHistoryTab />} />
+                <Route path="gerenciar" element={<ManageSubTabs />} />
+              </Route>
               <Route path="automacao" element={<ModuleGuard module="automacao"><AutomacaoPage /></ModuleGuard>} />
               <Route path="relatorios" element={<ModuleGuard module="relatorios"><RelatoriosPage /></ModuleGuard>} />
               <Route path="acordos" element={<AcordosPage />} />

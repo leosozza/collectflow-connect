@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useUrlState } from "@/hooks/useUrlState";
+import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
@@ -13,26 +13,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 import { Trophy, Star, Target, Flame, Settings, ShoppingBag, Coins, BarChart3, History, Calculator, HelpCircle } from "lucide-react";
 import ScoringRulesTab from "@/components/gamificacao/ScoringRulesTab";
-import RankingTab from "@/components/gamificacao/RankingTab";
-import AchievementsTab from "@/components/gamificacao/AchievementsTab";
-import CampaignsTab from "@/components/gamificacao/CampaignsTab";
-import GoalsTab from "@/components/gamificacao/GoalsTab";
-import ShopTab from "@/components/gamificacao/ShopTab";
-import WalletTab from "@/components/gamificacao/WalletTab";
-import PointsHistoryTab from "@/components/gamificacao/PointsHistoryTab";
-import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
-import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
 import CampaignsManagementTab from "@/components/gamificacao/CampaignsManagementTab";
-import ShopManagementTab from "@/components/gamificacao/ShopManagementTab";
+import AchievementsManagementTab from "@/components/gamificacao/AchievementsManagementTab";
+import GoalsManagementTab from "@/components/gamificacao/GoalsManagementTab";
 import RankingManagementTab from "@/components/gamificacao/RankingManagementTab";
+import ShopManagementTab from "@/components/gamificacao/ShopManagementTab";
 import ParticipantsManagementTab from "@/components/gamificacao/ParticipantsManagementTab";
 
 const medals = ["🥇", "🥈", "🥉"];
-const adminTabs = ["ranking", "campaigns", "achievements", "goals", "manage"];
-const operatorTabs = ["ranking", "campaigns", "achievements", "goals", "shop", "wallet", "history"];
+
+// Mapa de aba legada (?tab=...) para sub-rota nova.
+const LEGACY_TAB_TO_PATH: Record<string, string> = {
+  ranking: "ranking",
+  campaigns: "campanhas",
+  achievements: "conquistas",
+  goals: "metas",
+  shop: "loja",
+  wallet: "carteira",
+  history: "historico",
+  manage: "gerenciar",
+};
 
 const isValidDate = (s?: string | null) => {
   if (!s) return false;
@@ -51,7 +55,9 @@ const isCampaignActive = (campaign: Campaign) => {
 const GamificacaoPage = () => {
   const { profile } = useAuth();
   const { tenant, isTenantAdmin } = useTenant();
-  const [urlTab, setUrlTab] = useUrlState("tab", "");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { triggerGamificationUpdate } = useGamificationTrigger();
   const now = new Date();
   const year = now.getFullYear();
@@ -75,15 +81,39 @@ const GamificacaoPage = () => {
     };
   }, [triggerGamificationUpdate]);
 
-  const allowedTabs = isTenantAdmin ? adminTabs : operatorTabs;
-  const defaultTab = isTenantAdmin ? "ranking" : "goals";
-  const currentTab = urlTab && allowedTabs.includes(urlTab) ? urlTab : defaultTab;
+  const adminPaths = ["ranking", "campanhas", "conquistas", "metas", "gerenciar"];
+  const operatorPaths = ["ranking", "campanhas", "conquistas", "metas", "loja", "carteira", "historico"];
+  const allowedPaths = isTenantAdmin ? adminPaths : operatorPaths;
+  const defaultPath = isTenantAdmin ? "ranking" : "metas";
 
+  // Sub-rota atual a partir da URL.
+  const currentSub = (() => {
+    const seg = location.pathname.replace(/^\/gamificacao\/?/, "").split("/")[0];
+    return seg || "";
+  })();
+
+  // Redireciona /gamificacao puro ou aba inválida para o default.
   useEffect(() => {
-    if (urlTab && !allowedTabs.includes(urlTab)) {
-      setUrlTab(defaultTab);
+    if (location.pathname === "/gamificacao" || location.pathname === "/gamificacao/") {
+      navigate(`/gamificacao/${defaultPath}`, { replace: true });
+      return;
     }
-  }, [urlTab, defaultTab, setUrlTab, isTenantAdmin]);
+    if (currentSub && !allowedPaths.includes(currentSub)) {
+      navigate(`/gamificacao/${defaultPath}`, { replace: true });
+    }
+  }, [location.pathname, currentSub, defaultPath, allowedPaths, navigate]);
+
+  // Compat: ?tab=campaigns → /gamificacao/campanhas
+  useEffect(() => {
+    const legacy = searchParams.get("tab");
+    if (legacy && LEGACY_TAB_TO_PATH[legacy]) {
+      const next = LEGACY_TAB_TO_PATH[legacy];
+      const params = new URLSearchParams(searchParams);
+      params.delete("tab");
+      setSearchParams(params, { replace: true });
+      navigate(`/gamificacao/${next}`, { replace: true });
+    }
+  }, [searchParams, setSearchParams, navigate]);
 
   const { data: myPoints } = useQuery({
     queryKey: ["my-points", profile?.id, year, month],
@@ -299,84 +329,50 @@ const GamificacaoPage = () => {
       </div>
       )}
 
-      {/* Tabs */}
-      <Tabs defaultValue={defaultTab} onValueChange={setUrlTab} value={currentTab}>
-        <TabsList className="w-full sm:w-auto flex-wrap">
-          <TabsTrigger value="ranking" className="flex-1 sm:flex-none gap-1.5">
-            <Trophy className="w-3.5 h-3.5" /> Ranking
-          </TabsTrigger>
-          <TabsTrigger value="campaigns" className="flex-1 sm:flex-none gap-1.5">
-            <Flame className="w-3.5 h-3.5" /> Campanhas
-          </TabsTrigger>
-          <TabsTrigger value="achievements" className="flex-1 sm:flex-none gap-1.5">
-            <Star className="w-3.5 h-3.5" /> Conquistas
-          </TabsTrigger>
-          <TabsTrigger value="goals" className="flex-1 sm:flex-none gap-1.5">
-            <Target className="w-3.5 h-3.5" /> Metas
-          </TabsTrigger>
-          {!isTenantAdmin && (
-            <>
-              <TabsTrigger value="shop" className="flex-1 sm:flex-none gap-1.5">
-                <ShoppingBag className="w-3.5 h-3.5" /> Loja
-              </TabsTrigger>
-              <TabsTrigger value="wallet" className="flex-1 sm:flex-none gap-1.5">
-                <Coins className="w-3.5 h-3.5" /> Carteira
-              </TabsTrigger>
-              <TabsTrigger value="history" className="flex-1 sm:flex-none gap-1.5">
-                <History className="w-3.5 h-3.5" /> Histórico
-              </TabsTrigger>
-            </>
-          )}
-          {isTenantAdmin && (
-            <TabsTrigger value="manage" className="flex-1 sm:flex-none gap-1.5">
-              <Settings className="w-3.5 h-3.5" /> Gerenciar
-            </TabsTrigger>
-          )}
-        </TabsList>
+      {/* Tabs como rotas reais */}
+      <nav className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1 w-full sm:w-fit">
+        {[
+          { to: "ranking", label: "Ranking", icon: Trophy, show: true },
+          { to: "campanhas", label: "Campanhas", icon: Flame, show: true },
+          { to: "conquistas", label: "Conquistas", icon: Star, show: true },
+          { to: "metas", label: "Metas", icon: Target, show: true },
+          { to: "loja", label: "Loja", icon: ShoppingBag, show: !isTenantAdmin },
+          { to: "carteira", label: "Carteira", icon: Coins, show: !isTenantAdmin },
+          { to: "historico", label: "Histórico", icon: History, show: !isTenantAdmin },
+          { to: "gerenciar", label: "Gerenciar", icon: Settings, show: isTenantAdmin },
+        ]
+          .filter((t) => t.show)
+          .map((t) => {
+            const Icon = t.icon;
+            return (
+              <NavLink
+                key={t.to}
+                to={`/gamificacao/${t.to}`}
+                className={({ isActive }) =>
+                  cn(
+                    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    "flex-1 sm:flex-none",
+                    isActive
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )
+                }
+              >
+                <Icon className="w-3.5 h-3.5" /> {t.label}
+              </NavLink>
+            );
+          })}
+      </nav>
 
-        <TabsContent value="ranking" className="mt-4">
-          {currentTab === "ranking" && <RankingTab highlightCurrentUser={!isTenantAdmin} />}
-        </TabsContent>
-
-        <TabsContent value="campaigns" className="mt-4">
-          {currentTab === "campaigns" && <CampaignsTab highlightCurrentUser={!isTenantAdmin} />}
-        </TabsContent>
-
-        <TabsContent value="achievements" className="mt-4">
-          {currentTab === "achievements" && <AchievementsTab isAdmin={isTenantAdmin} />}
-        </TabsContent>
-
-        <TabsContent value="goals" className="mt-4">
-          {currentTab === "goals" && <GoalsTab />}
-        </TabsContent>
-
-        {!isTenantAdmin && (
-          <>
-            <TabsContent value="shop" className="mt-4">
-              {currentTab === "shop" && <ShopTab />}
-            </TabsContent>
-
-            <TabsContent value="wallet" className="mt-4">
-              {currentTab === "wallet" && <WalletTab />}
-            </TabsContent>
-
-            <TabsContent value="history" className="mt-4">
-              {currentTab === "history" && <PointsHistoryTab />}
-            </TabsContent>
-          </>
-        )}
-
-        {isTenantAdmin && (
-          <TabsContent value="manage" className="mt-4">
-            {currentTab === "manage" && <ManageSubTabs />}
-          </TabsContent>
-        )}
-      </Tabs>
+      <div className="mt-4">
+        <Outlet />
+      </div>
     </div>
   );
 };
 
-const ManageSubTabs = () => {
+export const ManageSubTabs = () => {
   const [sub, setSub] = useState("manage-campaigns");
   return (
     <Tabs value={sub} onValueChange={setSub}>

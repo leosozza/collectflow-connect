@@ -60,3 +60,19 @@ export const isCampaignActive = (campaign: Campaign): boolean => {
   if (isNaN(endMs)) return false;
   return endMs > Date.now();
 };
+
+/**
+ * Campanha que ainda tem status='ativa' mas cuja data de término já passou.
+ * Permanece visível na aba "Ativas" com banner de "encerrada" até o admin arquivar.
+ */
+export const isCampaignExpiredButNotArchived = (campaign: Campaign): boolean => {
+  if (campaign.status !== "ativa") return false;
+  if (!hasValidCampaignDates(campaign)) return false;
+  const endMs = getCampaignEndMs(campaign);
+  if (isNaN(endMs)) return false;
+  return endMs <= Date.now();
+};
+
+/** Campanha visível na seção "Ativas" do ponto de vista do usuário (ativa OU vencida aguardando arquivamento). */
+export const isCampaignVisibleInActive = (campaign: Campaign): boolean =>
+  isCampaignActive(campaign) || isCampaignExpiredButNotArchived(campaign);

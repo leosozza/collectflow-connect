@@ -1,70 +1,71 @@
-# Dashboard responsivo (1366×768 → 1920×1080)
+## 1. Rotas de Gamificação no React Router
 
-## Diagnóstico
+Substituir o sistema atual `?tab=...` por rotas reais aninhadas dentro de `/gamificacao`.
 
-A grade atual do `DashboardPage.tsx` força **toda a tela em uma altura fixa** (`h-full overflow-hidden` + 2 linhas `grid-rows-[minmax(0,1fr)_minmax(0,1.4fr)]`). Em telas como **1600×900** isso causa:
+### Rotas (em `src/App.tsx`)
 
-- Linhas da tabela "Parcelas Programadas" cortadas (Roberto sem credor visível).
-- Visão 360 com gauge "Projeção" muito grande comprimindo as barras de cima/baixo.
-- Cards Meta/Total Recebido com tipografia desproporcional.
-- Cards filhos só têm 2 conjuntos de estilos (`base` e `xl:`). Entre **1024–1279 (lg)** e em **1366×768** não há ajuste — usam o tamanho compacto base, mesmo sobrando espaço, ou explodem em telas médias.
-- Header com botões/filtros estoura em ≤1366 (quebra para 2 linhas).
-
-## O que vou fazer
-
-### 1. Grid principal (`DashboardPage.tsx`)
-- Trocar `h-full overflow-hidden` por **altura mínima + scroll vertical quando necessário** em viewports baixos (`@media (max-height: 900px)` e `< lg`).
-- Ajustar as linhas: usar `auto` em telas baixas e `minmax(280px, 1fr) minmax(360px, 1.4fr)` apenas em `2xl+`. Em `lg` (1024–1279) reduzir a 2ª linha.
-- Adicionar gap responsivo `gap-2 lg:gap-2.5 xl:gap-3 2xl:gap-4`.
-
-### 2. Header de filtros
-- Em `< xl`: reduzir largura dos `MultiSelect` (Ano 80px / Mês 96px / Operador 128px).
-- Esconder o subtítulo "Bem-vindo, X" em `< xl` (já está) e encurtar botão "Personalizar" (já está).
-
-### 3. Cards — adicionar breakpoint intermediário `lg:`
-Hoje só temos `base` e `xl:`. Vou introduzir variantes `lg:` (1024–1279) **e revisar `xl:` para 1280–1535** mantendo `2xl:` como o luxo atual. Cards afetados:
-
-- **`Visao360Card`**: alturas das barras (`h-1.5 lg:h-2 2xl:h-2.5`), padding e tamanho da caixa "Projeção Receita". Reduzir `flex: 1.3` → `flex: 1.1` em `lg`.
-- **`DashboardMetaCard`**: já usa `useBreakpoint` para o `radialSize`. Adicionar tamanho intermediário (lg=160, xl=190, 2xl=230) e reduzir paddings do footer em `lg`.
-- **`TotalRecebidoCard`**: reduzir `text-[26px]` para `text-[22px]` em `lg`, padding do header dos filtros, garantir altura mínima do gráfico (`min-h-[140px]`).
-- **`ParcelasProgramadasCard`**: já tem coluna "Credor" oculta em `< xl`. Adicionar `truncate` no nome, reduzir paddings em `lg`, garantir scroll interno (já existe — só conferir com nova altura).
-- **`KpisGridCard`**: reduzir o número gigante (`text-[34px] xl:text-[34px] 2xl:text-[42px]` → adicionar `lg:text-[28px]`).
-- **`AgendamentosHojeCard`**: revisar para igual altura.
-
-### 4. Comportamento abaixo de `lg` (tablet/mobile)
-- Atualmente vira `grid-cols-1` sem altura definida. Vou:
-  - Remover `h-full min-h-0 overflow-hidden` no container raiz quando `< lg`.
-  - Definir altura mínima por card (`min-h-[260px]`) para empilhamento utilizável.
-
-### 5. Sem mudanças de regra de negócio
-Apenas tokens visuais, classes Tailwind e estrutura de grid. Nenhuma RPC, query, ou dado tocado.
-
-## Detalhes técnicos
+Trocar a rota única por rotas filhas com `Outlet`:
 
 ```text
-Breakpoints alvo (Tailwind padrão):
-  sm  < 640
-  md  640–767
-  lg  1024–1279   ← novo tier de estilos
-  xl  1280–1535   ← refinado
-  2xl ≥ 1536      ← mantém estilo atual
-
-Grid principal:
-  base (mobile/tablet) : grid-cols-1, rows auto, scroll vertical
-  lg                    : grid-cols-12, rows auto (cards com min-h)
-  xl/2xl                : grid-cols-12, rows minmax(0,1fr) minmax(0,1.4fr), sem scroll
+/gamificacao                  → redirect para a aba padrão
+/gamificacao/ranking          → RankingTab
+/gamificacao/campanhas        → CampaignsTab
+/gamificacao/conquistas       → AchievementsTab
+/gamificacao/metas            → GoalsTab
+/gamificacao/loja             → ShopTab        (operador)
+/gamificacao/carteira         → WalletTab      (operador)
+/gamificacao/historico        → PointsHistoryTab (operador)
+/gamificacao/gerenciar        → ManageSubTabs  (admin)
 ```
 
-```text
-Arquivos editados:
-  src/pages/DashboardPage.tsx
-  src/components/dashboard/Visao360Card.tsx
-  src/components/dashboard/DashboardMetaCard.tsx
-  src/components/dashboard/TotalRecebidoCard.tsx
-  src/components/dashboard/KpisGridCard.tsx
-  src/components/dashboard/ParcelasProgramadasCard.tsx
-  src/components/dashboard/AgendamentosHojeCard.tsx
-```
+### Refatoração
 
-## Validação
-Após implementar, verifico nos viewports: 1920×1080, 1600×900, 1440×900, 1366×768, 1280×800, 1024×768 e mobile 390×844 — confirmando que nada estoura nem rola horizontalmente.
+- `GamificacaoPage.tsx` vira um **layout**: mantém header, cards de KPIs e o `TabsList`, mas o conteúdo passa a ser `<Outlet />`. O `TabsList` usa `NavLink` (`asChild`) para navegar para cada rota, com `isActive` derivado do `useLocation().pathname`.
+- Admin entrando em `/gamificacao` é redirecionado para `/gamificacao/ranking`; operador para `/gamificacao/metas`.
+- Guarda: se operador acessar `/gamificacao/gerenciar` (ou admin acessar `/gamificacao/loja`), redireciona para a aba padrão.
+- Remover o `useUrlState("tab", ...)` desta página. Manter compatibilidade redirecionando `/gamificacao?tab=campaigns` (e similares) para a rota nova via efeito.
+
+## 2. Campanhas encerradas continuam visíveis na aba "Ativas"
+
+A definição atual de "ativa" filtra `status === 'ativa'` **e** `end_date >= hoje`. Vamos separar esses dois conceitos:
+
+- **Ativa** = `status='ativa'` e `end_date >= hoje`
+- **Vencida (aguardando arquivamento)** = `status='ativa'` e `end_date < hoje` → continua na seção **"Campanhas Ativas"** com aviso
+- **Encerrada/arquivada** = `status='encerrada'` → vai para o colapsável "Campanhas encerradas"
+
+### Mudanças em `CampaignsTab.tsx`
+
+- Listar na seção topo: ativas reais + vencidas (status `ativa`, end_date passado), ordenando vencidas no fim do bloco.
+- Renderizar cada vencida com a prop `expired` no `CampaignCard`.
+
+### Mudanças em `CampaignCard.tsx`
+
+Quando `expired === true`:
+
+- **Banner no topo do card**, bem visual: faixa com gradiente `from-destructive/15 to-warning/10`, borda esquerda destacada `border-l-4 border-destructive`, ícone `AlertTriangle` pulsante e texto **"CAMPANHA ENCERRADA"** + data de término formatada (`Encerrou em DD/MM/YYYY`).
+- Card inteiro com leve dessaturação (`opacity-90`, `grayscale-[15%]`) para indicar estado finalizado, sem esconder o ranking final.
+- Substituir o `CampaignCountdown` por um bloco "Resultado final" mostrando o vencedor (1º colocado) com destaque dourado.
+- Se `isAdmin && expired`: botão **"Mover para encerradas"** no rodapé do card (variant `outline`, ícone `Archive`), com confirmação. Operador comum não vê o botão.
+
+### Ação "Mover para encerradas"
+
+- Chama `updateCampaign(id, { status: 'encerrada' })` (já existe em `campaignService.ts`).
+- Invalida `["campaigns", tenantId]` para reflar o card no colapsável.
+- Toast de sucesso "Campanha arquivada".
+- Permissão: `isTenantAdmin` (já disponível via `useTenant`).
+
+## 3. Backfill das campanhas da semana passada
+
+Não vamos mudar o status delas no banco — elas permanecem com `status='ativa'` e a nova lógica de UI já as mostrará no topo com o banner "encerrada". O admin pode então clicar em **"Mover para encerradas"** quando quiser arquivar.
+
+Isso é intencional: o usuário pediu exatamente esse comportamento ("quando encerrar continue na aba de ativas… com botão mover para encerrado"). Nenhuma migração SQL é necessária.
+
+## Arquivos afetados
+
+- `src/App.tsx` — novas rotas filhas
+- `src/pages/GamificacaoPage.tsx` — vira layout com `<Outlet />` + `NavLink`s
+- `src/components/gamificacao/CampaignsTab.tsx` — separa "ativas" de "vencidas" e mantém ambas no topo
+- `src/components/gamificacao/CampaignCard.tsx` — prop `expired` + banner + botão admin "Mover para encerradas"
+- `src/components/gamificacao/campaignTime.ts` — adicionar helper `isCampaignExpiredButNotArchived`
+
+Sem alterações de schema, RLS ou edge functions.
