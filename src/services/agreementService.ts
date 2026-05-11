@@ -270,7 +270,7 @@ export const createAgreement = async (
       logger.error(MODULE, "mark_em_acordo", e);
     }
 
-    // Auto-assign operator_id
+    // Auto-assign operator_id (cliente + conversa de WhatsApp)
     try {
       const { data: creatorProfile } = await supabase
         .from("profiles").select("id").eq("user_id", userId).single();
@@ -279,6 +279,15 @@ export const createAgreement = async (
         const fmtCpf3 = rawCpf3.length === 11
           ? `${rawCpf3.slice(0,3)}.${rawCpf3.slice(3,6)}.${rawCpf3.slice(6,9)}-${rawCpf3.slice(9)}`
           : rawCpf3;
+        const { reassignClientToOperator } = await import("@/services/operatorAssignmentService");
+        await reassignClientToOperator({
+          tenantId,
+          cpf: rawCpf3,
+          credor: data.credor,
+          operatorId: creatorProfile.id,
+          source: "agreement_created",
+        });
+        // backup: garante update mesmo se CPF estiver salvo em formato diferente
         await supabase
           .from("clients")
           .update({ operator_id: creatorProfile.id } as any)

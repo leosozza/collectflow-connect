@@ -369,10 +369,11 @@ export const createDisposition = async (params: {
   try {
     const { data: clientRow } = await supabase
       .from("clients")
-      .select("cpf")
+      .select("cpf, credor")
       .eq("id", params.client_id)
       .maybeSingle();
     const cpf = (clientRow as any)?.cpf;
+    const credor = (clientRow as any)?.credor;
     if (cpf) {
       const { applyAutoProfileFromDisposition } = await import("@/services/debtorProfileAutoService");
       void applyAutoProfileFromDisposition({
@@ -380,6 +381,19 @@ export const createDisposition = async (params: {
         cpf,
         dispositionKey: params.disposition_type,
         channel: "voice",
+      });
+    }
+
+    // "Quem negocia, vira dono": reatribui cliente + conversa ao operador
+    // quando ele marca "Em Negociação".
+    if (params.disposition_type === "wa_em_negociacao" && cpf && credor) {
+      const { reassignClientToOperator } = await import("@/services/operatorAssignmentService");
+      void reassignClientToOperator({
+        tenantId: params.tenant_id,
+        cpf,
+        credor,
+        operatorId: params.operator_id,
+        source: "disposition_em_negociacao",
       });
     }
   } catch (e) {
