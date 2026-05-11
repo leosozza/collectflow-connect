@@ -22,6 +22,7 @@ import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardD
 import KpisGridCard from "@/components/dashboard/KpisGridCard";
 import Visao360Card from "@/components/dashboard/Visao360Card";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
+import SetupBanner from "@/components/setup/SetupBanner";
 
 const generateYearOptions = () => {
   const now = new Date();
@@ -203,6 +204,7 @@ const DashboardPage = () => {
 
   return (
     <div className="flex flex-col gap-2 lg:gap-2.5 xl:gap-3 animate-fade-in h-full min-h-0 overflow-y-auto 2xl:overflow-hidden scrollbar-thin">
+      <SetupBanner />
       <div className="flex items-center justify-between gap-3 flex-wrap shrink-0">
         <div className="min-w-0">
           <h1 className="text-base xl:text-xl font-bold text-foreground leading-tight">Dashboard</h1>

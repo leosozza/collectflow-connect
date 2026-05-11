@@ -61,6 +61,7 @@ import CRMLeadsPage from "./pages/admin/comercial/CRMLeadsPage";
 import CRMCompaniesPage from "./pages/admin/comercial/CRMCompaniesPage";
 import CRMActivitiesPage from "./pages/admin/comercial/CRMActivitiesPage";
 import CRMReportsPage from "./pages/admin/comercial/CRMReportsPage";
+import TenantSetupPage from "./pages/TenantSetupPage";
 
 /* Conditional root: landing for visitors, redirect for logged-in users */
 const RootPage = () => {
@@ -115,6 +116,7 @@ const App = () => (
             <Route element={<ProtectedRoute requireTenant><AppLayout /></ProtectedRoute>}>
               <Route path="dashboard" element={<Index />} />
               <Route path="carteira" element={<CarteiraPage />} />
+              <Route path="setup" element={<TenantSetupPage />} />
               <Route path="carteira/:cpf" element={<ClientDetailPage />} />
               <Route path="cadastro" element={<CadastroPage />} />
               <Route path="cadastros/:tab?" element={<CadastrosPage />} />

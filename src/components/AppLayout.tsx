@@ -27,7 +27,9 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Receipt,
+  Rocket,
 } from "lucide-react";
+import { useTenantSetupStatus } from "@/hooks/useTenantSetupStatus";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import UpdateButton from "@/components/system/UpdateButton";
 import AgreementCelebration from "@/components/notifications/AgreementCelebration";
@@ -46,6 +48,8 @@ const AppLayout = () => {
   const { tenant, tenantUser, isTenantAdmin, isSuperAdmin } = useTenant();
   const permissions = usePermissions();
   const { isModuleEnabled } = useModules();
+  const setupStatus = useTenantSetupStatus();
+  const showSetupMenu = isTenantAdmin && !setupStatus.loading && setupStatus.setupCompletedAt === null;
   const { celebrationNotification, dismissCelebration } = useNotifications();
   const campaignCelebration = useCampaignCelebrations();
   const navigate = useNavigate();
@@ -135,6 +139,28 @@ const AppLayout = () => {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 scrollbar-thin">
+          {showSetupMenu && (
+            <Link
+              to="/setup"
+              onClick={() => setSidebarOpen(false)}
+              title={collapsed ? "Setup do tenant" : undefined}
+              className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-3 ${collapsed ? "px-2" : "px-4"} py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
+                location.pathname === "/setup"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30"
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Rocket className="w-5 h-5 flex-shrink-0" />
+                {!collapsed && <span className="truncate">Setup do tenant</span>}
+              </div>
+              {!collapsed && setupStatus.criticalPending > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">
+                  {setupStatus.criticalPending}
+                </span>
+              )}
+            </Link>
+          )}
           {preContactItems.map((item) => {
             const active = location.pathname === item.path;
             return (
