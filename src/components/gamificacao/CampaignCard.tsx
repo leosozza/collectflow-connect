@@ -39,6 +39,22 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
   const { isTenantAdmin, tenant } = useTenant();
   const queryClient = useQueryClient();
   const [archiving, setArchiving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+
+  const handleRecalculate = async () => {
+    setRecalculating(true);
+    try {
+      const r = await recalculateCampaignScores(campaign.id);
+      toast.success(`Ranking recalculado (${r?.updated ?? 0} participante(s))`);
+      queryClient.invalidateQueries({ queryKey: ["campaigns", tenant?.id] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-participants", campaign.id] });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erro ao recalcular";
+      toast.error(msg);
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   const { data: participants = [] } = useQuery({
     queryKey: ["campaign-participants", campaign.id],
