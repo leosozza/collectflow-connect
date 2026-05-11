@@ -9,10 +9,11 @@ import {
   Campaign,
   fetchCampaignParticipants,
   updateCampaign,
+  recalculateCampaignScores,
   METRIC_OPTIONS,
   PERIOD_OPTIONS,
 } from "@/services/campaignService";
-import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2, Calendar } from "lucide-react";
+import { Trophy, Gift, Building2, AlertTriangle, Archive, Crown, Loader2, Calendar, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import CampaignCountdown from "./CampaignCountdown";
 import { hasValidCampaignDates, isCampaignActive, getCampaignEndMs } from "./campaignTime";
