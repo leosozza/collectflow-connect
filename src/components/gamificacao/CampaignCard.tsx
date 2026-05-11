@@ -41,6 +41,7 @@ const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(({ campaign, 
   const queryClient = useQueryClient();
   const [archiving, setArchiving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const handleRecalculate = async () => {
     setRecalculating(true);
