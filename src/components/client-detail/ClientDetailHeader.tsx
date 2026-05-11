@@ -32,6 +32,9 @@ import { CraftButton, CraftButtonLabel, CraftButtonIcon } from "@/components/ui/
 import EmailList from "./EmailList";
 import InlineEditableField from "./InlineEditableField";
 import StartWhatsAppConversationDialog from "./StartWhatsAppConversationDialog";
+import AssignClientOperatorDialog from "./AssignClientOperatorDialog";
+import { usePermissions } from "@/hooks/usePermissions";
+import { UserCog } from "lucide-react";
 
 interface ClientDetailHeaderProps {
   client: any;
@@ -83,6 +86,9 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
   const formattedCpf = formatCPF(cpf || "");
   const [promotingSlot, setPromotingSlot] = useState<PhoneSlot | null>(null);
   const [waDialogOpen, setWaDialogOpen] = useState(false);
+  const [assignOpOpen, setAssignOpOpen] = useState(false);
+  const { role } = usePermissions();
+  const isAdmin = role === "admin";
 
   const handlePromoteHot = async (slot: PhoneSlot) => {
     if (slot === "phone" || !tenant?.id || !client?.cpf || !client?.credor) return;
@@ -496,6 +502,17 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
             >
               <Headset className="w-4 h-4" />
             </Button>
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 hover:text-orange-600"
+                onClick={() => setAssignOpOpen(true)}
+                title="Atribuir operador"
+              >
+                <UserCog className="w-4 h-4" />
+              </Button>
+            )}
             <PrimaryFlowButton onClick={onFormalizarAcordo}>
               <FileText className="w-4 h-4" />
               Formalizar Acordo
