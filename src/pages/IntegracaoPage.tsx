@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTenant } from "@/hooks/useTenant";
+import { supabase } from "@/integrations/supabase/client";
 import CobCloudTab from "@/components/integracao/CobCloudTab";
 import NegociarieTab from "@/components/integracao/NegociarieTab";
 import ThreeCPlusTab from "@/components/integracao/ThreeCPlusTab";
-import WhatsAppIntegrationTab from "@/components/integracao/WhatsAppIntegrationTab";
-import ProtestoTab from "@/components/integracao/ProtestoTab";
-import { Phone, MessageCircle, ShieldAlert, Cloud, Handshake, ArrowLeft, CheckCircle2 } from "lucide-react";
+import AsaasTab from "@/components/integracao/AsaasTab";
+import EvolutionTab from "@/components/integracao/EvolutionTab";
+import GupshupTab from "@/components/integracao/GupshupTab";
+import SerasaTab from "@/components/integracao/SerasaTab";
+import CenprotTab from "@/components/integracao/CenprotTab";
+import TargetDataTenantTab from "@/components/integracao/TargetDataTenantTab";
+import { Phone, MessageCircle, ShieldAlert, Cloud, Handshake, ArrowLeft, CheckCircle2, CreditCard, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +19,7 @@ const INTEGRATION_SEGMENTS = [
     title: "Financeiro",
     items: [
       { id: "negociarie", name: "Negociarie", icon: Handshake, color: "bg-blue-600" },
+      { id: "asaas", name: "Asaas", icon: CreditCard, color: "bg-indigo-600" },
     ]
   },
   {
@@ -25,13 +31,21 @@ const INTEGRATION_SEGMENTS = [
   {
     title: "WhatsApp",
     items: [
-      { id: "whatsapp", name: "WhatsApp", icon: MessageCircle, color: "bg-emerald-500" }
+      { id: "evolution", name: "Evolution API", icon: MessageCircle, color: "bg-emerald-500" },
+      { id: "gupshup", name: "Gupshup (Oficial)", icon: MessageCircle, color: "bg-green-600" }
     ]
   },
   {
     title: "Negativação",
     items: [
-      { id: "negativacao", name: "Negativação", icon: ShieldAlert, color: "bg-red-500" }
+      { id: "serasa", name: "Serasa Experian", icon: ShieldAlert, color: "bg-pink-600" },
+      { id: "cenprot", name: "Cenprot", icon: ShieldAlert, color: "bg-red-500" }
+    ]
+  },
+  {
+    title: "Enriquecimento de Dados",
+    items: [
+      { id: "targetdata", name: "Target Data", icon: Search, color: "bg-cyan-600" }
     ]
   },
   {
@@ -45,6 +59,27 @@ const INTEGRATION_SEGMENTS = [
 const IntegracaoPage = () => {
   const { isTenantAdmin, tenant } = useTenant();
   const [activeIntegration, setActiveIntegration] = useState<string | null>(null);
+  const [vaultIntegrations, setVaultIntegrations] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (tenant?.id) {
+      // Busca integrações configuradas no cofre
+      supabase
+        .from("tenant_integrations")
+        .select("provider, is_active")
+        .eq("tenant_id", tenant.id)
+        .eq("is_active", true)
+        .then(({ data }) => {
+          if (data) {
+            const vaultMap: Record<string, boolean> = {};
+            data.forEach(row => {
+              vaultMap[row.provider] = true;
+            });
+            setVaultIntegrations(vaultMap);
+          }
+        });
+    }
+  }, [tenant?.id]);
 
   if (!isTenantAdmin) {
     return (
@@ -54,19 +89,23 @@ const IntegracaoPage = () => {
     );
   }
 
-  // Check if configured for visual badges
   const settings = (tenant?.settings as any) || {};
   
   const checkConfigured = (id: string) => {
     switch(id) {
       case "negociarie":
-        return false; // Negociarie uses Vault mostly, or callback needs checking. Leave as not configured unless we have a specific setting.
+        return !!vaultIntegrations["negociarie"];
+      case "asaas":
+        return !!vaultIntegrations["asaas"];
       case "3cplus":
         return !!(settings.threecplus_domain && settings.threecplus_api_token);
       case "cobcloud":
         return !!(settings.cobcloud_token_company && settings.cobcloud_token_client);
-      case "whatsapp":
+      case "gupshup":
         return !!(settings.gupshup_api_key && settings.gupshup_app_name);
+      case "evolution":
+        // Fallback checks or vault checks can be placed here
+        return false;
       default:
         return false;
     }
@@ -75,9 +114,13 @@ const IntegracaoPage = () => {
   const renderActiveIntegration = () => {
     switch (activeIntegration) {
       case "negociarie": return <NegociarieTab />;
+      case "asaas": return <AsaasTab />;
       case "3cplus": return <ThreeCPlusTab />;
-      case "whatsapp": return <WhatsAppIntegrationTab />;
-      case "negativacao": return <ProtestoTab />;
+      case "evolution": return <EvolutionTab />;
+      case "gupshup": return <GupshupTab />;
+      case "serasa": return <SerasaTab />;
+      case "cenprot": return <CenprotTab />;
+      case "targetdata": return <TargetDataTenantTab />;
       case "cobcloud": return <CobCloudTab />;
       default: return null;
     }
