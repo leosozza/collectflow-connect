@@ -22,6 +22,7 @@ import CustomizeDashboardDialog from "@/components/dashboard/CustomizeDashboardD
 import KpisGridCard from "@/components/dashboard/KpisGridCard";
 import Visao360Card from "@/components/dashboard/Visao360Card";
 import { DashboardBlockId, useDashboardLayout } from "@/hooks/useDashboardLayout";
+import SetupBanner from "@/components/setup/SetupBanner";
 
 const generateYearOptions = () => {
   const now = new Date();
