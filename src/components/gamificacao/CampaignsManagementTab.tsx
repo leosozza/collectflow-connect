@@ -39,7 +39,16 @@ const CampaignsManagementTab = () => {
       participants: { operator_id: string; source_type: string; source_id: string | null }[];
     }) => {
       let campaignId: string;
+      let shouldRecalc = false;
       if (editing) {
+        const sensitive = ["metric", "start_date", "end_date", "end_time"] as const;
+        const changed = sensitive.some((k) => (editing as any)[k] !== data[k]);
+        const prevCredorIds = (editing.credores || []).map((c: any) => c.credor_id).sort();
+        const nextCredorIds = [...credorIds].sort();
+        const credoresChanged =
+          prevCredorIds.length !== nextCredorIds.length ||
+          prevCredorIds.some((id, i) => id !== nextCredorIds[i]);
+        shouldRecalc = changed || credoresChanged;
         await updateCampaign(editing.id, data);
         campaignId = editing.id;
       } else {
@@ -48,18 +57,28 @@ const CampaignsManagementTab = () => {
       }
       await saveCampaignCredores(campaignId, tenant!.id, credorIds);
       await saveCampaignParticipants(campaignId, tenant!.id, participants);
+      if (shouldRecalc) {
+        try {
+          await recalculateCampaignScores(campaignId);
+        } catch (err) {
+          console.error("Falha ao recalcular ranking após edição:", err);
+        }
+      }
+      return { shouldRecalc, isEdit: !!editing };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["campaigns"] });
       qc.invalidateQueries({ queryKey: ["campaign-participants"] });
       setFormOpen(false);
       setEditing(null);
-      toast.success(editing ? "Campanha atualizada!" : "Campanha criada!");
+      if (result?.isEdit) {
+        toast.success(result.shouldRecalc ? "Campanha atualizada e ranking recalculado!" : "Campanha atualizada!");
+      } else {
+        toast.success("Campanha criada!");
+      }
     },
     onError: (e: any) => toast.error(e.message),
   });
-
-  const deleteMut = useMutation({
     mutationFn: deleteCampaign,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["campaigns"] });
