@@ -1,59 +1,99 @@
-## Regra nova: "Quem negocia, vira dono"
+## Objetivo
 
-Quando o operador marcar **"Em Negociação"** ou **formalizar um Acordo**, o sistema atribui automaticamente o cliente **e** a conversa de WhatsApp àquele operador — **sobrescrevendo** o dono anterior (regra "último que negociou").
+Três ajustes em Gamificação → Campanhas:
 
-### Estado atual
+1. **Bug**: na aba **Gerenciar → Campanhas**, campanhas ativas aparecem em "Campanhas encerradas" sem terem sido arquivadas.
+2. **UX**: mostrar o **período (de–até) da campanha** de forma discreta no card, sem aumentar o tamanho.
+3. **Nova métrica**: **"Maior valor de Primeira parcela"** — para cada acordo, soma apenas o **primeiro valor a receber**: se houver entrada, conta a entrada; se não houver entrada, conta a primeira parcela. Conta valor **negociado** (não recebido).
 
-| Gatilho | `clients.operator_id` | `conversations.assigned_to` |
-|---|---|---|
-| Marcar "Em Negociação" | ❌ não atualiza | ❌ não atualiza |
-| Formalizar Acordo | ✅ já atualiza (`agreementService.createAgreement`) | ❌ não atualiza |
+---
 
-Ou seja: o Acordo já cobre metade do que queremos. Falta cobrir **Em Negociação** e **a conversa** nos dois casos.
+## 1. Bug: campanhas movidas indevidamente para "encerradas" no Gerenciar
 
-### O que vou implementar
+**Causa**: `CampaignsManagementTab.tsx` separa ativas/encerradas usando `isCampaignActive`, que considera "ativa" apenas quando `status='ativa'` **e** `end_date` ainda no futuro. Campanhas com data fim passada mas ainda não arquivadas pelo admin caem em "encerradas".
 
-#### 1. Função utilitária `reassignClientToOperator(cpf, credor, tenantId, operatorId)`
+Na aba pública (`CampaignsTab`) já existe o helper correto: `isCampaignVisibleInActive` (inclui as "expiradas aguardando arquivamento").
 
-Centraliza a regra em um único lugar (`src/services/clientService.ts` ou novo `src/services/operatorAssignmentService.ts`):
-- `UPDATE clients SET operator_id=:op WHERE tenant_id=:t AND cpf=:cpf AND credor=:credor` (todas as parcelas).
-- `UPDATE conversations SET assigned_to=:op WHERE tenant_id=:t AND client_id IN (clients do CPF+credor)`.
-- Registra `client_events` (`type='operator_reassigned'`, source da regra) para timeline.
-- Registra `audit_logs` (`action='auto_reassign_negotiation'`).
+**Correção**: em `src/components/gamificacao/CampaignsManagementTab.tsx`:
+- Trocar o filtro de `activeCampaigns` para `isCampaignVisibleInActive`.
+- Trocar `otherCampaigns` para o complemento (`!isCampaignVisibleInActive`).
+- Passar a prop `expired={isCampaignExpiredButNotArchived(c)}` no `CampaignCard` da seção ativas, para o admin ver o banner vermelho + botão "Mover para encerradas" (mesmo comportamento da aba pública).
 
-#### 2. Hook em `createDisposition` (dispositionService.ts ~linha 360)
+Resultado: só vão para o bloco "Campanhas encerradas" as que o admin arquivou manualmente (`status='encerrada'`).
 
-Logo após inserir a disposição com sucesso, se `disposition_type === 'wa_em_negociacao'` (ou matching pela `key`):
-- Buscar `cpf` + `credor` do `client_id`.
-- Chamar `reassignClientToOperator(...)` em fire-and-forget (não bloqueia o salvamento da disposição).
+---
 
-#### 3. Hook em `createAgreement` (agreementService.ts ~linha 273)
+## 2. Mostrar período discreto no card
 
-Já atualiza `clients.operator_id`. Adicionar **na mesma transação lógica** o update de `conversations.assigned_to` para todas as conversas vinculadas a clientes daquele CPF+credor.
+Em `src/components/gamificacao/CampaignCard.tsx`, dentro do `CardHeader`, abaixo da linha de badges `metricLabel`/`periodLabel` (linha ~139), adicionar uma linha de texto pequeno:
 
-### Comportamento exato (caso "último negocia"):
+```
+DD/MM/AAAA → DD/MM/AAAA
+```
 
-- Cliente sem dono → vira dono.
-- Cliente da Maria, Sabrina marca "Em Negociação" → vira da Sabrina.
-- Conversa atribuída à Sabrina, Maria marca "Em Negociação" → vira da Maria.
-- Toast no atendimento: "Cliente atribuído(a) a você" (feedback visual).
+Detalhes visuais:
+- `text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1`
+- Ícone `Calendar` (lucide) `w-3 h-3` à esquerda
+- Formato `pt-BR` reutilizando o helper `formatBR` que já existe no arquivo
+- Sem fundo, sem badge, sem padding extra — não muda a altura do card
 
-### Fora de escopo
+Renderiza só quando `datesValid` for verdadeiro.
 
-- Não vou criar regra para outras disposições (CPC genérico, Promessa) — só os 2 gatilhos aprovados.
-- Não vou corrigir retroativamente os 953 + 34 casos existentes — só novas marcações.
-- Não vou alterar a RPC `get_visible_conversations`.
+---
 
-### Detalhes técnicos
+## 3. Nova métrica: "Maior valor de Primeira parcela"
 
-- Arquivos:
-  - **Novo:** `src/services/operatorAssignmentService.ts` — função `reassignClientToOperator`.
-  - **Editar:** `src/services/dispositionService.ts` (~L360) — chamar reassign após disposição "Em Negociação".
-  - **Editar:** `src/services/agreementService.ts` (~L287) — adicionar update em `conversations`.
-- Sem migração de schema.
-- RLS já cobre — operador autenticado tem permissão de UPDATE nessas tabelas dentro do tenant.
-- Performance: updates são por CPF+credor (índices existentes), fire-and-forget no caso da disposição.
+### Regra de cálculo
 
-### Resposta direta
+Para cada acordo do operador no período (mesma janela e filtros das outras métricas de "negociado": status `pending`/`approved`, filtro por credores da campanha):
 
-**Hoje, marcar "Em Negociação" não faz nada com a atribuição.** Foi por isso que a Maria continuou invisível mesmo sendo a única a falar com a Flaviane. Esta regra resolve definitivamente esse cenário.
+- Se `entrada_value > 0` → soma `entrada_value`
+- Caso contrário → soma o valor da primeira parcela:
+  - Preferência: `custom_installment_values[0]` (regra já adotada no projeto — ver memória `Value Priorities`)
+  - Fallback: `new_installment_value`
+
+Score do operador = soma desse "primeiro valor" em todos os acordos dele na janela.
+
+### Implementação
+
+**Frontend** — `src/services/campaignService.ts`:
+- Adicionar opção em `METRIC_OPTIONS`:
+  ```ts
+  { value: "maior_valor_primeira_parcela", label: "Maior valor de primeira parcela" }
+  ```
+- Estender `computeCampaignScoreFallback` com bloco para a nova métrica, lendo `entrada_value`, `custom_installment_values`, `new_installment_value` dos acordos do operador, mesmos filtros de `maior_valor_promessas`.
+
+**Backend** — migration SQL atualizando o RPC `recalculate_campaign_scores` (e o usado por `close_campaign_and_award_points`, se aplicar a mesma lógica) com um novo branch `ELSIF _campaign.metric = 'maior_valor_primeira_parcela' THEN`:
+
+```sql
+SELECT COALESCE(SUM(
+  CASE
+    WHEN COALESCE(a.entrada_value, 0) > 0 THEN a.entrada_value
+    WHEN jsonb_typeof(a.custom_installment_values) = 'array'
+         AND jsonb_array_length(a.custom_installment_values) > 0
+      THEN COALESCE((a.custom_installment_values->>0)::numeric, a.new_installment_value, 0)
+    ELSE COALESCE(a.new_installment_value, 0)
+  END
+), 0) INTO _score
+FROM public.agreements a
+WHERE a.tenant_id = _campaign.tenant_id
+  AND a.created_by = _auth_uid
+  AND a.status IN ('pending','approved')
+  AND a.created_at >= _campaign.start_date::timestamptz
+  AND a.created_at < (_campaign.end_date + 1)::timestamptz
+  AND (_credor_names IS NULL OR a.credor = ANY(_credor_names));
+```
+
+Sem mudanças no schema; o RPC continua `SECURITY DEFINER` com o mesmo guard `can_access_tenant`.
+
+### Form e card
+
+O `CampaignForm` já popula o select de métrica a partir de `METRIC_OPTIONS`, então a nova opção aparece automaticamente. O `CampaignCard` também já resolve o label via `METRIC_OPTIONS.find(...)`. Nenhuma mudança extra nesses componentes.
+
+---
+
+## Fora do escopo
+
+- Retroagir scores de campanhas já criadas (admin pode clicar em editar/salvar para forçar recálculo se quiser).
+- Mudar layout/estrutura geral do card além da linha de período.
+- Alterar comportamento de `close_campaign_and_award_points` para premiação (apenas adiciono o branch da nova métrica se ele também calcular o score; caso contrário só `recalculate_campaign_scores` é tocado).
