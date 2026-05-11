@@ -792,6 +792,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
         client={client}
         allClientPhones={allClientPhones}
       />
+      <AssignClientOperatorDialog
+        open={assignOpOpen}
+        onClose={() => setAssignOpOpen(false)}
+        cpf={client.cpf}
+        credor={client.credor}
+        clientName={client.nome_completo}
+      />
     </>
   );
 };
