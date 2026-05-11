@@ -18,40 +18,40 @@ const INTEGRATION_SEGMENTS = [
   {
     title: "Financeiro",
     items: [
-      { id: "negociarie", name: "Negociarie", icon: Handshake, color: "bg-blue-600" },
-      { id: "asaas", name: "Asaas", icon: CreditCard, color: "bg-indigo-600" },
+      { id: "negociarie", name: "Negociarie", icon: Handshake, color: "bg-blue-600", logoUrl: "/logos/negociarie.png" },
+      { id: "asaas", name: "Asaas", icon: CreditCard, color: "bg-indigo-600", logoUrl: "/logos/asaas.png" },
     ]
   },
   {
     title: "Discador",
     items: [
-      { id: "3cplus", name: "3CPlus", icon: Phone, color: "bg-orange-500" }
+      { id: "3cplus", name: "3CPlus", icon: Phone, color: "bg-orange-500", logoUrl: "/logos/3cplus.png" }
     ]
   },
   {
     title: "WhatsApp",
     items: [
-      { id: "evolution", name: "Evolution API", icon: MessageCircle, color: "bg-emerald-500" },
-      { id: "gupshup", name: "Gupshup (Oficial)", icon: MessageCircle, color: "bg-green-600" }
+      { id: "evolution", name: "Evolution API", icon: MessageCircle, color: "bg-emerald-500", logoUrl: "/logos/evolution.png" },
+      { id: "gupshup", name: "Gupshup (Oficial)", icon: MessageCircle, color: "bg-green-600", logoUrl: "/logos/gupshup.png" }
     ]
   },
   {
     title: "Negativação",
     items: [
-      { id: "serasa", name: "Serasa Experian", icon: ShieldAlert, color: "bg-pink-600" },
-      { id: "cenprot", name: "Cenprot", icon: ShieldAlert, color: "bg-red-500" }
+      { id: "serasa", name: "Serasa Experian", icon: ShieldAlert, color: "bg-pink-600", logoUrl: "/logos/serasa.png" },
+      { id: "cenprot", name: "Cenprot", icon: ShieldAlert, color: "bg-red-500", logoUrl: "/logos/cenprot.png" }
     ]
   },
   {
     title: "Enriquecimento de Dados",
     items: [
-      { id: "targetdata", name: "Target Data", icon: Search, color: "bg-cyan-600" }
+      { id: "targetdata", name: "Target Data", icon: Search, color: "bg-cyan-600", logoUrl: "/logos/targetdata.png" }
     ]
   },
   {
     title: "CRMs",
     items: [
-      { id: "cobcloud", name: "CobCloud", icon: Cloud, color: "bg-purple-600" }
+      { id: "cobcloud", name: "CobCloud", icon: Cloud, color: "bg-purple-600", logoUrl: "/logos/cobcloud.png" }
     ]
   }
 ];
@@ -60,6 +60,7 @@ const IntegracaoPage = () => {
   const { isTenantAdmin, tenant } = useTenant();
   const [activeIntegration, setActiveIntegration] = useState<string | null>(null);
   const [vaultIntegrations, setVaultIntegrations] = useState<Record<string, boolean>>({});
+  const [hasEvolution, setHasEvolution] = useState(false);
 
   useEffect(() => {
     if (tenant?.id) {
@@ -73,9 +74,22 @@ const IntegracaoPage = () => {
           if (data) {
             const vaultMap: Record<string, boolean> = {};
             data.forEach(row => {
-              vaultMap[row.provider] = true;
+              vaultMap[(row.provider || "").toLowerCase()] = true;
             });
             setVaultIntegrations(vaultMap);
+          }
+        });
+
+      // Busca instâncias da Evolution (WhatsApp)
+      supabase
+        .from("whatsapp_instances")
+        .select("id")
+        .eq("tenant_id", tenant.id)
+        .eq("provider", "evolution")
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setHasEvolution(true);
           }
         });
     }
@@ -104,8 +118,7 @@ const IntegracaoPage = () => {
       case "gupshup":
         return !!(settings.gupshup_api_key && settings.gupshup_app_name);
       case "evolution":
-        // Fallback checks or vault checks can be placed here
-        return false;
+        return hasEvolution;
       default:
         return false;
     }
@@ -127,7 +140,7 @@ const IntegracaoPage = () => {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 w-full">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-foreground tracking-tight">Integrações</h1>
         <p className="text-muted-foreground">Gerencie conexões com serviços externos para sua operação.</p>
@@ -148,7 +161,7 @@ const IntegracaoPage = () => {
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                 {segment.title}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 {segment.items.map((item) => {
                   const isConfigured = checkConfigured(item.id);
                   return (
@@ -158,8 +171,21 @@ const IntegracaoPage = () => {
                       onClick={() => setActiveIntegration(item.id)}
                     >
                       <CardContent className="p-5 flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm ${item.color}`}>
-                          <item.icon className="w-6 h-6" />
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm overflow-hidden ${item.color}`}>
+                          {item.logoUrl ? (
+                            <img 
+                              src={item.logoUrl} 
+                              alt={`${item.name} logo`} 
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.nextElementSibling) {
+                                  (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block';
+                                }
+                              }}
+                            />
+                          ) : null}
+                          <item.icon className={`w-6 h-6 ${item.logoUrl ? 'hidden' : 'block'}`} />
                         </div>
                         <div className="flex-1">
                           <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">{item.name}</h3>
