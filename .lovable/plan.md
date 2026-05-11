@@ -1,55 +1,58 @@
+## Objetivo
+
+Tornar o conceito de "parcela" mais claro nos textos da página **Carteira**, sem alterar o nome do módulo no menu, sem mexer em queries, RLS, banco ou integrações. Mudança 100% de UI/copy.
+
 ## Diagnóstico
 
-A entrada da Gisele Aparecida Araujo (acordo `87ba2418…`, vencimento 11/05, R$ 250) **está paga** no banco. O webhook da Negociarie registrou corretamente em `negociarie_cobrancas`:
+- Não existe item "Clientes" no menu lateral. O módulo é **Carteira** (`/carteira`).
+- A tabela `clients` no banco guarda **parcelas** (cada linha = uma parcela/dívida), mas a Carteira exibe agrupado por CPF.
+- Os contadores "X clientes" da Carteira já estão semanticamente corretos (cada CPF = 1 cliente).
+- O que confunde é o **texto de subtítulo** e alguns **labels de botões/diálogos** que misturam "cliente" com "parcela".
 
-| installment_key | status | valor_pago | data_pagamento |
-|---|---|---|---|
-| `87ba2418-902a-41f5-925d-fb6910c2783e:entrada` | **pago** | 250 | 2026-05-11 |
+## Escopo das alterações (somente texto)
 
-E há também um `payment_confirmed` em `client_events` (11/05 11:08, id_status 801).
+**Arquivo: `src/pages/CarteiraPage.tsx`**
 
-**O problema está na RPC `get_dashboard_vencimentos`** (usada pelo card "Parcelas Programadas"). Para a linha de **entrada**, ela só considera a parcela paga quando o `installment_key` em `negociarie_cobrancas` é:
+1. Subtítulo da página (linha ~690):
+   - De: `Gerencie as parcelas, pagamentos e clientes`
+   - Para: `Gerencie suas carteiras de cobrança — cada linha agrupa as parcelas de um CPF`
 
-```sql
-nc.installment_key = a.id::text || ':0'   -- ex: '87ba2418…:0'
-OR nc.installment_key = 'entrada'
-```
+2. Botão "Novo Cliente" (linha ~743) e título do diálogo (linha ~1075):
+   - De: `Novo Cliente` / `Editar Cliente`
+   - Para: `Nova Parcela` / `Editar Parcela`
+   - (Faz sentido porque o formulário cria 1 registro na tabela `clients` = 1 parcela)
 
-Mas a chave real gravada pelo gateway é `'<agreement_id>:entrada'` (ex: `87ba2418-902a-41f5-925d-fb6910c2783e:entrada`). Nenhum dos dois padrões casa, então o dashboard exibe **ANDAMENTO** mesmo com o pagamento registrado.
+3. Toast de criação/edição (linhas ~367, ~378, ~370, ~382):
+   - "Cliente cadastrado!" → "Parcela cadastrada!"
+   - "Cliente atualizado!" → "Parcela atualizada!"
+   - "Erro ao cadastrar cliente" → "Erro ao cadastrar parcela"
+   - "Erro ao atualizar cliente" → "Erro ao atualizar parcela"
 
-As parcelas regulares (1..N) funcionam normalmente porque o padrão `a.id::text || ':' || (i+1)::text` casa com as chaves `…:1`, `…:2`, etc. Só a entrada está quebrada.
+4. **Manter como está** (são contagens de CPFs únicos, conceitualmente corretas):
+   - `{totalCount} clientes` nos banners de seleção
+   - `cliente(s) selecionado(s)`
+   - `Nenhum cliente encontrado`
+   - `Utilize os filtros para buscar clientes`
+   - "Clientes importados com sucesso!" (importação carrega múltiplos CPFs)
 
-Esse bug afeta **todos os clientes** com entrada paga via Negociarie no card "Parcelas Programadas" — não é específico da Gisele.
+**Arquivo: `src/components/carteira/CarteiraTable.tsx`**
 
-## Plano
+5. Manter `{grouped.length} clientes` e `Nenhum cliente encontrado` (refere-se a CPFs agrupados — correto).
 
-### 1. Corrigir a RPC `get_dashboard_vencimentos` (migração)
+## O que NÃO será alterado
 
-Ajustar o ramo da **entrada** para também aceitar o padrão `<agreement_id>:entrada`, mantendo retrocompatibilidade com `:0` e `entrada`:
+- Banco de dados (`clients`, `client_profiles`) — zero migration.
+- Edge functions, RLS, RPCs, serviços (`clientService.ts`, `clientProfileService.ts`).
+- Rotas (`/carteira` permanece) e item de menu ("Carteira" permanece).
+- API pública `/clients-api` e documentação técnica.
+- `ClientsPage.tsx` (já é código morto, não está roteado).
+- Comentários internos do código.
 
-```sql
-WHEN EXISTS (
-  SELECT 1 FROM negociarie_cobrancas nc
-  WHERE nc.agreement_id = a.id
-    AND (
-      nc.installment_key = a.id::text || ':entrada'   -- novo, padrão real
-      OR nc.installment_key = a.id::text || ':0'      -- legado
-      OR nc.installment_key = 'entrada'               -- legado
-    )
-    AND nc.status = 'pago'
-) THEN 'paid'
-```
+## Risco
 
-Aplicar a mesma lógica também ao bloco `manual_payments` da entrada por simetria (aceitar `<agreement_id>:entrada` além de `entrada`, `<agreement_id>:0`, `installment_number=0`).
+Zero risco funcional — apenas strings de UI. Nenhuma query, prop ou ID muda.
 
-Não mexer no ramo das parcelas regulares (já funcionam).
+## Verificação após implementação
 
-### 2. Validação pós-deploy
-
-Recarregar o dashboard em `/dashboard` no dia 11/05 — a linha da **Gisele Aparecida Araujo** deve aparecer com status **QUITADO** (verde) e o card de "Recebido" subir de R$ 381,20 para R$ 631,20.
-
-## Observações
-
-- Não é necessário alterar dados (o pagamento já está corretamente armazenado). É só fix de leitura.
-- Não impacta as outras parcelas (1/9 a 9/9 da Gisele continuam "ANDAMENTO" — corretas, ainda não venceram).
-- O mesmo padrão (`:entrada`) é usado em toda a base; a correção destrava o status de todas as entradas pagas via gateway, não só a desta cliente.
+- Abrir `/carteira` e conferir: subtítulo novo, botão "Nova Parcela", diálogo "Nova Parcela / Editar Parcela", toasts.
+- Conferir que a contagem "X clientes" no rodapé e nos banners de seleção continua igual (proposital).
