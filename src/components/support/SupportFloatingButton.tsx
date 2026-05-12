@@ -669,7 +669,11 @@ const SupportFloatingButton = () => {
             e.stopPropagation();
             return;
           }
-          setOpen((prev) => !prev);
+          if (open) {
+            handleRequestClose();
+          } else {
+            setOpen(true);
+          }
         }}
         className={cn(
           "fixed z-50 h-14 w-14 rounded-full flex items-center justify-center transition-colors duration-200 backdrop-blur-sm touch-none select-none",
@@ -678,10 +682,29 @@ const SupportFloatingButton = () => {
             ? "bg-muted text-muted-foreground hover:bg-muted/80 shadow-lg"
             : "bg-primary/30 text-primary-foreground/80 shadow-md hover:bg-primary hover:text-primary-foreground hover:shadow-xl"
         )}
+        title={open ? "Encerrar atendimento" : "Abrir suporte"}
       >
         {open ? <X className="w-6 h-6" /> : <LifeBuoy className="w-6 h-6" />}
       </button>
 
+      <AlertDialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Encerrar atendimento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sua conversa atual será encerrada e arquivada no histórico. Na próxima abertura você começará do zero.
+              <br />
+              <span className="text-xs text-muted-foreground mt-2 block">
+                Para apenas minimizar e continuar depois, use a setinha no topo do painel.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmClose}>Encerrar atendimento</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
