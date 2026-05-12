@@ -350,7 +350,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       const hasPreviousBoleto = inst.cobranca?.link_boleto;
       await negociarieService.generateSingleBoleto(
         { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
-        { number: inst.number, value: inst.value, dueDate: inst.dueDate.toISOString().split("T")[0] }
+        { number: inst.number, value: inst.value, dueDate: inst.dueDate.toISOString().split("T")[0], key: inst.customKey }
       );
       if (hasPreviousBoleto) {
         toast({ title: "Novo boleto gerado com sucesso!", description: "O boleto anterior foi substituído no sistema." });
@@ -731,6 +731,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         number: inst.number,
         value: inst.value,
         dueDate: inst.dueDate.toISOString().split("T")[0],
+        key: inst.customKey,
       }));
       const result = await negociarieService.generateAgreementBoletos(
         { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
