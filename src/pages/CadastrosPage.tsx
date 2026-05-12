@@ -14,7 +14,7 @@ import DispositionTabsWrapper from "@/components/cadastros/DispositionTabsWrappe
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
@@ -25,7 +25,6 @@ interface NavItem {
   key: string;
   label: string;
   icon: React.ElementType;
-  badge?: number | null;
 }
 
 interface NavGroup {
@@ -128,14 +127,6 @@ const CadastrosPage = () => {
             >
               <item.icon className="w-4 h-4 shrink-0" />
               <span>{item.label}</span>
-              {item.badge != null && item.badge > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center bg-background/50 text-foreground"
-                >
-                  {item.badge}
-                </Badge>
-              )}
             </button>
           );
         })}
