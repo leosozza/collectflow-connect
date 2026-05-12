@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Cloud, Settings, Code2, FileSpreadsheet, Activity, Server } from "lucide-react";
+import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
