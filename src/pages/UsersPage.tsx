@@ -113,7 +113,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const UsersPage = () => {
   const { profile } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin, loading: tenantLoading } = useTenant();
   const queryClient = useQueryClient();
 
   // Edit state
@@ -195,7 +195,7 @@ const UsersPage = () => {
       const emailMap = new Map((emails || []).map((e: { user_id: string; email: string }) => [e.user_id, e.email]));
       return (profiles || []).map((p) => ({ ...p, email: emailMap.get(p.user_id) || "—" })) as (Profile & { email: string })[];
     },
-    enabled: profile?.role === "admin",
+    enabled: isTenantAdmin,
   });
 
   // Fetch tenant_users for roles
@@ -458,7 +458,11 @@ const UsersPage = () => {
     return set;
   }, [users]);
 
-  if (profile?.role !== "admin") {
+  if (tenantLoading) {
+    return <div className="text-center py-12 text-muted-foreground">Carregando...</div>;
+  }
+
+  if (!isTenantAdmin) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         Acesso restrito a administradores.
