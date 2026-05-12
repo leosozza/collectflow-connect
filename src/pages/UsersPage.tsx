@@ -195,7 +195,7 @@ const UsersPage = () => {
       const emailMap = new Map((emails || []).map((e: { user_id: string; email: string }) => [e.user_id, e.email]));
       return (profiles || []).map((p) => ({ ...p, email: emailMap.get(p.user_id) || "—" })) as (Profile & { email: string })[];
     },
-    enabled: profile?.role === "admin",
+    enabled: isTenantAdmin,
   });
 
   // Fetch tenant_users for roles
