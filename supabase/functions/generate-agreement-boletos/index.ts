@@ -225,14 +225,19 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { agreement_id } = body;
+    const { agreement_id, installment_key: requestedKey } = body as {
+      agreement_id?: string;
+      installment_key?: string | null;
+    };
     if (!agreement_id) {
       return new Response(JSON.stringify({ error: "agreement_id é obrigatório" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log(`[generate-agreement-boletos] Starting for agreement ${agreement_id}`);
+    const singleMode = typeof requestedKey === "string" && requestedKey.length > 0;
+    const mode = singleMode ? "single" : "batch";
+    console.log(`[generate-agreement-boletos] Starting for agreement ${agreement_id} mode=${mode}${singleMode ? ` key=${requestedKey}` : ""}`);
 
     // ---- Parallel initial queries ----
     const tQ0 = Date.now();
