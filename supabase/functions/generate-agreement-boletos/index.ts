@@ -241,8 +241,7 @@ Deno.serve(async (req) => {
 
     // ---- Parallel initial queries ----
     const tQ0 = Date.now();
-    const cleanCpf = String("").length; // placeholder; need agreement first for tenant
-    // We must read agreement first to know tenant/cpf, then run profile+clients in parallel.
+    // Read agreement first to know tenant/cpf, then run profile + clients lookups in parallel.
     const { data: agreement, error: agErr } = await supabaseAdmin
       .from("agreements")
       .select("*")
