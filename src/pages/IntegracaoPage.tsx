@@ -64,16 +64,16 @@ const IntegracaoPage = () => {
 
   useEffect(() => {
     if (tenant?.id) {
-      // Busca integrações configuradas no cofre
-      supabase
+      // Busca integrações configuradas no cofre (tabela opcional)
+      (supabase as any)
         .from("tenant_integrations")
         .select("provider, is_active")
         .eq("tenant_id", tenant.id)
         .eq("is_active", true)
-        .then(({ data }) => {
+        .then(({ data }: { data: Array<{ provider: string; is_active: boolean }> | null }) => {
           if (data) {
             const vaultMap: Record<string, boolean> = {};
-            data.forEach(row => {
+            data.forEach((row) => {
               vaultMap[(row.provider || "").toLowerCase()] = true;
             });
             setVaultIntegrations(vaultMap);
