@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User } from "lucide-react";
+import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User, HeadphonesIcon, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -25,6 +25,11 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-ai-c
 const FAB_SIZE = 56;
 const FAB_MARGIN = 16;
 const POS_STORAGE_KEY = "rivo-support-fab-pos";
+const CATEGORY_STORAGE_KEY = "rivo-support-category";
+
+type SupportCategory = "suporte" | "financeiro";
+
+const categoryLabel = (c: SupportCategory) => (c === "financeiro" ? "Financeiro" : "Suporte");
 
 const loadInitialPos = () => {
   if (typeof window === "undefined") return { x: 0, y: 0 };
@@ -49,6 +54,11 @@ const SupportFloatingButton = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [humanMode, setHumanMode] = useState(false);
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [category, setCategory] = useState<SupportCategory | null>(() => {
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem(CATEGORY_STORAGE_KEY);
+    return stored === "suporte" || stored === "financeiro" ? stored : null;
+  });
   const [pos, setPos] = useState(loadInitialPos);
   const [isDragging, setIsDragging] = useState(false);
   const draggedRef = useRef(false);
@@ -120,7 +130,7 @@ const SupportFloatingButton = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ message: userMessage, history: chatHistory }),
+        body: JSON.stringify({ message: userMessage, history: chatHistory, category }),
       });
 
       if (!resp.ok) {
@@ -203,11 +213,11 @@ const SupportFloatingButton = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, category]);
 
   const handleSend = useCallback(async () => {
     const trimmed = message.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isLoading || !category) return;
 
     if (humanMode && ticketId && user) {
       // Human mode: save to DB
@@ -233,7 +243,7 @@ const SupportFloatingButton = () => {
     setMessages(updatedMessages);
     setMessage("");
     await streamAIResponse(trimmed, updatedMessages);
-  }, [message, isLoading, humanMode, ticketId, user, messages, streamAIResponse, toast, queryClient]);
+  }, [message, isLoading, humanMode, ticketId, user, messages, streamAIResponse, toast, queryClient, category]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -249,11 +259,12 @@ const SupportFloatingButton = () => {
   };
 
   const handleTalkToHuman = async () => {
-    if (!user || !tenant) return;
+    if (!user || !tenant || !category) return;
     try {
+      const subject = `[${categoryLabel(category)}] Chat de Suporte`;
       const { data: ticket, error } = await supabase
         .from("support_tickets")
-        .insert({ tenant_id: tenant.id, user_id: user.id, subject: "Chat de Suporte" })
+        .insert({ tenant_id: tenant.id, user_id: user.id, subject, category } as any)
         .select("id")
         .single();
       if (error || !ticket) throw error;
@@ -286,6 +297,28 @@ const SupportFloatingButton = () => {
     }
   };
 
+  const handleSelectCategory = (c: SupportCategory) => {
+    setCategory(c);
+    try { localStorage.setItem(CATEGORY_STORAGE_KEY, c); } catch { /* ignore */ }
+    setMessages(prev => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: `Você selecionou **${categoryLabel(c)}**. Pode escrever sua dúvida que eu te ajudo. 👇`,
+      },
+    ]);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleResetCategory = () => {
+    setCategory(null);
+    try { localStorage.removeItem(CATEGORY_STORAGE_KEY); } catch { /* ignore */ }
+    setMessages([]);
+    setHumanMode(false);
+    setTicketId(null);
+  };
+
   return (
     <>
       <AnimatePresence>
@@ -300,9 +333,20 @@ const SupportFloatingButton = () => {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5" />
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="w-5 h-5 shrink-0" />
                 <span className="font-semibold text-sm">RIVO Suporte</span>
+                {category && (
+                  <button
+                    type="button"
+                    onClick={handleResetCategory}
+                    title="Trocar área"
+                    className="text-[10px] bg-primary-foreground/20 hover:bg-primary-foreground/30 px-1.5 py-0.5 rounded-full inline-flex items-center gap-1"
+                  >
+                    {category === "financeiro" ? <DollarSign className="w-2.5 h-2.5" /> : <HeadphonesIcon className="w-2.5 h-2.5" />}
+                    {categoryLabel(category)}
+                  </button>
+                )}
                 {humanMode && (
                   <span className="text-[10px] bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">Humano</span>
                 )}
@@ -320,14 +364,32 @@ const SupportFloatingButton = () => {
             {/* Messages */}
             <ScrollArea className="flex-1 px-4 py-3">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full py-12 text-center">
+                <div className="flex flex-col items-center justify-center h-full py-8 text-center">
                   <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
                     <Sparkles className="w-6 h-6 text-primary" />
                   </div>
-                  <p className="text-sm font-medium text-foreground">Olá! 👋</p>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">
-                    Sou o assistente RIVO. Pergunte sobre qualquer funcionalidade do sistema.
+                  <p className="text-sm font-medium text-foreground">Olá! 👋 Seja bem-vindo(a) ao atendimento da RIVO.</p>
+                  <p className="text-xs text-muted-foreground mt-2 max-w-[260px]">
+                    Para agilizar seu suporte, escolha abaixo a área que melhor atende sua necessidade.
                   </p>
+                  {!category && (
+                    <div className="flex gap-2 mt-4 w-full max-w-[260px]">
+                      <button
+                        onClick={() => handleSelectCategory("suporte")}
+                        className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors"
+                      >
+                        <HeadphonesIcon className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium">Suporte</span>
+                      </button>
+                      <button
+                        onClick={() => handleSelectCategory("financeiro")}
+                        className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors"
+                      >
+                        <DollarSign className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium">Financeiro</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               {messages.map((msg) => (
@@ -417,22 +479,29 @@ const SupportFloatingButton = () => {
               <div className="flex gap-2">
                 <Input
                   ref={inputRef}
-                  placeholder={humanMode ? "Mensagem para o atendente..." : "Pergunte algo ao RIVO..."}
+                  placeholder={
+                    !category
+                      ? "Selecione uma área para começar..."
+                      : humanMode
+                        ? "Mensagem para o atendente..."
+                        : "Pergunte algo ao RIVO..."
+                  }
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="h-9 text-xs rounded-full border-muted bg-muted/50"
+                  disabled={!category}
+                  className="h-9 text-xs rounded-full border-muted bg-muted/50 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 <Button
                   size="icon"
                   className="h-9 w-9 rounded-full shrink-0"
                   onClick={handleSend}
-                  disabled={!message.trim() || isLoading}
+                  disabled={!message.trim() || isLoading || !category}
                 >
                   <Send className="w-3.5 h-3.5" />
                 </Button>
               </div>
-              {!humanMode && (
+              {!humanMode && category && (
                 <button
                   onClick={handleTalkToHuman}
                   className="w-full flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors py-1"

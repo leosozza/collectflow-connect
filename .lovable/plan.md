@@ -1,48 +1,48 @@
-# Plano: Atualizar conhecimento do RIVO Suporte (IA + Guias)
+## Objetivo
 
-## Problema
-O assistente RIVO Suporte (`supabase/functions/support-ai-chat/index.ts`) tem um `SYSTEM_PROMPT` hardcoded que cobre apenas 7 áreas básicas (Dashboard, Carteira, Acordos, Contact Center, Automação, Cadastros, Portal). Vários módulos importantes não estão documentados, então a IA responde "não sei" — por exemplo, sobre o **Score Operacional**.
+No widget RIVO Suporte, o cliente obrigatoriamente escolhe **Suporte** ou **Financeiro** antes de enviar a primeira mensagem. Na criação de usuários da equipe RIVO (super admin), quando a função permitir atender suporte, escolhe-se quais áreas (Suporte / Financeiro / Ambos) o usuário vai cobrir — usando a tela já existente, sem nova rota.
 
-## Escopo da atualização
-Adicionar conhecimento completo, alinhado ao que já existe no projeto (memórias, docs/, código), sobre:
+## 1. Banco
 
-1. **Score Operacional (propensity_score)** — único score oficial; 4 dimensões (Contato 25%, Engajamento 20%, Conversão 35%, Credibilidade 20%); pesos por fonte (operador 45% / sistema 35% / prevenção 20%); peso de recência (7d=100%, 8-30d=70%, >30d=40%); base 50 quando sem histórico; explicado em `score_reason`/`score_confidence`; alimentado pela timeline `client_events`.
-2. **Perfil do Devedor** — 4 categorias fixas (Ocasional, Recorrente, Resistente, Insatisfeito).
-3. **Atendimento / Omnichannel** — sessão unificada por tenant/cliente/credor, timeline `client_events`, locks de concorrência, takeover.
-4. **Acordos** — ciclo de vida (sem regressão de fase), parcelas (`installment_key`), confirmação manual de pagamento, quebra de acordo, reconciliação.
-5. **Carteira** — Mar Aberto vs Atribuição, mascaramento de dados sensíveis, busca multi-termo, "Sem disparo", agrupamento por credor, hierarquia de status (QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > QUEBRA > INADIMPLENTE > EM DIA), bulk até 1000.
-6. **Gamificação** — regras de pontuação configuráveis (pagamento, valor recebido em faixas, acordo formalizado/quitado/quebrado, conquistas, meta), metas mensais.
-7. **Tokens / RIVO Coin** — saldo, consumo atômico, pacotes, histórico.
-8. **WhatsApp** — instâncias oficiais vs não-oficiais (Evolution/Gupshup/Wuzapi), campanhas, anti-ban, transcrição de áudio, templates.
-9. **Telefonia 3CPlus** — entrar/sair de campanha, gravações, status do agente, isolamento de credenciais.
-10. **Automação** — régua + workflow visual (nós, gatilhos, templates).
-11. **Documentos** — geração com variáveis e hierarquia de resolução.
-12. **Negativação / Protesto** — CENPROT e Serasa, baixa automática.
-13. **Integrações** — MaxSystem, Negociarie, Asaas, REST API (`/clients-api` com SHA-256 X-API-Key), Servidor MCP.
-14. **Portal do Devedor** — white-label por credor, assinatura de contrato, checkout.
-15. **Relatórios e Analytics** — aging, prestação de contas, ranking, métricas de acordo, distribuição.
-16. **Configurações** — usuários, equipes, permissões, módulos, serviços, APIs (REST + MCP).
-17. **Onboarding / Provisionamento** — CNPJ obrigatório, 50 tokens cortesia.
+Migração:
 
-## Mudanças de código
+- `support_tickets`: nova coluna `category text NOT NULL DEFAULT 'suporte'` com check `('suporte','financeiro')`.
+- Nova tabela `support_staff_categories`:
+  - `user_id uuid PK`
+  - `categories text[] NOT NULL DEFAULT '{suporte,financeiro}'` (valores aceitos: suporte, financeiro)
+  - `updated_at timestamptz`
+  - RLS: gerenciamento total para `is_super_admin(auth.uid())`; SELECT do próprio user permitido.
 
-### 1. `supabase/functions/support-ai-chat/index.ts`
-- Reescrever `SYSTEM_PROMPT` expandindo de ~7 seções para ~17 seções cobrindo todos os módulos acima.
-- Manter o tom curto/objetivo e a instrução de sugerir "Falar com humano" quando não souber.
-- Manter resto da função inalterado (streaming, CORS, tratamento 429/402).
+## 2. Widget cliente (`SupportFloatingButton.tsx`)
 
-### 2. `src/components/support/SupportGuidesTab.tsx` (opcional, recomendado)
-- Adicionar novas categorias ao `guidesData` para os tópicos novos (Score Operacional, Gamificação, Tokens, Documentos, Negativação, Integrações, Relatórios), com 1-2 guias passo-a-passo cada — para que o usuário também encontre na aba "Guias", não só perguntando à IA.
+- Estado `category: 'suporte' | 'financeiro' | null`, persistido em localStorage da sessão.
+- Empty state: saudação + dois botões grandes "Suporte" e "Financeiro" (visual do print, tokens semânticos).
+- Enquanto `category === null`: input e botão Send desabilitados com placeholder "Selecione uma área para começar"; "Falar com humano" oculto.
+- Ao escolher: mensagem do assistente "Você selecionou **{Categoria}**…" e libera input.
+- `handleTalkToHuman`: insere `category` no `support_tickets` e prefixa subject `[Categoria] Chat de Suporte`.
+- `streamAIResponse`: envia `category` no body do edge function.
+- Pequeno ajuste no `SYSTEM_PROMPT` do `support-ai-chat` para considerar `category` recebida.
 
-## Detalhes técnicos
-- O `SYSTEM_PROMPT` é apenas string; sem mudanças de schema, sem migrações, sem novos secrets.
-- Edge function já usa `google/gemini-3-flash-preview` via Lovable AI Gateway — manter.
-- Deploy é automático após salvar a função.
+## 3. Criação de usuário (`src/pages/admin/AdminUsuariosPage.tsx`)
+
+- No diálogo "Novo Usuário", adicionar bloco **"Áreas de atendimento de suporte"** (checkboxes Suporte / Financeiro), visível apenas quando `userType === 'rivo'` (Equipe RIVO). Valor default: ambos marcados.
+- No `handleCreate`, após `invokeCreateUser` retornar com sucesso e `user_id`, fazer upsert em `support_staff_categories` com as áreas escolhidas. Se a edge function não retorna `user_id`, ajustar para retornar (verificar `userEdgeFunctionService` / edge correspondente — se necessário, fazer SELECT por email no `profiles` para obter o id).
+- Para usuários RIVO existentes: na própria página, abaixo de "Criar Novo Usuário", adicionar pequeno painel/seção "Áreas de Atendimento – Equipe RIVO" listando os usuários RIVO com checkboxes editáveis (mesma escrita em `support_staff_categories`). Mantém tudo dentro da rota existente.
+
+## 4. Painel super admin (`SupportAdminPage.tsx`)
+
+- Mostrar badge da categoria em cada ticket.
+- Filtro `Categoria` (Todas / Suporte / Financeiro) ao lado do filtro de status.
+- Query de tickets para usuário **não-super-admin**: filtrar `.in('category', minhasCategorias)` lendo `support_staff_categories` do user logado. Super admin vê tudo.
+- Sem nova aba "Operadores" — gerenciamento fica no AdminUsuariosPage.
+
+## 5. Validação
+
+- Cliente: input desabilitado até escolher área; "Suporte" e "Financeiro" criam ticket com `category` correto.
+- Criar usuário RIVO marcando só "Suporte" → logar com ele → confirmar que tickets financeiros não aparecem.
+- Editar áreas de um RIVO existente → comportamento muda imediatamente.
+- Build limpo.
 
 ## Fora de escopo
-- Não criar tabela de KB dinâmica (overkill para o volume atual).
-- Não trocar modelo de IA.
-- Não mexer em `SupportChatTab.tsx`, `SupportFloatingButton.tsx` ou `SupportScheduleTab.tsx`.
 
-## Validação
-- Após o deploy, perguntar ao bot: "O que é o score operacional?", "Como funciona a quebra de acordo?", "Como configurar gamificação?", "O que é Mar Aberto?" — esperar respostas corretas e específicas.
+- Roteamento automático/round-robin, notificações por categoria, relatórios por categoria.

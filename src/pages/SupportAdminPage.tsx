@@ -20,6 +20,7 @@ interface SupportTicket {
   subject: string;
   status: string;
   priority: string;
+  category?: string;
   created_at: string;
   updated_at: string;
 }
@@ -70,14 +71,35 @@ const SupportAdminPage = () => {
   const queryClient = useQueryClient();
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [statusFilter, setStatusFilter] = useUrlState("status", "all");
+  const [categoryFilter, setCategoryFilter] = useUrlState("category", "all");
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Áreas de atendimento do usuário logado (filtra tickets quando não é super admin)
+  const { data: myAreas } = useQuery({
+    queryKey: ["my-support-areas", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await (supabase as any)
+        .from("support_staff_categories")
+        .select("categories")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return (data?.categories as string[] | undefined) ?? null;
+    },
+    enabled: !!user,
+  });
+
   const { data: tickets = [] } = useQuery({
-    queryKey: ["admin-support-tickets", statusFilter],
+    queryKey: ["admin-support-tickets", statusFilter, categoryFilter, myAreas],
     queryFn: async () => {
       let q = supabase.from("support_tickets").select("*").order("created_at", { ascending: false });
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
+      if (categoryFilter !== "all") q = q.eq("category", categoryFilter);
+      // Restringe pelas áreas do staff (super admin via RLS já vê tudo, mas mantemos o filtro defensivo)
+      if (myAreas && myAreas.length > 0 && myAreas.length < 2) {
+        q = q.in("category", myAreas);
+      }
       const { data, error } = await q;
       if (error) throw error;
       return data as SupportTicket[];
@@ -190,16 +212,26 @@ const SupportAdminPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Ticket list */}
             <div className="space-y-3">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="open">Abertos</SelectItem>
-                  <SelectItem value="in_progress">Em Andamento</SelectItem>
-                  <SelectItem value="resolved">Resolvidos</SelectItem>
-                  <SelectItem value="closed">Fechados</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos status</SelectItem>
+                    <SelectItem value="open">Abertos</SelectItem>
+                    <SelectItem value="in_progress">Em Andamento</SelectItem>
+                    <SelectItem value="resolved">Resolvidos</SelectItem>
+                    <SelectItem value="closed">Fechados</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas áreas</SelectItem>
+                    <SelectItem value="suporte">Suporte</SelectItem>
+                    <SelectItem value="financeiro">Financeiro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2 max-h-[60vh] overflow-auto">
                 {tickets.map((ticket) => (
                   <button
@@ -216,9 +248,16 @@ const SupportAdminPage = () => {
                         {statusLabels[ticket.status]}
                       </Badge>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(ticket.created_at).toLocaleDateString("pt-BR")} · {ticket.priority}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        {new Date(ticket.created_at).toLocaleDateString("pt-BR")} · {ticket.priority}
+                      </p>
+                      {ticket.category && (
+                        <Badge variant="secondary" className="text-[9px] shrink-0 capitalize">
+                          {ticket.category}
+                        </Badge>
+                      )}
+                    </div>
                   </button>
                 ))}
                 {tickets.length === 0 && (
