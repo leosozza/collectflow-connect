@@ -731,6 +731,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         number: inst.number,
         value: inst.value,
         dueDate: inst.dueDate.toISOString().split("T")[0],
+        key: inst.customKey,
       }));
       const result = await negociarieService.generateAgreementBoletos(
         { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
