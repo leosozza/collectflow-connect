@@ -152,6 +152,13 @@ async function negociarieRequest(tenantId: string, method: string, endpoint: str
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Declarado fora do try para o catch ter acesso ao contexto e poder logar/invalidar cache
+  let userId: string | null = null;
+  let tenantId: string | null = null;
+  let creditorIdCtx: string | undefined;
+  let action = "";
+  let params: Record<string, any> = {};
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -177,11 +184,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const userId = claimsData.claims.sub;
-    const { action, ...params } = await req.json();
-    
-    // Buscar o tenant_id do usuário
-    const { data: userData, error: userError } = await supabase
+    userId = claimsData.claims.sub;
+    const parsed = await req.json();
+    action = parsed.action || "";
+    const { action: _ignored, ...rest } = parsed;
+    params = rest;
+    creditorIdCtx = (params as any)?.creditor_id ?? (params as any)?.data?.creditor_id;
+
+    // Buscar tenant_id usando service-role (RLS pode bloquear via JWT em alguns casos)
+    const { data: userData, error: userError } = await adminClient
       .from("tenant_users")
       .select("tenant_id")
       .eq("user_id", userId)
@@ -195,7 +206,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const tenantId = userData.tenant_id;
+    tenantId = userData.tenant_id as string;
     console.log(`[negociarie-proxy] action=${action} user=${userId} tenant=${tenantId}`);
 
     let result;
