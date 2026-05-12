@@ -259,11 +259,12 @@ const SupportFloatingButton = () => {
   };
 
   const handleTalkToHuman = async () => {
-    if (!user || !tenant) return;
+    if (!user || !tenant || !category) return;
     try {
+      const subject = `[${categoryLabel(category)}] Chat de Suporte`;
       const { data: ticket, error } = await supabase
         .from("support_tickets")
-        .insert({ tenant_id: tenant.id, user_id: user.id, subject: "Chat de Suporte" })
+        .insert({ tenant_id: tenant.id, user_id: user.id, subject, category } as any)
         .select("id")
         .single();
       if (error || !ticket) throw error;
@@ -294,6 +295,28 @@ const SupportFloatingButton = () => {
     } catch {
       toast({ title: "Erro ao criar ticket", variant: "destructive" });
     }
+  };
+
+  const handleSelectCategory = (c: SupportCategory) => {
+    setCategory(c);
+    try { localStorage.setItem(CATEGORY_STORAGE_KEY, c); } catch { /* ignore */ }
+    setMessages(prev => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: `Você selecionou **${categoryLabel(c)}**. Pode escrever sua dúvida que eu te ajudo. 👇`,
+      },
+    ]);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleResetCategory = () => {
+    setCategory(null);
+    try { localStorage.removeItem(CATEGORY_STORAGE_KEY); } catch { /* ignore */ }
+    setMessages([]);
+    setHumanMode(false);
+    setTicketId(null);
   };
 
   return (
