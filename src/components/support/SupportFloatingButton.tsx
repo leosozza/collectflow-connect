@@ -1,8 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User, HeadphonesIcon, DollarSign } from "lucide-react";
+import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User, HeadphonesIcon, DollarSign, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
+import SupportHistoryPanel from "./SupportHistoryPanel";
 
 interface LocalMessage {
   id: string;
