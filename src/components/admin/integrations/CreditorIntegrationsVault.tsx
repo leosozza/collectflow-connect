@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { ShieldCheck, Zap, Play, CheckCircle2, AlertCircle, Eye, EyeOff, Save } from "lucide-react";
+import { ShieldCheck, Zap, Play, Eye, EyeOff, Save, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,88 +12,110 @@ interface CreditorIntegrationsVaultProps {
   creditorId: string;
 }
 
+interface VaultStatus {
+  configured: boolean;
+  has_credentials: boolean;
+  uses_global_fallback: boolean;
+  client_id_masked: string;
+  is_active: boolean;
+  last_test_at: string | null;
+  last_test_ok: boolean | null;
+  last_test_message: string | null;
+}
+
 export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorIntegrationsVaultProps) => {
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
-  
-  const [config, setConfig] = useState({
-    client_id: "",
-    client_secret: ""
-  });
+  const [status, setStatus] = useState<VaultStatus | null>(null);
+  const [form, setForm] = useState({ client_id: "", client_secret: "" });
 
-  const loadConfig = async () => {
+  const loadStatus = async () => {
     if (!creditorId) return;
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from("tenant_integrations")
-        .select("config")
-        .eq("tenant_id", tenantId)
-        .eq("creditor_id", creditorId)
-        .eq("provider", "negociarie")
-        .maybeSingle();
-
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: { action: "get_status", tenant_id: tenantId, creditor_id: creditorId },
+      });
       if (error) throw error;
-      if (data?.config) {
-        setConfig({
-          client_id: data.config.client_id || "",
-          client_secret: data.config.client_secret || ""
-        });
-      }
-    } catch (err) {
-      console.error("[Vault] Error loading config:", err);
+      setStatus(data as VaultStatus);
+      setForm({ client_id: "", client_secret: "" });
+    } catch (err: any) {
+      console.error("[CreditorVault] Error loading:", err);
+      toast.error("Erro ao carregar cofre: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadConfig();
-  }, [creditorId]);
+    loadStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creditorId, tenantId]);
 
   const handleSave = async () => {
-    setLoading(true);
+    if (!form.client_id) {
+      toast.error("Client ID é obrigatório");
+      return;
+    }
+    setSaving(true);
     try {
-      const { error } = await (supabase as any)
-        .from("tenant_integrations")
-        .upsert({
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: {
+          action: "save",
           tenant_id: tenantId,
           creditor_id: creditorId,
-          provider: "negociarie",
-          config: config,
-          is_active: true,
-          updated_at: new Date().toISOString()
-        } as any, {
-          onConflict: "tenant_id,provider,creditor_id"
-        });
-
+          client_id: form.client_id,
+          client_secret: form.client_secret,
+        },
+      });
       if (error) throw error;
-      toast.success("Credenciais do credor salvas com sucesso!");
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Credenciais validadas e salvas no cofre!");
+      await loadStatus();
     } catch (err: any) {
       toast.error("Erro ao salvar: " + err.message);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const testConnection = async () => {
+  const handleTest = async () => {
     setTesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("negociarie-proxy", {
-        body: { action: "test-connection" }
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: { action: "test", tenant_id: tenantId, creditor_id: creditorId },
       });
-      
       if (error) throw error;
-      if (data.connected) {
-        toast.success("Conexão com Negociarie (Credor) estabelecida!");
+      if ((data as any)?.ok) {
+        toast.success((data as any).message || "Conexão OK");
       } else {
-        throw new Error(data.error || "Erro desconhecido");
+        throw new Error((data as any)?.message || (data as any)?.error || "Falha");
       }
+      await loadStatus();
     } catch (err: any) {
       toast.error("Falha no teste: " + err.message);
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Remover credenciais Negociarie deste credor?")) return;
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: { action: "delete", tenant_id: tenantId, creditor_id: creditorId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success("Credenciais removidas");
+      await loadStatus();
+    } catch (err: any) {
+      toast.error("Erro ao remover: " + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -111,35 +132,50 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
               <p className="text-[10px] text-muted-foreground">Credenciais exclusivas para este credor</p>
             </div>
           </div>
-          <Badge variant="outline" className="bg-background text-[10px] gap-1">
-            <ShieldCheck className="w-3 h-3 text-green-500" /> Cofre Ativo
-          </Badge>
+          {status?.has_credentials ? (
+            <Badge variant="outline" className="bg-background text-[10px] gap-1">
+              <ShieldCheck className="w-3 h-3 text-green-500" /> Cofre Ativo
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px]">Não configurado</Badge>
+          )}
         </div>
 
         <div className="space-y-3">
+          {status?.client_id_masked && (
+            <p className="text-[10px] text-muted-foreground font-mono">
+              Atual: {status.client_id_masked}
+            </p>
+          )}
+
           <div className="space-y-1.5">
-            <label className="text-[11px] font-medium text-muted-foreground ml-1">Client ID</label>
-            <Input 
-              placeholder="Insira o Client ID do Credor"
-              value={config.client_id}
-              onChange={(e) => setConfig(prev => ({ ...prev, client_id: e.target.value }))}
+            <label className="text-[11px] font-medium text-muted-foreground ml-1">
+              Client ID {status?.has_credentials && "(deixe vazio para manter)"}
+            </label>
+            <Input
+              placeholder={status?.has_credentials ? "Manter atual" : "Insira o Client ID do Credor"}
+              value={form.client_id}
+              onChange={(e) => setForm(prev => ({ ...prev, client_id: e.target.value }))}
               className="bg-background border-primary/10"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[11px] font-medium text-muted-foreground ml-1">Client Secret</label>
+            <label className="text-[11px] font-medium text-muted-foreground ml-1">
+              Client Secret {status?.has_credentials && "(deixe vazio para manter)"}
+            </label>
             <div className="relative">
-              <Input 
+              <Input
                 type={showSecret ? "text" : "password"}
-                placeholder="Insira o Client Secret do Credor"
-                value={config.client_secret}
-                onChange={(e) => setConfig(prev => ({ ...prev, client_secret: e.target.value }))}
+                placeholder="Insira o Client Secret"
+                value={form.client_secret}
+                onChange={(e) => setForm(prev => ({ ...prev, client_secret: e.target.value }))}
                 className="bg-background border-primary/10 pr-10"
               />
-              <button 
+              <button
                 onClick={() => setShowSecret(!showSecret)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                type="button"
               >
                 {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -147,19 +183,19 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button 
-              className="flex-1 gap-2" 
+            <Button
+              className="flex-1 gap-2"
               onClick={handleSave}
-              disabled={loading}
+              disabled={saving || loading || !form.client_id}
             >
               <Save className="w-4 h-4" />
-              {loading ? "Salvando..." : "Salvar no Cofre"}
+              {saving ? "Salvando..." : "Salvar no Cofre"}
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="gap-2 border-primary/20 hover:bg-primary/10"
-              onClick={testConnection}
-              disabled={testing || !config.client_id}
+              onClick={handleTest}
+              disabled={testing || !status?.has_credentials}
             >
               {testing ? (
                 <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -168,12 +204,30 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
               )}
               Testar
             </Button>
+            {status?.has_credentials && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleDelete}
+                disabled={saving}
+                title="Remover"
+              >
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </Button>
+            )}
           </div>
+
+          {status?.last_test_at && (
+            <p className="text-[10px] text-muted-foreground italic">
+              Último teste: {new Date(status.last_test_at).toLocaleString("pt-BR")} —{" "}
+              {status.last_test_ok ? "✓" : "✗"} {status.last_test_message}
+            </p>
+          )}
         </div>
       </Card>
-      
+
       <p className="text-[10px] text-muted-foreground px-1 italic">
-        * As credenciais acima são criptografadas e isoladas por Tenant e Credor.
+        * As credenciais são validadas na Negociarie antes de serem armazenadas, criptografadas e isoladas por Tenant e Credor.
       </p>
     </div>
   );
