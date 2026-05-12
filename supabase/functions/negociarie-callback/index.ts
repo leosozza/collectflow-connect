@@ -124,17 +124,52 @@ Deno.serve(async (req) => {
 
     // ─── New format: body.parcelas[] ───
     if (Array.isArray(body.parcelas) && body.parcelas.length > 0) {
-      // Validate token
-      const clientId = Deno.env.get("NEGOCIARIE_CLIENT_ID") || "";
-      const clientSecret = Deno.env.get("NEGOCIARIE_CLIENT_SECRET") || "";
-      if (clientId && clientSecret && body.token) {
-        const expected = await sha1(clientId + clientSecret);
-        if (body.token !== expected) {
-          console.error("Token inválido no callback");
-          return new Response(JSON.stringify({ error: "Token inválido" }), {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+      // Validate token usando credenciais do TENANT correto (descobrir via id_parcela)
+      if (body.token) {
+        let tokenClientId = "";
+        let tokenClientSecret = "";
+
+        // Descobre o tenant via primeira parcela
+        const firstId = String(body.parcelas[0]?.id_parcela || "");
+        if (firstId) {
+          const { data: cob } = await supabase
+            .from("negociarie_cobrancas")
+            .select("tenant_id, agreement_id")
+            .eq("id_parcela", firstId)
+            .maybeSingle();
+
+          if (cob?.tenant_id) {
+            const { data: integ } = await supabase
+              .from("tenant_integrations")
+              .select("config")
+              .eq("tenant_id", cob.tenant_id)
+              .is("creditor_id", null)
+              .eq("provider", "negociarie")
+              .eq("is_active", true)
+              .maybeSingle();
+
+            const cfg = (integ?.config as Record<string, any>) || {};
+            const useGlobal = cfg.uses_global_fallback === true;
+            tokenClientId = (!useGlobal && cfg.client_id) || Deno.env.get("NEGOCIARIE_CLIENT_ID") || "";
+            tokenClientSecret = (!useGlobal && cfg.client_secret) || Deno.env.get("NEGOCIARIE_CLIENT_SECRET") || "";
+          }
+        }
+
+        // Fallback final para ENV (Y.BRASIL ou cobrança não localizada)
+        if (!tokenClientId || !tokenClientSecret) {
+          tokenClientId = Deno.env.get("NEGOCIARIE_CLIENT_ID") || "";
+          tokenClientSecret = Deno.env.get("NEGOCIARIE_CLIENT_SECRET") || "";
+        }
+
+        if (tokenClientId && tokenClientSecret) {
+          const expected = await sha1(tokenClientId + tokenClientSecret);
+          if (body.token !== expected) {
+            console.error("Token inválido no callback Negociarie");
+            return new Response(JSON.stringify({ error: "Token inválido" }), {
+              status: 401,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
         }
       }
 
