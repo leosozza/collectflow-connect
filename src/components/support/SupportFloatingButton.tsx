@@ -54,6 +54,11 @@ const SupportFloatingButton = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [humanMode, setHumanMode] = useState(false);
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [category, setCategory] = useState<SupportCategory | null>(() => {
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem(CATEGORY_STORAGE_KEY);
+    return stored === "suporte" || stored === "financeiro" ? stored : null;
+  });
   const [pos, setPos] = useState(loadInitialPos);
   const [isDragging, setIsDragging] = useState(false);
   const draggedRef = useRef(false);
