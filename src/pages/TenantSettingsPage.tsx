@@ -252,10 +252,10 @@ const TenantSettingsPage = () => {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* ABA FINANCEIRO */}
-        <TabsContent value="financeiro">
+        {activeTab === "financeiro" && (
           <div className="space-y-6">
             {/* Resumo Financeiro */}
             <Card>
@@ -403,10 +403,10 @@ const TenantSettingsPage = () => {
               />
             )}
           </div>
-        </TabsContent>
+        )}
 
         {/* ABA CONTRATO */}
-        <TabsContent value="contrato">
+        {activeTab === "contrato" && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -455,10 +455,10 @@ const TenantSettingsPage = () => {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* ABA SERVIÇOS */}
-        <TabsContent value="servicos">
+        {activeTab === "servicos" && (
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -487,14 +487,13 @@ const TenantSettingsPage = () => {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
+        )}
 
 
 
 
         {/* ABA CANCELAMENTO */}
-        <TabsContent value="cancelamento">
+        {activeTab === "cancelamento" && (
           <Card>
             <CardHeader>
               <CardTitle>Cancelamento</CardTitle>
@@ -545,8 +544,8 @@ const TenantSettingsPage = () => {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {/* DIALOG: COMPRAR TOKENS */}
       <TokenPurchaseDialog
