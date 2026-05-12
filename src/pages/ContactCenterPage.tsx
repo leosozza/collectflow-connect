@@ -39,7 +39,7 @@ const ContactCenterPage = ({ channel }: ContactCenterPageProps) => {
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Horizontal tab navigation */}
       {tabs.length > 1 && (
-        <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full px-4">
+        <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
