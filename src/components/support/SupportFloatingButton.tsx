@@ -333,9 +333,20 @@ const SupportFloatingButton = () => {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5" />
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="w-5 h-5 shrink-0" />
                 <span className="font-semibold text-sm">RIVO Suporte</span>
+                {category && (
+                  <button
+                    type="button"
+                    onClick={handleResetCategory}
+                    title="Trocar área"
+                    className="text-[10px] bg-primary-foreground/20 hover:bg-primary-foreground/30 px-1.5 py-0.5 rounded-full inline-flex items-center gap-1"
+                  >
+                    {category === "financeiro" ? <DollarSign className="w-2.5 h-2.5" /> : <HeadphonesIcon className="w-2.5 h-2.5" />}
+                    {categoryLabel(category)}
+                  </button>
+                )}
                 {humanMode && (
                   <span className="text-[10px] bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">Humano</span>
                 )}
@@ -353,14 +364,32 @@ const SupportFloatingButton = () => {
             {/* Messages */}
             <ScrollArea className="flex-1 px-4 py-3">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full py-12 text-center">
+                <div className="flex flex-col items-center justify-center h-full py-8 text-center">
                   <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
                     <Sparkles className="w-6 h-6 text-primary" />
                   </div>
-                  <p className="text-sm font-medium text-foreground">Olá! 👋</p>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">
-                    Sou o assistente RIVO. Pergunte sobre qualquer funcionalidade do sistema.
+                  <p className="text-sm font-medium text-foreground">Olá! 👋 Seja bem-vindo(a) ao atendimento da RIVO.</p>
+                  <p className="text-xs text-muted-foreground mt-2 max-w-[260px]">
+                    Para agilizar seu suporte, escolha abaixo a área que melhor atende sua necessidade.
                   </p>
+                  {!category && (
+                    <div className="flex gap-2 mt-4 w-full max-w-[260px]">
+                      <button
+                        onClick={() => handleSelectCategory("suporte")}
+                        className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors"
+                      >
+                        <HeadphonesIcon className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium">Suporte</span>
+                      </button>
+                      <button
+                        onClick={() => handleSelectCategory("financeiro")}
+                        className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors"
+                      >
+                        <DollarSign className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium">Financeiro</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               {messages.map((msg) => (
