@@ -348,10 +348,15 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     setGeneratingIdx(idx);
     try {
       const hasPreviousBoleto = inst.cobranca?.link_boleto;
-      await negociarieService.generateSingleBoleto(
-        { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
-        { number: inst.number, value: inst.value, dueDate: inst.dueDate.toISOString().split("T")[0], key: inst.customKey }
-      );
+      const { data, error } = await supabase.functions.invoke("generate-agreement-boletos", {
+        body: { agreement_id: agreementId, installment_key: inst.customKey },
+      });
+      if (error) throw new Error(error.message || "Erro ao gerar boleto");
+      if (data?.error) throw new Error(data.error);
+      if ((data?.success ?? 0) === 0) {
+        const detail = data?.errors?.[0] || data?.message || "Não foi possível gerar o boleto";
+        throw new Error(detail);
+      }
       if (hasPreviousBoleto) {
         toast({ title: "Novo boleto gerado com sucesso!", description: "O boleto anterior foi substituído no sistema." });
       } else {
