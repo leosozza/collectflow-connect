@@ -80,9 +80,13 @@ Deno.serve(async (req) => {
     const { data: profile } = await admin
       .from("profiles")
       .select("role")
-      .eq("id", userId)
+      .eq("user_id", userId)
       .maybeSingle();
-    if (profile?.role !== "admin") {
+
+    // Super admin (can_access_tenant retorna true em qualquer tenant) também passa
+    const { data: isSuperAdmin } = await admin.rpc("is_super_admin", { _user_id: userId });
+
+    if (profile?.role !== "admin" && !isSuperAdmin) {
       return json(403, { error: "Apenas administradores podem alterar integrações" });
     }
 
