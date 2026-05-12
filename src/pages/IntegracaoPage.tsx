@@ -31,6 +31,7 @@ const IntegracaoPage = () => {
   const [activeIntegration, setActiveIntegration] = useState<string | null>(null);
   const [vaultIntegrations, setVaultIntegrations] = useState<Record<string, boolean>>({});
   const [hasEvolution, setHasEvolution] = useState(false);
+  const [hasGupshup, setHasGupshup] = useState(false);
 
   useEffect(() => {
     if (tenant?.id) {
@@ -52,13 +53,13 @@ const IntegracaoPage = () => {
 
       supabase
         .from("whatsapp_instances")
-        .select("id")
+        .select("id, provider")
         .eq("tenant_id", tenant.id)
-        .eq("provider", "evolution")
-        .limit(1)
+        .in("provider", ["evolution", "gupshup"])
         .then(({ data }) => {
-          if (data && data.length > 0) {
-            setHasEvolution(true);
+          if (data) {
+            setHasEvolution(data.some((r: any) => r.provider === "evolution"));
+            setHasGupshup(data.some((r: any) => r.provider === "gupshup"));
           }
         });
     }
