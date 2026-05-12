@@ -236,9 +236,22 @@ function extractBoletoLink(apiResult: any, parcelaResult: any): string | null {
   return parcelaResult?.link || parcelaResult?.link_boleto || parcelaResult?.url_boleto || apiResult?.link_boleto || apiResult?.url_boleto || null;
 }
 
-/** Build installment_key from agreement_id and installment number */
-function buildInstallmentKey(agreementId: string, installmentNumber: number): string {
-  return `${agreementId}:${installmentNumber}`;
+/**
+ * Build installment_key from agreement_id and the canonical installment key.
+ * Canonical key is "entrada", "entrada_2", "1", "2", ... — same convention used by
+ * the classifier (`src/lib/agreementInstallmentClassifier.ts`) and the edge
+ * function `generate-agreement-boletos`. Falls back to deriving from `number`
+ * for legacy callers (entrada => 0).
+ */
+function buildInstallmentKey(agreementId: string, key: string | number): string {
+  let canonical: string;
+  if (typeof key === "string" && key.length > 0) {
+    canonical = key;
+  } else {
+    const n = Number(key);
+    canonical = n === 0 ? "entrada" : String(n);
+  }
+  return `${agreementId}:${canonical}`;
 }
 
 /** Mark previous unpaid boletos for same installment as substituido */
