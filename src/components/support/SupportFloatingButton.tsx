@@ -72,6 +72,8 @@ const SupportFloatingButton = () => {
   });
   const [pos, setPos] = useState(loadInitialPos);
   const [isDragging, setIsDragging] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
   const draggedRef = useRef(false);
 
   // Keep within viewport on resize
