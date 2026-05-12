@@ -20,6 +20,7 @@ interface SupportTicket {
   subject: string;
   status: string;
   priority: string;
+  category?: string;
   created_at: string;
   updated_at: string;
 }
