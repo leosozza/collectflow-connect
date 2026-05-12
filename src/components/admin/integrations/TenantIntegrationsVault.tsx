@@ -5,11 +5,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, Key, ShieldCheck, Loader2, Play } from "lucide-react";
+import { Eye, EyeOff, Key, ShieldCheck, Loader2, Play, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface TenantIntegrationsVaultProps {
   tenantId: string;
+}
+
+interface VaultStatus {
+  configured: boolean;
+  has_credentials: boolean;
+  uses_global_fallback: boolean;
+  client_id_masked: string;
+  is_active: boolean;
+  last_test_at: string | null;
+  last_test_ok: boolean | null;
+  last_test_message: string | null;
+  callback_registered_at: string | null;
 }
 
 export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultProps) => {
@@ -18,54 +30,51 @@ export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultPro
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [status, setStatus] = useState<VaultStatus | null>(null);
 
-  const [config, setConfig] = useState({
-    client_id: "",
-    client_secret: "",
-  });
+  const [form, setForm] = useState({ client_id: "", client_secret: "" });
 
-  const loadConfig = async () => {
+  const loadStatus = async () => {
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from("tenant_integrations")
-        .select("config")
-        .eq("tenant_id", tenantId)
-        .eq("provider", "negociarie")
-        .maybeSingle();
-
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: { action: "get_status", tenant_id: tenantId },
+      });
       if (error) throw error;
-      if (data?.config) {
-        setConfig(data.config as any);
-      } else {
-        setConfig({ client_id: "", client_secret: "" });
-      }
+      setStatus(data as VaultStatus);
+      setForm({ client_id: "", client_secret: "" });
     } catch (err: any) {
       console.error("[Vault] Error loading:", err);
+      toast({ title: "Erro ao carregar cofre", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (tenantId) loadConfig();
+    if (tenantId) loadStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const handleSave = async () => {
+    if (!form.client_id) {
+      toast({ title: "Client ID obrigatório", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      const { error } = await (supabase as any)
-        .from("tenant_integrations")
-        .upsert({
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: {
+          action: "save",
           tenant_id: tenantId,
-          provider: "negociarie",
-          config: config,
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        } as any, { onConflict: "tenant_id, provider" });
-
+          client_id: form.client_id,
+          client_secret: form.client_secret,
+        },
+      });
       if (error) throw error;
-      toast({ title: "Configurações salvas!", description: "O cofre foi atualizado com sucesso." });
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast({ title: "Configurações salvas!", description: "Credenciais validadas e armazenadas." });
+      await loadStatus();
     } catch (err: any) {
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
     } finally {
@@ -73,23 +82,41 @@ export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultPro
     }
   };
 
-  const handleTestConnection = async () => {
+  const handleTest = async () => {
     setTesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("negociarie-proxy", {
-        body: { action: "test-connection" },
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: { action: "test", tenant_id: tenantId },
       });
-
       if (error) throw error;
-      if (data?.connected) {
-        toast({ title: "Conexão estabelecida!", description: "As credenciais são válidas.", variant: "default" });
+      if ((data as any)?.ok) {
+        toast({ title: "Conexão OK", description: (data as any).message });
       } else {
-        throw new Error(data?.error || "Falha na conexão");
+        throw new Error((data as any)?.message || (data as any)?.error || "Falha");
       }
+      await loadStatus();
     } catch (err: any) {
       toast({ title: "Falha no teste", description: err.message, variant: "destructive" });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Remover credenciais Negociarie deste tenant?")) return;
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("negociarie-credentials", {
+        body: { action: "delete", tenant_id: tenantId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast({ title: "Credenciais removidas" });
+      await loadStatus();
+    } catch (err: any) {
+      toast({ title: "Erro ao remover", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -115,34 +142,41 @@ export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultPro
               <Key className="w-4 h-4" />
               Negociarie
             </CardTitle>
-            {config.client_id ? (
+            {status?.uses_global_fallback ? (
+              <Badge variant="secondary">Fallback Global</Badge>
+            ) : status?.has_credentials ? (
               <Badge variant="default" className="bg-green-600">Configurado</Badge>
             ) : (
-              <Badge variant="secondary">Usando Global (Fallback)</Badge>
+              <Badge variant="outline">Não configurado</Badge>
             )}
           </div>
           <CardDescription className="text-xs">
             Credenciais para geração de Boletos e Pix nesta assessoria.
+            {status?.client_id_masked && (
+              <span className="block mt-1 font-mono text-[10px]">
+                Atual: {status.client_id_masked}
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-xs">Client ID</Label>
-            <Input 
-              value={config.client_id} 
-              onChange={e => setConfig(prev => ({ ...prev, client_id: e.target.value }))}
-              placeholder="Ex: 550e8400-e29b-41d4-a716-446655440000"
+            <Label className="text-xs">Client ID {status?.has_credentials && "(deixe vazio para manter)"}</Label>
+            <Input
+              value={form.client_id}
+              onChange={e => setForm(prev => ({ ...prev, client_id: e.target.value }))}
+              placeholder={status?.has_credentials ? "Manter atual" : "Ex: 550e8400-e29b-41d4-a716-446655440000"}
               className="bg-background"
             />
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs">Client Secret</Label>
+            <Label className="text-xs">Client Secret {status?.has_credentials && "(deixe vazio para manter)"}</Label>
             <div className="relative">
-              <Input 
+              <Input
                 type={showSecret ? "text" : "password"}
-                value={config.client_secret} 
-                onChange={e => setConfig(prev => ({ ...prev, client_secret: e.target.value }))}
+                value={form.client_secret}
+                onChange={e => setForm(prev => ({ ...prev, client_secret: e.target.value }))}
                 placeholder="••••••••••••••••"
                 className="bg-background pr-10"
               />
@@ -157,25 +191,43 @@ export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultPro
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button 
-              size="sm" 
-              className="flex-1" 
-              onClick={handleSave} 
-              disabled={saving}
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={handleSave}
+              disabled={saving || !form.client_id}
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Salvar no Cofre
             </Button>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={handleTestConnection} 
-              disabled={testing || !config.client_id}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleTest}
+              disabled={testing || (!status?.has_credentials && !status?.uses_global_fallback)}
               title="Testar Conexão"
             >
               {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
             </Button>
+            {status?.has_credentials && !status?.uses_global_fallback && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDelete}
+                disabled={saving}
+                title="Remover credenciais"
+              >
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </Button>
+            )}
           </div>
+
+          {status?.last_test_at && (
+            <p className="text-[10px] text-muted-foreground italic">
+              Último teste: {new Date(status.last_test_at).toLocaleString("pt-BR")} —{" "}
+              {status.last_test_ok ? "✓" : "✗"} {status.last_test_message}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
