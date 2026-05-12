@@ -113,7 +113,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const UsersPage = () => {
   const { profile } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin, loading: tenantLoading } = useTenant();
   const queryClient = useQueryClient();
 
   // Edit state
