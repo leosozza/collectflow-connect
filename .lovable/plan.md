@@ -1,128 +1,106 @@
 
-## Unificação da geração de boletos Negociarie — Fonte única de verdade
+# Melhorias em /configuracoes/integracao
 
-Objetivo: eliminar a duplicação entre `negociarieService` (frontend) e `generate-agreement-boletos` (edge), mantendo a edge como **única** fonte. Sem regressão de UX. Sem quebrar nenhum dos demais fluxos da Negociarie (cobrança avulsa, sync, callback).
+## Diagnóstico
 
----
+A grade de cards (Financeiro / Discador / WhatsApp / Negativação / Enriquecimento / CRMs) já está bem desenhada. Os problemas estão em duas camadas:
 
-### Fase 1 — Estender a edge `generate-agreement-boletos` (sem tocar o front)
+### 1. Logos
+A página referencia `/logos/negociarie.png`, `/logos/3cplus.png`, etc., mas a pasta `public/logos/` **não existe**. Hoje cai sempre no ícone genérico do `lucide-react` colorido. O usuário não reconhece visualmente as marcas.
 
-**1.1. Aceitar novo parâmetro opcional no body**
-- `installment_key?: string` (ex: `"entrada"`, `"entrada_2"`, `"1"`, `"2"`).
-- Quando ausente: comportamento atual (lote completo) — **100% retro-compatível** com `agreementService.ts:444`, `agreementService.ts:1040` e `AgreementCalculator.tsx:697`.
+### 2. Conteúdo de cada integração (ao clicar no card)
+Auditando os 9 tabs, há três grupos bem distintos:
 
-**1.2. Comportamentos do modo single (`installment_key` presente)**
-- Filtrar `buildInstallments()` para devolver apenas a parcela com a chave canônica recebida.
-- Validar que a chave existe no acordo; se não, devolver `400` com mensagem clara.
-- **NÃO** aplicar o skip de `dueDate < today` (a UI já valida; reemissão manual deve passar).
-- **NÃO** alterar a flag `boleto_pendente` do acordo (uma parcela individual não deve mexer no estado do acordo todo).
-- Manter a marcação de `status='substituido'` da cobrança anterior com mesma `installment_key` (já existe no código atual da edge — linha 405).
-- Manter o skip de método ≠ BOLETO (linha 331), devolvendo erro explícito: `"Método da parcela é PIX/cartão — altere para boleto antes de reemitir"`. (Mais seguro que silenciosamente trocar; alinhado com `mem://features/billing/agreement-installments-ui`.)
+| Integração | Estado real | O que falta |
+|---|---|---|
+| **3CPlus** | Funcional (salva em `tenants.settings`, testa via `threecplus-proxy`) | Cabeçalho/explicação padronizada, link de onde pegar o token |
+| **Negociarie** | Funcional (vault + proxy) | Padronização visual e instruções |
+| **CobCloud** | Funcional (3 tokens, teste real) | Padronização |
+| **Evolution / Gupshup** | Funcional (instâncias) | Padronização do "como começar" |
+| **Asaas** | **STUB** — `setTimeout` falso, não salva nada, não testa | Implementar ou marcar como "Em breve" |
+| **Serasa** | **STUB** — idem | Implementar ou marcar como "Em breve" |
+| **Cenprot** | **STUB** — idem | Implementar ou marcar como "Em breve" |
+| **Target Data** | **STUB** — idem | Implementar ou marcar como "Em breve" |
 
-**1.3. Portar auto-heal de `client_profiles` para a edge**
-- Replicar `enrichClientDataFromClients` (hoje em `negociarieService.ts:24-68`) dentro da edge: se faltar campo em `client_profiles`, buscar em `clients` e disparar `upsertClientProfile` em background.
-- Deve rodar **antes** do check `missingFields` que dispara `boleto_pendente`. Sem isso, acordos que hoje só funcionam graças ao enrichment passariam a ser marcados como pendentes — regressão silenciosa.
-- Preserva a regra `mem://logic/client-data/canonical-profile-architecture`.
-
-**1.4. Logging**
-- Adicionar `mode: "single" | "batch"` aos logs já existentes da edge.
-- Manter timing detalhado (`auth_ms`, `queries_ms`, `negociarie_total_ms`, `per_installment_ms`).
-
-**1.5. Deploy isolado**
-- Deploy `generate-agreement-boletos`. Nenhuma mudança no front nesta fase → **zero risco** para usuários.
+Cada tab tem cabeçalho próprio diferente, layout diferente, e nenhuma traz uma seção objetiva de "para que serve / o que você precisa / como testar / como ir para produção" — exatamente o que o usuário pediu.
 
 ---
 
-### Fase 2 — Validação da edge isolada (antes de tocar o front)
+## Proposta (sem mexer no visual da listagem)
 
-Tudo via `curl_edge_functions` em ambiente preview, contra acordos reais de teste:
+### Etapa 1 — Logos reais
+Adicionar arquivos em `public/logos/`:
+- `negociarie.png`, `asaas.png`, `3cplus.png`, `evolution.png`, `gupshup.png`, `serasa.png`, `cenprot.png`, `targetdata.png`, `cobcloud.png`
 
-**2.1.** Modo lote (sem `installment_key`) em acordo já existente → confirmar:
-- Comportamento idêntico ao de hoje (mesma quantidade de cobranças geradas, mesmo `boleto_pendente`, mesmos logs de timing).
+Fonte: site oficial de cada parceiro (favicon/press kit). Padrão: PNG quadrado 256×256, fundo transparente. O código já tem fallback para o ícone caso a imagem falhe — nenhuma mudança de JSX necessária na grade.
 
-**2.2.** Modo single em parcela "entrada" → confirmar:
-- 1 cobrança nova com `installment_key = "<agId>:entrada"`.
-- Anterior marcada `substituido`.
-- `agreements.boleto_pendente` **não** mudou.
+Pequeno ajuste opcional no card: trocar `object-cover` por `object-contain` com padding interno (`p-1.5`) para a logo respirar e não ser cortada — ainda dentro do mesmo card colorido.
 
-**2.3.** Modo single em parcela com `dueDate < today` (vencimento já editado para futuro pela UI antes da chamada) → confirmar geração OK.
+### Etapa 2 — Padrão único de tela ao entrar numa integração
 
-**2.4.** Modo single em parcela com método PIX → confirmar erro claro retornado.
+Criar um componente compartilhado `IntegrationDetailLayout` usado por **todos os tabs**, com estrutura fixa:
 
-**2.5.** Modo single em acordo com `client_profiles` incompleto (mas com dados em `clients`) → confirmar auto-heal e geração OK.
+```text
+┌──────────────────────────────────────────────┐
+│ [Logo grande]  Nome do Provedor              │
+│                Categoria · Status (badge)     │
+│                "Para que serve" (1 linha)     │
+├──────────────────────────────────────────────┤
+│ ▸ O que você precisa                          │
+│   • Conta ativa em <provedor>                 │
+│   • Token / chave de API                      │
+│   • Link: "Onde obtenho?" (doc oficial)       │
+├──────────────────────────────────────────────┤
+│ ▸ Credenciais            [Modo: Teste|Produção]│
+│   <campos do tab atual>                       │
+│   [Salvar]  [Testar conexão]                  │
+├──────────────────────────────────────────────┤
+│ ▸ Status da integração                        │
+│   Última conexão OK em ...                    │
+│   Última falha: ...                           │
+└──────────────────────────────────────────────┘
+```
 
-**2.6.** Simular callback Negociarie (`negociarie-callback`) chegando para a cobrança gerada → confirmar baixa correta no classificador (`agreementInstallmentClassifier.ts:147`).
+Pontos-chave:
+- **Toggle Sandbox/Produção** fica visível e explícito (hoje só Negociarie e CobCloud têm noção disso). Persistido em `tenant_integrations.environment` (já existe esse padrão em outras integrações nossas).
+- **Seção "O que você precisa"** padronizada — texto curto + link externo para a doc oficial do parceiro de onde tirar o token.
+- **Seção "Status"** mostra resultado do último teste (data/hora + mensagem). Usa o resultado do botão "Testar conexão", salvo em `tenant_integrations.last_test_at` / `last_test_result`.
+- Os tabs existentes passam a renderizar **apenas** o bloco de campos (input do token/domínio). O cabeçalho, instruções e ações ficam no layout. Reduz divergência visual e código duplicado.
 
-**Critério de avanço para fase 3:** todos os 6 cenários acima passando.
+### Etapa 3 — Tratar os 4 stubs (Asaas / Serasa / Cenprot / Target Data)
 
----
+Sem implementar backend agora (escopo é UX/clareza), aplicar uma das duas opções **por integração**:
 
-### Fase 3 — Migrar o frontend
+- **Opção A — "Em breve"**: tab abre, mas mostra um banner claro "Esta integração estará disponível em breve" + lista de funcionalidades planejadas. Botão de salvar desabilitado. No card da grade, badge `Em breve` em vez de `Não configurado`.
+- **Opção B — habilitar cadastro real**: implementar o salvamento no `tenant_integrations` (vault) usando o mesmo fluxo do Negociarie. Sem teste de conexão por enquanto.
 
-**3.1.** Em `src/components/client-detail/AgreementInstallments.tsx`:
-- Linha 351 (`generateSingleBoleto`) → trocar por `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id: agreementId, installment_key: inst.customKey } })`.
-- Linha 736 (`generateAgreementBoletos`) → trocar por `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id: agreementId } })` (modo lote — mesma chamada que `agreementService` já faz).
-- Manter toast, refetch e `onRefresh` exatamente iguais.
+Recomendação: **A para Serasa/Cenprot/Target Data** (dependem de contratos B2B nossos com o parceiro, não basta o cliente ter token), **B para Asaas** (cliente pode trazer a própria conta, mesmo padrão do Negociarie).
 
-**3.2.** Em `src/services/negociarieService.ts`:
-- Remover: `generateSingleBoleto`, `generateAgreementBoletos`, `markPreviousBoletosAsSubstituido`, `enrichClientDataFromClients`, `buildBoletoPayload`, `buildInstallmentKey`, interface `BoletoInstallment` e helpers internos correlatos.
-- **Preservar intacto**: `testConnection`, `atualizarCallback`, `consultaCobrancas`, `parcelasPagas`, `alteradasHoje`, `novaCobranca`, `novaPix`, `novaCartao`, `getCobrancas`, `saveCobranca`. Esses são usados por `CobrancaForm`, `CobrancasList`, `NegociarieTab`, `SyncPanel` (cobrança avulsa e sync — fora do escopo).
+### Etapa 4 — Microcópia e clareza geral
 
-**3.3.** Verificações estáticas
-- Rodar typecheck (automático).
-- Confirmar que nenhum import órfão sobrou.
-
----
-
-### Fase 4 — QA manual no preview
-
-**4.1. Detalhe do acordo → "Reemitir parcela"**
-- Em entrada: confirmar toast OK, link novo, anterior substituída na lista.
-- Em parcela normal: idem.
-
-**4.2. Detalhe do acordo → "Gerar boletos depois"** (acordo com `boleto_pendente=true`)
-- Confirmar geração em lote, flag desligada, toast OK.
-
-**4.3. Aprovar acordo novo** (`agreementService:444`)
-- Confirmar que continua gerando todos os boletos (caminho não alterado).
-
-**4.4. Cobrança avulsa** (`Configurações → Integração → Cobranças → Nova`)
-- Confirmar que `CobrancaForm` continua funcionando (não tocado).
-
-**4.5. Sync** (`SyncPanel`)
-- Confirmar `parcelasPagas` e `alteradasHoje` continuam funcionando.
-
-**4.6. Callback real**
-- Aguardar/forçar callback Negociarie em uma cobrança gerada pela edge → confirmar baixa correta em `negociarie_cobrancas` e classificador exibindo "pago".
+- Trocar "Token de API" genérico pelo **nome real** que o parceiro usa (ex.: 3CPlus chama "Bearer Token"; Gupshup chama "API Key"; Asaas chama "Access Token").
+- Placeholder do input mostra **formato esperado** (ex.: `sk_prod_xxxxxxxx`).
+- Botão `Testar conexão` sempre antes de `Salvar` na ordem visual — incentiva o cliente a validar antes de persistir.
+- No card da grade, três estados claros em vez de dois: `Conectado` (verde) · `Configurado em teste` (amarelo) · `Não configurado` (cinza).
 
 ---
 
-### Garantias de não-quebrar (regras do projeto)
+## Detalhes técnicos
 
-- **Tenant Isolation**: a edge resolve `tenant_id` a partir de `agreement_id` no DB; o front nunca mais manda tenant explícito para esse fluxo. Reduz surface de erro.
-- **Phone Normalization E.164**: passa a viver só na edge (já existe em `generate-agreement-boletos`).
-- **Security: edge functions validam via JWT**: a edge já valida (`agreementService` invoca via supabase client autenticado).
-- **Canonical Profiles**: auto-heal preservado e centralizado.
-- **Installment UI Rules** (`mem://features/billing/agreement-installments-ui`): a UI continua dependendo de `installment_key` canônica — agora **garantidamente** canônica porque só existe um gerador.
-- **Negociarie Integration** (`mem://integrations/negociarie-gateway`): payload mantido (lógica `buildBoletoPayload` já espelhada na edge).
+- Novo componente `src/components/integracao/IntegrationDetailLayout.tsx` recebendo: `provider`, `logoUrl`, `category`, `description`, `requirements: string[]`, `docsUrl`, `environment`, `onEnvironmentChange`, `lastTest`, `children` (campos), `onSave`, `onTest`, `saving`, `testing`.
+- Refator de `NegociarieTab`, `ThreeCPlusTab`, `CobCloudTab`, `EvolutionTab`, `GupshupTab` para usar o novo layout — sem alterar lógica de save/test (apenas mover o JSX de fora dos campos para o layout).
+- `AsaasTab` / `SerasaTab` / `CenprotTab` / `TargetDataTenantTab`: substituir o `setTimeout` por estado "coming soon" (Asaas vira fluxo real igual Negociarie se você confirmar Opção B).
+- Logos: arquivos novos em `public/logos/`. Sem mudança no `IntegracaoPage.tsx` além do `object-contain p-1.5`.
+- Migração leve em `tenant_integrations` apenas se ainda não existirem `last_test_at` (timestamptz) e `last_test_result` (jsonb). Confirmar antes de criar.
 
-### Fora de escopo (explicitamente não tocar)
+## Fora de escopo
 
-- `negociarie-callback` — funciona por `id_geral`, não depende de `installment_key`.
-- `agreementInstallmentClassifier.ts` — só leitura, já consome chave canônica.
-- `manual_payments`, `portal_payments`, `send-notifications` — caminhos paralelos legítimos.
-- `CobrancaForm` (cobrança avulsa não-acordo).
-- O caso da Eunice (`proposed_total` inconsistente) — separado.
+- Nada na grade (cores, ordem, agrupamento) muda.
+- Não tocaremos nas edge functions de proxy (`threecplus-proxy`, `negociarie-proxy`, `cobcloud-proxy`).
+- Sem mudar o fluxo de WhatsApp (Evolution/Gupshup mantêm a sub-listagem de instâncias dentro do novo layout).
 
-### Plano de rollback
+## Perguntas antes de executar
 
-- Fase 1 e 2: nada para reverter (edge é retro-compatível).
-- Fase 3: revert do commit do front em 1 clique restaura o caminho B; a edge estendida continua funcionando para quem usa o modo lote.
-
-### Resultado esperado
-
-- Uma única implementação canônica da geração de boleto de acordo, server-side.
-- Impossível regredir convenção de chave (`:entrada` vs `:0`).
-- ~250 linhas a menos no bundle do front.
-- Logs centralizados em `edge_function_logs` para qualquer admin debugar.
-- Comportamento observável **idêntico** para o usuário final.
+1. Você consegue me enviar (ou autorizar buscar das fontes oficiais) os 9 PNGs de logo? Posso usar fallback automático para favicons oficiais se preferir.
+2. Para Asaas/Serasa/Cenprot/Target Data — confirma a recomendação (A para 3 deles, B para Asaas) ou quer todos como "Em breve" por enquanto?
+3. Você quer o toggle **Sandbox / Produção** visível em todas integrações ou só nas que realmente têm ambiente separado (Negociarie, Asaas, CobCloud)?
