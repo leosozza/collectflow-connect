@@ -97,13 +97,15 @@ export const INTEGRATIONS: Record<string, IntegrationMeta> = {
     logoUrl: cb("evolution-api.com"),
     brandColor: "bg-emerald-500",
     fallbackIcon: createElement(MessageCircle, { className: "w-7 h-7" }),
-    available: false,
-    comingSoonFeatures: [
-      "Cadastro centralizado de servidor Evolution por tenant",
-      "Criação de instância e leitura de QR Code direto pela RIVO",
-      "Atribuição de instâncias a operadores",
-      "Painel hoje disponível em Atendimento → Canais → WhatsApp",
-    ],
+    available: true,
+    requirements: {
+      title: "O que você precisa",
+      items: [
+        "Servidor Evolution já provisionado pela RIVO (sem configuração extra)",
+        "Criar uma instância e ler o QR Code com o WhatsApp do número desejado",
+        "Atribuir a instância aos operadores em Atendimento → Canais",
+      ],
+    },
   },
   gupshup: {
     id: "gupshup",
@@ -114,13 +116,18 @@ export const INTEGRATIONS: Record<string, IntegrationMeta> = {
     logoUrl: cb("gupshup.io"),
     brandColor: "bg-green-600",
     fallbackIcon: createElement(MessageCircle, { className: "w-7 h-7" }),
-    available: false,
-    comingSoonFeatures: [
-      "Cadastro do App Name e API Key da Gupshup",
-      "Sincronização automática de templates aprovados",
-      "Alternância entre ambientes Sandbox e Produção",
-      "Painel hoje disponível em Atendimento → Canais → WhatsApp",
-    ],
+    available: true,
+    requirements: {
+      title: "O que você precisa",
+      items: [
+        "Conta ativa na Gupshup (BSP) com app aprovado pela Meta",
+        "App Name (identificador do app na Gupshup)",
+        "API Key gerada no painel da Gupshup",
+        "Número de origem (source number) homologado",
+      ],
+      docsUrl: "https://www.gupshup.io",
+      docsLabel: "Acessar painel Gupshup",
+    },
   },
   serasa: {
     id: "serasa",
