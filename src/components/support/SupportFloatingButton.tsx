@@ -479,22 +479,29 @@ const SupportFloatingButton = () => {
               <div className="flex gap-2">
                 <Input
                   ref={inputRef}
-                  placeholder={humanMode ? "Mensagem para o atendente..." : "Pergunte algo ao RIVO..."}
+                  placeholder={
+                    !category
+                      ? "Selecione uma área para começar..."
+                      : humanMode
+                        ? "Mensagem para o atendente..."
+                        : "Pergunte algo ao RIVO..."
+                  }
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="h-9 text-xs rounded-full border-muted bg-muted/50"
+                  disabled={!category}
+                  className="h-9 text-xs rounded-full border-muted bg-muted/50 disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 <Button
                   size="icon"
                   className="h-9 w-9 rounded-full shrink-0"
                   onClick={handleSend}
-                  disabled={!message.trim() || isLoading}
+                  disabled={!message.trim() || isLoading || !category}
                 >
                   <Send className="w-3.5 h-3.5" />
                 </Button>
               </div>
-              {!humanMode && (
+              {!humanMode && category && (
                 <button
                   onClick={handleTalkToHuman}
                   className="w-full flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors py-1"
