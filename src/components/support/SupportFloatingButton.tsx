@@ -373,20 +373,24 @@ const SupportFloatingButton = () => {
                     Para agilizar seu suporte, escolha abaixo a área que melhor atende sua necessidade.
                   </p>
                   {!category && (
-                    <div className="flex gap-2 mt-4 w-full max-w-[260px]">
+                    <div className="flex gap-3 mt-5 w-full max-w-[280px]">
                       <button
                         onClick={() => handleSelectCategory("suporte")}
-                        className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors"
+                        className="flex-1 flex flex-col items-center gap-2 px-4 py-4 rounded-xl border-2 border-border bg-card shadow-sm hover:border-primary hover:bg-primary/10 hover:shadow-md transition-all"
                       >
-                        <HeadphonesIcon className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium">Suporte</span>
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <HeadphonesIcon className="w-5 h-5 text-primary" />
+                        </div>
+                        <span className="text-xs font-semibold text-foreground">Suporte</span>
                       </button>
                       <button
                         onClick={() => handleSelectCategory("financeiro")}
-                        className="flex-1 flex flex-col items-center gap-1 px-3 py-3 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors"
+                        className="flex-1 flex flex-col items-center gap-2 px-4 py-4 rounded-xl border-2 border-border bg-card shadow-sm hover:border-primary hover:bg-primary/10 hover:shadow-md transition-all"
                       >
-                        <DollarSign className="w-4 h-4 text-primary" />
-                        <span className="text-xs font-medium">Financeiro</span>
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <DollarSign className="w-5 h-5 text-primary" />
+                        </div>
+                        <span className="text-xs font-semibold text-foreground">Financeiro</span>
                       </button>
                     </div>
                   )}
