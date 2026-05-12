@@ -4,19 +4,21 @@ import { useToast } from "@/hooks/use-toast";
 import { useTenant } from "@/hooks/useTenant";
 import { updateTenant } from "@/services/tenantService";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wifi, WifiOff, Loader2, CheckCircle2, KeyRound, Save, Eye, EyeOff, Database } from "lucide-react";
+import { Wifi, WifiOff, Loader2, KeyRound, Save, Eye, EyeOff, Database } from "lucide-react";
+import IntegrationDetailLayout from "./IntegrationDetailLayout";
+import { INTEGRATIONS } from "./integrationsCatalog";
 
 const CobCloudTab = () => {
+  const meta = INTEGRATIONS.cobcloud;
   const { toast } = useToast();
   const { tenant, refetch } = useTenant();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [testing, setTesting] = useState(false);
   const [connectionDetail, setConnectionDetail] = useState<{ devedores_count?: number; titulos_count?: number } | null>(null);
 
-  // Credentials state
   const [tokenCompany, setTokenCompany] = useState("");
   const [tokenAssessoria, setTokenAssessoria] = useState("");
   const [tokenClient, setTokenClient] = useState("");
@@ -26,6 +28,7 @@ const CobCloudTab = () => {
   const [showClient, setShowClient] = useState(false);
 
   const hasCredentials = !!(tenant?.settings?.cobcloud_token_company && tenant?.settings?.cobcloud_token_client);
+  const status = connected ? "connected" : hasCredentials ? "test" : "not_configured";
 
   useEffect(() => {
     if (tenant?.settings) {
@@ -68,14 +71,11 @@ const CobCloudTab = () => {
     try {
       const result = await cobcloudService.testConnection();
       setConnected(result.connected);
-      setConnectionDetail({
-        devedores_count: result.devedores_count,
-        titulos_count: result.titulos_count,
-      });
+      setConnectionDetail({ devedores_count: result.devedores_count, titulos_count: result.titulos_count });
       const detail = `Devedores: ${result.devedores_count ?? 0} | Títulos: ${result.titulos_count ?? 0}`;
       toast({
         title: result.connected ? "Conectado!" : "Falha na conexão",
-        description: result.connected ? `API CobCloud acessível. ${detail}` : "Verifique as credenciais configuradas",
+        description: result.connected ? `API CobCloud acessível. ${detail}` : "Verifique as credenciais",
         variant: result.connected ? "default" : "destructive",
       });
     } catch (e: any) {
@@ -88,66 +88,62 @@ const CobCloudTab = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <IntegrationDetailLayout
+      name={meta.name}
+      category={meta.category}
+      logoUrl={meta.logoUrl}
+      fallbackIcon={meta.fallbackIcon}
+      brandColor={meta.brandColor}
+      description={meta.description}
+      status={status}
+      requirements={meta.requirements}
+    >
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <KeyRound className="w-5 h-5 text-primary" />
-            Credenciais da API CobCloud
-          </CardTitle>
-          <CardDescription>
-            Insira os tokens de autenticação da API CobCloud v3.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm text-foreground">Credenciais da API CobCloud v3</h3>
+          </div>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="token-company" className="text-xs text-muted-foreground">Token Company</Label>
+              <Label className="text-xs text-muted-foreground">Token Company</Label>
               <div className="relative">
-                <Input id="token-company" type={showCompany ? "text" : "password"} placeholder="Token da empresa" value={tokenCompany} onChange={(e) => setTokenCompany(e.target.value)} className="bg-background/50" />
+                <Input type={showCompany ? "text" : "password"} placeholder="Token da empresa" value={tokenCompany} onChange={(e) => setTokenCompany(e.target.value)} className="bg-background/50" />
                 <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowCompany(!showCompany)}>
                   {showCompany ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="token-assessoria" className="text-xs text-muted-foreground">Token Assessoria (opcional)</Label>
+              <Label className="text-xs text-muted-foreground">Token Assessoria (opcional)</Label>
               <div className="relative">
-                <Input id="token-assessoria" type={showAssessoria ? "text" : "password"} placeholder="Token da assessoria" value={tokenAssessoria} onChange={(e) => setTokenAssessoria(e.target.value)} className="bg-background/50" />
+                <Input type={showAssessoria ? "text" : "password"} placeholder="Token da assessoria" value={tokenAssessoria} onChange={(e) => setTokenAssessoria(e.target.value)} className="bg-background/50" />
                 <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowAssessoria(!showAssessoria)}>
                   {showAssessoria ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="token-client" className="text-xs text-muted-foreground">Token Client</Label>
+              <Label className="text-xs text-muted-foreground">Token Client</Label>
               <div className="relative">
-                <Input id="token-client" type={showClient ? "text" : "password"} placeholder="Token do client/credor" value={tokenClient} onChange={(e) => setTokenClient(e.target.value)} className="bg-background/50" />
+                <Input type={showClient ? "text" : "password"} placeholder="Token do client/credor" value={tokenClient} onChange={(e) => setTokenClient(e.target.value)} className="bg-background/50" />
                 <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowClient(!showClient)}>
                   {showClient ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
-            
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row gap-3 pt-1">
+              <Button onClick={handleTestConnection} disabled={testing || !hasCredentials} variant="secondary" className="flex-1">
+                {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : connected ? <Wifi className="w-4 h-4 mr-2 text-emerald-500" /> : <WifiOff className="w-4 h-4 mr-2" />}
+                Testar Conexão
+              </Button>
               <Button onClick={handleSaveCredentials} disabled={savingCredentials} className="flex-1">
                 {savingCredentials ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                 Salvar Credenciais
               </Button>
-              <Button onClick={handleTestConnection} disabled={testing || !hasCredentials} variant="secondary" className="flex-1">
-                {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : (connected ? <Wifi className="w-4 h-4 mr-2 text-emerald-500" /> : <WifiOff className="w-4 h-4 mr-2" />)}
-                Testar Conexão
-              </Button>
             </div>
-
-            {hasCredentials && (
-              <div className="flex items-center gap-2 text-sm justify-center text-emerald-500 pt-2">
-                <CheckCircle2 className="w-4 h-4" /> Credenciais configuradas
-              </div>
-            )}
           </div>
 
-          {/* Connection detail badges */}
           {connectionDetail && connected && (
             <div className="pt-4 border-t border-border/50">
               <div className="flex flex-wrap gap-3">
@@ -166,7 +162,7 @@ const CobCloudTab = () => {
           )}
         </CardContent>
       </Card>
-    </div>
+    </IntegrationDetailLayout>
   );
 };
 

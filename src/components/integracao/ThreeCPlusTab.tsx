@@ -4,11 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wifi, WifiOff, Loader2, Save, Phone, Eye, EyeOff } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Wifi, WifiOff, Loader2, Save, Eye, EyeOff, KeyRound } from "lucide-react";
 import { toast } from "sonner";
+import IntegrationDetailLayout from "./IntegrationDetailLayout";
+import { INTEGRATIONS } from "./integrationsCatalog";
 
 const ThreeCPlusTab = () => {
+  const meta = INTEGRATIONS["3cplus"];
   const { tenant, refetch } = useTenant();
   const settings = (tenant?.settings as Record<string, any>) || {};
 
@@ -26,6 +29,9 @@ const ThreeCPlusTab = () => {
     if (t && !apiToken) setApiToken(t);
   }, [settings.threecplus_domain, settings.threecplus_api_token]);
 
+  const isConfigured = !!(settings.threecplus_domain && settings.threecplus_api_token);
+  const status = connected ? "connected" : isConfigured ? "test" : "not_configured";
+
   const handleSave = async () => {
     if (!tenant?.id) return;
     setSaving(true);
@@ -38,10 +44,7 @@ const ThreeCPlusTab = () => {
         threecplus_domain: domain.trim(),
         threecplus_api_token: apiToken.trim(),
       };
-      const { error } = await supabase
-        .from("tenants")
-        .update({ settings: newSettings })
-        .eq("id", tenant.id);
+      const { error } = await supabase.from("tenants").update({ settings: newSettings }).eq("id", tenant.id);
       if (error) throw error;
       await refetch();
       toast.success("Credenciais 3CPlus salvas!");
@@ -61,11 +64,7 @@ const ThreeCPlusTab = () => {
     setConnected(null);
     try {
       const { data, error } = await supabase.functions.invoke("threecplus-proxy", {
-        body: {
-          action: "list_campaigns",
-          domain: domain.trim(),
-          api_token: apiToken.trim(),
-        },
+        body: { action: "list_campaigns", domain: domain.trim(), api_token: apiToken.trim() },
       });
       if (error) throw error;
       if (data?.status === 200 && data?.data) {
@@ -84,23 +83,27 @@ const ThreeCPlusTab = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <IntegrationDetailLayout
+      name={meta.name}
+      category={meta.category}
+      logoUrl={meta.logoUrl}
+      fallbackIcon={meta.fallbackIcon}
+      brandColor={meta.brandColor}
+      description={meta.description}
+      status={status}
+      requirements={meta.requirements}
+    >
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Phone className="w-6 h-6 text-primary" />
-            <div>
-              <CardTitle className="text-base">3CPlus - Discador</CardTitle>
-              <CardDescription>
-                Configure a integração com o discador 3CPlus para envio de listas de contatos e discagem automática
-              </CardDescription>
-            </div>
+        <CardContent className="p-5 space-y-5">
+          <div className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm text-foreground">Credenciais</h3>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="domain" className="text-xs text-muted-foreground">Domínio da empresa</Label>
+              <Label htmlFor="domain" className="text-xs text-muted-foreground">
+                Domínio da empresa
+              </Label>
               <Input
                 id="domain"
                 placeholder="minha-empresa.3c.plus"
@@ -108,12 +111,12 @@ const ThreeCPlusTab = () => {
                 onChange={(e) => setDomain(e.target.value)}
                 className="bg-background/50"
               />
-              <p className="text-[10px] text-muted-foreground">
-                Ex: minha-empresa.3c.plus (sem https://)
-              </p>
+              <p className="text-[10px] text-muted-foreground">Ex: minha-empresa.3c.plus (sem https://)</p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="apiToken" className="text-xs text-muted-foreground">Token de API (Gestor)</Label>
+              <Label htmlFor="apiToken" className="text-xs text-muted-foreground">
+                Token de API (Gestor)
+              </Label>
               <div className="relative">
                 <Input
                   id="apiToken"
@@ -133,24 +136,29 @@ const ThreeCPlusTab = () => {
                 </button>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Obtenha em Configurações → Usuários → Opções Avançadas
+                Configurações → Usuários → Opções Avançadas
               </p>
             </div>
           </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-1">
+            <Button variant="secondary" onClick={handleTestConnection} disabled={testing} className="flex-1">
+              {testing ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : connected ? (
+                <Wifi className="w-4 h-4 mr-2 text-emerald-500" />
+              ) : (
+                <WifiOff className="w-4 h-4 mr-2" />
+              )}
+              Testar Conexão
+            </Button>
             <Button onClick={handleSave} disabled={saving} className="flex-1">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
               Salvar Credenciais
             </Button>
-            <Button variant="secondary" onClick={handleTestConnection} disabled={testing} className="flex-1">
-              {testing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : (connected ? <Wifi className="w-4 h-4 mr-2 text-emerald-500" /> : <WifiOff className="w-4 h-4 mr-2" />)}
-              Testar Conexão
-            </Button>
           </div>
         </CardContent>
       </Card>
-    </div>
+    </IntegrationDetailLayout>
   );
 };
 
