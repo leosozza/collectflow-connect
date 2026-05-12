@@ -75,14 +75,13 @@ async function getNegociarieConfig(tenantId: string, creditorId?: string) {
   return { clientId, clientSecret };
 }
 
-async function getToken(supabase: any, tenantId: string, creditorId?: string): Promise<string> {
-  // O cache de token agora precisa ser por tenant + credor para evitar colisão
+async function getToken(tenantId: string, creditorId?: string): Promise<string> {
   const cacheKey = `token_${tenantId}_${creditorId || "default"}`;
   if (cachedTokens[cacheKey] && Date.now() < tokenExpiries[cacheKey]) {
     return cachedTokens[cacheKey];
   }
 
-  const { clientId, clientSecret } = await getNegociarieConfig(supabase, tenantId, creditorId);
+  const { clientId, clientSecret } = await getNegociarieConfig(tenantId, creditorId);
 
   const res = await fetch(LOGIN_URL, {
     method: "POST",
@@ -102,14 +101,14 @@ async function getToken(supabase: any, tenantId: string, creditorId?: string): P
   const data = await res.json();
   const token = data.access_token || data.token;
   if (!token) throw new Error("Token não retornado pela API Negociarie");
-  
+
   cachedTokens[cacheKey] = token;
   tokenExpiries[cacheKey] = Date.now() + 50 * 60 * 1000;
   return token;
 }
 
-async function negociarieRequest(supabase: any, tenantId: string, method: string, endpoint: string, body?: unknown, creditorId?: string) {
-  const token = await getToken(supabase, tenantId, creditorId);
+async function negociarieRequest(tenantId: string, method: string, endpoint: string, body?: unknown, creditorId?: string) {
+  const token = await getToken(tenantId, creditorId);
   const url = `${NEGOCIARIE_BASE}${endpoint}`;
   const opts: RequestInit = {
     method,
