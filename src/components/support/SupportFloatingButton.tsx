@@ -419,19 +419,39 @@ const SupportFloatingButton = () => {
                   <span className="text-[10px] bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">Humano</span>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20"
-                onClick={() => {
-                  setOpen(false);
-                  // Reset chat para começar do zero na próxima abertura
-                  handleResetCategory();
-                }}
-              >
-                <ChevronDown className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen((v) => !v)}
+                  title="Histórico"
+                  className={cn(
+                    "h-7 px-2 rounded-md inline-flex items-center gap-1 text-[11px] font-medium transition-colors",
+                    historyOpen
+                      ? "bg-primary-foreground/30 text-primary-foreground"
+                      : "text-primary-foreground hover:bg-primary-foreground/20"
+                  )}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  Histórico
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20"
+                  onClick={handleMinimize}
+                  title="Minimizar (mantém conversa)"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
+
+            {historyOpen ? (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <SupportHistoryPanel onBack={() => setHistoryOpen(false)} />
+              </div>
+            ) : (
+            <>
 
             {/* Messages */}
             <ScrollArea className="flex-1 px-4 py-3">
