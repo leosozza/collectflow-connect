@@ -5490,6 +5490,36 @@ export type Database = {
           },
         ]
       }
+      support_ai_conversations: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          messages: Json
+          tenant_id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          messages?: Json
+          tenant_id: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          messages?: Json
+          tenant_id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       support_messages: {
         Row: {
           content: string
