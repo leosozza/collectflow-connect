@@ -128,8 +128,7 @@ const App = () => (
                 <Route index element={<Navigate to="integracao" replace />} />
                 <Route path="integracao" element={<IntegracaoPage />} />
                 <Route path="auditoria" element={<AuditoriaPage />} />
-                <Route path="api" element={<ApiDocsPage />} />
-                <Route path="mcp" element={<McpDocsPage />} />
+                <Route path="apis" element={<ApisPage />} />
                 <Route path="maxlist" element={<MaxListPage />} />
               </Route>
               <Route path="contact-center/telefonia" element={<ModuleGuard module="telefonia"><ContactCenterPage channel="telefonia" /></ModuleGuard>} />
