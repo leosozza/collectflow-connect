@@ -126,6 +126,25 @@ Deno.serve(async (req) => {
           ? `${rawId.substring(0, 4)}••••${rawId.substring(rawId.length - 4)}`
           : "••••"
         : "";
+
+      // Quando consultando um credor, também olha a linha do tenant para informar fallback
+      let tenant_fallback_active = false;
+      let tenant_uses_global_fallback = false;
+      if (creditorId) {
+        const { data: tenantRow } = await admin
+          .from("tenant_integrations")
+          .select("config, is_active")
+          .eq("tenant_id", targetTenantId)
+          .eq("provider", provider)
+          .is("creditor_id", null)
+          .maybeSingle();
+        const tcfg = (tenantRow?.config as any) || {};
+        const tenantHasCreds = !!(tcfg.client_id && tcfg.client_secret);
+        tenant_uses_global_fallback = tcfg.uses_global_fallback === true;
+        tenant_fallback_active =
+          (tenantRow?.is_active ?? false) && (tenantHasCreds || tenant_uses_global_fallback);
+      }
+
       return json(200, {
         configured: !!existing,
         has_credentials: !!(cfg.client_id && cfg.client_secret),
@@ -136,6 +155,8 @@ Deno.serve(async (req) => {
         last_test_ok: existing?.last_test_ok ?? null,
         last_test_message: existing?.last_test_message ?? null,
         callback_registered_at: existing?.callback_registered_at ?? null,
+        tenant_fallback_active,
+        tenant_uses_global_fallback,
       });
     }
 

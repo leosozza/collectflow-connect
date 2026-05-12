@@ -1,46 +1,50 @@
-## Migrar componentes admin para a edge function segura
+## Diagnóstico
 
-Os dois componentes admin (`TenantIntegrationsVault` em `SuperAdminPage` e `CreditorIntegrationsVault` em `CredorForm`) ainda fazem `SELECT`/`UPSERT` direto na tabela `tenant_integrations`. Como a RLS agora é `no_direct_select USING(false)` e o INSERT/UPDATE exige `tenant_id = get_my_tenant_id()`, esses dois componentes estão **quebrados**:
+A tela mostra **Cofre de Integrações → Negociarie: "Não configurado"** com os campos vazios. Isso **não é um bug** — é o estado real do banco:
 
-- A leitura sempre retorna vazio (toda integração aparece como "Não configurado").
-- O super admin não consegue salvar credenciais para outros tenants (RLS bloqueia porque o `tenant_id` alvo ≠ `get_my_tenant_id()` do super admin).
+- A Y.BRASIL tem **apenas 1 linha** em `tenant_integrations` para o provider `negociarie`:
+  - `creditor_id = NULL` (escopo do tenant inteiro)
+  - `uses_global_fallback = true`
+  - `is_active = true`, `last_test_ok = true`
+- **Nenhum credor** (incluindo o que está sendo editado na tela) tem credenciais próprias.
 
-### Solução
+O componente `CreditorIntegrationsVault` consulta a linha **do credor atual** (`creditor_id = X`). Como ela não existe, ele retorna `has_credentials: false` → "Não configurado". A geração de boletos da Y.BRASIL **continua funcionando** porque o `negociarie-proxy` faz fallback para o nível do tenant (e este, para as credenciais globais via `NEGOCIARIE_CLIENT_ID/SECRET`).
 
-Centralizar toda leitura/escrita pela edge function `negociarie-credentials` (que já roda em service-role e valida o solicitante). Acrescentamos 1 ação nova e ampliamos as existentes para aceitar `tenant_id` quando o chamador for super admin.
+Portanto o que está errado é a **UX**: o usuário não consegue distinguir "este credor não tem cofre próprio mas o tenant cobre via fallback" de "está realmente sem nada e vai falhar".
 
----
+## O que ajustar (apenas UI/edge — sem mudança de regra)
 
-### 1. Estender `supabase/functions/negociarie-credentials/index.ts`
+### 1. `negociarie-credentials` — incluir info do escopo tenant no `get_status`
 
-- **Nova action `get_status`**: retorna o mesmo formato mascarado da RPC `get_my_integrations_status` (sem `client_secret`), filtrado por `tenant_id` + `creditor_id` opcionais.
-- **Permissão "ator"**:
-  - Se `payload.tenant_id` está ausente OU é igual ao tenant do chamador → exige `profiles.role = 'admin'` (comportamento atual).
-  - Se `payload.tenant_id` é **diferente** do tenant do chamador → exige `public.can_access_tenant(payload.tenant_id)` retornar `true` (super admin support mode, padrão já adotado em outras RPCs do projeto).
-- Aplicar a mesma checagem de "ator" em `save`, `test` e `delete`, usando `targetTenantId = payload.tenant_id ?? callerTenantId`.
+Quando a chamada vier com `creditor_id`, fazer **uma segunda leitura** da linha de tenant (`creditor_id IS NULL`) e devolver dois campos extras:
 
-### 2. Refatorar `src/components/admin/integrations/TenantIntegrationsVault.tsx`
+- `tenant_fallback_active: boolean` (existe linha tenant ativa com credenciais OU `uses_global_fallback`)
+- `tenant_uses_global_fallback: boolean`
 
-- Trocar o `select` direto por `supabase.functions.invoke('negociarie-credentials', { body: { action: 'get_status', tenant_id } })`.
-- Trocar o `upsert` direto por `action: 'save'` com `tenant_id` no body. Isso valida na Negociarie antes de gravar — comportamento idêntico ao `NegociarieTab` da própria tenant.
-- Estado local exibe `client_id_masked`, `last_test_ok`, `callback_registered_at`, `uses_global_fallback`. Campo `client_secret` fica como input vazio (envia só ao salvar, mantém o anterior se vazio — lógica que `negociarie-credentials` já implementa).
+Sem alterar contrato existente.
 
-### 3. Refatorar `src/components/admin/integrations/CreditorIntegrationsVault.tsx`
+### 2. `CreditorIntegrationsVault.tsx` — refletir o fallback
 
-- Mesmo padrão do item 2, com `creditor_id` no body de todas as ações.
-- Mostrar badge "Cofre Ativo" baseada em `has_credentials` retornado pela função.
+- Quando `has_credentials = false` **e** `tenant_fallback_active = true`:
+  - Substituir o badge "Não configurado" por **"Usando cofre do tenant"** (variante neutra) e, se `tenant_uses_global_fallback`, complementar com "(fallback global)".
+  - Mostrar uma linha curta abaixo do título: *"Este credor não possui credenciais próprias. As cobranças usam as credenciais configuradas no tenant. Configure abaixo apenas se este credor tiver Client ID/Secret próprios na Negociarie."*
+- Quando `has_credentials = false` **e** `tenant_fallback_active = false`:
+  - Manter "Não configurado" (estado real de risco) com texto: *"Sem credenciais — boletos deste credor falharão até configurar aqui ou no nível do tenant."*
 
-### 4. Smoke test pós-deploy
+### 3. `TenantIntegrationsVault.tsx` — espelhar a mesma clareza
 
-- Como super admin, abrir `SuperAdminPage` → gerenciar uma tenant qualquer → ver status carregado e salvar credenciais fictícias (deve falhar no login da Negociarie como esperado).
-- Como admin do tenant Y.BRASIL, abrir `CredorForm` em um credor sem cobrança direta — deve aparecer "Não configurado" sem quebrar.
-- Conferir que o `NegociarieTab` em Configurações → Integrações **continua** funcionando (não tocamos nele).
+- Se a linha do tenant existir só com `uses_global_fallback`, badge **"Fallback global ativo"** (neutro, não "Não configurado").
+- Texto curto explicando que credenciais próprias do tenant sobrepõem o fallback global.
 
----
+### 4. Smoke test após o ajuste
 
-### Fora do escopo desta rodada
-- Migrar Asaas/CobCloud para o mesmo cofre — feito quando outro tenant pedir.
-- HMAC validation extra no webhook — já corrigido na rodada anterior.
-- Remover documentação antiga referente ao acesso direto da tabela.
+- Abrir credor da Y.BRASIL → deve mostrar "Usando cofre do tenant (fallback global)".
+- Abrir tenant Y.BRASIL no `SuperAdminPage` → "Fallback global ativo".
+- Salvar credenciais próprias num credor de teste → vira "Cofre Ativo".
+- Remover credenciais → volta a "Usando cofre do tenant".
 
-Resultado esperado: super admin volta a gerenciar credenciais Negociarie de qualquer tenant; o admin do tenant edita só as suas; Y.BRASIL operacional segue intocada porque continua usando `uses_global_fallback`.
+## Fora de escopo
+
+- Migrar/forçar Y.BRASIL a ter credenciais próprias por credor.
+- Mexer em `negociarie-proxy` / `negociarie-callback` (já corrigidos nas etapas anteriores).
+- Logs de erro da seção "LOGS DE ERROS DE INTEGRAÇÃO" — já está vazio porque não há erros (comportamento correto).

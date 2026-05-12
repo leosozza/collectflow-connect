@@ -21,6 +21,8 @@ interface VaultStatus {
   last_test_at: string | null;
   last_test_ok: boolean | null;
   last_test_message: string | null;
+  tenant_fallback_active?: boolean;
+  tenant_uses_global_fallback?: boolean;
 }
 
 export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorIntegrationsVaultProps) => {
@@ -136,10 +138,27 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
             <Badge variant="outline" className="bg-background text-[10px] gap-1">
               <ShieldCheck className="w-3 h-3 text-green-500" /> Cofre Ativo
             </Badge>
+          ) : status?.tenant_fallback_active ? (
+            <Badge variant="outline" className="bg-background text-[10px] gap-1">
+              <ShieldCheck className="w-3 h-3 text-blue-500" />
+              Usando cofre do tenant{status?.tenant_uses_global_fallback ? " (fallback global)" : ""}
+            </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px]">Não configurado</Badge>
+            <Badge variant="outline" className="text-[10px] text-destructive border-destructive/40">Não configurado</Badge>
           )}
         </div>
+
+        {!status?.has_credentials && status?.tenant_fallback_active && (
+          <p className="text-[11px] text-muted-foreground mb-3 leading-snug">
+            Este credor não possui credenciais próprias. As cobranças usam as credenciais configuradas no nível do tenant.
+            Configure abaixo apenas se este credor tiver Client ID/Secret próprios na Negociarie.
+          </p>
+        )}
+        {!status?.has_credentials && !status?.tenant_fallback_active && (
+          <p className="text-[11px] text-destructive/90 mb-3 leading-snug">
+            Sem credenciais — boletos deste credor falharão até configurar aqui ou no nível do tenant.
+          </p>
+        )}
 
         <div className="space-y-3">
           {status?.client_id_masked && (
