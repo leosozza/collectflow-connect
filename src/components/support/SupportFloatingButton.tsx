@@ -243,7 +243,7 @@ const SupportFloatingButton = () => {
     setMessages(updatedMessages);
     setMessage("");
     await streamAIResponse(trimmed, updatedMessages);
-  }, [message, isLoading, humanMode, ticketId, user, messages, streamAIResponse, toast, queryClient]);
+  }, [message, isLoading, humanMode, ticketId, user, messages, streamAIResponse, toast, queryClient, category]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
