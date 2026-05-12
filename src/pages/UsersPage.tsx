@@ -458,7 +458,11 @@ const UsersPage = () => {
     return set;
   }, [users]);
 
-  if (profile?.role !== "admin") {
+  if (tenantLoading) {
+    return <div className="text-center py-12 text-muted-foreground">Carregando...</div>;
+  }
+
+  if (!isTenantAdmin) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         Acesso restrito a administradores.
