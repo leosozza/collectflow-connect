@@ -93,6 +93,10 @@ const IntegracaoPage = () => {
           : "not_configured";
       case "evolution":
         return hasEvolution ? "connected" : "not_configured";
+      case "gupshup":
+        return hasGupshup || (settings.gupshup_api_key && settings.gupshup_app_name)
+          ? "connected"
+          : "not_configured";
       default:
         return "not_configured";
     }
