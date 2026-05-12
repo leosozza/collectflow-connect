@@ -10,51 +10,21 @@ import GupshupTab from "@/components/integracao/GupshupTab";
 import SerasaTab from "@/components/integracao/SerasaTab";
 import CenprotTab from "@/components/integracao/CenprotTab";
 import TargetDataTenantTab from "@/components/integracao/TargetDataTenantTab";
-import { Phone, MessageCircle, ShieldAlert, Cloud, Handshake, ArrowLeft, CheckCircle2, CreditCard, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Sparkles, Info } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  INTEGRATIONS,
+  INTEGRATION_SEGMENTS,
+  IntegrationStatus,
+} from "@/components/integracao/integrationsCatalog";
 
-const INTEGRATION_SEGMENTS = [
-  {
-    title: "Financeiro",
-    items: [
-      { id: "negociarie", name: "Negociarie", icon: Handshake, color: "bg-blue-600", logoUrl: "/logos/negociarie.png" },
-      { id: "asaas", name: "Asaas", icon: CreditCard, color: "bg-indigo-600", logoUrl: "/logos/asaas.png" },
-    ]
-  },
-  {
-    title: "Discador",
-    items: [
-      { id: "3cplus", name: "3CPlus", icon: Phone, color: "bg-orange-500", logoUrl: "/logos/3cplus.png" }
-    ]
-  },
-  {
-    title: "WhatsApp",
-    items: [
-      { id: "evolution", name: "Evolution API", icon: MessageCircle, color: "bg-emerald-500", logoUrl: "/logos/evolution.png" },
-      { id: "gupshup", name: "Gupshup (Oficial)", icon: MessageCircle, color: "bg-green-600", logoUrl: "/logos/gupshup.png" }
-    ]
-  },
-  {
-    title: "Negativação",
-    items: [
-      { id: "serasa", name: "Serasa Experian", icon: ShieldAlert, color: "bg-pink-600", logoUrl: "/logos/serasa.png" },
-      { id: "cenprot", name: "Cenprot", icon: ShieldAlert, color: "bg-red-500", logoUrl: "/logos/cenprot.png" }
-    ]
-  },
-  {
-    title: "Enriquecimento de Dados",
-    items: [
-      { id: "targetdata", name: "Target Data", icon: Search, color: "bg-cyan-600", logoUrl: "/logos/targetdata.png" }
-    ]
-  },
-  {
-    title: "CRMs",
-    items: [
-      { id: "cobcloud", name: "CobCloud", icon: Cloud, color: "bg-purple-600", logoUrl: "/logos/cobcloud.png" }
-    ]
-  }
-];
+const STATUS_LABEL: Record<IntegrationStatus, { text: string; cls: string; Icon: any }> = {
+  connected: { text: "Conectado", cls: "text-emerald-500", Icon: CheckCircle2 },
+  test: { text: "Em teste", cls: "text-amber-500", Icon: Info },
+  not_configured: { text: "Não configurado", cls: "text-muted-foreground", Icon: Info },
+  coming_soon: { text: "Em breve", cls: "text-primary", Icon: Sparkles },
+};
 
 const IntegracaoPage = () => {
   const { isTenantAdmin, tenant } = useTenant();
@@ -80,7 +50,6 @@ const IntegracaoPage = () => {
           }
         });
 
-      // Busca instâncias da Evolution (WhatsApp)
       supabase
         .from("whatsapp_instances")
         .select("id")
@@ -104,51 +73,71 @@ const IntegracaoPage = () => {
   }
 
   const settings = (tenant?.settings as any) || {};
-  
-  const checkConfigured = (id: string) => {
-    switch(id) {
+
+  const computeStatus = (id: string): IntegrationStatus => {
+    const meta = INTEGRATIONS[id];
+    if (!meta?.available) return "coming_soon";
+    switch (id) {
       case "negociarie":
-        return !!vaultIntegrations["negociarie"];
+        return vaultIntegrations["negociarie"] ? "connected" : "not_configured";
       case "asaas":
-        return !!vaultIntegrations["asaas"];
+        return vaultIntegrations["asaas"] ? "connected" : "not_configured";
       case "3cplus":
-        return !!(settings.threecplus_domain && settings.threecplus_api_token);
+        return settings.threecplus_domain && settings.threecplus_api_token
+          ? "connected"
+          : "not_configured";
       case "cobcloud":
-        return !!(settings.cobcloud_token_company && settings.cobcloud_token_client);
-      case "gupshup":
-        return !!(settings.gupshup_api_key && settings.gupshup_app_name);
+        return settings.cobcloud_token_company && settings.cobcloud_token_client
+          ? "connected"
+          : "not_configured";
       case "evolution":
-        return hasEvolution;
+        return hasEvolution ? "connected" : "not_configured";
       default:
-        return false;
+        return "not_configured";
     }
-  }
+  };
 
   const renderActiveIntegration = () => {
     switch (activeIntegration) {
-      case "negociarie": return <NegociarieTab />;
-      case "asaas": return <AsaasTab />;
-      case "3cplus": return <ThreeCPlusTab />;
-      case "evolution": return <EvolutionTab />;
-      case "gupshup": return <GupshupTab />;
-      case "serasa": return <SerasaTab />;
-      case "cenprot": return <CenprotTab />;
-      case "targetdata": return <TargetDataTenantTab />;
-      case "cobcloud": return <CobCloudTab />;
-      default: return null;
+      case "negociarie":
+        return <NegociarieTab />;
+      case "asaas":
+        return <AsaasTab />;
+      case "3cplus":
+        return <ThreeCPlusTab />;
+      case "evolution":
+        return <EvolutionTab />;
+      case "gupshup":
+        return <GupshupTab />;
+      case "serasa":
+        return <SerasaTab />;
+      case "cenprot":
+        return <CenprotTab />;
+      case "targetdata":
+        return <TargetDataTenantTab />;
+      case "cobcloud":
+        return <CobCloudTab />;
+      default:
+        return null;
     }
-  }
+  };
 
   return (
     <div className="space-y-6 w-full">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-foreground tracking-tight">Integrações</h1>
-        <p className="text-muted-foreground">Gerencie conexões com serviços externos para sua operação.</p>
+        <p className="text-muted-foreground">
+          Gerencie conexões com serviços externos para sua operação.
+        </p>
       </div>
 
       {activeIntegration ? (
         <div className="space-y-6 animate-fade-in">
-          <Button variant="ghost" className="gap-2 -ml-4 hover:bg-transparent hover:text-primary" onClick={() => setActiveIntegration(null)}>
+          <Button
+            variant="ghost"
+            className="gap-2 -ml-4 hover:bg-transparent hover:text-primary"
+            onClick={() => setActiveIntegration(null)}
+          >
             <ArrowLeft className="w-4 h-4" />
             Voltar para Integrações
           </Button>
@@ -162,42 +151,47 @@ const IntegracaoPage = () => {
                 {segment.title}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                {segment.items.map((item) => {
-                  const isConfigured = checkConfigured(item.id);
+                {segment.ids.map((id) => {
+                  const meta = INTEGRATIONS[id];
+                  if (!meta) return null;
+                  const status = computeStatus(id);
+                  const sl = STATUS_LABEL[status];
                   return (
-                    <Card 
-                      key={item.id} 
+                    <Card
+                      key={id}
                       className="cursor-pointer hover:scale-[1.02] hover:border-primary/50 hover:shadow-md transition-all duration-200 bg-card/40 backdrop-blur-sm border-border/50 group"
-                      onClick={() => setActiveIntegration(item.id)}
+                      onClick={() => setActiveIntegration(id)}
                     >
                       <CardContent className="p-5 flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm overflow-hidden ${item.color}`}>
-                          {item.logoUrl ? (
-                            <img 
-                              src={item.logoUrl} 
-                              alt={`${item.name} logo`} 
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                                if (e.currentTarget.nextElementSibling) {
-                                  (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block';
-                                }
-                              }}
-                            />
-                          ) : null}
-                          <item.icon className={`w-6 h-6 ${item.logoUrl ? 'hidden' : 'block'}`} />
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm overflow-hidden bg-white border border-border/50 shrink-0">
+                          <img
+                            src={meta.logoUrl}
+                            alt={`${meta.name} logo`}
+                            className="w-full h-full object-contain p-1.5"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                              const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
+                              if (sib) sib.style.display = "flex";
+                            }}
+                          />
+                          <div
+                            className={`w-full h-full ${meta.brandColor} text-white items-center justify-center`}
+                            style={{ display: "none" }}
+                          >
+                            {meta.fallbackIcon}
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">{item.name}</h3>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                            {meta.name}
+                          </h3>
                           <div className="flex items-center gap-1.5 mt-1">
-                            {isConfigured ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                                <span className="text-[11px] text-emerald-500 font-medium uppercase tracking-wider">Conectado</span>
-                              </>
-                            ) : (
-                              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Não configurado</span>
-                            )}
+                            <sl.Icon className={`w-3.5 h-3.5 ${sl.cls}`} />
+                            <span
+                              className={`text-[11px] font-medium uppercase tracking-wider ${sl.cls}`}
+                            >
+                              {sl.text}
+                            </span>
                           </div>
                         </div>
                       </CardContent>
