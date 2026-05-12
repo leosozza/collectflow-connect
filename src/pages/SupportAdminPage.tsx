@@ -71,14 +71,35 @@ const SupportAdminPage = () => {
   const queryClient = useQueryClient();
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [statusFilter, setStatusFilter] = useUrlState("status", "all");
+  const [categoryFilter, setCategoryFilter] = useUrlState("category", "all");
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Áreas de atendimento do usuário logado (filtra tickets quando não é super admin)
+  const { data: myAreas } = useQuery({
+    queryKey: ["my-support-areas", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await (supabase as any)
+        .from("support_staff_categories")
+        .select("categories")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return (data?.categories as string[] | undefined) ?? null;
+    },
+    enabled: !!user,
+  });
+
   const { data: tickets = [] } = useQuery({
-    queryKey: ["admin-support-tickets", statusFilter],
+    queryKey: ["admin-support-tickets", statusFilter, categoryFilter, myAreas],
     queryFn: async () => {
       let q = supabase.from("support_tickets").select("*").order("created_at", { ascending: false });
       if (statusFilter !== "all") q = q.eq("status", statusFilter);
+      if (categoryFilter !== "all") q = q.eq("category", categoryFilter);
+      // Restringe pelas áreas do staff (super admin via RLS já vê tudo, mas mantemos o filtro defensivo)
+      if (myAreas && myAreas.length > 0 && myAreas.length < 2) {
+        q = q.in("category", myAreas);
+      }
       const { data, error } = await q;
       if (error) throw error;
       return data as SupportTicket[];
