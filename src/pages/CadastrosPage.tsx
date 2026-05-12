@@ -43,7 +43,6 @@ const CadastrosPage = () => {
   const isCredorRoute = location.pathname.startsWith("/cadastros/credores/");
   const active = isCredorRoute ? "credores" : (tab || "credores");
   const setActive = (key: string) => navigate(`/cadastros/${key}`, { replace: true });
-  const [search, setSearch] = useState("");
   const { isTenantAdmin, isSuperAdmin, tenant } = useTenant();
 
   const tenantId = tenant?.id;
@@ -92,19 +91,6 @@ const CadastrosPage = () => {
     },
   ];
 
-  const filteredGroups = groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) =>
-        item.label.toLowerCase().includes(search.toLowerCase())
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
-
-  const activeLabel = groups
-    .flatMap((g) => g.items)
-    .find((i) => i.key === active)?.label;
-
   // Estado do formulário de credor controlado pela URL
   const isNewCredor = location.pathname === "/cadastros/credores/novo";
   const credorFormOpen = isCredorRoute && (!!credorId || isNewCredor);
@@ -118,85 +104,51 @@ const CadastrosPage = () => {
   };
 
   return (
-    <div className="flex gap-6 animate-fade-in">
-      {/* Sub-navegação lateral */}
-      <div className="w-56 flex-shrink-0">
-        <div className="flex items-center gap-2 mb-4">
-          <Database className="w-5 h-5 text-primary" />
-          <h1 className="text-lg font-bold text-foreground">Cadastros</h1>
-        </div>
-
-        {/* Busca rápida */}
-        <div className="relative mb-4">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Buscar seção..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm"
-          />
-        </div>
-
-        {/* Grupos de navegação */}
-        <nav className="space-y-4">
-          {filteredGroups.map((group, groupIndex) => (
-            <div key={group.title}>
-              {groupIndex > 0 && <Separator className="mb-3" />}
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-3 mb-1.5">
-                {group.title}
-              </p>
-              <div className="space-y-0.5">
-                {group.items.map((item) => {
-                  const isActive = active === item.key;
-                  return (
-                    <button
-                      key={item.key}
-                      onClick={() => setActive(item.key)}
-                      className={cn(
-                        "flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 relative",
-                        isActive
-                          ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-[calc(0.75rem-3px)]"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground border-l-[3px] border-transparent pl-[calc(0.75rem-3px)]"
-                      )}
-                    >
-                      <item.icon className="w-4 h-4 shrink-0" />
-                      <span className="flex-1 text-left">{item.label}</span>
-                      {item.badge != null && item.badge > 0 && (
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center"
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          {filteredGroups.length === 0 && (
-            <p className="text-xs text-muted-foreground px-3 py-2">
-              Nenhuma seção encontrada.
-            </p>
-          )}
-        </nav>
+    <div className="flex flex-col gap-6 animate-fade-in w-full">
+      {/* Cabeçalho unificado */}
+      <div className="flex items-center gap-2">
+        <Database className="w-5 h-5 text-primary" />
+        <h1 className="text-2xl font-bold text-foreground">Cadastros</h1>
       </div>
 
-      {/* Conteúdo */}
+      {/* Navegação Horizontal Premium */}
+      <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px">
+        {groups.flatMap((g) => g.items).map((item) => {
+          const isActive = active === item.key;
+          return (
+            <button
+              key={item.key}
+              onClick={() => setActive(item.key)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all relative rounded-t-lg",
+                isActive
+                  ? "bg-primary/10 text-primary border-b-[3px] border-primary"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-b-[3px] border-transparent"
+              )}
+            >
+              <item.icon className="w-4 h-4 shrink-0" />
+              <span>{item.label}</span>
+              {item.badge != null && item.badge > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-1 text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center bg-background/50 text-foreground"
+                >
+                  {item.badge}
+                </Badge>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Conteúdo Full-Width (Sem título redundante) */}
       <div className="flex-1 min-w-0">
-        <div className="mb-4">
-          <h2 className="text-xl font-bold text-foreground">{activeLabel}</h2>
-        </div>
         {active === "credores" && <CredorList />}
         {active === "usuarios" && <UsersPage />}
         {active === "equipes" && <EquipeList />}
         {active === "tipo_devedor" && <TipoDevedorList />}
         {active === "tipo_status" && <TipoStatusList />}
-        
         {(active === "tabulacoes" || active === "tabulacao_chamada") && <DispositionTabsWrapper />}
-        
       </div>
 
       {/* Formulário de credor controlado pela URL */}

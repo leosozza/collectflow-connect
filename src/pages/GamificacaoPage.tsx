@@ -329,8 +329,8 @@ const GamificacaoPage = () => {
       </div>
       )}
 
-      {/* Tabs como rotas reais */}
-      <nav className="flex flex-wrap items-center gap-1 rounded-md bg-muted p-1 w-full sm:w-fit">
+      {/* Tabs como rotas reais (Padrão UI/UX Horizontal) */}
+      <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full">
         {[
           { to: "ranking", label: "Ranking", icon: Trophy, show: true },
           { to: "campanhas", label: "Campanhas", icon: Flame, show: true },
@@ -350,16 +350,15 @@ const GamificacaoPage = () => {
                 to={`/gamificacao/${t.to}`}
                 className={({ isActive }) =>
                   cn(
-                    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    "flex-1 sm:flex-none",
+                    "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all relative rounded-t-lg",
                     isActive
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary/10 text-primary border-b-[3px] border-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-b-[3px] border-transparent"
                   )
                 }
               >
-                <Icon className="w-3.5 h-3.5" /> {t.label}
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{t.label}</span>
               </NavLink>
             );
           })}
