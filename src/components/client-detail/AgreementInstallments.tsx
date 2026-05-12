@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { negociarieService } from "@/services/negociarieService";
 import { updateInstallmentDate, updateInstallmentValue, cancelInstallment, reactivateInstallment } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
 import { TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
