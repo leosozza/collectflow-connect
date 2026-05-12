@@ -610,6 +610,8 @@ const SupportFloatingButton = () => {
                 O RIVO pode cometer erros. Verifique informações importantes.
               </p>
             </div>
+            </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
