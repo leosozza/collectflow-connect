@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "test-connection": {
-        await getToken(supabase, tenantId);
+        await getToken(tenantId);
         result = { connected: true, status: 200 };
         break;
       }
@@ -311,17 +311,17 @@ Deno.serve(async (req) => {
 
         console.log("[negociarie-proxy] nova-cobranca id_geral:", cobrancaData.id_geral);
         console.log("[negociarie-proxy] nova-cobranca final payload:", JSON.stringify(cobrancaData));
-        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/nova", cobrancaData);
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/nova", cobrancaData);
         break;
       }
 
       case "nova-pix": {
-        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/nova-pix", params.data);
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/nova-pix", params.data);
         break;
       }
 
       case "nova-cartao": {
-        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/nova-cartao", params.data);
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/nova-cartao", params.data);
         break;
       }
 
@@ -331,23 +331,23 @@ Deno.serve(async (req) => {
         if (params.id_geral) qs.set("id_geral", String(params.id_geral));
         if (params.limit) qs.set("limit", String(params.limit));
         const query = qs.toString() ? `?${qs.toString()}` : "";
-        result = await negociarieRequest(supabase, tenantId, "GET", `/cobranca/consulta${query}`);
+        result = await negociarieRequest(tenantId, "GET", `/cobranca/consulta${query}`);
         break;
       }
 
       case "baixa-manual": {
-        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/baixa-manual", params.data);
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/baixa-manual", params.data);
         break;
       }
 
       case "parcelas-pagas": {
         const data = params.data || new Date().toISOString().split("T")[0];
-        result = await negociarieRequest(supabase, tenantId, "GET", `/cobranca/parcelas-pagas?data=${data}`);
+        result = await negociarieRequest(tenantId, "GET", `/cobranca/parcelas-pagas?data=${data}`);
         break;
       }
 
       case "alteradas-hoje": {
-        result = await negociarieRequest(supabase, tenantId, "GET", "/cobranca/alteradas-hoje");
+        result = await negociarieRequest(tenantId, "GET", "/cobranca/alteradas-hoje");
         break;
       }
 
@@ -355,18 +355,18 @@ Deno.serve(async (req) => {
         const cbUrl = (params.data as any)?.url || (params.data as any)?.url_callback || "";
         const callbackPayload = { url_callback: cbUrl };
         console.log("[negociarie-proxy] Registrando callback:", JSON.stringify(callbackPayload));
-        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/atualizar-url-callback", callbackPayload);
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/atualizar-url-callback", callbackPayload);
         console.log("[negociarie-proxy] Resposta callback:", JSON.stringify(result));
         break;
       }
 
       case "pagamento-credito": {
-        result = await negociarieRequest(supabase, tenantId, "POST", "/cobranca/pagamento-credito", params.data);
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/pagamento-credito", params.data);
         break;
       }
 
       case "cancelar-pagamento": {
-        result = await negociarieRequest(supabase, tenantId, "PATCH", "/cobranca/pagamento-credito/cancelar", params.data);
+        result = await negociarieRequest(tenantId, "PATCH", "/cobranca/pagamento-credito/cancelar", params.data);
         break;
       }
 
@@ -381,7 +381,7 @@ Deno.serve(async (req) => {
         const idStr = String(idParcela);
         console.log(`[negociarie-proxy] cancelar-cobranca id_parcela=${idStr}`);
         try {
-          result = await negociarieRequest(supabase, tenantId, "DELETE", `/cobranca/${encodeURIComponent(idStr)}`);
+          result = await negociarieRequest(tenantId, "DELETE", `/cobranca/${encodeURIComponent(idStr)}`);
         } catch (e) {
           // 404 means already cancelled / not found — treat as success for idempotency
           const msg = e instanceof Error ? e.message : String(e);
@@ -395,7 +395,7 @@ Deno.serve(async (req) => {
       }
 
       case "inadimplencia-nova": {
-        result = await negociarieRequest(supabase, tenantId, "POST", "/inadimplencia/nova", params.data);
+        result = await negociarieRequest(tenantId, "POST", "/inadimplencia/nova", params.data);
         break;
       }
 
@@ -403,22 +403,22 @@ Deno.serve(async (req) => {
         const qs = new URLSearchParams();
         if (params.cpf) qs.set("cpf", String(params.cpf));
         const query = qs.toString() ? `?${qs.toString()}` : "";
-        result = await negociarieRequest(supabase, tenantId, "GET", `/inadimplencia/titulos${query}`);
+        result = await negociarieRequest(tenantId, "GET", `/inadimplencia/titulos${query}`);
         break;
       }
 
       case "inadimplencia-acordos": {
-        result = await negociarieRequest(supabase, tenantId, "GET", "/inadimplencia/acordos");
+        result = await negociarieRequest(tenantId, "GET", "/inadimplencia/acordos");
         break;
       }
 
       case "inadimplencia-baixa-parcela": {
-        result = await negociarieRequest(supabase, tenantId, "POST", "/inadimplencia/baixa-parcela", params.data);
+        result = await negociarieRequest(tenantId, "POST", "/inadimplencia/baixa-parcela", params.data);
         break;
       }
 
       case "inadimplencia-devolucao": {
-        result = await negociarieRequest(supabase, tenantId, "POST", "/inadimplencia/devolucao-titulo", params.data);
+        result = await negociarieRequest(tenantId, "POST", "/inadimplencia/devolucao-titulo", params.data);
         break;
       }
 
