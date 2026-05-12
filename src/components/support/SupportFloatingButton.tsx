@@ -330,6 +330,61 @@ const SupportFloatingButton = () => {
     setMessages([]);
     setHumanMode(false);
     setTicketId(null);
+    setHistoryOpen(false);
+  };
+
+  const hasActiveConversation = !!category || messages.length > 0;
+
+  const persistConversationToHistory = useCallback(async () => {
+    if (!user || !tenant || !category) return;
+    const real = messages.filter((m) => m.content && !m.isStreaming);
+    if (real.length === 0) return;
+    const firstUser = real.find((m) => m.role === "user");
+    const title = (firstUser?.content || real[0].content).slice(0, 80);
+    try {
+      const { error } = await supabase.from("support_ai_conversations").insert({
+        tenant_id: tenant.id,
+        user_id: user.id,
+        category,
+        title,
+        messages: real.map((m) => ({ role: m.role, content: m.content })),
+      });
+      if (error) throw error;
+      // Keep only top 10
+      const { data: extras } = await supabase
+        .from("support_ai_conversations")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .range(10, 999);
+      if (extras && extras.length) {
+        await supabase
+          .from("support_ai_conversations")
+          .delete()
+          .in("id", extras.map((e: any) => e.id));
+      }
+    } catch (e) {
+      console.error("Erro ao salvar histórico:", e);
+    }
+  }, [user, tenant, category, messages]);
+
+  const handleMinimize = () => {
+    setOpen(false);
+  };
+
+  const handleRequestClose = () => {
+    if (hasActiveConversation) {
+      setConfirmCloseOpen(true);
+    } else {
+      setOpen(false);
+    }
+  };
+
+  const handleConfirmClose = async () => {
+    await persistConversationToHistory();
+    handleResetCategory();
+    setConfirmCloseOpen(false);
+    setOpen(false);
   };
 
   return (
