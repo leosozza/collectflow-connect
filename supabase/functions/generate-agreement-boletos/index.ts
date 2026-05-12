@@ -225,19 +225,23 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { agreement_id } = body;
+    const { agreement_id, installment_key: requestedKey } = body as {
+      agreement_id?: string;
+      installment_key?: string | null;
+    };
     if (!agreement_id) {
       return new Response(JSON.stringify({ error: "agreement_id é obrigatório" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log(`[generate-agreement-boletos] Starting for agreement ${agreement_id}`);
+    const singleMode = typeof requestedKey === "string" && requestedKey.length > 0;
+    const mode = singleMode ? "single" : "batch";
+    console.log(`[generate-agreement-boletos] Starting for agreement ${agreement_id} mode=${mode}${singleMode ? ` key=${requestedKey}` : ""}`);
 
     // ---- Parallel initial queries ----
     const tQ0 = Date.now();
-    const cleanCpf = String("").length; // placeholder; need agreement first for tenant
-    // We must read agreement first to know tenant/cpf, then run profile+clients in parallel.
+    // Read agreement first to know tenant/cpf, then run profile + clients lookups in parallel.
     const { data: agreement, error: agErr } = await supabaseAdmin
       .from("agreements")
       .select("*")
@@ -277,6 +281,7 @@ Deno.serve(async (req) => {
 
     let clientData: any = { ...(clientProfile || {}) };
     const fallbackFields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf", "nome_completo"];
+    const healed: Record<string, string> = {};
     if (Array.isArray(clientRows) && clientRows.length > 0) {
       for (const f of fallbackFields) {
         if (String(clientData[f] || "").trim()) continue;
@@ -284,6 +289,7 @@ Deno.serve(async (req) => {
           const v = (row as any)[f];
           if (v && String(v).trim()) {
             clientData[f] = String(v).trim();
+            healed[f] = clientData[f];
             break;
           }
         }
@@ -291,19 +297,55 @@ Deno.serve(async (req) => {
     }
     const queries_ms = Date.now() - tQ0;
 
+    // Auto-heal canonical client_profiles in background — preserves canonical-profile-architecture rule
+    if (Object.keys(healed).length > 0) {
+      const healPayload: Record<string, unknown> = {
+        tenant_id: agreement.tenant_id,
+        cpf: cleanCpfStr,
+        ...healed,
+        updated_at: new Date().toISOString(),
+      };
+      // best-effort, never blocks boleto generation
+      supabaseAdmin
+        .from("client_profiles")
+        .upsert(healPayload, { onConflict: "tenant_id,cpf" } as any)
+        .then(({ error }: any) => {
+          if (error) console.warn(`[generate-agreement-boletos] auto_heal_profile failed: ${error.message}`);
+          else console.log(`[generate-agreement-boletos] auto_heal_profile fields=${Object.keys(healed).join(",")}`);
+        });
+    }
+
     const requiredFields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"];
     const missingFields = requiredFields.filter(f => !String(clientData[f] || "").trim());
 
     if (missingFields.length > 0) {
-      console.log(`[generate-agreement-boletos] Missing fields: ${missingFields.join(", ")} — marking boleto_pendente`);
-      await supabaseAdmin.from("agreements").update({ boleto_pendente: true }).eq("id", agreement_id);
+      console.log(`[generate-agreement-boletos] Missing fields: ${missingFields.join(", ")} — mode=${mode}`);
+      // Only flip the global boleto_pendente flag in batch mode; single mode is per-installment.
+      if (!singleMode) {
+        await supabaseAdmin.from("agreements").update({ boleto_pendente: true }).eq("id", agreement_id);
+      }
       return new Response(JSON.stringify({
-        success: 0, failed: 0, boleto_pendente: true,
+        success: 0, failed: 0, boleto_pendente: !singleMode,
         message: `Dados cadastrais incompletos (${missingFields.join(", ")}). Boletos poderão ser gerados manualmente após correção.`,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }), {
+        status: singleMode ? 400 : 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const installments = buildInstallments(agreement);
+    const allInstallments = buildInstallments(agreement);
+    let installments = allInstallments;
+    if (singleMode) {
+      installments = allInstallments.filter((i) => i.key === requestedKey);
+      if (installments.length === 0) {
+        return new Response(JSON.stringify({
+          error: `Parcela '${requestedKey}' não encontrada no acordo`,
+        }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const today = getTodayIso();
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const CALLBACK_URL = `${supabaseUrl}/functions/v1/negociarie-callback`;
@@ -321,13 +363,22 @@ Deno.serve(async (req) => {
     type Job = { inst: InstallmentInfo };
     const jobs: Job[] = [];
     for (const inst of installments) {
-      if (inst.dueDate < today) {
+      // In single mode the UI already validated dueDate >= today (manual reissue);
+      // skipping silently here would make "Reemitir" do nothing.
+      if (!singleMode && inst.dueDate < today) {
         console.log(`[generate-agreement-boletos] Skipping installment ${inst.key} — past due (${inst.dueDate})`);
         continue;
       }
       const rawMethod = cvAll[`${inst.key}_method`] ?? (inst.isEntrada ? "BOLETO" : defaultParcMethod);
       const method = String(rawMethod || "BOLETO").toUpperCase();
       if (method !== "BOLETO") {
+        if (singleMode) {
+          return new Response(JSON.stringify({
+            error: `Método da parcela é ${method} — altere para BOLETO antes de reemitir`,
+          }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         console.log(`[generate-agreement-boletos] Skipping installment ${inst.key} — payment method = ${method}`);
         result.skipped_non_boleto++;
         continue;
@@ -436,12 +487,14 @@ Deno.serve(async (req) => {
 
     const negociarie_total_ms = Date.now() - tNeg0;
 
-    if (result.success > 0) {
+    // Only flip the global boleto_pendente flag in batch mode.
+    // Single mode targets one installment and must not affect agreement-wide state.
+    if (!singleMode && result.success > 0) {
       await supabaseAdmin.from("agreements").update({ boleto_pendente: false }).eq("id", agreement_id);
     }
 
     const total_ms = Date.now() - t0;
-    console.log(`[generate-agreement-boletos] Done: ${result.success}/${result.total} success, ${result.failed} failed | timing: total=${total_ms}ms auth=${auth_ms}ms queries=${queries_ms}ms negociarie=${negociarie_total_ms}ms per=${JSON.stringify(per_installment_ms)}`);
+    console.log(`[generate-agreement-boletos] Done mode=${mode}: ${result.success}/${result.total} success, ${result.failed} failed | timing: total=${total_ms}ms auth=${auth_ms}ms queries=${queries_ms}ms negociarie=${negociarie_total_ms}ms per=${JSON.stringify(per_installment_ms)}`);
 
     return new Response(JSON.stringify({ ...result, timing: { total_ms, auth_ms, queries_ms, negociarie_total_ms, per_installment_ms } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

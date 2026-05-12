@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { negociarieService } from "@/services/negociarieService";
 import { updateInstallmentDate, updateInstallmentValue, cancelInstallment, reactivateInstallment } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
 import { TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
@@ -348,10 +347,15 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     setGeneratingIdx(idx);
     try {
       const hasPreviousBoleto = inst.cobranca?.link_boleto;
-      await negociarieService.generateSingleBoleto(
-        { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
-        { number: inst.number, value: inst.value, dueDate: inst.dueDate.toISOString().split("T")[0], key: inst.customKey }
-      );
+      const { data, error } = await supabase.functions.invoke("generate-agreement-boletos", {
+        body: { agreement_id: agreementId, installment_key: inst.customKey },
+      });
+      if (error) throw new Error(error.message || "Erro ao gerar boleto");
+      if (data?.error) throw new Error(data.error);
+      if ((data?.success ?? 0) === 0) {
+        const detail = data?.errors?.[0] || data?.message || "Não foi possível gerar o boleto";
+        throw new Error(detail);
+      }
       if (hasPreviousBoleto) {
         toast({ title: "Novo boleto gerado com sucesso!", description: "O boleto anterior foi substituído no sistema." });
       } else {
@@ -727,20 +731,17 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     if (!tenantId) return;
     setGeneratingAllBoletos(true);
     try {
-      const boletoInstallments = installments.map((inst: any) => ({
-        number: inst.number,
-        value: inst.value,
-        dueDate: inst.dueDate.toISOString().split("T")[0],
-        key: inst.customKey,
-      }));
-      const result = await negociarieService.generateAgreementBoletos(
-        { id: agreementId, client_cpf: cpf, credor: agreement.credor, tenant_id: tenantId, client_name: agreement.client_name },
-        boletoInstallments
-      );
-      // Clear boleto_pendente flag only if at least one boleto was generated
-      if (result.success > 0) {
-        await supabase.from("agreements").update({ boleto_pendente: false } as any).eq("id", agreementId);
-      }
+      const { data, error } = await supabase.functions.invoke("generate-agreement-boletos", {
+        body: { agreement_id: agreementId },
+      });
+      if (error) throw new Error(error.message || "Erro ao gerar boletos");
+      if (data?.error) throw new Error(data.error);
+      const result = {
+        success: data?.success ?? 0,
+        failed: data?.failed ?? 0,
+        errors: data?.errors ?? [],
+      };
+      // Edge already clears boleto_pendente when at least one boleto succeeds (batch mode).
       logAction({
         action: "boleto_gerado_posteriormente",
         entity_type: "agreement",
@@ -752,6 +753,9 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       }
       if (result.failed > 0) {
         toast({ title: "Falha parcial", description: result.errors[0], variant: "destructive" });
+      }
+      if (result.success === 0 && result.failed === 0 && data?.message) {
+        toast({ title: "Não foi possível gerar", description: data.message, variant: "destructive" });
       }
       refetchCobrancas();
       onRefresh?.();

@@ -1,66 +1,128 @@
 
-## Diagnóstico
+## Unificação da geração de boletos Negociarie — Fonte única de verdade
 
-**Conexão Negociarie está saudável.** O log da edge function `negociarie-callback` mostra callbacks chegando e sendo processados (último: acordo `56ce3b0c…` marcado como `completed` há minutos). REST e webhook respondendo 200.
+Objetivo: eliminar a duplicação entre `negociarieService` (frontend) e `generate-agreement-boletos` (edge), mantendo a edge como **única** fonte. Sem regressão de UX. Sem quebrar nenhum dos demais fluxos da Negociarie (cobrança avulsa, sync, callback).
 
-**O caso da Eunice Coelho de Oliveira Rocha (CPF 570.887.051-68)** revelou um bug estrutural, não uma falha de conexão:
+---
 
-- Acordo `c23d48b3-…` tem **2 cobranças negociarie para a entrada**:
-  - `installment_key = "<id>:entrada"` → status `registrado` (aberto)
-  - `installment_key = "<id>:0"` → status `pago` em 11/05 (R$ 735,36)
-- O callback marcou a chave `:0` como paga, mas o RIVO procura `:entrada` no classificador de parcelas → continua exibindo como vencida e o acordo nunca avança para `completed`.
+### Fase 1 — Estender a edge `generate-agreement-boletos` (sem tocar o front)
 
-### Causa raiz
+**1.1. Aceitar novo parâmetro opcional no body**
+- `installment_key?: string` (ex: `"entrada"`, `"entrada_2"`, `"1"`, `"2"`).
+- Quando ausente: comportamento atual (lote completo) — **100% retro-compatível** com `agreementService.ts:444`, `agreementService.ts:1040` e `AgreementCalculator.tsx:697`.
 
-Existem **dois geradores de boleto Negociarie com convenções de chave diferentes**:
+**1.2. Comportamentos do modo single (`installment_key` presente)**
+- Filtrar `buildInstallments()` para devolver apenas a parcela com a chave canônica recebida.
+- Validar que a chave existe no acordo; se não, devolver `400` com mensagem clara.
+- **NÃO** aplicar o skip de `dueDate < today` (a UI já valida; reemissão manual deve passar).
+- **NÃO** alterar a flag `boleto_pendente` do acordo (uma parcela individual não deve mexer no estado do acordo todo).
+- Manter a marcação de `status='substituido'` da cobrança anterior com mesma `installment_key` (já existe no código atual da edge — linha 405).
+- Manter o skip de método ≠ BOLETO (linha 331), devolvendo erro explícito: `"Método da parcela é PIX/cartão — altere para boleto antes de reemitir"`. (Mais seguro que silenciosamente trocar; alinhado com `mem://features/billing/agreement-installments-ui`.)
 
-| Caminho | Linha | Convenção |
-|---|---|---|
-| `src/services/negociarieService.ts` | 240 | `${agId}:${number}` → entrada = `:0` |
-| `supabase/functions/generate-agreement-boletos/index.ts` | 344 | `${agId}:${inst.key}` → entrada = `:entrada` (canônico) |
+**1.3. Portar auto-heal de `client_profiles` para a edge**
+- Replicar `enrichClientDataFromClients` (hoje em `negociarieService.ts:24-68`) dentro da edge: se faltar campo em `client_profiles`, buscar em `clients` e disparar `upsertClientProfile` em background.
+- Deve rodar **antes** do check `missingFields` que dispara `boleto_pendente`. Sem isso, acordos que hoje só funcionam graças ao enrichment passariam a ser marcados como pendentes — regressão silenciosa.
+- Preserva a regra `mem://logic/client-data/canonical-profile-architecture`.
 
-O classificador (`src/lib/agreementInstallmentClassifier.ts:147`) e a UI (`AgreementInstallments.tsx`) usam a chave canônica (`entrada`, `entrada_2`, `1`, `2`…). Quando a entrada é gerada pelos dois caminhos (cenário comum quando o operador recobra/regenera), ficam duas linhas; o callback bate apenas em uma e a outra trava o acordo.
+**1.4. Logging**
+- Adicionar `mode: "single" | "batch"` aos logs já existentes da edge.
+- Manter timing detalhado (`auth_ms`, `queries_ms`, `negociarie_total_ms`, `per_installment_ms`).
 
-### Impacto verificado
+**1.5. Deploy isolado**
+- Deploy `generate-agreement-boletos`. Nenhuma mudança no front nesta fase → **zero risco** para usuários.
 
-- **17 acordos com pagamento da entrada confirmado pela Negociarie, mas travados em `pending`** (Eunice + 16 outras clientes — Janine Pinho Morais, Maraíza da Silva Nunes, Patrícia Santos Neves, Melissa Giovana, Leudiane Silva Araújo, Paloma Ramos, Bruna Ohara, Valdenice, Jullian, Edilma, Aline Matias, Elineuza, Nádia, Maíara, Vitória de Lima, e a Ana Patrícia que já está completed mas com a duplicata aberta).
-- **44 acordos com a duplicação `:entrada` + `:0` no total** (os 27 restantes ainda não tiveram pagamento — vão cair no mesmo problema quando pagarem).
+---
 
-## Plano de correção
+### Fase 2 — Validação da edge isolada (antes de tocar o front)
 
-### 1. Padronizar geração de chaves (eliminar a causa)
+Tudo via `curl_edge_functions` em ambiente preview, contra acordos reais de teste:
 
-Em `src/services/negociarieService.ts`:
-- Substituir `buildInstallmentKey(agreementId, number)` para receber a `key` canônica (`"entrada"`, `"entrada_2"`, `"1"`, `"2"`…) em vez de `number`.
-- Em `generateAgreementBoletos` e `generateSingleBoleto`, passar `inst.key` (já existente em `BoletoInstallment` via classificador) — para entrada usar `"entrada"`, para parcelas usar `String(inst.number)`.
-- Manter `id_parcela` enviado à Negociarie inalterado (é apenas identificador externo).
+**2.1.** Modo lote (sem `installment_key`) em acordo já existente → confirmar:
+- Comportamento idêntico ao de hoje (mesma quantidade de cobranças geradas, mesmo `boleto_pendente`, mesmos logs de timing).
 
-Resultado: novos boletos da entrada serão sempre salvos com `installment_key = "<agId>:entrada"`, batendo com o edge function e com o classificador.
+**2.2.** Modo single em parcela "entrada" → confirmar:
+- 1 cobrança nova com `installment_key = "<agId>:entrada"`.
+- Anterior marcada `substituido`.
+- `agreements.boleto_pendente` **não** mudou.
 
-### 2. Reconciliação dos 17 acordos travados (migration única)
+**2.3.** Modo single em parcela com `dueDate < today` (vencimento já editado para futuro pela UI antes da chamada) → confirmar geração OK.
 
-SQL idempotente que, para cada acordo onde existe par `:0 pago` + `:entrada não-pago`:
+**2.4.** Modo single em parcela com método PIX → confirmar erro claro retornado.
 
-- Marca a cobrança órfã `:entrada` (status ≠ `pago`) como `status = 'substituido'`, copiando `valor_pago`, `data_pagamento` e `callback_data` da `:0` para preservar histórico.
-- Recalcula o status do acordo via mesma lógica do callback (`paid_total >= proposed_total - 0.01` ⇒ `completed`).
-- Insere registro em `audit_logs` (`action='reconcile_negociarie_duplicate_entrada'`).
+**2.5.** Modo single em acordo com `client_profiles` incompleto (mas com dados em `clients`) → confirmar auto-heal e geração OK.
 
-### 3. Tratar os 27 acordos com duplicação ainda sem pagamento
+**2.6.** Simular callback Negociarie (`negociarie-callback`) chegando para a cobrança gerada → confirmar baixa correta no classificador (`agreementInstallmentClassifier.ts:147`).
 
-Mesma migration: para cada acordo com `:entrada` (pendente) e `:0` (pendente, mesma `data_vencimento` e mesmo `valor`), marcar a `:0` como `substituido` (mantém a `:entrada` canônica como ativa). Quando o callback chegar, vai bater na chave certa.
+**Critério de avanço para fase 3:** todos os 6 cenários acima passando.
 
-### 4. Validação visual
+---
 
-- Abrir a tela do acordo da Eunice (CPF 570.887.051-68) e confirmar que a entrada aparece como **paga** e o acordo como **completed**.
-- Conferir 2-3 acordos da lista (Janine, Bruna, Paloma) na tela de Acordos.
+### Fase 3 — Migrar o frontend
 
-## Fora de escopo
+**3.1.** Em `src/components/client-detail/AgreementInstallments.tsx`:
+- Linha 351 (`generateSingleBoleto`) → trocar por `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id: agreementId, installment_key: inst.customKey } })`.
+- Linha 736 (`generateAgreementBoletos`) → trocar por `supabase.functions.invoke("generate-agreement-boletos", { body: { agreement_id: agreementId } })` (modo lote — mesma chamada que `agreementService` já faz).
+- Manter toast, refetch e `onRefresh` exatamente iguais.
 
-- Reescrita do edge function `generate-agreement-boletos` (já está correto).
-- Mudanças no fluxo de callback Negociarie (funcionando — logs OK).
-- Alteração da UI de exibição de parcelas.
-- Migração das chaves históricas das parcelas regulares (`:1`, `:2`…) — já são consistentes nos dois geradores.
+**3.2.** Em `src/services/negociarieService.ts`:
+- Remover: `generateSingleBoleto`, `generateAgreementBoletos`, `markPreviousBoletosAsSubstituido`, `enrichClientDataFromClients`, `buildBoletoPayload`, `buildInstallmentKey`, interface `BoletoInstallment` e helpers internos correlatos.
+- **Preservar intacto**: `testConnection`, `atualizarCallback`, `consultaCobrancas`, `parcelasPagas`, `alteradasHoje`, `novaCobranca`, `novaPix`, `novaCartao`, `getCobrancas`, `saveCobranca`. Esses são usados por `CobrancaForm`, `CobrancasList`, `NegociarieTab`, `SyncPanel` (cobrança avulsa e sync — fora do escopo).
 
-## Risco
+**3.3.** Verificações estáticas
+- Rodar typecheck (automático).
+- Confirmar que nenhum import órfão sobrou.
 
-Baixo. A migration toca apenas linhas duplicadas identificadas por critério estrito (mesmo `agreement_id`, par `:entrada`/`:0`, mesmo valor/vencimento). A mudança no `negociarieService.ts` é compatível com cobranças antigas porque o classificador já testa pela chave canônica.
+---
+
+### Fase 4 — QA manual no preview
+
+**4.1. Detalhe do acordo → "Reemitir parcela"**
+- Em entrada: confirmar toast OK, link novo, anterior substituída na lista.
+- Em parcela normal: idem.
+
+**4.2. Detalhe do acordo → "Gerar boletos depois"** (acordo com `boleto_pendente=true`)
+- Confirmar geração em lote, flag desligada, toast OK.
+
+**4.3. Aprovar acordo novo** (`agreementService:444`)
+- Confirmar que continua gerando todos os boletos (caminho não alterado).
+
+**4.4. Cobrança avulsa** (`Configurações → Integração → Cobranças → Nova`)
+- Confirmar que `CobrancaForm` continua funcionando (não tocado).
+
+**4.5. Sync** (`SyncPanel`)
+- Confirmar `parcelasPagas` e `alteradasHoje` continuam funcionando.
+
+**4.6. Callback real**
+- Aguardar/forçar callback Negociarie em uma cobrança gerada pela edge → confirmar baixa correta em `negociarie_cobrancas` e classificador exibindo "pago".
+
+---
+
+### Garantias de não-quebrar (regras do projeto)
+
+- **Tenant Isolation**: a edge resolve `tenant_id` a partir de `agreement_id` no DB; o front nunca mais manda tenant explícito para esse fluxo. Reduz surface de erro.
+- **Phone Normalization E.164**: passa a viver só na edge (já existe em `generate-agreement-boletos`).
+- **Security: edge functions validam via JWT**: a edge já valida (`agreementService` invoca via supabase client autenticado).
+- **Canonical Profiles**: auto-heal preservado e centralizado.
+- **Installment UI Rules** (`mem://features/billing/agreement-installments-ui`): a UI continua dependendo de `installment_key` canônica — agora **garantidamente** canônica porque só existe um gerador.
+- **Negociarie Integration** (`mem://integrations/negociarie-gateway`): payload mantido (lógica `buildBoletoPayload` já espelhada na edge).
+
+### Fora de escopo (explicitamente não tocar)
+
+- `negociarie-callback` — funciona por `id_geral`, não depende de `installment_key`.
+- `agreementInstallmentClassifier.ts` — só leitura, já consome chave canônica.
+- `manual_payments`, `portal_payments`, `send-notifications` — caminhos paralelos legítimos.
+- `CobrancaForm` (cobrança avulsa não-acordo).
+- O caso da Eunice (`proposed_total` inconsistente) — separado.
+
+### Plano de rollback
+
+- Fase 1 e 2: nada para reverter (edge é retro-compatível).
+- Fase 3: revert do commit do front em 1 clique restaura o caminho B; a edge estendida continua funcionando para quem usa o modo lote.
+
+### Resultado esperado
+
+- Uma única implementação canônica da geração de boleto de acordo, server-side.
+- Impossível regredir convenção de chave (`:entrada` vs `:0`).
+- ~250 linhas a menos no bundle do front.
+- Logs centralizados em `edge_function_logs` para qualquer admin debugar.
+- Comportamento observável **idêntico** para o usuário final.

@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatCurrency, formatDate, formatCPF } from "@/lib/formatters";
 import { createAgreement, AgreementFormData } from "@/services/agreementService";
-import { negociarieService, BoletoInstallment } from "@/services/negociarieService";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
