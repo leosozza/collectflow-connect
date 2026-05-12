@@ -5566,8 +5566,27 @@ export type Database = {
           },
         ]
       }
+      support_staff_categories: {
+        Row: {
+          categories: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          categories?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          categories?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       support_tickets: {
         Row: {
+          category: string
           created_at: string
           id: string
           priority: string
@@ -5578,6 +5597,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          category?: string
           created_at?: string
           id?: string
           priority?: string
@@ -5588,6 +5608,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          category?: string
           created_at?: string
           id?: string
           priority?: string
