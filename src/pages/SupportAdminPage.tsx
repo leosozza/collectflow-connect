@@ -212,16 +212,26 @@ const SupportAdminPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Ticket list */}
             <div className="space-y-3">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="open">Abertos</SelectItem>
-                  <SelectItem value="in_progress">Em Andamento</SelectItem>
-                  <SelectItem value="resolved">Resolvidos</SelectItem>
-                  <SelectItem value="closed">Fechados</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos status</SelectItem>
+                    <SelectItem value="open">Abertos</SelectItem>
+                    <SelectItem value="in_progress">Em Andamento</SelectItem>
+                    <SelectItem value="resolved">Resolvidos</SelectItem>
+                    <SelectItem value="closed">Fechados</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas áreas</SelectItem>
+                    <SelectItem value="suporte">Suporte</SelectItem>
+                    <SelectItem value="financeiro">Financeiro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2 max-h-[60vh] overflow-auto">
                 {tickets.map((ticket) => (
                   <button
@@ -238,9 +248,16 @@ const SupportAdminPage = () => {
                         {statusLabels[ticket.status]}
                       </Badge>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(ticket.created_at).toLocaleDateString("pt-BR")} · {ticket.priority}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-muted-foreground">
+                        {new Date(ticket.created_at).toLocaleDateString("pt-BR")} · {ticket.priority}
+                      </p>
+                      {ticket.category && (
+                        <Badge variant="secondary" className="text-[9px] shrink-0 capitalize">
+                          {ticket.category}
+                        </Badge>
+                      )}
+                    </div>
                   </button>
                 ))}
                 {tickets.length === 0 && (
