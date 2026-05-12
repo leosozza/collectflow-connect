@@ -213,7 +213,7 @@ const SupportFloatingButton = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, category]);
 
   const handleSend = useCallback(async () => {
     const trimmed = message.trim();
