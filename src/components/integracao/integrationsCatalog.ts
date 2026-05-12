@@ -90,7 +90,7 @@ export const INTEGRATIONS: Record<string, IntegrationMeta> = {
   },
   evolution: {
     id: "evolution",
-    name: "Evolution API",
+    name: "Evolution | Whatsapp não oficial",
     category: "WhatsApp Não-Oficial",
     description:
       "Conecta o WhatsApp do tenant via QR Code. Indicado para operação de menor escala e fluxos conversacionais.",
