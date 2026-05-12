@@ -293,6 +293,9 @@ export interface BoletoInstallment {
   number: number;
   value: number;
   dueDate: string;
+  /** Canonical installment key ("entrada", "entrada_2", "1", "2", ...). When
+   *  omitted, derived from `number` (0 ⇒ "entrada"). */
+  key?: string;
 }
 
 export interface BoletoGenerationResult {
