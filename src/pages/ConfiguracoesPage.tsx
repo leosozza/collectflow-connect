@@ -8,9 +8,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 const LEGACY_TAB_MAP: Record<string, string> = {
   integracao: "/configuracoes/integracao",
   auditoria: "/configuracoes/auditoria",
-  api_docs: "/configuracoes/api",
+  api_docs: "/configuracoes/apis",
   maxlist: "/configuracoes/maxlist",
-  mcp: "/configuracoes/mcp",
+  mcp: "/configuracoes/apis",
 };
 
 const ConfiguracoesPage = () => {
