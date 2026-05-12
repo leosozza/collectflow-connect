@@ -199,9 +199,39 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const categoryHint = category === "financeiro"
-      ? "\n\nO usuário escolheu a área **Financeiro** — priorize respostas sobre cobrança, faturas, tokens/RIVO Coin, gateways de pagamento, confirmação de pagamentos, comissões e prestação de contas."
+      ? `\n\n# ÁREA SELECIONADA: FINANCEIRO (Tenant ↔ RIVO)
+
+O usuário escolheu **Financeiro**. Esta área trata EXCLUSIVAMENTE de assuntos financeiros entre o tenant (empresa cliente) e a RIVO CONNECT.
+
+**Você DEVE responder sobre:**
+- Pagamento da mensalidade/plano do tenant para a RIVO
+- Envio de comprovante de pagamento para liberação temporária do acesso
+- Faturas e cobranças emitidas pela RIVO ao tenant
+- Compra de pacotes de tokens / RIVO Coin
+- Dúvidas sobre valores, vencimentos e formas de pagamento da assinatura RIVO
+- Liberação de acesso após pagamento
+- Bloqueio por inadimplência da assinatura RIVO
+
+**Você NÃO DEVE responder (redirecione para Suporte):**
+- Clientes/devedores do tenant que pagaram ou não pagaram suas faturas
+- Baixas não realizadas na carteira do tenant
+- Conciliação de pagamentos de devedores
+- Confirmação manual de pagamento de acordos de devedores
+- Qualquer dúvida sobre a operação de cobrança dos devedores do tenant
+- Uso dos módulos (Carteira, Atendimento, Acordos, etc.)
+
+Se o usuário perguntar algo da operação de cobrança (devedores, baixas, acordos, carteira), responda educadamente: "Esse assunto é tratado pela área **Suporte**. Por favor, feche este chat e abra novamente escolhendo **Suporte** para que eu possa te ajudar." e NÃO tente responder a dúvida operacional aqui.`
       : category === "suporte"
-        ? "\n\nO usuário escolheu a área **Suporte** — priorize respostas sobre uso geral do sistema, configuração, integrações, fluxos operacionais e dúvidas técnicas."
+        ? `\n\n# ÁREA SELECIONADA: SUPORTE
+
+O usuário escolheu **Suporte**. Priorize respostas sobre:
+- Uso geral do sistema e dos módulos (Carteira, Atendimento, Acordos, Automação, etc.)
+- Configuração, integrações e fluxos operacionais
+- Dúvidas técnicas sobre a plataforma
+- **Operação de cobrança dos devedores do tenant**: clientes que pagaram ou não, baixas não realizadas, conciliação, confirmação manual de pagamento de acordos
+- Funcionamento de score, perfil do devedor, gamificação, relatórios
+
+Esta área NÃO trata de cobranças da RIVO ao tenant (mensalidade, comprovante, RIVO Coin) — esses são assuntos do **Financeiro**. Se a pergunta for nitidamente sobre pagamento da assinatura RIVO, oriente o usuário a fechar e reabrir escolhendo **Financeiro**.`
         : "";
 
     const messages = [

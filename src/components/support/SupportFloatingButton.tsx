@@ -355,7 +355,11 @@ const SupportFloatingButton = () => {
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setOpen(false);
+                  // Reset chat para começar do zero na próxima abertura
+                  handleResetCategory();
+                }}
               >
                 <ChevronDown className="w-4 h-4" />
               </Button>
