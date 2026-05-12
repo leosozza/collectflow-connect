@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
 
         console.log("[negociarie-proxy] nova-cobranca id_geral:", cobrancaData.id_geral);
         console.log("[negociarie-proxy] nova-cobranca final payload:", JSON.stringify(cobrancaData));
-        result = await negociarieRequest(tenantId, "POST", "/cobranca/nova", cobrancaData);
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/nova", cobrancaData, creditorIdCtx);
         break;
       }
 
