@@ -1,50 +1,62 @@
-## Diagnóstico
+# Plano — Fechar a lacuna que faz a Barbara ver "Nenhuma instância" / spinner infinito
 
-A tela mostra **Cofre de Integrações → Negociarie: "Não configurado"** com os campos vazios. Isso **não é um bug** — é o estado real do banco:
+## Diagnóstico (resumo)
 
-- A Y.BRASIL tem **apenas 1 linha** em `tenant_integrations` para o provider `negociarie`:
-  - `creditor_id = NULL` (escopo do tenant inteiro)
-  - `uses_global_fallback = true`
-  - `is_active = true`, `last_test_ok = true`
-- **Nenhum credor** (incluindo o que está sendo editado na tela) tem credenciais próprias.
+- `useTenant` só resolve `tenant.id` via RPC `get_my_tenant_id()` (que depende de `auth.uid()` no JWT atual).
+- Se a RPC retornar `null` em alguma janela de carga (ex.: JWT expirado em refresh, race no `onAuthStateChange`), `tenant` fica `null`.
+- Todas as queries da página `/configuracoes/integracao` usam `enabled: !!tenant?.id`. Sem `tenant.id`:
+  - `BaylersInstancesList` (Evolution) e `GupshupInstancesList` ficam **eternamente em "Carregando..."** (react-query em pending com `enabled:false`).
+  - `IntegracaoPage` mostra `hasEvolution=false` / `hasGupshup=false`.
+- Raul (super_admin) **não sente** o problema porque a RLS de `whatsapp_instances` tem o ramo `is_super_admin(auth.uid())` que mascara qualquer instabilidade — mas mesmo o super_admin só veria os cards via `tenant?.id` na UI; a diferença real é que ele cai em `/admin` antes (não passa pela tela tenant).
+- A Barbara não tem nenhum caminho de fuga.
 
-O componente `CreditorIntegrationsVault` consulta a linha **do credor atual** (`creditor_id = X`). Como ela não existe, ele retorna `has_credentials: false` → "Não configurado". A geração de boletos da Y.BRASIL **continua funcionando** porque o `negociarie-proxy` faz fallback para o nível do tenant (e este, para as credenciais globais via `NEGOCIARIE_CLIENT_ID/SECRET`).
+## Mudanças
 
-Portanto o que está errado é a **UX**: o usuário não consegue distinguir "este credor não tem cofre próprio mas o tenant cobre via fallback" de "está realmente sem nada e vai falhar".
+### 1) `src/hooks/useTenant.tsx` — fallback + logs
 
-## O que ajustar (apenas UI/edge — sem mudança de regra)
+Em `fetchTenantData`, depois de chamar `supabase.rpc("get_my_tenant_id")`:
 
-### 1. `negociarie-credentials` — incluir info do escopo tenant no `get_status`
+- Se `tenantId` vier `null/undefined` **e** `user?.id` existir, fazer um SELECT direto:
+  ```ts
+  const { data: tu } = await supabase
+    .from("tenant_users")
+    .select("tenant_id, role")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+  ```
+  Se vier `tu?.tenant_id`, usar esse valor como `tenantId` e seguir o fluxo normal (`is_super_admin` / `is_tenant_admin` / fetch tenant + plan).
+- Se ainda assim ficar sem tenant, logar `console.warn("[useTenant] Sem tenant após fallback", { userId: user.id, rpcError })` e seguir para o `setLoading(false)` atual.
+- Adicionar `console.warn` quando o fallback **for** acionado (`"[useTenant] RPC retornou null, usando fallback direto em tenant_users"`) para deixar o sintoma rastreável em produção.
+- Manter os `setX(prev => ...)` estáveis que já existem.
 
-Quando a chamada vier com `creditor_id`, fazer **uma segunda leitura** da linha de tenant (`creditor_id IS NULL`) e devolver dois campos extras:
+Por que isso é seguro: a tabela `tenant_users` tem RLS que permite o próprio usuário ler sua linha (políticas existentes referenciam `user_id = auth.uid()`). O fallback não bypassa nada — apenas evita o caminho da RPC em caso de instabilidade.
 
-- `tenant_fallback_active: boolean` (existe linha tenant ativa com credenciais OU `uses_global_fallback`)
-- `tenant_uses_global_fallback: boolean`
+### 2) (opcional, mesma alteração) Forçar refresh de sessão antes de desistir
 
-Sem alterar contrato existente.
+Antes do fallback, se a primeira RPC vier `null`, executar `await supabase.auth.refreshSession()` uma única vez e refazer a RPC. Se ainda vier `null`, cair no fallback acima. Custo: ~1 round-trip extra **só** no cenário de falha — em condições normais a primeira RPC já resolve e nada muda.
 
-### 2. `CreditorIntegrationsVault.tsx` — refletir o fallback
+### 3) Sem mudanças de banco / RLS / edge functions
 
-- Quando `has_credentials = false` **e** `tenant_fallback_active = true`:
-  - Substituir o badge "Não configurado" por **"Usando cofre do tenant"** (variante neutra) e, se `tenant_uses_global_fallback`, complementar com "(fallback global)".
-  - Mostrar uma linha curta abaixo do título: *"Este credor não possui credenciais próprias. As cobranças usam as credenciais configuradas no tenant. Configure abaixo apenas se este credor tiver Client ID/Secret próprios na Negociarie."*
-- Quando `has_credentials = false` **e** `tenant_fallback_active = false`:
-  - Manter "Não configurado" (estado real de risco) com texto: *"Sem credenciais — boletos deste credor falharão até configurar aqui ou no nível do tenant."*
+Nenhuma migração. Nenhuma policy. Nada de roles. As policies atuais (`tenant_id = get_my_tenant_id()`) continuam corretas — o fallback alimenta o mesmo `tenant.id` que a UI já usa para filtrar.
 
-### 3. `TenantIntegrationsVault.tsx` — espelhar a mesma clareza
+## O que NÃO muda
 
-- Se a linha do tenant existir só com `uses_global_fallback`, badge **"Fallback global ativo"** (neutro, não "Não configurado").
-- Texto curto explicando que credenciais próprias do tenant sobrepõem o fallback global.
+- Nada nos componentes `IntegracaoPage`, `EvolutionTab`, `GupshupTab`, `BaylersInstancesList`, `GupshupInstancesList`, `whatsappInstanceService`.
+- Nada nas roles do Raul / Barbara (já estão corretas).
+- Nada nos fluxos de super_admin / `support_tenant_id` / `ProtectedRoute`.
 
-### 4. Smoke test após o ajuste
+## Validação
 
-- Abrir credor da Y.BRASIL → deve mostrar "Usando cofre do tenant (fallback global)".
-- Abrir tenant Y.BRASIL no `SuperAdminPage` → "Fallback global ativo".
-- Salvar credenciais próprias num credor de teste → vira "Cofre Ativo".
-- Remover credenciais → volta a "Usando cofre do tenant".
+1. Logar com a Barbara em produção, abrir `/configuracoes/integracao`.
+2. Esperado: cards "WhatsApp Não Oficial" e "WhatsApp Oficial" mostram a contagem real de instâncias do Y.BRASIL (em vez de "Carregando..." ou "Nenhuma instância").
+3. Em DevTools → Console, se aparecer o warn `"[useTenant] RPC retornou null, usando fallback…"`, confirma que a hipótese era correta e o fallback consertou. Se não aparecer, o fallback ficou de prevenção mas o caminho normal continua funcionando.
+4. Logar com Raul (`raul@temisconsultoria.com.br`) → deve continuar caindo em `/admin` direto (comportamento inalterado).
+5. Logar com `raulsjunior579@gmail.com` (admin do Y.BRASIL) → deve ver as mesmas instâncias da Barbara, sem bypass de RLS (mesmo caminho).
 
-## Fora de escopo
+## Detalhes técnicos (resumo)
 
-- Migrar/forçar Y.BRASIL a ter credenciais próprias por credor.
-- Mexer em `negociarie-proxy` / `negociarie-callback` (já corrigidos nas etapas anteriores).
-- Logs de erro da seção "LOGS DE ERROS DE INTEGRAÇÃO" — já está vazio porque não há erros (comportamento correto).
+- Arquivo único alterado: `src/hooks/useTenant.tsx`.
+- Sem novas dependências.
+- Sem mudança de tipo público do hook (`tenant`, `tenantUser`, `plan`, `isSuperAdmin`, etc. permanecem).
+- Logs apenas com `console.warn` (sem PII além de `user.id`).
