@@ -25,6 +25,11 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-ai-c
 const FAB_SIZE = 56;
 const FAB_MARGIN = 16;
 const POS_STORAGE_KEY = "rivo-support-fab-pos";
+const CATEGORY_STORAGE_KEY = "rivo-support-category";
+
+type SupportCategory = "suporte" | "financeiro";
+
+const categoryLabel = (c: SupportCategory) => (c === "financeiro" ? "Financeiro" : "Suporte");
 
 const loadInitialPos = () => {
   if (typeof window === "undefined") return { x: 0, y: 0 };
