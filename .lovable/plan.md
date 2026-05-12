@@ -1,102 +1,46 @@
-## Revisão da integração Negociarie — bugs encontrados e correções
+## Migrar componentes admin para a edge function segura
 
-Após uma varredura completa do código (proxy, callback, credentials, migrations, RLS e UI), encontrei **6 problemas reais** que afetam Y.BRASIL e/ou impedem que outros tenants usem a integração. Abaixo cada um, o impacto e a correção.
+Os dois componentes admin (`TenantIntegrationsVault` em `SuperAdminPage` e `CreditorIntegrationsVault` em `CredorForm`) ainda fazem `SELECT`/`UPSERT` direto na tabela `tenant_integrations`. Como a RLS agora é `no_direct_select USING(false)` e o INSERT/UPDATE exige `tenant_id = get_my_tenant_id()`, esses dois componentes estão **quebrados**:
 
----
+- A leitura sempre retorna vazio (toda integração aparece como "Não configurado").
+- O super admin não consegue salvar credenciais para outros tenants (RLS bloqueia porque o `tenant_id` alvo ≠ `get_my_tenant_id()` do super admin).
 
-### 🔴 1. Bug crítico no `catch` do `negociarie-proxy` (quebra logging e invalida cache errada)
+### Solução
 
-**Arquivo:** `supabase/functions/negociarie-proxy/index.ts` (linhas 430–466)
-
-O bloco `catch` referencia variáveis declaradas **dentro** do `try` (`userData`, `userId`, `tenantId`, `action`, `params`). Em qualquer erro lançado **antes** dessas linhas (ex.: erro de auth ou de parsing do JSON), o `catch` dispara `ReferenceError` e a Edge Function retorna 500 sem corpo útil — e o `audit_logs` nunca é gravado.
-
-Além disso, na linha 459 usa a chave de cache `token_${tenantId}` (sem `_default`), enquanto `getToken` salva como `token_${tenantId}_${creditorId || "default"}`. **A invalidação em 401 nunca limpa o token real.** Token expirado fica em cache até reinício do isolate — Y.BRASIL pode ficar 1h batendo "Falha ao autenticar".
-
-**Correção:** declarar `let userId, tenantId, action, params, userData` antes do `try`, e usar a mesma fórmula de chave de cache (`token_${tenantId}_${creditorId || "default"}`) na invalidação.
+Centralizar toda leitura/escrita pela edge function `negociarie-credentials` (que já roda em service-role e valida o solicitante). Acrescentamos 1 ação nova e ampliamos as existentes para aceitar `tenant_id` quando o chamador for super admin.
 
 ---
 
-### 🔴 2. Proxy lê `tenant_integrations` com cliente anon → outros tenants nunca conseguirão usar
+### 1. Estender `supabase/functions/negociarie-credentials/index.ts`
 
-**Arquivo:** `negociarie-proxy/index.ts` linhas 159–163, 25–55
+- **Nova action `get_status`**: retorna o mesmo formato mascarado da RPC `get_my_integrations_status` (sem `client_secret`), filtrado por `tenant_id` + `creditor_id` opcionais.
+- **Permissão "ator"**:
+  - Se `payload.tenant_id` está ausente OU é igual ao tenant do chamador → exige `profiles.role = 'admin'` (comportamento atual).
+  - Se `payload.tenant_id` é **diferente** do tenant do chamador → exige `public.can_access_tenant(payload.tenant_id)` retornar `true` (super admin support mode, padrão já adotado em outras RPCs do projeto).
+- Aplicar a mesma checagem de "ator" em `save`, `test` e `delete`, usando `targetTenantId = payload.tenant_id ?? callerTenantId`.
 
-O proxy cria o `supabase` client com `SUPABASE_ANON_KEY` + JWT do usuário e lê `tenant_integrations`. Mas a nova RLS aplicada na migração de hoje é `no_direct_select USING (false)` — **nenhum SELECT via JWT retorna linhas**.
+### 2. Refatorar `src/components/admin/integrations/TenantIntegrationsVault.tsx`
 
-Resultado: para qualquer tenant que NÃO seja Y.BRASIL, `tenantIntegration` vem `null`, cai no fallback ENV (que só tem credenciais Y.BRASIL) e qualquer chamada da Negociarie retorna erro de autenticação. Y.BRASIL "funciona" por puro acidente — sempre vai pro ENV.
+- Trocar o `select` direto por `supabase.functions.invoke('negociarie-credentials', { body: { action: 'get_status', tenant_id } })`.
+- Trocar o `upsert` direto por `action: 'save'` com `tenant_id` no body. Isso valida na Negociarie antes de gravar — comportamento idêntico ao `NegociarieTab` da própria tenant.
+- Estado local exibe `client_id_masked`, `last_test_ok`, `callback_registered_at`, `uses_global_fallback`. Campo `client_secret` fica como input vazio (envia só ao salvar, mantém o anterior se vazio — lógica que `negociarie-credentials` já implementa).
 
-**Correção:** `getNegociarieConfig` precisa usar um client **service_role** dedicado (`SUPABASE_SERVICE_ROLE_KEY`) só para ler a tabela de credenciais. O JWT do usuário continua usado apenas para validar a identidade e descobrir o `tenant_id`.
+### 3. Refatorar `src/components/admin/integrations/CreditorIntegrationsVault.tsx`
 
----
+- Mesmo padrão do item 2, com `creditor_id` no body de todas as ações.
+- Mostrar badge "Cofre Ativo" baseada em `has_credentials` retornado pela função.
 
-### 🟠 3. Tabela `tenant_integrations` já existia — schema antigo sobreviveu
+### 4. Smoke test pós-deploy
 
-**Arquivos:** `supabase/migrations/20260506154500_tenant_integrations_v1.sql` + `20260506163500_creditor_integrations.sql` vs. `20260512141015_*.sql`
-
-A nova migração usa `create table if not exists`, mas a tabela antiga (de 06/05) já existia com colunas diferentes. Provavelmente faltam: `environment`, `last_test_at`, `last_test_ok`, `last_test_message`, `callback_registered_at`. A RPC `get_my_integrations_status` referencia essas colunas — se alguma estiver ausente, **a função quebra com `column does not exist`** e a UI nunca carrega o status.
-
-Além disso, **as policies RLS antigas continuam ativas em paralelo** com a nova `no_direct_select`. Como permissive policies são OR, a "deny-all" é fictícia — qualquer usuário do tenant continua lendo `client_secret` em texto puro via SQL bruto.
-
-**Correção:** migration de saneamento que (a) faz `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` para todas as colunas novas, (b) `DROP POLICY` nas políticas antigas (`Tenant users can view own integrations`, `Tenant admins can manage own integrations`, `Tenant admins can manage creditor integrations`), mantendo só as novas (`no_direct_select`, `tenant_admin_insert/update/delete`), (c) confirma o seed da Y.BRASIL.
-
-⚠️ **Atenção:** os componentes admin (`src/components/admin/integrations/CreditorIntegrationsVault.tsx` e `TenantIntegrationsVault.tsx`) leem `tenant_integrations` direto — após o fechamento do RLS eles param de funcionar. Vou trocar essas leituras pela RPC `get_my_integrations_status` (ou criar um RPC equivalente para super admin via `can_access_tenant`).
-
----
-
-### 🟠 4. `negociarie-callback` valida token só com credenciais globais (Y.BRASIL)
-
-**Arquivo:** `negociarie-callback/index.ts` linhas 128–139
-
-O HMAC do webhook é calculado como `sha1(NEGOCIARIE_CLIENT_ID + NEGOCIARIE_CLIENT_SECRET)` lendo do ENV. Se outro tenant configurar credenciais próprias, o callback dele **sempre** retornará 401 (token nunca bate). E como o ENV é só Y.BRASIL, qualquer outro tenant que ative a integração terá baixas perdidas.
-
-**Correção:** descobrir o tenant através do `id_parcela` da primeira parcela do payload → `negociarie_cobrancas` → `tenant_id` → `tenant_integrations` (via service_role). Recalcular o `expected = sha1(client_id + client_secret)` com as credenciais corretas. Se a linha for `uses_global_fallback`, usar o ENV como hoje (Y.BRASIL preservado).
+- Como super admin, abrir `SuperAdminPage` → gerenciar uma tenant qualquer → ver status carregado e salvar credenciais fictícias (deve falhar no login da Negociarie como esperado).
+- Como admin do tenant Y.BRASIL, abrir `CredorForm` em um credor sem cobrança direta — deve aparecer "Não configurado" sem quebrar.
+- Conferir que o `NegociarieTab` em Configurações → Integrações **continua** funcionando (não tocamos nele).
 
 ---
 
-### 🟡 5. Credor com `cobrança_direta_ativa = true` sem linha em `tenant_integrations`
+### Fora do escopo desta rodada
+- Migrar Asaas/CobCloud para o mesmo cofre — feito quando outro tenant pedir.
+- HMAC validation extra no webhook — já corrigido na rodada anterior.
+- Remover documentação antiga referente ao acesso direto da tabela.
 
-**Arquivo:** `negociarie-proxy/index.ts` linhas 16–44
-
-Hoje, se o credor está marcado como "cobrança direta" mas o tenant ainda não cadastrou as credenciais específicas dele, o proxy faz fallback silencioso para as credenciais do tenant. Isso pode emitir boletos pelo CNPJ errado e gerar conciliação confusa.
-
-**Correção:** quando `cobrança_direta_ativa = true` E não houver linha no `tenant_integrations`, **bloquear** com erro claro (`Cobrança direta ativa para este credor mas credenciais Negociarie não cadastradas`). Y.BRASIL continua intocada porque os credores dela não usam essa flag.
-
----
-
-### 🟡 6. UI `NegociarieTab` mostra "Não configurado" para Y.BRASIL caso o seed falhe
-
-**Arquivo:** `src/components/integracao/NegociarieTab.tsx` + `src/pages/IntegracaoPage.tsx`
-
-Se a row de seed da migração 20260512 não tiver sido inserida (ex.: tabela ainda não existia no momento certo, conflito com ON CONFLICT), Y.BRASIL aparece como "Não configurado". A funcionalidade roda (cai no ENV) mas o admin se assusta.
-
-**Correção:** após o saneamento da migração (item 3) confirmar via RPC que a row existe; se não existir, re-inserir como parte da migration. UI exibe badge "Conectado (cofre global)" quando `uses_global_fallback = true`.
-
----
-
-## Plano de execução (em ordem)
-
-1. **Migration de saneamento** (`tenant_integrations` schema + RLS + seed Y.BRASIL):
-   - `ADD COLUMN IF NOT EXISTS` para `environment`, `last_test_at`, `last_test_ok`, `last_test_message`, `callback_registered_at`
-   - `DROP POLICY` nas três políticas antigas
-   - Recriar `no_direct_select` + `tenant_admin_*` (idempotente)
-   - Recriar/validar RPC `get_my_integrations_status`
-   - `INSERT ... ON CONFLICT DO NOTHING` da row Y.BRASIL com `uses_global_fallback: true`
-
-2. **`negociarie-proxy/index.ts`**:
-   - Mover `let` de `userId/tenantId/action/params/userData` para fora do `try`
-   - Criar `adminClient` com SERVICE_ROLE para `getNegociarieConfig`
-   - Corrigir chave de invalidação de cache no catch
-   - Erro explícito quando credor `cobrança_direta_ativa` não tem credenciais cadastradas
-
-3. **`negociarie-callback/index.ts`**:
-   - Lookup de credenciais por tenant a partir do `id_parcela`
-   - Manter Y.BRASIL via fallback ENV quando `uses_global_fallback = true`
-
-4. **Admin vaults (`CreditorIntegrationsVault`, `TenantIntegrationsVault`)**:
-   - Trocar leitura direta de `tenant_integrations` por RPC mascarada
-
-5. **Smoke test** após deploy:
-   - `test-connection` Y.BRASIL → deve retornar `connected: true`
-   - `consulta-cobrancas` com CPF real → deve listar parcelas
-   - Simular callback de baixa via `curl` → conferir `negociarie_cobrancas.status='pago'` + `client_events` + `agreement_completed`
-
-Nada do fluxo Y.BRASIL é removido: o ENV continua sendo a fonte real de credenciais e o cache por tenant é mantido. A diferença é que agora outros tenants conseguem ativar a integração com suas próprias chaves sem colidir.
+Resultado esperado: super admin volta a gerenciar credenciais Negociarie de qualquer tenant; o admin do tenant edita só as suas; Y.BRASIL operacional segue intocada porque continua usando `uses_global_fallback`.
