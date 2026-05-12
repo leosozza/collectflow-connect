@@ -23,7 +23,7 @@ const ConfiguracoesPage = () => {
   const isMaxList =
     ((tenant as any)?.settings as any)?.maxlist_enabled === true || tenant?.slug === "ybrasil";
 
-  // Backward compatibility: /configuracoes?tab=api_docs → /configuracoes/api
+  // Backward compatibility: /configuracoes?tab=api_docs → /configuracoes/apis
   useEffect(() => {
     const legacyTab = searchParams.get("tab");
     if (legacyTab && LEGACY_TAB_MAP[legacyTab]) {
