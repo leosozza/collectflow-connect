@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User } from "lucide-react";
+import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User, HeadphonesIcon, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
