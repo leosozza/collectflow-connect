@@ -45,6 +45,7 @@ import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
 import McpDocsPage from "./pages/McpDocsPage";
+import ApisPage from "./pages/ApisPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AdminUsuariosHubPage from "./pages/admin/AdminUsuariosHubPage";
 import LandingPage from "./pages/LandingPage";
