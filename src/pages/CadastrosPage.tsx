@@ -81,11 +81,11 @@ const CadastrosPage = () => {
     {
       title: "Cadastros",
       items: [
-        { key: "credores", label: "Credores", icon: Building2, badge: credores?.length ?? null },
-        { key: "usuarios", label: "Usuários", icon: UserCog, badge: usuariosCount ?? null },
-        { key: "equipes", label: "Equipes", icon: Users, badge: equipes?.length ?? null },
+        { key: "credores", label: "Credores", icon: Building2 },
+        { key: "usuarios", label: "Usuários", icon: UserCog },
+        { key: "equipes", label: "Equipes", icon: Users },
         { key: "tipo_devedor", label: "Perfil do Devedor", icon: UserCheck },
-        { key: "tipo_status", label: "Tipo de Status", icon: Tags, badge: tiposStatus?.length ?? null },
+        { key: "tipo_status", label: "Tipo de Status", icon: Tags },
         { key: "tabulacoes", label: "Tabulações de Atendimento", icon: Headset },
       ],
     },
