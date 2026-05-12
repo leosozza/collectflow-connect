@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
       delete (newConfig as any).uses_global_fallback;
 
       const payload = {
-        tenant_id: tenantId,
+        tenant_id: targetTenantId,
         creditor_id: creditorId,
         provider,
         is_active: true,
