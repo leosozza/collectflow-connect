@@ -488,12 +488,14 @@ Deno.serve(async (req) => {
 
     const negociarie_total_ms = Date.now() - tNeg0;
 
-    if (result.success > 0) {
+    // Only flip the global boleto_pendente flag in batch mode.
+    // Single mode targets one installment and must not affect agreement-wide state.
+    if (!singleMode && result.success > 0) {
       await supabaseAdmin.from("agreements").update({ boleto_pendente: false }).eq("id", agreement_id);
     }
 
     const total_ms = Date.now() - t0;
-    console.log(`[generate-agreement-boletos] Done: ${result.success}/${result.total} success, ${result.failed} failed | timing: total=${total_ms}ms auth=${auth_ms}ms queries=${queries_ms}ms negociarie=${negociarie_total_ms}ms per=${JSON.stringify(per_installment_ms)}`);
+    console.log(`[generate-agreement-boletos] Done mode=${mode}: ${result.success}/${result.total} success, ${result.failed} failed | timing: total=${total_ms}ms auth=${auth_ms}ms queries=${queries_ms}ms negociarie=${negociarie_total_ms}ms per=${JSON.stringify(per_installment_ms)}`);
 
     return new Response(JSON.stringify({ ...result, timing: { total_ms, auth_ms, queries_ms, negociarie_total_ms, per_installment_ms } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
