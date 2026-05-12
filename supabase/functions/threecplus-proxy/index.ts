@@ -1230,38 +1230,49 @@ Deno.serve(async (req) => {
     // Sanitize log — never print api_token
     console.log(`3CPlus proxy: ${action} -> ${method} ${url.replace(/api_token=[^&]+/, 'api_token=***')}`);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    // Per-attempt timeout (resets each retry). company_calls/agents_status podem demorar mais sob carga.
+    const PER_ATTEMPT_TIMEOUT_MS = 20000;
 
     const fetchOptions: RequestInit = {
       method,
       headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
     };
     if (reqBody) {
       fetchOptions.body = reqBody;
     }
 
-    // Retry transient upstream errors (HTTP/2 connection resets, 502/503/504).
-    // The 3CPlus edge frequently returns "http2 error: connection error received"
-    // mid-request; a quick retry almost always succeeds.
+    // Retry transient upstream errors (HTTP/2 connection resets, 502/503/504, timeouts).
     let response!: Response;
     let lastErr: any = null;
+    let timedOut = false;
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, PER_ATTEMPT_TIMEOUT_MS);
       try {
-        response = await fetch(url, fetchOptions);
-        // Retry on transient upstream gateway errors
+        timedOut = false;
+        response = await fetch(url, { ...fetchOptions, signal: controller.signal });
+        clearTimeout(timeoutId);
         if ([502, 503, 504].includes(response.status) && attempt < maxAttempts) {
           console.warn(`3CPlus transient ${response.status} on ${action}, retry ${attempt}/${maxAttempts - 1}`);
-          await new Promise((r) => setTimeout(r, 200 * attempt));
+          await new Promise((r) => setTimeout(r, 250 * attempt));
           continue;
         }
         lastErr = null;
         break;
       } catch (err: any) {
+        clearTimeout(timeoutId);
         lastErr = err;
-        if (err?.name === "AbortError") break;
+        const isAbort = err?.name === "AbortError" || timedOut;
+        if (isAbort && attempt < maxAttempts) {
+          console.warn(`3CPlus timeout on ${action} (attempt ${attempt}/${maxAttempts}), retrying`);
+          await new Promise((r) => setTimeout(r, 250 * attempt));
+          continue;
+        }
+        if (isAbort) break;
         const msg = String(err?.message || err);
         const transient =
           msg.includes("http2") ||
@@ -1272,25 +1283,26 @@ Deno.serve(async (req) => {
           msg.includes("os error");
         if (!transient || attempt === maxAttempts) break;
         console.warn(`3CPlus transient network err on ${action} (attempt ${attempt}/${maxAttempts}): ${msg.slice(0, 120)}`);
-        await new Promise((r) => setTimeout(r, 200 * attempt));
+        await new Promise((r) => setTimeout(r, 250 * attempt));
       }
     }
-    clearTimeout(timeoutId);
 
     if (lastErr) {
-      if (lastErr?.name === "AbortError") {
-        return new Response(
-          JSON.stringify({ status: 504, detail: "3CPlus API timeout (15s)" }),
-          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      // Surface as 502 Bad Gateway (transient) so the frontend can treat it as recoverable
+      const isAbort = lastErr?.name === "AbortError" || timedOut;
+      // Sempre retorna HTTP 200 com payload de erro estruturado para o cliente
+      // não sofrer "non-2xx" exception (que causa tela em branco no polling).
       return new Response(
-        JSON.stringify({
-          status: 502,
-          detail: "3CPlus upstream temporariamente indisponível, tente novamente em instantes",
-          upstream_error: String(lastErr?.message || lastErr).slice(0, 200),
-        }),
+        JSON.stringify(
+          isAbort
+            ? { status: 504, detail: "3CPlus API timeout", fallback: true, transient: true }
+            : {
+                status: 502,
+                detail: "3CPlus upstream temporariamente indisponível, tente novamente em instantes",
+                fallback: true,
+                transient: true,
+                upstream_error: String(lastErr?.message || lastErr).slice(0, 200),
+              }
+        ),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
