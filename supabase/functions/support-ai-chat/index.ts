@@ -194,12 +194,18 @@ serve(async (req) => {
   }
 
   try {
-    const { message, history } = await req.json();
+    const { message, history, category } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    const categoryHint = category === "financeiro"
+      ? "\n\nO usuário escolheu a área **Financeiro** — priorize respostas sobre cobrança, faturas, tokens/RIVO Coin, gateways de pagamento, confirmação de pagamentos, comissões e prestação de contas."
+      : category === "suporte"
+        ? "\n\nO usuário escolheu a área **Suporte** — priorize respostas sobre uso geral do sistema, configuração, integrações, fluxos operacionais e dúvidas técnicas."
+        : "";
+
     const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: SYSTEM_PROMPT + categoryHint },
       ...(history || []),
       { role: "user", content: message },
     ];
