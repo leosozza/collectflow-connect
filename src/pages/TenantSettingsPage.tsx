@@ -9,10 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Building2, Wallet, FileSignature, Package, XOctagon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import TokenBalance from "@/components/tokens/TokenBalance";
 import PaymentCheckoutDialog from "@/components/financeiro/PaymentCheckoutDialog";
 import PaymentHistoryCard from "@/components/financeiro/PaymentHistoryCard";
@@ -60,11 +60,20 @@ Fica eleito o foro da comarca da sede da CONTRATADA para dirimir quaisquer quest
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
+const SETTINGS_TABS = [
+  { key: "dados", label: "Dados", icon: Building2 },
+  { key: "financeiro", label: "Financeiro", icon: Wallet },
+  { key: "contrato", label: "Contrato", icon: FileSignature },
+  { key: "servicos", label: "Serviços", icon: Package },
+  { key: "cancelamento", label: "Cancelamento", icon: XOctagon },
+];
+
 const TenantSettingsPage = () => {
   const { tenant, plan, isTenantAdmin, refetch } = useTenant();
   const { toast } = useToast();
   const [name, setName] = useState(tenant?.name || "");
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("dados");
 
   // Services state
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
@@ -198,17 +207,31 @@ const TenantSettingsPage = () => {
         <p className="text-muted-foreground">Gerencie os dados, plano e serviços da sua empresa</p>
       </div>
 
-      <Tabs defaultValue="dados">
-         <TabsList>
-          <TabsTrigger value="dados">Dados</TabsTrigger>
-          <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
-          <TabsTrigger value="contrato">Contrato</TabsTrigger>
-          <TabsTrigger value="servicos">Serviços</TabsTrigger>
-          <TabsTrigger value="cancelamento">Cancelamento</TabsTrigger>
-        </TabsList>
+      <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full">
+        {SETTINGS_TABS.map((t) => {
+          const Icon = t.icon;
+          const isActive = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all relative rounded-t-lg",
+                isActive
+                  ? "bg-primary/10 text-primary border-b-[3px] border-primary"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-b-[3px] border-transparent"
+              )}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
+      <div className="mt-4">
         {/* ABA DADOS */}
-        <TabsContent value="dados">
+        {activeTab === "dados" && (
           <Card>
             <CardHeader>
               <CardTitle>Dados da Empresa</CardTitle>
@@ -229,10 +252,10 @@ const TenantSettingsPage = () => {
               </Button>
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* ABA FINANCEIRO */}
-        <TabsContent value="financeiro">
+        {activeTab === "financeiro" && (
           <div className="space-y-6">
             {/* Resumo Financeiro */}
             <Card>
@@ -380,10 +403,10 @@ const TenantSettingsPage = () => {
               />
             )}
           </div>
-        </TabsContent>
+        )}
 
         {/* ABA CONTRATO */}
-        <TabsContent value="contrato">
+        {activeTab === "contrato" && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -432,10 +455,10 @@ const TenantSettingsPage = () => {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        )}
 
         {/* ABA SERVIÇOS */}
-        <TabsContent value="servicos">
+        {activeTab === "servicos" && (
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -464,14 +487,13 @@ const TenantSettingsPage = () => {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
+        )}
 
 
 
 
         {/* ABA CANCELAMENTO */}
-        <TabsContent value="cancelamento">
+        {activeTab === "cancelamento" && (
           <Card>
             <CardHeader>
               <CardTitle>Cancelamento</CardTitle>
@@ -522,8 +544,8 @@ const TenantSettingsPage = () => {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {/* DIALOG: COMPRAR TOKENS */}
       <TokenPurchaseDialog

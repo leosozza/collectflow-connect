@@ -14,7 +14,8 @@ import PaymentConfirmationTab from "@/components/acordos/PaymentConfirmationTab"
 import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Download, HandCoins, CalendarIcon } from "lucide-react";
+import { Search, Download, HandCoins, CalendarIcon, CheckCircle2, Clock, AlertTriangle, ListChecks, XCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { exportToExcel } from "@/lib/exportUtils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
@@ -34,13 +35,13 @@ import {
 
 type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled" | "payment_confirmation";
 
-const statusFilterConfig: { key: StatusFilter; label: string; color: string; selectedColor: string }[] = [
-  { key: "approved", label: "Pagos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "vigentes", label: "Vigentes", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "overdue", label: "Vencidos", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "pending_approval", label: "Aguardando Liberação", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "cancelled", label: "Cancelados", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
-  { key: "payment_confirmation", label: "Confirmação de Pagamento", color: "bg-muted text-muted-foreground", selectedColor: "bg-primary text-primary-foreground ring-2 ring-primary shadow-sm" },
+const statusFilterConfig: { key: StatusFilter; label: string; icon: React.ElementType }[] = [
+  { key: "approved", label: "Pagos", icon: CheckCircle2 },
+  { key: "vigentes", label: "Vigentes", icon: ListChecks },
+  { key: "overdue", label: "Vencidos", icon: AlertTriangle },
+  { key: "pending_approval", label: "Aguardando Liberação", icon: Clock },
+  { key: "cancelled", label: "Cancelados", icon: XCircle },
+  { key: "payment_confirmation", label: "Confirmação de Pagamento", icon: HandCoins },
 ];
 
 const AcordosPage = () => {
@@ -401,27 +402,37 @@ const AcordosPage = () => {
         <StatCard title="Pagos" value={String(stats.paid)} icon="received" />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full">
         {statusFilterConfig
           .filter(({ key }) => key !== "payment_confirmation" || isAdmin)
-          .map(({ key, label, color, selectedColor }) => {
+          .map(({ key, label, icon: Icon }) => {
             const count = (tabCounts as any)[key] ?? 0;
+            const isActive = statusFilter === key;
             return (
               <button
                 key={key}
                 onClick={() => setStatusFilter(key)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${statusFilter === key ? selectedColor : color
-                  }`}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all relative rounded-t-lg",
+                  isActive
+                    ? "bg-primary/10 text-primary border-b-[3px] border-primary"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-b-[3px] border-transparent"
+                )}
               >
-                {key === "payment_confirmation" && <HandCoins className="w-3 h-3" />}
+                <Icon className="w-4 h-4 shrink-0" />
                 <span>{label}</span>
-                <span className={`inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] font-bold ${statusFilter === key ? "bg-primary-foreground/20 text-primary-foreground" : "bg-foreground/10 text-foreground"}`}>
-                  {count}
-                </span>
+                {count > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 text-[10px] px-1.5 py-0 h-4 min-w-4 flex items-center justify-center bg-background/50 text-foreground"
+                  >
+                    {count}
+                  </Badge>
+                )}
               </button>
             );
           })}
-      </div>
+      </nav>
 
       <div className="flex flex-wrap gap-3 items-center">
         <Select value={credorFilter} onValueChange={setCredorFilter}>

@@ -1,62 +1,69 @@
-# Plano — Fechar a lacuna que faz a Barbara ver "Nenhuma instância" / spinner infinito
+# Padronização da navegação superior (top tabs)
 
-## Diagnóstico (resumo)
+## Objetivo
+Aplicar o mesmo padrão visual de navegação horizontal usado em `/gamificacao/ranking` em todas as telas listadas, mantendo o conteúdo, ícones e nomenclaturas atuais de cada uma.
 
-- `useTenant` só resolve `tenant.id` via RPC `get_my_tenant_id()` (que depende de `auth.uid()` no JWT atual).
-- Se a RPC retornar `null` em alguma janela de carga (ex.: JWT expirado em refresh, race no `onAuthStateChange`), `tenant` fica `null`.
-- Todas as queries da página `/configuracoes/integracao` usam `enabled: !!tenant?.id`. Sem `tenant.id`:
-  - `BaylersInstancesList` (Evolution) e `GupshupInstancesList` ficam **eternamente em "Carregando..."** (react-query em pending com `enabled:false`).
-  - `IntegracaoPage` mostra `hasEvolution=false` / `hasGupshup=false`.
-- Raul (super_admin) **não sente** o problema porque a RLS de `whatsapp_instances` tem o ramo `is_super_admin(auth.uid())` que mascara qualquer instabilidade — mas mesmo o super_admin só veria os cards via `tenant?.id` na UI; a diferença real é que ele cai em `/admin` antes (não passa pela tela tenant).
-- A Barbara não tem nenhum caminho de fuga.
+## Padrão visual de referência (extraído de `GamificacaoPage.tsx`)
 
-## Mudanças
+Container:
+```
+<nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full">
+```
 
-### 1) `src/hooks/useTenant.tsx` — fallback + logs
+Item ativo:
+```
+"flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all relative rounded-t-lg
+ bg-primary/10 text-primary border-b-[3px] border-primary"
+```
 
-Em `fetchTenantData`, depois de chamar `supabase.rpc("get_my_tenant_id")`:
+Item inativo:
+```
+"text-muted-foreground hover:bg-muted/50 hover:text-foreground border-b-[3px] border-transparent"
+```
 
-- Se `tenantId` vier `null/undefined` **e** `user?.id` existir, fazer um SELECT direto:
-  ```ts
-  const { data: tu } = await supabase
-    .from("tenant_users")
-    .select("tenant_id, role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
-  ```
-  Se vier `tu?.tenant_id`, usar esse valor como `tenantId` e seguir o fluxo normal (`is_super_admin` / `is_tenant_admin` / fetch tenant + plan).
-- Se ainda assim ficar sem tenant, logar `console.warn("[useTenant] Sem tenant após fallback", { userId: user.id, rpcError })` e seguir para o `setLoading(false)` atual.
-- Adicionar `console.warn` quando o fallback **for** acionado (`"[useTenant] RPC retornou null, usando fallback direto em tenant_users"`) para deixar o sintoma rastreável em produção.
-- Manter os `setX(prev => ...)` estáveis que já existem.
+Cada item: ícone Lucide 16px (`w-4 h-4 shrink-0`) + label.
 
-Por que isso é seguro: a tabela `tenant_users` tem RLS que permite o próprio usuário ler sua linha (políticas existentes referenciam `user_id = auth.uid()`). O fallback não bypassa nada — apenas evita o caminho da RPC em caso de instabilidade.
+Observação: `/cadastros` já usa exatamente esse padrão — fica como referência cruzada e não precisa de alteração.
 
-### 2) (opcional, mesma alteração) Forçar refresh de sessão antes de desistir
+## Escopo por tela
 
-Antes do fallback, se a primeira RPC vier `null`, executar `await supabase.auth.refreshSession()` uma única vez e refazer a RPC. Se ainda vier `null`, cair no fallback acima. Custo: ~1 round-trip extra **só** no cenário de falha — em condições normais a primeira RPC já resolve e nada muda.
+### 1. `/acordos` (`src/pages/AcordosPage.tsx`)
+Hoje usa "pills" arredondadas coloridas (linha ~404). Substituir o bloco `<div className="flex flex-wrap gap-2">…</div>` por um `<nav>` no padrão acima. Manter:
+- mesmas chaves do `statusFilterConfig`
+- mesma lógica de visibilidade (`payment_confirmation` só para admin)
+- mesmo badge de contagem (`tabCounts[key]`) renderizado como `<Badge variant="secondary">` ao lado do label, igual ao `CadastrosPage`
+- ícones Lucide já usados (ex.: `HandCoins` para confirmação) e adicionar ícones consistentes para os demais status (ex.: `ListChecks`, `Clock`, `CheckCircle2`, `AlertTriangle`, `XCircle`).
 
-### 3) Sem mudanças de banco / RLS / edge functions
+### 2. `/financeiro/aguardando-liberacao` e `/financeiro/confirmacao-pagamento`
+Ambas reusam `AcordosPage` forçando `?status=…`. Como a nav nova vive dentro de `AcordosPage`, a mudança feita no item 1 já cobre essas duas rotas. Nenhuma edição adicional nesses arquivos.
 
-Nenhuma migração. Nenhuma policy. Nada de roles. As policies atuais (`tenant_id = get_my_tenant_id()`) continuam corretas — o fallback alimenta o mesmo `tenant.id` que a UI já usa para filtrar.
+### 3. `/automacao` (`src/pages/AutomacaoPage.tsx`)
+Substituir o `<Tabs>/<TabsList>/<TabsTrigger>` por um `<nav>` no padrão de Gamificação, usando state local para a aba ativa (mantendo `activeTab`/`setActiveTab` atuais). Itens (mantendo nomenclatura): Fluxos, Gatilhos, Templates, Pós-Tabulação, Histórico, Configurações. Ícones sugeridos: `GitBranch`, `Zap`, `FileText`, `ListChecks`, `History`, `Settings`. Conteúdo continua via render condicional por `activeTab`.
 
-## O que NÃO muda
+### 4. `/cadastros`
+Já está no padrão. Sem alterações.
 
-- Nada nos componentes `IntegracaoPage`, `EvolutionTab`, `GupshupTab`, `BaylersInstancesList`, `GupshupInstancesList`, `whatsappInstanceService`.
-- Nada nas roles do Raul / Barbara (já estão corretas).
-- Nada nos fluxos de super_admin / `support_tenant_id` / `ProtectedRoute`.
+### 5. `/contact-center/telefonia` (`src/components/contact-center/TelefoniaTab.tsx`)
+Hoje tem um `<Tabs>` com uma única aba (3CPlus). Trocar por uma `<nav>` no novo padrão com o item "3CPlus" (icon `Phone`). Mantém comportamento de única aba, agora visualmente alinhado.
 
-## Validação
+### 6. `/contact-center/whatsapp` (`src/pages/ContactCenterPage.tsx`)
+Substituir o bloco de botões pill com `bg-primary text-primary-foreground` (linhas 41-63) pela `<nav>` padrão. Itens existentes preservados: Conversas, Campanhas, Agente IA, Etiquetas, Respostas Rápidas, Personalização, com seus ícones e flags `show`. Ajustar o wrapper para que o nav fique acima de `flex-1 overflow-hidden`.
 
-1. Logar com a Barbara em produção, abrir `/configuracoes/integracao`.
-2. Esperado: cards "WhatsApp Não Oficial" e "WhatsApp Oficial" mostram a contagem real de instâncias do Y.BRASIL (em vez de "Carregando..." ou "Nenhuma instância").
-3. Em DevTools → Console, se aparecer o warn `"[useTenant] RPC retornou null, usando fallback…"`, confirma que a hipótese era correta e o fallback consertou. Se não aparecer, o fallback ficou de prevenção mas o caminho normal continua funcionando.
-4. Logar com Raul (`raul@temisconsultoria.com.br`) → deve continuar caindo em `/admin` direto (comportamento inalterado).
-5. Logar com `raulsjunior579@gmail.com` (admin do Y.BRASIL) → deve ver as mesmas instâncias da Barbara, sem bypass de RLS (mesmo caminho).
+### 7. `/central-empresa` (`src/pages/TenantSettingsPage.tsx`)
+Substituir o `<Tabs>/<TabsList>` (linha ~202) por `<nav>` no padrão. Itens: Dados, Financeiro, Contrato, Serviços, Cancelamento. Ícones sugeridos: `Building2`, `Wallet`, `FileSignature`, `Package`, `XOctagon`. Migrar o conteúdo de cada `<TabsContent>` para render condicional por `activeTab` (state local), preservando lógica atual.
 
-## Detalhes técnicos (resumo)
+### 8. `/configuracoes/integracao` (`src/pages/IntegracaoPage.tsx`)
+Hoje renderiza grid de cards agrupados por `INTEGRATION_SEGMENTS` (Negociação, Pagamentos, WhatsApp, etc.) sem nav superior. Adicionar `<nav>` no padrão Gamificação onde cada item corresponde a um segmento de `INTEGRATION_SEGMENTS` (ex.: Todos, Comunicação, Pagamentos, Telefonia, Crédito, Dados). State local controla o segmento selecionado e filtra os cards exibidos. Item "Todos" mostra todos os segmentos como hoje. Quando `activeIntegration` está aberto, o nav fica oculto (mantém a UX atual de "voltar").
 
-- Arquivo único alterado: `src/hooks/useTenant.tsx`.
-- Sem novas dependências.
-- Sem mudança de tipo público do hook (`tenant`, `tenantUser`, `plan`, `isSuperAdmin`, etc. permanecem).
-- Logs apenas com `console.warn` (sem PII além de `user.id`).
+## Detalhes técnicos
+
+- Sem alteração de tokens/CSS globais — só uso das classes semânticas existentes.
+- Sem alteração em rotas, services, RLS ou lógica de negócio.
+- `Badge` reutilizado: `import { Badge } from "@/components/ui/badge"`.
+- Em telas que dependem de URL state (`useUrlState`/`useSearchParams`) o estado da aba continua na URL, apenas a renderização do nav muda.
+- Não tocar em `src/pages/CadastrosPage.tsx` (já é a referência canônica do padrão).
+
+## Fora de escopo
+- Cores/temas globais.
+- Lógica funcional de cada aba.
+- Mudanças no sidebar lateral do app.

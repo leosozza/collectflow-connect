@@ -10,9 +10,10 @@ import GupshupTab from "@/components/integracao/GupshupTab";
 import SerasaTab from "@/components/integracao/SerasaTab";
 import CenprotTab from "@/components/integracao/CenprotTab";
 import TargetDataTenantTab from "@/components/integracao/TargetDataTenantTab";
-import { ArrowLeft, CheckCircle2, Sparkles, Info } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Sparkles, Info, LayoutGrid } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   INTEGRATIONS,
   INTEGRATION_SEGMENTS,
@@ -29,6 +30,7 @@ const STATUS_LABEL: Record<IntegrationStatus, { text: string; cls: string; Icon:
 const IntegracaoPage = () => {
   const { isTenantAdmin, tenant } = useTenant();
   const [activeIntegration, setActiveIntegration] = useState<string | null>(null);
+  const [activeSegment, setActiveSegment] = useState<string>("__all__");
   const [vaultIntegrations, setVaultIntegrations] = useState<Record<string, boolean>>({});
   const [hasEvolution, setHasEvolution] = useState(false);
   const [hasGupshup, setHasGupshup] = useState(false);
@@ -146,63 +148,90 @@ const IntegracaoPage = () => {
           {renderActiveIntegration()}
         </div>
       ) : (
-        <div className="space-y-8 animate-fade-in pt-4">
-          {INTEGRATION_SEGMENTS.map((segment) => (
-            <div key={segment.title} className="space-y-4">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                {segment.title}
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                {segment.ids.map((id) => {
-                  const meta = INTEGRATIONS[id];
-                  if (!meta) return null;
-                  const status = computeStatus(id);
-                  const sl = STATUS_LABEL[status];
-                  return (
-                    <Card
-                      key={id}
-                      className="cursor-pointer hover:scale-[1.02] hover:border-primary/50 hover:shadow-md transition-all duration-200 bg-card/40 backdrop-blur-sm border-border/50 group"
-                      onClick={() => setActiveIntegration(id)}
-                    >
-                      <CardContent className="p-5 flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm overflow-hidden bg-white border border-border/50 shrink-0">
-                          <img
-                            src={meta.logoUrl}
-                            alt={`${meta.name} logo`}
-                            className="w-full h-full object-contain p-1.5"
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                              const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
-                              if (sib) sib.style.display = "flex";
-                            }}
-                          />
-                          <div
-                            className={`w-full h-full ${meta.brandColor} text-white items-center justify-center`}
-                            style={{ display: "none" }}
-                          >
-                            {meta.fallbackIcon}
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                            {meta.name}
-                          </h3>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <sl.Icon className={`w-3.5 h-3.5 ${sl.cls}`} />
-                            <span
-                              className={`text-[11px] font-medium uppercase tracking-wider ${sl.cls}`}
+        <div className="space-y-6 animate-fade-in">
+          <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full">
+            {[{ title: "__all__", label: "Todos" }, ...INTEGRATION_SEGMENTS.map(s => ({ title: s.title, label: s.title }))].map((seg) => {
+              const isActive = activeSegment === seg.title;
+              return (
+                <button
+                  key={seg.title}
+                  onClick={() => setActiveSegment(seg.title)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all relative rounded-t-lg",
+                    isActive
+                      ? "bg-primary/10 text-primary border-b-[3px] border-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-b-[3px] border-transparent"
+                  )}
+                >
+                  {seg.title === "__all__" && <LayoutGrid className="w-4 h-4 shrink-0" />}
+                  <span>{seg.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="space-y-8 pt-2">
+            {INTEGRATION_SEGMENTS
+              .filter((segment) => activeSegment === "__all__" || activeSegment === segment.title)
+              .map((segment) => (
+              <div key={segment.title} className="space-y-4">
+                {activeSegment === "__all__" && (
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    {segment.title}
+                  </h2>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {segment.ids.map((id) => {
+                    const meta = INTEGRATIONS[id];
+                    if (!meta) return null;
+                    const status = computeStatus(id);
+                    const sl = STATUS_LABEL[status];
+                    return (
+                      <Card
+                        key={id}
+                        className="cursor-pointer hover:scale-[1.02] hover:border-primary/50 hover:shadow-md transition-all duration-200 bg-card/40 backdrop-blur-sm border-border/50 group"
+                        onClick={() => setActiveIntegration(id)}
+                      >
+                        <CardContent className="p-5 flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-sm overflow-hidden bg-white border border-border/50 shrink-0">
+                            <img
+                              src={meta.logoUrl}
+                              alt={`${meta.name} logo`}
+                              className="w-full h-full object-contain p-1.5"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                if (sib) sib.style.display = "flex";
+                              }}
+                            />
+                            <div
+                              className={`w-full h-full ${meta.brandColor} text-white items-center justify-center`}
+                              style={{ display: "none" }}
                             >
-                              {sl.text}
-                            </span>
+                              {meta.fallbackIcon}
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                              {meta.name}
+                            </h3>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <sl.Icon className={`w-3.5 h-3.5 ${sl.cls}`} />
+                              <span
+                                className={`text-[11px] font-medium uppercase tracking-wider ${sl.cls}`}
+                              >
+                                {sl.text}
+                              </span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
