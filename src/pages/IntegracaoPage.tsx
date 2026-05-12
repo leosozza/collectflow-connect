@@ -150,7 +150,7 @@ const IntegracaoPage = () => {
       ) : (
         <div className="space-y-6 animate-fade-in">
           <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px w-full">
-            {[{ title: "__all__", label: "Todos" }, ...INTEGRATION_SEGMENTS.map(s => ({ title: s.title, label: s.title }))].map((seg) => {
+            {[...INTEGRATION_SEGMENTS.map(s => ({ title: s.title, label: s.title })), { title: "__all__", label: "Todos" }].map((seg) => {
               const isActive = activeSegment === seg.title;
               return (
                 <button
