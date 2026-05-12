@@ -336,7 +336,7 @@ export const negociarieService = {
    */
   async generateSingleBoleto(
     agreement: { id: string; client_cpf: string; credor: string; tenant_id: string; client_name: string },
-    installment: { number: number; value: number; dueDate: string }
+    installment: { number: number; value: number; dueDate: string; key?: string }
   ) {
     let clientData: any = {};
     try {
