@@ -14,7 +14,6 @@ import DispositionTabsWrapper from "@/components/cadastros/DispositionTabsWrappe
 import UsersPage from "@/pages/UsersPage";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
-import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
