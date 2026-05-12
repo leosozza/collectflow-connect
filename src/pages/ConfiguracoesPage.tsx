@@ -58,7 +58,8 @@ const ConfiguracoesPage = () => {
         {items.map((item) => {
           const isActive =
             location.pathname === item.to ||
-            (item.key === "integracao" && location.pathname === "/configuracoes");
+            (item.key === "integracao" && location.pathname === "/configuracoes") ||
+            (item.key === "apis" && location.pathname.startsWith("/configuracoes/apis"));
           return (
             <Link
               key={item.key}
