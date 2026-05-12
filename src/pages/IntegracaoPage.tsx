@@ -35,21 +35,18 @@ const IntegracaoPage = () => {
 
   useEffect(() => {
     if (tenant?.id) {
-      // Busca integrações configuradas no cofre (tabela opcional)
-      (supabase as any)
-        .from("tenant_integrations")
-        .select("provider, is_active")
-        .eq("tenant_id", tenant.id)
-        .eq("is_active", true)
-        .then(({ data }: { data: Array<{ provider: string; is_active: boolean }> | null }) => {
-          if (data) {
-            const vaultMap: Record<string, boolean> = {};
-            data.forEach((row) => {
+      // Lê apenas metadados (RLS bloqueia SELECT direto na tabela)
+      supabase.rpc("get_my_integrations_status").then(({ data }: any) => {
+        if (Array.isArray(data)) {
+          const vaultMap: Record<string, boolean> = {};
+          data.forEach((row: any) => {
+            if (row?.is_active && (row?.has_credentials || row?.uses_global_fallback)) {
               vaultMap[(row.provider || "").toLowerCase()] = true;
-            });
-            setVaultIntegrations(vaultMap);
-          }
-        });
+            }
+          });
+          setVaultIntegrations(vaultMap);
+        }
+      });
 
       supabase
         .from("whatsapp_instances")

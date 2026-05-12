@@ -5697,6 +5697,72 @@ export type Database = {
         }
         Relationships: []
       }
+      tenant_integrations: {
+        Row: {
+          callback_registered_at: string | null
+          config: Json
+          created_at: string
+          created_by: string | null
+          creditor_id: string | null
+          environment: string
+          id: string
+          is_active: boolean
+          last_test_at: string | null
+          last_test_message: string | null
+          last_test_ok: boolean | null
+          provider: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          callback_registered_at?: string | null
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          creditor_id?: string | null
+          environment?: string
+          id?: string
+          is_active?: boolean
+          last_test_at?: string | null
+          last_test_message?: string | null
+          last_test_ok?: boolean | null
+          provider: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          callback_registered_at?: string | null
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          creditor_id?: string | null
+          environment?: string
+          id?: string
+          is_active?: boolean
+          last_test_at?: string | null
+          last_test_message?: string | null
+          last_test_ok?: boolean | null
+          provider?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_integrations_creditor_id_fkey"
+            columns: ["creditor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_integrations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_modules: {
         Row: {
           enabled: boolean | null
@@ -7482,6 +7548,24 @@ export type Database = {
         }[]
       }
       get_my_enabled_modules: { Args: never; Returns: string[] }
+      get_my_integrations_status: {
+        Args: never
+        Returns: {
+          callback_registered_at: string
+          callback_url: string
+          client_id_masked: string
+          creditor_id: string
+          environment: string
+          has_credentials: boolean
+          is_active: boolean
+          last_test_at: string
+          last_test_message: string
+          last_test_ok: boolean
+          provider: string
+          updated_at: string
+          uses_global_fallback: boolean
+        }[]
+      }
       get_my_permission_profile: {
         Args: never
         Returns: {

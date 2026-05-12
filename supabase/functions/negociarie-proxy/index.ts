@@ -54,10 +54,13 @@ async function getNegociarieConfig(supabase: any, tenantId: string, creditorId?:
     .maybeSingle();
 
   const config = tenantIntegration?.config || {};
-  
-  // 3. Fallback para ENV (YBRASIL)
-  const clientId = config.client_id || Deno.env.get("NEGOCIARIE_CLIENT_ID");
-  const clientSecret = config.client_secret || Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
+
+  // 2.1 Se a linha do tenant marca uso de cofre global, ignora client_id/secret da config
+  const useGlobal = config.uses_global_fallback === true;
+
+  // 3. Fallback para ENV (YBRASIL ou tenants marcados com uses_global_fallback)
+  const clientId = (!useGlobal && config.client_id) || Deno.env.get("NEGOCIARIE_CLIENT_ID");
+  const clientSecret = (!useGlobal && config.client_secret) || Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
 
   if (!clientId || !clientSecret) {
     throw new Error("Credenciais Negociarie não configuradas para este tenant/credor");
