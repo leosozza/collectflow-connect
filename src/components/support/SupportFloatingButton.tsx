@@ -217,7 +217,7 @@ const SupportFloatingButton = () => {
 
   const handleSend = useCallback(async () => {
     const trimmed = message.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isLoading || !category) return;
 
     if (humanMode && ticketId && user) {
       // Human mode: save to DB
