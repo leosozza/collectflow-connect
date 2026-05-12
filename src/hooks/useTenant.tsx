@@ -78,7 +78,7 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
       if (!tenant) setLoading(true);
       
       // Use SECURITY DEFINER RPC to get tenant_id (bypasses restrictive RLS)
-      const { data: tenantId, error: rpcError } = await supabase
+      let { data: tenantId, error: rpcError } = await supabase
         .rpc("get_my_tenant_id");
 
       console.log("[useTenant] get_my_tenant_id result:", tenantId, "error:", rpcError);
@@ -87,8 +87,39 @@ export const TenantProvider = ({ children }: { children: React.ReactNode }) => {
         console.error("Error fetching tenant_id via RPC:", rpcError);
       }
 
+      // Fallback chain when RPC returns null (JWT instability / refresh race):
+      // 1) force a session refresh and retry the RPC once,
+      // 2) if still null, query tenant_users directly (RLS allows user's own row).
+      if (!tenantId && user?.id) {
+        console.warn("[useTenant] RPC retornou null, tentando refreshSession + retry");
+        try {
+          await supabase.auth.refreshSession();
+          const retry = await supabase.rpc("get_my_tenant_id");
+          tenantId = retry.data;
+          rpcError = retry.error;
+        } catch (e) {
+          console.warn("[useTenant] refreshSession falhou:", e);
+        }
+
+        if (!tenantId) {
+          console.warn("[useTenant] RPC ainda null, usando fallback direto em tenant_users");
+          const { data: tu, error: tuErr } = await supabase
+            .from("tenant_users")
+            .select("tenant_id, role")
+            .eq("user_id", user.id)
+            .limit(1)
+            .maybeSingle();
+          if (tuErr) {
+            console.warn("[useTenant] Fallback tenant_users falhou:", tuErr);
+          }
+          if (tu?.tenant_id) {
+            tenantId = tu.tenant_id;
+          }
+        }
+      }
+
       if (!tenantId) {
-        console.log("[useTenant] No tenant found, redirecting to onboarding");
+        console.warn("[useTenant] Sem tenant após fallback", { userId: user?.id, rpcError });
         setTenantUser(null);
         setTenant(null);
         setPlan(null);
