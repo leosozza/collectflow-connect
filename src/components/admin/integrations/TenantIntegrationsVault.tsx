@@ -142,16 +142,21 @@ export const TenantIntegrationsVault = ({ tenantId }: TenantIntegrationsVaultPro
               <Key className="w-4 h-4" />
               Negociarie
             </CardTitle>
-            {status?.uses_global_fallback ? (
-              <Badge variant="secondary">Fallback Global</Badge>
-            ) : status?.has_credentials ? (
+            {status?.has_credentials ? (
               <Badge variant="default" className="bg-green-600">Configurado</Badge>
+            ) : status?.uses_global_fallback ? (
+              <Badge variant="secondary">Fallback global ativo</Badge>
             ) : (
-              <Badge variant="outline">Não configurado</Badge>
+              <Badge variant="outline" className="text-destructive border-destructive/40">Não configurado</Badge>
             )}
           </div>
           <CardDescription className="text-xs">
             Credenciais para geração de Boletos e Pix nesta assessoria.
+            {status?.uses_global_fallback && !status?.has_credentials && (
+              <span className="block mt-1 text-muted-foreground">
+                Este tenant está usando as credenciais globais da plataforma. Configure abaixo apenas se este tenant tiver Client ID/Secret próprios na Negociarie (sobrepõem o fallback).
+              </span>
+            )}
             {status?.client_id_masked && (
               <span className="block mt-1 font-mono text-[10px]">
                 Atual: {status.client_id_masked}
