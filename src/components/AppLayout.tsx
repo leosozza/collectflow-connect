@@ -374,7 +374,7 @@ const AppLayout = () => {
                 "/configuracoes": "Configurações",
                 "/configuracoes/integracao": "Configurações",
                 "/configuracoes/auditoria": "Configurações",
-                "/configuracoes/api": "Configurações",
+                "/configuracoes/apis": "Configurações",
                 "/configuracoes/maxlist": "Configurações",
                 "/central-empresa": "Central Empresa",
                 "/signs": "Assinatura Digital",

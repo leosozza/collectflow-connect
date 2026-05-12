@@ -110,7 +110,7 @@ const McpServerTab = ({ publicView = false }: { publicView?: boolean }) => {
             </div>
             {!publicView && (
               <Button asChild variant="outline" size="sm">
-                <Link to="/configuracoes/api">
+                <Link to="/configuracoes/apis">
                   <KeyRound className="w-4 h-4 mr-2" /> Gerar API Key
                 </Link>
               </Button>

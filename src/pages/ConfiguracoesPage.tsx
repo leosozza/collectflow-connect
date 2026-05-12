@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Cloud, Settings, Code2, FileSpreadsheet, Activity, Server } from "lucide-react";
+import { Cloud, Settings, Code2, FileSpreadsheet, Activity } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
@@ -8,9 +8,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 const LEGACY_TAB_MAP: Record<string, string> = {
   integracao: "/configuracoes/integracao",
   auditoria: "/configuracoes/auditoria",
-  api_docs: "/configuracoes/api",
+  api_docs: "/configuracoes/apis",
   maxlist: "/configuracoes/maxlist",
-  mcp: "/configuracoes/mcp",
+  mcp: "/configuracoes/apis",
 };
 
 const ConfiguracoesPage = () => {
@@ -23,7 +23,7 @@ const ConfiguracoesPage = () => {
   const isMaxList =
     ((tenant as any)?.settings as any)?.maxlist_enabled === true || tenant?.slug === "ybrasil";
 
-  // Backward compatibility: /configuracoes?tab=api_docs → /configuracoes/api
+  // Backward compatibility: /configuracoes?tab=api_docs → /configuracoes/apis
   useEffect(() => {
     const legacyTab = searchParams.get("tab");
     if (legacyTab && LEGACY_TAB_MAP[legacyTab]) {
@@ -38,10 +38,7 @@ const ConfiguracoesPage = () => {
         ? [{ key: "auditoria", label: "Auditoria", icon: Activity, to: "/configuracoes/auditoria" }]
         : []),
       ...(isTenantAdmin
-        ? [{ key: "api", label: "API REST", icon: Code2, to: "/configuracoes/api" }]
-        : []),
-      ...(isTenantAdmin
-        ? [{ key: "mcp", label: "Servidor MCP", icon: Server, to: "/configuracoes/mcp" }]
+        ? [{ key: "apis", label: "APIs", icon: Code2, to: "/configuracoes/apis" }]
         : []),
       ...(isMaxList
         ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet, to: "/configuracoes/maxlist" }]
@@ -61,7 +58,8 @@ const ConfiguracoesPage = () => {
         {items.map((item) => {
           const isActive =
             location.pathname === item.to ||
-            (item.key === "integracao" && location.pathname === "/configuracoes");
+            (item.key === "integracao" && location.pathname === "/configuracoes") ||
+            (item.key === "apis" && location.pathname.startsWith("/configuracoes/apis"));
           return (
             <Link
               key={item.key}

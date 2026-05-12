@@ -45,6 +45,7 @@ import ApiDocsPage from "./pages/ApiDocsPage";
 import ApiDocsPublicPage from "./pages/ApiDocsPublicPage";
 import MaxListPage from "./pages/MaxListPage";
 import McpDocsPage from "./pages/McpDocsPage";
+import ApisPage from "./pages/ApisPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AdminUsuariosHubPage from "./pages/admin/AdminUsuariosHubPage";
 import LandingPage from "./pages/LandingPage";
@@ -127,8 +128,7 @@ const App = () => (
                 <Route index element={<Navigate to="integracao" replace />} />
                 <Route path="integracao" element={<IntegracaoPage />} />
                 <Route path="auditoria" element={<AuditoriaPage />} />
-                <Route path="api" element={<ApiDocsPage />} />
-                <Route path="mcp" element={<McpDocsPage />} />
+                <Route path="apis" element={<ApisPage />} />
                 <Route path="maxlist" element={<MaxListPage />} />
               </Route>
               <Route path="contact-center/telefonia" element={<ModuleGuard module="telefonia"><ContactCenterPage channel="telefonia" /></ModuleGuard>} />
