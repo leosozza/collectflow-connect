@@ -1,8 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User, HeadphonesIcon, DollarSign } from "lucide-react";
+import { LifeBuoy, X, Send, ChevronDown, Sparkles, ThumbsUp, ThumbsDown, MessageCircle, User, HeadphonesIcon, DollarSign, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/hooks/useTenant";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +21,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
+import SupportHistoryPanel from "./SupportHistoryPanel";
 
 interface LocalMessage {
   id: string;
@@ -61,6 +72,8 @@ const SupportFloatingButton = () => {
   });
   const [pos, setPos] = useState(loadInitialPos);
   const [isDragging, setIsDragging] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
   const draggedRef = useRef(false);
 
   // Keep within viewport on resize
@@ -317,6 +330,61 @@ const SupportFloatingButton = () => {
     setMessages([]);
     setHumanMode(false);
     setTicketId(null);
+    setHistoryOpen(false);
+  };
+
+  const hasActiveConversation = !!category || messages.length > 0;
+
+  const persistConversationToHistory = useCallback(async () => {
+    if (!user || !tenant || !category) return;
+    const real = messages.filter((m) => m.content && !m.isStreaming);
+    if (real.length === 0) return;
+    const firstUser = real.find((m) => m.role === "user");
+    const title = (firstUser?.content || real[0].content).slice(0, 80);
+    try {
+      const { error } = await supabase.from("support_ai_conversations").insert({
+        tenant_id: tenant.id,
+        user_id: user.id,
+        category,
+        title,
+        messages: real.map((m) => ({ role: m.role, content: m.content })),
+      });
+      if (error) throw error;
+      // Keep only top 10
+      const { data: extras } = await supabase
+        .from("support_ai_conversations")
+        .select("id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .range(10, 999);
+      if (extras && extras.length) {
+        await supabase
+          .from("support_ai_conversations")
+          .delete()
+          .in("id", extras.map((e: any) => e.id));
+      }
+    } catch (e) {
+      console.error("Erro ao salvar histórico:", e);
+    }
+  }, [user, tenant, category, messages]);
+
+  const handleMinimize = () => {
+    setOpen(false);
+  };
+
+  const handleRequestClose = () => {
+    if (hasActiveConversation) {
+      setConfirmCloseOpen(true);
+    } else {
+      setOpen(false);
+    }
+  };
+
+  const handleConfirmClose = async () => {
+    await persistConversationToHistory();
+    handleResetCategory();
+    setConfirmCloseOpen(false);
+    setOpen(false);
   };
 
   return (
@@ -351,19 +419,39 @@ const SupportFloatingButton = () => {
                   <span className="text-[10px] bg-primary-foreground/20 px-1.5 py-0.5 rounded-full">Humano</span>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20"
-                onClick={() => {
-                  setOpen(false);
-                  // Reset chat para começar do zero na próxima abertura
-                  handleResetCategory();
-                }}
-              >
-                <ChevronDown className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen((v) => !v)}
+                  title="Histórico"
+                  className={cn(
+                    "h-7 px-2 rounded-md inline-flex items-center gap-1 text-[11px] font-medium transition-colors",
+                    historyOpen
+                      ? "bg-primary-foreground/30 text-primary-foreground"
+                      : "text-primary-foreground hover:bg-primary-foreground/20"
+                  )}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  Histórico
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-primary-foreground hover:bg-primary-foreground/20"
+                  onClick={handleMinimize}
+                  title="Minimizar (mantém conversa)"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
+
+            {historyOpen ? (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <SupportHistoryPanel onBack={() => setHistoryOpen(false)} />
+              </div>
+            ) : (
+            <>
 
             {/* Messages */}
             <ScrollArea className="flex-1 px-4 py-3">
@@ -522,6 +610,8 @@ const SupportFloatingButton = () => {
                 O RIVO pode cometer erros. Verifique informações importantes.
               </p>
             </div>
+            </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -579,7 +669,11 @@ const SupportFloatingButton = () => {
             e.stopPropagation();
             return;
           }
-          setOpen((prev) => !prev);
+          if (open) {
+            handleRequestClose();
+          } else {
+            setOpen(true);
+          }
         }}
         className={cn(
           "fixed z-50 h-14 w-14 rounded-full flex items-center justify-center transition-colors duration-200 backdrop-blur-sm touch-none select-none",
@@ -588,10 +682,29 @@ const SupportFloatingButton = () => {
             ? "bg-muted text-muted-foreground hover:bg-muted/80 shadow-lg"
             : "bg-primary/30 text-primary-foreground/80 shadow-md hover:bg-primary hover:text-primary-foreground hover:shadow-xl"
         )}
+        title={open ? "Encerrar atendimento" : "Abrir suporte"}
       >
         {open ? <X className="w-6 h-6" /> : <LifeBuoy className="w-6 h-6" />}
       </button>
 
+      <AlertDialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Encerrar atendimento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sua conversa atual será encerrada e arquivada no histórico. Na próxima abertura você começará do zero.
+              <br />
+              <span className="text-xs text-muted-foreground mt-2 block">
+                Para apenas minimizar e continuar depois, use a setinha no topo do painel.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmClose}>Encerrar atendimento</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
