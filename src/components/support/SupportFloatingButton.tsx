@@ -130,7 +130,7 @@ const SupportFloatingButton = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ message: userMessage, history: chatHistory }),
+        body: JSON.stringify({ message: userMessage, history: chatHistory, category }),
       });
 
       if (!resp.ok) {
