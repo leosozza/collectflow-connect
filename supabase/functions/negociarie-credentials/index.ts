@@ -91,15 +91,49 @@ Deno.serve(async (req) => {
     const creditorId: string | null = body?.creditor_id ?? null;
     const provider = "negociarie";
 
+    // Resolve tenant alvo (super admin pode operar em outros tenants via can_access_tenant)
+    const requestedTenantId: string | null = body?.tenant_id ?? null;
+    let targetTenantId = tenantId;
+    if (requestedTenantId && requestedTenantId !== tenantId) {
+      const { data: canAccess, error: caErr } = await admin.rpc("can_access_tenant", {
+        _tenant_id: requestedTenantId,
+      });
+      if (caErr || !canAccess) {
+        return json(403, { error: "Sem permissão para gerenciar este tenant" });
+      }
+      targetTenantId = requestedTenantId;
+    }
+
     // Carrega linha existente
     const baseQuery = admin
       .from("tenant_integrations")
-      .select("id, config")
-      .eq("tenant_id", tenantId)
+      .select("id, config, is_active, last_test_at, last_test_ok, last_test_message, callback_registered_at")
+      .eq("tenant_id", targetTenantId)
       .eq("provider", provider);
     const { data: existing } = creditorId
       ? await baseQuery.eq("creditor_id", creditorId).maybeSingle()
       : await baseQuery.is("creditor_id", null).maybeSingle();
+
+    if (action === "get_status") {
+      const cfg = (existing?.config as any) || {};
+      const rawId: string = cfg.client_id || "";
+      const masked = rawId
+        ? rawId.length > 8
+          ? `${rawId.substring(0, 4)}••••${rawId.substring(rawId.length - 4)}`
+          : "••••"
+        : "";
+      return json(200, {
+        configured: !!existing,
+        has_credentials: !!(cfg.client_id && cfg.client_secret),
+        uses_global_fallback: cfg.uses_global_fallback === true,
+        client_id_masked: masked,
+        is_active: existing?.is_active ?? false,
+        last_test_at: existing?.last_test_at ?? null,
+        last_test_ok: existing?.last_test_ok ?? null,
+        last_test_message: existing?.last_test_message ?? null,
+        callback_registered_at: existing?.callback_registered_at ?? null,
+      });
+    }
 
     if (action === "save") {
       const clientIdInput = String(body?.client_id || "").trim();
