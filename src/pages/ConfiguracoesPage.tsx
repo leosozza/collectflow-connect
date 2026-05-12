@@ -38,10 +38,7 @@ const ConfiguracoesPage = () => {
         ? [{ key: "auditoria", label: "Auditoria", icon: Activity, to: "/configuracoes/auditoria" }]
         : []),
       ...(isTenantAdmin
-        ? [{ key: "api", label: "API REST", icon: Code2, to: "/configuracoes/api" }]
-        : []),
-      ...(isTenantAdmin
-        ? [{ key: "mcp", label: "Servidor MCP", icon: Server, to: "/configuracoes/mcp" }]
+        ? [{ key: "apis", label: "APIs", icon: Code2, to: "/configuracoes/apis" }]
         : []),
       ...(isMaxList
         ? [{ key: "maxlist", label: "MaxList", icon: FileSpreadsheet, to: "/configuracoes/maxlist" }]
