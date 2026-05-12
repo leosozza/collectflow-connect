@@ -357,7 +357,7 @@ export const negociarieService = {
     const creditorId = (credorObj as any)?.id;
 
     const cleanCpf = agreement.client_cpf.replace(/[.\-]/g, "");
-    const installmentKey = buildInstallmentKey(agreement.id, installment.number);
+    const installmentKey = buildInstallmentKey(agreement.id, installment.key ?? installment.number);
 
     const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${installment.number === 0 ? "Entrada" : installment.number}`;
     const shortAgreementId = agreement.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6);
