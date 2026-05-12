@@ -449,7 +449,7 @@ export const negociarieService = {
 
     for (const inst of installments) {
       try {
-        const installmentKey = buildInstallmentKey(agreement.id, inst.number);
+        const installmentKey = buildInstallmentKey(agreement.id, inst.key ?? inst.number);
         const instLabel = `Acordo ${agreement.id.substring(0, 8)} - Parcela ${inst.number === 0 ? "Entrada" : inst.number}`;
         const shortAgreementId = agreement.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6);
         const idParcela = inst.number === 0
