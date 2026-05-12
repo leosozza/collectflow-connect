@@ -11,18 +11,23 @@ const LOGIN_URL = "https://sistema.negociarie.com.br/api/login";
 const cachedTokens: Record<string, string> = {};
 const tokenExpiries: Record<string, number> = {};
 
-async function getNegociarieConfig(supabase: any, tenantId: string, creditorId?: string) {
-  // 1. Tentar buscar credenciais específicas do CREDOR (Prioridade Máxima)
+// Cliente service-role dedicado APENAS para ler credenciais (RLS deny-SELECT bloqueia o user JWT)
+const adminClient = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
+
+async function getNegociarieConfig(tenantId: string, creditorId?: string) {
+  // 1. Credenciais específicas do CREDOR (cobrança direta)
   if (creditorId) {
-    // Verificar se o faturamento direto está ativo para este credor
-    const { data: creditor } = await supabase
+    const { data: creditor } = await adminClient
       .from("credores")
       .select("cobrança_direta_ativa")
       .eq("id", creditorId)
       .maybeSingle();
 
     if (creditor?.cobrança_direta_ativa) {
-      const { data: creditorIntegration } = await supabase
+      const { data: creditorIntegration } = await adminClient
         .from("tenant_integrations")
         .select("config")
         .eq("tenant_id", tenantId)
@@ -31,34 +36,35 @@ async function getNegociarieConfig(supabase: any, tenantId: string, creditorId?:
         .eq("is_active", true)
         .maybeSingle();
 
-      if (creditorIntegration?.config) {
-        console.log(`[negociarie-proxy] Usando configuração direta do CREDOR: ${creditorId}`);
-        return { 
-          clientId: creditorIntegration.config.client_id, 
-          clientSecret: creditorIntegration.config.client_secret 
+      if (creditorIntegration?.config?.client_id && creditorIntegration?.config?.client_secret) {
+        console.log(`[negociarie-proxy] Usando credenciais diretas do credor ${creditorId}`);
+        return {
+          clientId: creditorIntegration.config.client_id,
+          clientSecret: creditorIntegration.config.client_secret,
         };
       }
-    } else {
-      console.log(`[negociarie-proxy] Cobrança direta desativada para o credor ${creditorId}. Usando tenant fallback.`);
+
+      // Cobrança direta ativa porém sem credenciais → bloquear (evita emissão pelo CNPJ errado)
+      throw new Error(
+        "Cobrança direta ativa para este credor mas credenciais Negociarie não cadastradas. Cadastre em Configurações → Integrações → Negociarie."
+      );
     }
   }
 
-  // 2. Tentar buscar credenciais específicas do TENANT (Assessoria)
-  const { data: tenantIntegration } = await supabase
+  // 2. Credenciais do TENANT
+  const { data: tenantIntegration } = await adminClient
     .from("tenant_integrations")
     .select("config")
     .eq("tenant_id", tenantId)
-    .is("creditor_id", null) // Garante que é a chave geral do tenant
+    .is("creditor_id", null)
     .eq("provider", "negociarie")
     .eq("is_active", true)
     .maybeSingle();
 
-  const config = tenantIntegration?.config || {};
-
-  // 2.1 Se a linha do tenant marca uso de cofre global, ignora client_id/secret da config
+  const config = (tenantIntegration?.config as Record<string, any>) || {};
   const useGlobal = config.uses_global_fallback === true;
 
-  // 3. Fallback para ENV (YBRASIL ou tenants marcados com uses_global_fallback)
+  // 3. Fallback ENV (Y.BRASIL e tenants marcados com uses_global_fallback)
   const clientId = (!useGlobal && config.client_id) || Deno.env.get("NEGOCIARIE_CLIENT_ID");
   const clientSecret = (!useGlobal && config.client_secret) || Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
 
