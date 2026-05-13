@@ -95,12 +95,20 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   useEffect(() => {
     if (!agreementId) return;
     const channel = supabase
-      .channel(`negociarie_cobrancas_${agreementId}`)
+      .channel(`agreement_inst_realtime_${agreementId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "negociarie_cobrancas", filter: `agreement_id=eq.${agreementId}` },
         () => {
           refetchCobrancas();
+          queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agreement_installments", filter: `agreement_id=eq.${agreementId}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
         },
       )
       .subscribe();
