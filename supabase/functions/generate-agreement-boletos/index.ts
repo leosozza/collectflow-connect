@@ -362,7 +362,7 @@ Deno.serve(async (req) => {
         success: 0, failed: 0, boleto_pendente: !singleMode,
         message: `Cadastro com dados inválidos (${invalidFields.join(", ")}). Atualize o cadastro do cliente antes de gerar o boleto.`,
       }), {
-        status: singleMode ? 400 : 200,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
