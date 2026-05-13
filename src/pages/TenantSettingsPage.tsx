@@ -69,6 +69,7 @@ O cancelamento pode ser solicitado a qualquer momento, com aviso prévio de 30 d
 
 CLÁUSULA 8ª - DO FORO
 Fica eleito o foro da comarca da sede da CONTRATADA para dirimir quaisquer questões oriundas deste contrato.`;
+};
 
 const formatCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
