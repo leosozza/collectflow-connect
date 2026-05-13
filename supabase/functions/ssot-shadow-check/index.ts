@@ -4,18 +4,30 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const expectedSecret = Deno.env.get('SHADOW_CHECK_SECRET')
-  const providedSecret = req.headers.get('x-shadow-secret')
-  if (!expectedSecret || providedSecret !== expectedSecret) {
-    return new Response(JSON.stringify({ error: 'unauthorized' }), {
-      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
-
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
+
+  // Rate limit: only run if the most recent run is older than 50 minutes,
+  // unless explicit secret header bypasses (for manual/admin testing).
+  const expectedSecret = Deno.env.get('SHADOW_CHECK_SECRET')
+  const providedSecret = req.headers.get('x-shadow-secret')
+  const bypassRateLimit = !!expectedSecret && providedSecret === expectedSecret
+
+  if (!bypassRateLimit) {
+    const { data: lastRun } = await supabase
+      .from('ssot_shadow_checks')
+      .select('run_at').order('run_at', { ascending: false }).limit(1).maybeSingle()
+    if (lastRun?.run_at) {
+      const ageMin = (Date.now() - new Date(lastRun.run_at).getTime()) / 60000
+      if (ageMin < 50) {
+        return new Response(JSON.stringify({
+          skipped: true, reason: 'rate_limited', last_run_minutes_ago: Math.round(ageMin),
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+    }
+  }
 
   const { data: tenants, error: tErr } = await supabase
     .from('tenants').select('id').eq('active', true)
