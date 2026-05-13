@@ -866,7 +866,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         toast({ title: `${result.success} boleto(s) gerado(s) com sucesso!` });
       }
       if (result.failed > 0) {
-        toast({ title: "Falha parcial", description: result.errors[0], variant: "destructive" });
+        toast({ title: "Falha parcial", description: humanizeErrorMessage(result.errors[0]), variant: "destructive" });
       }
       if (result.success === 0 && result.failed === 0 && data?.message) {
         toast({ title: "Não foi possível gerar", description: data.message, variant: "destructive" });
