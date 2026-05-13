@@ -87,9 +87,30 @@ async function negociarieRequest(admin: any, method: string, endpoint: string, b
 
   const res = await fetch(url, opts);
   const text = await res.text();
-  let json;
+  let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
-  if (!res.ok) throw new Error(json.message || json.error || JSON.stringify(json) || `Negociarie ${res.status}`);
+  if (!res.ok) {
+    // Negociarie returns Portuguese keys: mensagem / erro / sucesso / erros[]
+    const negMsg = json?.mensagem || json?.message || json?.error || json?.erro;
+    const detailList = Array.isArray(json?.erros) ? json.erros.join("; ")
+      : Array.isArray(json?.errors) ? json.errors.join("; ")
+      : null;
+    const friendly = [negMsg, detailList].filter(Boolean).join(" — ") || `Negociarie ${res.status}`;
+    // Diagnostic log: full response + safe payload echo (no CPF/email/phone)
+    const safeBody = body && typeof body === "object" ? {
+      keys: Object.keys(body as any),
+      cliente_keys: Object.keys((body as any)?.cliente || {}),
+      parcelas_count: Array.isArray((body as any)?.parcelas) ? (body as any).parcelas.length : 0,
+      first_parcela: Array.isArray((body as any)?.parcelas) ? {
+        id_parcela: (body as any).parcelas[0]?.id_parcela,
+        data_vencimento: (body as any).parcelas[0]?.data_vencimento,
+        valor: (body as any).parcelas[0]?.valor,
+      } : null,
+      id_geral: (body as any)?.id_geral,
+    } : null;
+    console.error(`[negociarieRequest] FAIL status=${res.status} url=${url} response=${text.slice(0, 800)} payloadInfo=${JSON.stringify(safeBody)}`);
+    throw new Error(friendly);
+  }
   return json;
 }
 
@@ -344,6 +365,26 @@ Deno.serve(async (req) => {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Guard: do not reissue boleto over an already-paid installment.
+      // Prevents UNIQUE violation on uq_negociarie_cob_agreement_inst_active
+      // (pago + new pendente in the active set), and is correct business-wise.
+      const installmentKeyFq = `${agreement_id}:${requestedKey}`;
+      const { data: paidRow } = await supabaseAdmin
+        .from("negociarie_cobrancas")
+        .select("id")
+        .eq("agreement_id", agreement_id)
+        .eq("installment_key", installmentKeyFq)
+        .eq("status", "pago")
+        .limit(1)
+        .maybeSingle();
+      if (paidRow) {
+        return new Response(JSON.stringify({
+          error: "Parcela já paga — não é possível reemitir boleto",
+        }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const today = getTodayIso();
@@ -481,7 +522,7 @@ Deno.serve(async (req) => {
         const msg = `${label}: ${err?.message || "Erro desconhecido"}`;
         result.errors.push(msg);
         per_installment_ms[idx] = Date.now() - tI0;
-        console.error(`[generate-agreement-boletos] Error for installment ${inst.key}:`, err?.message);
+        console.error(`[generate-agreement-boletos] Error installment_key=${inst.key} agreement_id=${agreement_id} valor=${inst.value} dueDate=${inst.dueDate} isEntrada=${inst.isEntrada} :: ${err?.message}`);
       }
     });
 
