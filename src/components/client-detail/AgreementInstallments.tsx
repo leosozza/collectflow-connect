@@ -874,7 +874,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       refetchCobrancas();
       onRefresh?.();
     } catch (err: any) {
-      toast({ title: "Erro ao gerar boletos", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao gerar boletos", description: humanizeErrorMessage(err.message), variant: "destructive" });
     } finally {
       setGeneratingAllBoletos(false);
     }
