@@ -294,7 +294,7 @@ export async function sendMediaMessage(
     },
     body: JSON.stringify({
       conversationId,
-      content: fileName,
+      content: mediaType === "document" ? fileName : "",
       mediaUrl,
       mediaType,
       mediaMimeType,
