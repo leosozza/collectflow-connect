@@ -8232,7 +8232,13 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "operador"
-      client_status: "pendente" | "pago" | "quebrado" | "vencido" | "em_acordo"
+      client_status:
+        | "pendente"
+        | "pago"
+        | "quebrado"
+        | "vencido"
+        | "em_acordo"
+        | "cancelado_maxlist"
       debtor_profile_type:
         | "ocasional"
         | "recorrente"
@@ -8372,7 +8378,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "operador"],
-      client_status: ["pendente", "pago", "quebrado", "vencido", "em_acordo"],
+      client_status: [
+        "pendente",
+        "pago",
+        "quebrado",
+        "vencido",
+        "em_acordo",
+        "cancelado_maxlist",
+      ],
       debtor_profile_type: [
         "ocasional",
         "recorrente",
