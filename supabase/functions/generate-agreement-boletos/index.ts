@@ -339,6 +339,29 @@ Deno.serve(async (req) => {
     const requiredFields = ["email", "phone", "cep", "endereco", "bairro", "cidade", "uf"];
     const missingFields = requiredFields.filter(f => !String(clientData[f] || "").trim());
 
+    // Validação preventiva: campos presentes mas inválidos (Negociarie devolve 422 "Erro desconhecido")
+    const invalidFields: string[] = [];
+    const cepDigits = String(clientData.cep || "").replace(/\D/g, "");
+    if (cepDigits && (cepDigits.length !== 8 || cepDigits === "00000000")) invalidFields.push("CEP inválido");
+    const enderecoStr = String(clientData.endereco || "").trim();
+    if (enderecoStr && enderecoStr.replace(/[,\s0]/g, "").length < 3) invalidFields.push("endereço inválido");
+    const ufStr = String(clientData.uf || "").trim();
+    if (ufStr && ufStr.length !== 2) invalidFields.push("UF inválida");
+
+    if (invalidFields.length > 0 && missingFields.length === 0) {
+      console.log(`[generate-agreement-boletos] Invalid fields: ${invalidFields.join(", ")} — mode=${mode}`);
+      if (!singleMode) {
+        await supabaseAdmin.from("agreements").update({ boleto_pendente: true }).eq("id", agreement_id);
+      }
+      return new Response(JSON.stringify({
+        success: 0, failed: 0, boleto_pendente: !singleMode,
+        message: `Cadastro com dados inválidos (${invalidFields.join(", ")}). Atualize o cadastro do cliente antes de gerar o boleto.`,
+      }), {
+        status: singleMode ? 400 : 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (missingFields.length > 0) {
       console.log(`[generate-agreement-boletos] Missing fields: ${missingFields.join(", ")} — mode=${mode}`);
       // Only flip the global boleto_pendente flag in batch mode; single mode is per-installment.

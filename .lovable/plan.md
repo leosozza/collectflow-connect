@@ -1,16 +1,41 @@
-## Causa
+## Diagnóstico
 
-O `<Link>` do nome está com `className="... truncate block"` — `block` faz o link ocupar **toda a largura da célula**, então qualquer clique/hover dentro da célula cai no link (parece "fora do nome", mas é o link inteiro esticado).
+**O erro NÃO foi causado pelas nossas alterações recentes.**
 
-Além disso, na rodada anterior eu adicionei um `onClick` na célula para copiar o nome — agora o usuário quer o oposto: clique fora do nome **não faz nada**.
+As únicas mudanças recentes na função `generate-agreement-boletos` foram:
+1. Guard que bloqueia reemissão de boleto já pago
+2. Log de erro mais detalhado
 
-## Plano
+Nenhuma delas afeta o payload enviado à Negociarie.
 
-Em `src/components/dashboard/ParcelasProgramadasCard.tsx` (linhas 170–186):
+### Causa real
 
-1. Remover o `onClick`/`title`/`cursor-copy` da `TableCell` — clique fora não dispara nada.
-2. Trocar a classe do `<Link>` de `truncate block` para `inline-block max-w-full truncate align-middle` — o link passa a ter a largura **apenas do texto** (mais o ellipsis), não da célula inteira. Hover/click só na faixa exata do nome.
+A API da Negociarie retornou **HTTP 422 "Erro desconhecido"** ao receber o payload. Investigando o cadastro da cliente Josieli Fátima Viega (CPF 09744608935):
 
-Sem mudança visual: o nome continua truncando com `…` se for longo, mesma cor, mesmo `hover:underline`.
+| Campo | Valor cadastrado | Problema |
+|---|---|---|
+| CEP | `00.000-000` | **CEP inválido** — Negociarie rejeita |
+| Cidade | `Chápeco` | Grafia incorreta (correto: `Chapecó`) |
+| Endereço | `São Wendelino, 0` | Sem número real |
+| Bairro | `Interior` | Genérico |
 
-Posso aplicar?
+O CEP `00000000` é a causa direta da rejeição — é um placeholder e não corresponde a nenhuma localidade real, então a Negociarie devolve 422 sem detalhar o motivo (a mensagem genérica "Erro desconhecido" é padrão deles para validação de endereço).
+
+A entrada de R$ 175 com vencimento 2026-05-13 e o restante do payload estão corretos. O acordo não tem nenhuma cobrança anterior (`negociarie_cobrancas` vazia), então não é problema de duplicidade.
+
+### Plano de correção
+
+**Solução imediata (sem código):** Atualizar o cadastro da cliente em `client_profiles` com CEP, endereço e cidade reais. Após isso, "Reemitir boleto" funciona normalmente.
+
+**Melhorias opcionais (se você quiser que eu implemente):**
+
+1. **Validação preventiva no edge function** — antes de chamar a Negociarie, validar:
+   - CEP ≠ `00000000` e com 8 dígitos
+   - Endereço com mais de 3 caracteres
+   - Cidade não vazia
+   
+   Retornar mensagem clara como "CEP inválido no cadastro — atualize antes de gerar boleto" em vez de "Erro desconhecido".
+
+2. **Toast no front com mensagem amigável** — quando a Negociarie devolver 422 genérico, mapear para "Verifique CEP e endereço do cliente".
+
+Me confirme se quer só a correção manual do cadastro, ou se quer também as validações preventivas (item 1 e/ou 2).
