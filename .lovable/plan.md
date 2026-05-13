@@ -1,50 +1,90 @@
-## Validação da análise (verificação no banco)
+## Diagnóstico — "Erro ao gerar boleto: Entrada: {sucesso:0, erro:422, mensagem:Erro desconhecido}"
 
-Confirmei tudo que o Antigravity afirma, com nuances importantes. Resumo factual antes do plano de correção.
+### O que está realmente acontecendo
 
-### ✅ O que está correto na análise
+A toast mostra **a resposta crua do servidor da Negociarie**:
 
-1. **Não existe UNIQUE em `manual_payments(agreement_id, installment_key)` nem em `negociarie_cobrancas(agreement_id, installment_key)`.** Verificado em `pg_index`: só existem índices NÃO-únicos (`idx_manual_pay_tenant_agr_key`, `idx_neg_cob_tenant_agr_key`, `idx_manual_payments_agreement_key`). O ÚNICO `UNIQUE (agreement_id, installment_key)` criado foi em `agreement_installments` (a tabela nova da SSOT). Então a "trava de idempotência da raiz" realmente ficou de fora.
-2. **`tenant_id NOT NULL` + índices compostos por tenant aplicados** em `clients`, `agreements`, `manual_payments`, `negociarie_cobrancas`. Confirmado (vi `idx_clients_tenant_cpfnorm_credor`, `idx_agreements_tenant_cpfnorm_credor`, etc.).
-3. **SSOT (`agreement_installments`) + Shadow Check + cron** estão criados e ativos. Confirmado.
+```json
+{ "sucesso": 0, "erro": 422, "mensagem": "Erro desconhecido" }
+```
 
-### ⚠️ Onde o risco é menor do que o texto sugere (mas ainda real)
+Esse é o corpo HTTP 422 que a Negociarie devolveu para a chamada `POST /cobranca/nova`. Ou seja: **a edge function `generate-agreement-boletos` chamou a Negociarie e a Negociarie rejeitou**. Não é erro do nosso banco (e a UNIQUE da rodada anterior não foi violada — a falha aconteceu **antes** da gente tentar inserir em `negociarie_cobrancas`).
 
-- **Duplicatas atuais**: rodei a checagem agora — `manual_payments` tem **0** pares duplicados de (agreement_id, installment_key) com status confirmado/approved; `negociarie_cobrancas` tem **1** par duplicado. Ou seja, hoje o estrago é mínimo, mas a porta está aberta.
-- **Clique-duplo na UI duplicando pagamento**: o `rebuild_agreement_installments` agrega manual_payments com `SUM(amount_paid)` e `MAX(payment_date)` por `(agreement_id, installment_key)`. **Se o usuário clicar duas vezes em "Confirmar Pagamento" no mesmo segundo, vão entrar 2 linhas em `manual_payments` e a SSOT vai somar os dois valores** — então o risco de "parcela paga em dobro" no agregado é real, exatamente como o Antigravity descreve. Não é loop infinito, mas infla `paid_amount` e pode marcar como pago algo que era parcial.
-- **Negociarie**: o lookup tem proteção `usedCobrancaIds` por parcela, então mesmo com 2 cobranças idênticas, só uma é "consumida" por parcela. A duplicata existente provavelmente está sendo ignorada pela rotina anti-leak, mas continua poluindo a fonte e o Shadow Check.
+### Por que o erro aparece como "Erro desconhecido"
 
-### ❌ Onde discordo da análise
+`supabase/functions/generate-agreement-boletos/index.ts` linha 92:
 
-- **"Atropelou as fases"**: a Fase 5 (SSOT como verdade única) já estava combinada e foi entregue na rodada anterior. O Antigravity está olhando só os arquivos novos e concluindo que ele pulou etapa, mas a SSOT não foi criada agora — foi criada nas rodadas de migração anteriores que você aprovou (`20260513151251_*` e antes). O que faltou de fato foi a **trava UNIQUE nas tabelas de origem**, que é diferente.
-- **"Pode receber duas parcelas idênticas em `agreement_installments`"**: não. A própria `agreement_installments` tem UNIQUE `(agreement_id, installment_key)` e o `rebuild` faz `DELETE` + `INSERT` por acordo. O risco real está **no agregado de valor pago** (somar duplicado), não em criar 2 linhas iguais na SSOT.
+```ts
+if (!res.ok) throw new Error(json.message || json.error || JSON.stringify(json) || `Negociarie ${res.status}`);
+```
 
-### 📋 Plano (mínimo necessário, sem mexer em recebimento)
+A Negociarie usa **chaves em português** (`mensagem`, `erro`, `sucesso`). Nosso código procura `message`/`error` (em inglês) e, ao não achar, faz `JSON.stringify(json)` — por isso o blob JSON aparece dentro da toast. O `"Erro desconhecido"` é literalmente o que a Negociarie devolveu como `mensagem`.
 
-**Parte 1 — Limpar a única duplicata existente em `negociarie_cobrancas`**
-- Identificar o par duplicado, manter o registro mais antigo (ou o que está vinculado ao `paid_source_id` da SSOT, se houver), apagar o restante.
-- Sem isso o UNIQUE da Parte 2 não vai conseguir ser criado.
+Resultado prático: **a Negociarie não nos disse o motivo real** ("Erro desconhecido" é o fallback do lado deles). Para descobrir, precisamos:
+1. Logar o **payload exato** que enviamos (CPF, endereço, valor, vencimento, id_geral, id_parcela).
+2. Logar a **resposta completa** dela (incluindo headers e body bruto) — pode haver pistas em `details`/`erros[]` que estamos ignorando.
+3. Reapresentar a mensagem real (`mensagem`) para o usuário.
 
-**Parte 2 — Criar as travas UNIQUE que faltaram (a trava de raiz da Fase 1)**
-- `manual_payments`: UNIQUE parcial `(agreement_id, installment_key) WHERE installment_key IS NOT NULL AND status IN ('confirmed','approved','pending_confirmation')`. Parcial para não quebrar registros legados sem `installment_key` e para não bloquear `cancelled/rejected`.
-- `negociarie_cobrancas`: UNIQUE parcial `(agreement_id, installment_key) WHERE installment_key IS NOT NULL`. Igualmente parcial para preservar histórico legado.
-- Ambos via `CREATE UNIQUE INDEX CONCURRENTLY` se possível, ou normal dentro de migration.
+### Verificação adicional (já feita)
 
-**Parte 3 — Proteção UI/serviço contra clique-duplo (defesa em profundidade)**
-- Em `manualPaymentService.ts`: antes do INSERT, fazer `SELECT 1 FROM manual_payments WHERE agreement_id=? AND installment_key=? AND status IN ('confirmed','approved','pending_confirmation') LIMIT 1`. Se existir, retornar erro amigável "Esta parcela já tem pagamento registrado".
-- O UNIQUE da Parte 2 cobre o pior caso a nível de banco; este check evita o usuário ver erro genérico.
+Consultei `negociarie_cobrancas` — os últimos 8 inserts (15:07 a 15:34 hoje) foram `registrado` com sucesso. Logo, a geração **continua funcionando para a maioria dos acordos**; o erro é em casos específicos. Causas mais prováveis para 422 da Negociarie nesse cenário:
+- Endereço/CEP inválido ou cidade/UF não reconhecidos
+- `id_parcela` ou `id_geral` colidindo (geramos com `Date.now()` + `idx`; em chamadas paralelas e re-tentativas pode bater)
+- Telefone com dígitos a menos depois do `normalizePhone` (que remove o "55" — parcela sem telefone fica como `[]`)
+- Valor com mais de 2 casas (não deveria, usamos `toFixed(2)`)
+- Cliente já cadastrado na Negociarie com outro CPF/endereço e validação dela falha
 
-**Parte 4 — Não fazer nada na lógica de SSOT, triggers, recebimento, edge functions financeiras.** Tudo isso foi auditado nas rodadas anteriores e está convergente (0 drift, 0 órfãs, cron estável).
+Sem o log detalhado, não dá para apontar dedo. O plano abaixo expõe isso na próxima tentativa.
+
+### Bug separado descoberto na revisão (regressão da rodada anterior)
+
+A UNIQUE parcial nova `uq_negociarie_cob_agreement_inst_active` cobre status `('registrado','pago','pendente','RECEIVED','CONFIRMED')`. No fluxo de reemissão (linhas 451-474 da edge):
+
+1. `UPDATE ... SET status='substituido' WHERE installment_key=? AND status <> 'pago'`  ← **propositalmente preserva o `pago`**
+2. `INSERT ... status='pendente'` com a mesma `installment_key`
+
+Se já existe uma cobrança `pago` para essa parcela, o passo 1 não a toca, o passo 2 insere um `pendente`, e a nova UNIQUE estoura: **`pago` + `pendente` no mesmo (agreement_id, installment_key)** = violação. A Negociarie até aceitaria a chamada, mas o nosso commit no banco quebraria. Não é o que o usuário viu agora, mas é uma armadilha latente.
+
+Solução simples: **bloquear a reemissão quando já existe `pago` para aquela parcela** (faz sentido de negócio também — não se reemite boleto de parcela já paga). Isso evita o problema sem afetar a UNIQUE.
+
+---
+
+## Plano
+
+**Parte 1 — Diagnóstico permanente (sem mudar comportamento)**
+
+Em `supabase/functions/generate-agreement-boletos/index.ts`:
+
+1. `negociarieRequest`: ao detectar `!res.ok`, montar mensagem priorizando `json.mensagem`, depois `json.message`, depois `json.error`, depois `json.erro`. Fazer `console.error` com `{ status, url, requestBodyKeys, responseBody }` (sem CPF/email — só o que é seguro logar).
+2. No `runWithConcurrency` (linha ~478), no `catch` de cada parcela, fazer `console.error` com `{ installment_key, agreement_id, idGeralPrefix, valor, dueDate, message }` para correlacionar com o log da requisição.
+3. Manter o erro retornado para o usuário **legível** (`mensagem` real da Negociarie) — assim "Erro desconhecido" só aparece se ela mesma retornar isso.
+
+**Parte 2 — Guarda contra reemissão sobre parcela paga (fecha a regressão da UNIQUE)**
+
+Antes de chamar a Negociarie, em modo `single`:
+```ts
+SELECT 1 FROM negociarie_cobrancas
+WHERE agreement_id=? AND installment_key=? AND status='pago' LIMIT 1
+```
+Se existir, retornar 400 com `"Parcela já paga — não é possível reemitir boleto"`.
+
+Alternativa adicional (defesa em profundidade): mudar o `UPDATE` da linha 454-457 para também marcar **`pago` velhos como `substituido` apenas se o INSERT for bem-sucedido** — não. Manter `pago` é correto; só não deixar gerar boleto novo em cima.
+
+**Parte 3 — Frontend (UX)**
+
+Em `AgreementInstallments.tsx` (handler que mostra a toast, ~linha 442):
+- Se a `data?.errors?.[0]` parecer JSON cru (começa com `{`), tentar `JSON.parse` e exibir só o `mensagem` ou `message` interno. Caso contrário, exibir como está. Garante que mesmo se algum response novo escapar, o usuário não vê blob.
 
 ### O que NÃO mexer
 
-- ❌ `agreement_installments`, `rebuild_agreement_installments`, triggers de recompute
-- ❌ Edge functions de Negociarie / pagamento / portal
-- ❌ Lógica de status hierárquico, carteira, dashboard
-- ❌ Shadow check / cron
+- ❌ Lógica de SSOT, triggers, recompute, status hierárquico
+- ❌ `negociarie_cobrancas` schema, UNIQUE, callback handler
+- ❌ Cron de shadow-check
+- ❌ Lógica de geração de `id_parcela`/`id_geral` (pode ser fonte do 422, mas mexer sem dado é chute — primeiro logamos, depois corrigimos se necessário)
 
-### Resumo em uma frase
+### Resultado esperado
 
-A análise do Antigravity está **factualmente certa no ponto que importa** (faltou UNIQUE nas tabelas de origem), **exagera no diagnóstico de "atropelou fases"** (a SSOT foi aprovada antes) e o risco prático hoje é só **1 duplicata** em `negociarie_cobrancas` + **porta aberta** para clique-duplo em `manual_payments`. O plano acima fecha essa porta sem encostar em nada que envolva recebimento.
+- Próxima vez que falhar, a toast mostra a mensagem real (não JSON cru) e os logs da edge mostram o payload + response completo, permitindo diagnóstico final em 1 minuto.
+- Reemissão sobre parcela já paga é bloqueada com erro amigável, fechando a armadilha da UNIQUE.
 
-Posso executar?
+Posso executar as 3 partes?
