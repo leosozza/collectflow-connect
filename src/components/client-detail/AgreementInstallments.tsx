@@ -42,6 +42,25 @@ import {
   Tooltip, TooltipContent, TooltipTrigger, TooltipProvider,
 } from "@/components/ui/tooltip";
 
+// Defensive: if an error message is a stringified JSON blob (e.g. raw provider
+// response leaking through), extract a human-readable field. Else return as-is.
+function humanizeErrorMessage(msg: unknown): string {
+  const s = typeof msg === "string" ? msg.trim() : String(msg ?? "");
+  if (!s) return "Erro desconhecido";
+  const m = s.match(/^(.*?):\s*(\{.*\})\s*$/s);
+  const prefix = m ? `${m[1]}: ` : "";
+  const candidate = m ? m[2] : (s.startsWith("{") ? s : null);
+  if (!candidate) return s;
+  try {
+    const j = JSON.parse(candidate);
+    const inner = j?.mensagem || j?.message || j?.error || j?.erro
+      || (Array.isArray(j?.erros) ? j.erros.join("; ") : null)
+      || (Array.isArray(j?.errors) ? j.errors.join("; ") : null);
+    if (inner) return `${prefix}${inner}`;
+  } catch { /* not JSON */ }
+  return s;
+}
+
 interface AgreementInstallmentsProps {
   agreementId: string;
   agreement: any;
