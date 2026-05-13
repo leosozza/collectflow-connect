@@ -1663,7 +1663,7 @@ export type Database = {
             | Database["public"]["Enums"]["debtor_profile_type"]
             | null
           suggested_queue: string | null
-          tenant_id: string | null
+          tenant_id: string
           tipo_devedor_id: string | null
           tipo_divida_id: string | null
           total_parcelas: number
@@ -1721,7 +1721,7 @@ export type Database = {
             | Database["public"]["Enums"]["debtor_profile_type"]
             | null
           suggested_queue?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null
           total_parcelas?: number
@@ -1779,7 +1779,7 @@ export type Database = {
             | Database["public"]["Enums"]["debtor_profile_type"]
             | null
           suggested_queue?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           tipo_devedor_id?: string | null
           tipo_divida_id?: string | null
           total_parcelas?: number
