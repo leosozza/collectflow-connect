@@ -157,6 +157,22 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     enabled: !!agreementId,
   });
 
+  // SSOT — fonte canônica do "esta parcela está paga?".
+  // Lemos `agreement_installments` e sobrescrevemos status/paidAt do classifier legado
+  // sempre que houver linha SSOT correspondente. Mantemos o objeto `inst` intacto
+  // (com `cobranca`, `customKey`, etc) para preservar todas as ações de escrita.
+  const { data: ssotMap } = useQuery({
+    queryKey: ["agreement-installments-ssot", agreementId],
+    queryFn: async () => {
+      const m = await fetchSSOTInstallments([agreementId]);
+      const rows = m.get(agreementId) || [];
+      const byKey = new Map<string, SSOTInstallment>();
+      for (const r of rows) byKey.set(r.installment_key, r);
+      return byKey;
+    },
+    enabled: !!agreementId,
+  });
+
   const customDates: Record<string, string> = agreement.custom_installment_dates || {};
   const customValues: Record<string, number> = agreement.custom_installment_values || {};
   const cancelledMap: Record<string, any> = (agreement as any).cancelled_installments || {};
