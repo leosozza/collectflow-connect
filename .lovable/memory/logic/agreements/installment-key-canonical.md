@@ -21,7 +21,7 @@ Colunas `paid_count`, `total_count`, `pending_count`, `overdue_count`, `last_pai
 **Regras de uso (frontend):**
 1. **Listagens/dashboards/contadores**: ler `agreements.paid_count/total_count` direto. Zero query extra.
 2. **Lista de Acordos com filtro por mês ou ações por parcela**: usar `agreement_installments` via `fetchSSOTInstallments` + `classifySSOTInstallment`.
-3. **Detalhe do cliente (botão "gerar boleto" etc)**: continuar usando classifier legado (`agreementInstallmentClassifier`) que tem acesso aos registros brutos para ações.
+3. **Detalhe do cliente (`AgreementInstallments.tsx`)**: classifier legado constrói o objeto `inst` (preserva ações de boleto/baixa/cancelamento), mas o **status final é sobreposto pela SSOT** quando há linha materializada. Realtime em `agreement_installments` + invalidação React Query em `["agreement-installments-ssot", agreementId]` em todo write path.
 
 **Fase 5.1 — Dashboard:**
 - `get_dashboard_stats_v2(_user_id, _year, _month, _user_ids)` substitui SOMENTE `total_recebido` e `total_recebido_mes_anterior` pela SSOT (`agreement_installments` paid+não-cancelado, fuso America/Sao_Paulo). Demais métricas reaproveitadas via SELECT INTO da função legada — preserva regras já validadas. Não aceita `_tenant_id` (deriva via auth.uid()).
