@@ -229,12 +229,15 @@ export function countPaidInstallments(
 ): { paid: number; total: number } {
   const schedule = buildInstallmentSchedule(agreement);
   const cancelled = getCancelledKeys(agreement);
+  // Compartilha o set de cobranças consumidas entre as parcelas para impedir
+  // que duas parcelas reivindiquem a mesma cobranca (ex.: ":2" canônica vs ":2" legada).
+  const usedCobrancaIds = new Set<string>();
   let paid = 0;
   let total = 0;
   for (const inst of schedule) {
     if (cancelled.has(inst.key)) continue;
     total++;
-    const cls = classifyInstallment(inst, cobrancas, manualPayments, today);
+    const cls = classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds);
     if (cls === "pago") paid++;
   }
   return { paid, total };
