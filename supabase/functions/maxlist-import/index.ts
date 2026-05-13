@@ -710,7 +710,7 @@ Deno.serve(async (req) => {
           processingLogs.push(`Processed chunk ${i / CHUNK_SIZE + 1}: inserted ${toInsert.length}, updated ${toUpdate.length}`);
         }
       }
-
+    } else {
       // === IMPORT MODE: Upsert in batches ===
       for (let i = 0; i < finalRecords.length; i += BATCH_SIZE) {
         const batch = finalRecords.slice(i, i + BATCH_SIZE);
