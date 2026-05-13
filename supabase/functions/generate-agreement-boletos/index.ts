@@ -95,7 +95,12 @@ async function negociarieRequest(admin: any, method: string, endpoint: string, b
     const detailList = Array.isArray(json?.erros) ? json.erros.join("; ")
       : Array.isArray(json?.errors) ? json.errors.join("; ")
       : null;
-    const friendly = [negMsg, detailList].filter(Boolean).join(" — ") || `Negociarie ${res.status}`;
+    let friendly = [negMsg, detailList].filter(Boolean).join(" — ") || `Negociarie ${res.status}`;
+    // Negociarie devolve 422 "Erro desconhecido" para falhas de validação de endereço/CEP/cliente.
+    // Tornamos a mensagem acionável para o operador.
+    if (res.status === 422 && /erro desconhecido/i.test(friendly)) {
+      friendly = "Negociarie rejeitou o cadastro do cliente (verifique CEP, endereço, e-mail e telefone)";
+    }
     // Diagnostic log: full response + safe payload echo (no CPF/email/phone)
     const safeBody = body && typeof body === "object" ? {
       keys: Object.keys(body as any),
