@@ -7661,6 +7661,31 @@ export type Database = {
           total_recebido_mes_anterior: number
         }[]
       }
+      get_dashboard_stats_v2: {
+        Args: {
+          _month?: number
+          _user_id?: string
+          _user_ids?: string[]
+          _year?: number
+        }
+        Returns: {
+          acionados_ontem: number
+          acordos_dia: number
+          acordos_dia_anterior: number
+          acordos_mes: number
+          acordos_mes_anterior: number
+          total_negociado: number
+          total_negociado_mes: number
+          total_negociado_mes_anterior: number
+          total_pendente: number
+          total_pendente_mes_anterior: number
+          total_projetado: number
+          total_quebra: number
+          total_quebra_mes_anterior: number
+          total_recebido: number
+          total_recebido_mes_anterior: number
+        }[]
+      }
       get_dashboard_vencimentos: {
         Args: { _target_date?: string; _user_id?: string; _user_ids?: string[] }
         Returns: {
