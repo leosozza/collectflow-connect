@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public._oneshot_backfill_agreement_aggregates();
