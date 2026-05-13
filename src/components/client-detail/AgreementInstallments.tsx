@@ -470,7 +470,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       refetchCobrancas();
       onRefresh?.();
     } catch (err: any) {
-      toast({ title: "Erro ao gerar boleto", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao gerar boleto", description: humanizeErrorMessage(err.message), variant: "destructive" });
     } finally {
       setGeneratingIdx(null);
     }
