@@ -1,41 +1,28 @@
 ## Diagnóstico
 
-**O erro NÃO foi causado pelas nossas alterações recentes.**
+Na tela **Configurações da Empresa → Contrato** (`src/pages/TenantSettingsPage.tsx`), o texto do contrato é uma constante hardcoded (`CONTRATO_PADRAO`, linhas 24–58) com a frase genérica:
 
-As únicas mudanças recentes na função `generate-agreement-boletos` foram:
-1. Guard que bloqueia reemissão de boleto já pago
-2. Log de erro mais detalhado
+> `CONTRATANTE: A empresa identificada nos dados cadastrais deste sistema.`
 
-Nenhuma delas afeta o payload enviado à Negociarie.
+Não há nenhuma interpolação dos dados do tenant. Por isso, mesmo em uma tenant nova com nome e CNPJ preenchidos, o contrato sai sem o nome da empresa.
 
-### Causa real
+A tabela `tenants` já possui `name` e `cnpj` (verificado no schema), e o hook `useTenant()` já carrega esses campos.
 
-A API da Negociarie retornou **HTTP 422 "Erro desconhecido"** ao receber o payload. Investigando o cadastro da cliente Josieli Fátima Viega (CPF 09744608935):
+## Plano de correção
 
-| Campo | Valor cadastrado | Problema |
-|---|---|---|
-| CEP | `00.000-000` | **CEP inválido** — Negociarie rejeita |
-| Cidade | `Chápeco` | Grafia incorreta (correto: `Chapecó`) |
-| Endereço | `São Wendelino, 0` | Sem número real |
-| Bairro | `Interior` | Genérico |
+Em `src/pages/TenantSettingsPage.tsx`:
 
-O CEP `00000000` é a causa direta da rejeição — é um placeholder e não corresponde a nenhuma localidade real, então a Negociarie devolve 422 sem detalhar o motivo (a mensagem genérica "Erro desconhecido" é padrão deles para validação de endereço).
+1. Converter `CONTRATO_PADRAO` de constante para uma função `buildContrato(tenant)` que recebe o tenant e injeta:
+   - **Nome**: `tenant.name`
+   - **CNPJ**: `tenant.cnpj` formatado como `00.000.000/0000-00` (ou `"CNPJ não informado"` se vazio)
 
-A entrada de R$ 175 com vencimento 2026-05-13 e o restante do payload estão corretos. O acordo não tem nenhuma cobrança anterior (`negociarie_cobrancas` vazia), então não é problema de duplicidade.
+2. Substituir a linha do CONTRATANTE por:
+   ```
+   CONTRATANTE: {tenant.name}, inscrita no CNPJ sob nº {cnpjFormatado}.
+   ```
 
-### Plano de correção
+3. Renderizar com `{buildContrato(tenant)}` no `<pre>` da aba (linha 430).
 
-**Solução imediata (sem código):** Atualizar o cadastro da cliente em `client_profiles` com CEP, endereço e cidade reais. Após isso, "Reemitir boleto" funciona normalmente.
+4. Se `tenant.cnpj` estiver vazio, mostrar um aviso visual acima do contrato sugerindo preencher o CNPJ na aba **Dados** antes de assinar (não bloqueia, só orienta).
 
-**Melhorias opcionais (se você quiser que eu implemente):**
-
-1. **Validação preventiva no edge function** — antes de chamar a Negociarie, validar:
-   - CEP ≠ `00000000` e com 8 dígitos
-   - Endereço com mais de 3 caracteres
-   - Cidade não vazia
-   
-   Retornar mensagem clara como "CEP inválido no cadastro — atualize antes de gerar boleto" em vez de "Erro desconhecido".
-
-2. **Toast no front com mensagem amigável** — quando a Negociarie devolver 422 genérico, mapear para "Verifique CEP e endereço do cliente".
-
-Me confirme se quer só a correção manual do cadastro, ou se quer também as validações preventivas (item 1 e/ou 2).
+Sem alteração de banco, sem alteração de outras telas. Apenas a renderização do contrato passa a refletir os dados reais da empresa.
