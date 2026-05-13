@@ -522,7 +522,7 @@ Deno.serve(async (req) => {
         const msg = `${label}: ${err?.message || "Erro desconhecido"}`;
         result.errors.push(msg);
         per_installment_ms[idx] = Date.now() - tI0;
-        console.error(`[generate-agreement-boletos] Error for installment ${inst.key}:`, err?.message);
+        console.error(`[generate-agreement-boletos] Error installment_key=${inst.key} agreement_id=${agreement_id} valor=${inst.value} dueDate=${inst.dueDate} isEntrada=${inst.isEntrada} :: ${err?.message}`);
       }
     });
 
