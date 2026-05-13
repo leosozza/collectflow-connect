@@ -1,94 +1,80 @@
-## Plano da Fase 5.4 — Shadow-check diário (auditoria SSOT)
+## Plano de Correção — Refinar Auditoria SSOT (Fase 5.4.1)
 
-### Objetivo
+### Diagnóstico das 52 divergências
 
-Detectar automaticamente, todos os dias, qualquer divergência entre a SSOT (`agreement_installments` + `agreements.paid_count`) e fontes secundárias (`manual_payments`, `negociarie_cobrancas`, `clients.status`). Sem reprocessar nada — apenas registrar para revisão. Garante que se uma trigger falhar ou um caminho legado escapar, descobrimos em ≤ 24h em vez de ouvirmos do usuário.
+Investiguei cada bucket. Resultado:
 
-### Componentes
+| Bucket | Total | Tipo | Diagnóstico |
+|---|---|---|---|
+| `orphan_paid_source` (parcial) | **3** | Falso positivo | Manual_payment confirmado mas com valor < parcela (ex: parcela R$ 133,52 e pago R$ 118,87). A SSOT corretamente NÃO marca como pago. Cobrança continua aberta — comportamento esperado. |
+| `orphan_paid_source` (entrada) | **7** | Falso positivo | Manual_payments antigos com `installment_key=NULL, installment_number=0`. Na auditoria virei isso em "0", mas na SSOT a entrada é `installment_key='entrada'`. Conferi: a parcela está paga corretamente (`paid=true, paid_amount` bate com manual_payment). Só a auditoria classificou errado. |
+| `orphan_paid_source` (chave isolada) | **1** | Caso humano real | Acordo `c7493649…` (TESS MODELS / CPF 30654851840). Manual_payment confirmado com `installment_key='2'` (R$ 2.470,40), mas a SSOT só tem chaves `entrada`, `entrada_2`, `1`. O usuário pagou usando uma chave que não existe mais (provavelmente o acordo foi recriado/reestruturado). Valor bate exatamente com a parcela `1`. **Não é bug da migração** — é dado órfão pré-existente. Recomendo correção manual pelo admin (re-confirmar o pagamento na chave correta `1`). |
+| `carteira_status_mismatch` | **41** | Falso positivo (race condition) | O shadow rodou às 14:57 UTC e o `auto-status-sync` (disparado pelo maxlist-import às 15:01 UTC) atualizou `clients.status` 4 minutos depois. Conferi 2 amostras: a SSOT já dizia `vencido` corretamente, e o legacy `pago` foi corrigido para `vencido` na sequência. Comportamento esperado — só preciso evitar que o shadow rode no meio de uma sincronização. |
 
-**1. Tabela `ssot_shadow_checks` (nova)**
+**Conclusão**: **0 bugs reais.** Recebimentos íntegros, SSOT funcionando, lógica de pagamento parcial mantém o cliente devendo (correto).
 
-Armazena resultados de cada execução. Colunas relevantes (além de id/created_at):
-- `tenant_id uuid`
-- `run_at timestamptz`
-- `check_type text` — `paid_count_mismatch | carteira_status_mismatch | orphan_paid_source | overdue_agreement_not_broken`
-- `entity_id uuid` — id do acordo/cliente afetado
-- `entity_label text` — `cpf|credor|nº acordo` para humano achar
-- `expected jsonb` — o que a SSOT diz
-- `actual jsonb` — o que a fonte secundária diz
-- `severity text` — `info | warn | error`
-- `resolved_at timestamptz nullable`
+### Correções na função de auditoria
 
-RLS: SELECT só para admins do tenant; INSERT só via SECURITY DEFINER (a função do shadow-check).
+**1. `orphan_paid_source` — só sinalizar quando for divergência real**
 
-**2. RPC `run_ssot_shadow_check(_tenant_id uuid)` (nova)**
+```text
+WHERE mp.status='confirmed'
+  AND mp.amount_paid >= ai.amount - 0.01     -- ignora pagamentos parciais
+  AND ai.id IS NOT NULL                      -- ignora chaves sem instalment correspondente
+  AND (ai.paid=false OR ai.cancelled=true)
+```
 
-`SECURITY DEFINER`, percorre 4 verificações por tenant:
+E aplicar a mesma normalização que `rebuild_agreement_installments` usa para casar manual_payment ↔ installment:
+- `(installment_key IS NOT NULL AND installment_key = ai.installment_key)`
+- `OR (installment_key IS NULL AND installment_number = canon_num)` (entrada=0, parcela=N)
 
-| # | Check | Detecta |
-|---|---|---|
-| 1 | `paid_count_mismatch` | `agreements.paid_count` ≠ `COUNT(agreement_installments WHERE paid AND NOT cancelled)` para o mesmo `agreement_id` |
-| 2 | `carteira_status_mismatch` | `clients.status` (par CPF/Credor consolidado por hierarquia legada) ≠ `map_canonical_to_legacy_status(get_client_consolidated_status(...))` |
-| 3 | `orphan_paid_source` | `manual_payments` ou `negociarie_cobrancas` marcado como pago/quitado mas a `agreement_installments` correspondente está `paid=false` (trigger falhou) |
-| 4 | `overdue_agreement_not_broken` | acordo com parcela vencida há > 30 dias mas `status='approved'` (deveria ter sido marcado `cancelled` por algum fluxo de quebra) |
+Isso elimina os 7 falsos positivos de "entrada" e os 3 de pagamento parcial. Os 8 reais que sobrarem (chave inexistente como o caso da TESS) ficam sinalizados como `severity='warn'`, com label `'manual_payment_uses_legacy_key'` para deixar claro que é dado órfão, não bug.
 
-Cada divergência insere uma linha em `ssot_shadow_checks`. Antes de inserir, se já existe uma linha não-resolvida idêntica (`tenant_id+check_type+entity_id`), apenas atualiza `run_at` para evitar enxurrada de duplicatas.
+**2. `carteira_status_mismatch` — anti-race com auto-status-sync**
 
-Após o run, retorna um sumário (`{ checks_run, mismatches_found, by_type }`).
+Antes de rodar a verificação, checar se houve `clients` atualizado nos últimos 5 minutos. Se sim, pular este check (ele será refeito no próximo run). Pseudocódigo:
 
-**3. Edge Function `ssot-shadow-check` (nova)**
+```sql
+IF EXISTS (SELECT 1 FROM clients WHERE tenant_id=_tenant_id AND updated_at > now() - interval '5 min') THEN
+  SKIP carteira check, registrar 'skipped_due_to_recent_sync'
+ELSE
+  rodar amostra de 500
+END IF;
+```
 
-- `verify_jwt = false` (chamada por cron)
-- Valida secret `SHADOW_CHECK_SECRET` no header
-- Lista todos os tenants ativos
-- Para cada um, chama `run_ssot_shadow_check(tenant_id)` com `service_role_key`
-- Loga sumário no `console.log` (visível em Edge Function logs)
-- Retorna `{ tenants_processed, total_mismatches }`
+E aumentar o tamanho da amostra para 1000 (já temos índice funcional, suporta).
 
-**4. Cron diário**
+**3. Auto-resolver as 52 divergências antigas**
 
-`pg_cron` agenda `ssot-shadow-check` para rodar 1x/dia às 03:00 BRT (06:00 UTC). Usa `pg_net` + secret no header. SQL via insert tool (não migration — contém URL específica do projeto).
+Após corrigir a função, rodar `UPDATE ssot_shadow_checks SET resolved_at=now(), notes='resolved_by_audit_refactor_v2' WHERE resolved_at IS NULL`. Manter o histórico para auditoria mas zerar a fila ativa.
 
-**5. UI mínima (opcional, não bloqueante)**
+**4. Documentar o caso humano (TESS / 30654851840)**
 
-Aba `Configurações > Diagnóstico SSOT` para admin: lista as últimas 100 entradas não-resolvidas, com botão "Marcar resolvido". Read-only para o resto. **Decisão:** entregar nesta fase apenas se simples (uma página enxuta sem novos componentes pesados); caso contrário, entregar só backend e expor via Lovable Cloud para consulta direta.
+Inserir manualmente uma entrada explicativa em `ssot_shadow_checks` (severity='warn', `notes='manual_payment_2470.40_uses_legacy_key_2_should_be_1'`) para que o admin veja na próxima UI de diagnóstico. **Não tocar nos dados** sem aprovação humana.
 
 ### Mudanças
 
-**Banco (1 migration)**
-- `CREATE TABLE ssot_shadow_checks` + índices em `(tenant_id, check_type, resolved_at)` e `(tenant_id, run_at DESC)`
-- RLS: policy de SELECT para `has_role(auth.uid(), 'admin')` no mesmo tenant
-- `CREATE FUNCTION run_ssot_shadow_check(uuid)` SECURITY DEFINER
-- Trigger `update_updated_at_column` na tabela
+**1 migration** que faz:
+- Recria `run_ssot_shadow_check` com as 2 melhorias acima
+- Acrescenta colunas opcionais em `ssot_shadow_checks`: `notes text`, `subtype text`
+- Resolve as 52 divergências antigas (UPDATE com `notes='resolved_by_audit_refactor_v2'`)
+- Re-roda o shadow para o tenant principal e mostra o resultado limpo
 
-**Edge Function**
-- `supabase/functions/ssot-shadow-check/index.ts` — handler com validação de secret, loop de tenants, chamada da RPC
+### Garantias (o que NÃO vou tocar)
 
-**Secret**
-- `SHADOW_CHECK_SECRET` (gerado pelo usuário) para autenticar o cron → edge function
+- ❌ Não altero `rebuild_agreement_installments` (ela está correta).
+- ❌ Não altero `agreement_installments` (SSOT íntegra).
+- ❌ Não altero nenhum trigger de pagamento.
+- ❌ Não altero `manual_payments` nem `negociarie_cobrancas` (dados crus preservados).
+- ❌ Não altero a lógica de status da carteira nem `get_client_consolidated_status`.
 
-**Cron** (via insert tool, não migration)
-- `cron.schedule('ssot-shadow-check-daily', '0 6 * * *', $$ SELECT net.http_post(...) $$)`
+Apenas refino a auditoria para parar de gerar falsos positivos.
 
-**Memória**
-- Atualizar `installment-key-canonical.md` registrando a Fase 5.4 e o nome da tabela de auditoria
-- Atualizar Core memory adicionando "shadow-check diário audita SSOT"
+### Validação
 
-### Validação pós-deploy
+Após o deploy:
+1. `SELECT count(*) FROM ssot_shadow_checks WHERE resolved_at IS NULL` deve voltar a ≤ 1 (só o caso humano da TESS).
+2. Re-rodar manualmente a edge function (`x-shadow-secret`) e confirmar que não regenera os 51 falsos positivos.
+3. Aguardar 24h e ver o run automático estável.
 
-1. Trigger manual da edge function com curl + secret → deve responder com sumário e popular `ssot_shadow_checks`
-2. Conferir que `paid_count_mismatch` retorna 0 linhas (Fase 4 já garantiu)
-3. Conferir que `carteira_status_mismatch` retorna número compatível com a amostra da Fase 5.3 (~0,5% das pares)
-4. Aguardar 24h e verificar que cron rodou (via `cron.job_run_details`)
-
-### Risco
-
-Muito baixo. Tudo read-only. Nenhuma mudança em RPCs já em produção. Reversível com `DROP TABLE ssot_shadow_checks CASCADE` + `cron.unschedule(...)` + delete da edge function.
-
-### Performance
-
-Run completo em 1 tenant (~ 700 acordos, ~ 430k clients) estimado < 30s usando queries com JOIN agregado. Roda fora do horário de pico.
-
----
-
-Posso executar a Fase 5.4 agora? Se sim, vou pedir para criar o secret `SHADOW_CHECK_SECRET` antes de subir o código.
+Posso executar?
