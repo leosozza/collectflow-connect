@@ -102,6 +102,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         () => {
           refetchCobrancas();
           queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
         },
       )
       .on(
@@ -109,6 +110,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         { event: "*", schema: "public", table: "agreement_installments", filter: `agreement_id=eq.${agreementId}` },
         () => {
           queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
         },
       )
       .subscribe();
@@ -478,6 +480,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       toast({ title: "Data atualizada com sucesso" });
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
       queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
       await Promise.resolve(onRefresh?.());
@@ -627,6 +630,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       toast({ title: "Baixa revertida para pendente de confirmação." });
       queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       onRefresh?.();
     } catch (err: any) {
       toast({ title: "Erro ao desconfirmar", description: err.message, variant: "destructive" });
@@ -647,6 +651,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       toast({ title: "Solicitação de baixa cancelada." });
       queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       onRefresh?.();
     } catch (err: any) {
       toast({ title: "Erro ao cancelar", description: err.message, variant: "destructive" });
@@ -704,6 +709,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       toast({ title: "Pagamento estornado com sucesso." });
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
       queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       refetchCobrancas();
       onRefresh?.();
@@ -1306,6 +1312,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
               onSuccess={() => {
                 queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
                 onRefresh?.();
               }}
             />
