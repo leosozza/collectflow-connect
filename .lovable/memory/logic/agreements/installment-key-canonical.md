@@ -10,7 +10,11 @@ type: feature
 - `displayNum` (ex: "2/12") é só rótulo visual, não é chave de match
 
 **SSOT — `agreement_installments`:**
-Tabela materializada via `rebuild_agreement_installments(uuid)` chamada por trigger em `agreements`, `manual_payments`, `negociarie_cobrancas`. Contém `installment_key`, `due_date`, `amount`, `paid`, `paid_at`, `paid_source`, `cancelled`, `pending_confirmation`. SSOT única de "esta parcela está paga?".
+Tabela materializada via `rebuild_agreement_installments(uuid)` chamada por trigger em `agreements`, `manual_payments`, `negociarie_cobrancas`. Contém `installment_key`, `due_date`, `amount`, `paid`, `paid_at`, `paid_source`, `cancelled`, `pending_confirmation`. SSOT operacional de "esta parcela está paga?" (status, próxima vencer, agregados por acordo).
+
+**⚠️ Recebido em R$ NÃO vem da SSOT.** A verdade contábil de "Recebido" é a UNION das tabelas brutas: `manual_payments` (status confirmed/approved) + `portal_payments` (status paid) + `negociarie_cobrancas` (status pago). Tela `BaixasRealizadasPage` é a fonte canônica e o Dashboard (`get_dashboard_stats_v2`, `get_financial_received_by_day`) lê exatamente o mesmo UNION — convergem por construção. Nunca usar `SUM(agreement_installments.paid_amount)` para mostrar dinheiro recebido em telas financeiras.
+
+**Data de pagamento exibida:** sempre a data da baixa real (`manual_payments.payment_date` / `negociarie_cobrancas.data_pagamento` / `portal_payments.updated_at`). `agreement_installments.paid_at` é timestamp interno e só serve como fallback. Em `AgreementInstallments.tsx`, a sobreposição SSOT mantém `paidAt: inst.paidAt || ssotRow.paid_at` (preserva data do classifier vinda da baixa).
 
 **Trigger gating:** `tg_rebuild_from_agreement` só dispara em colunas que afetam o cronograma — não em agregados (evita loop com Fase 4).
 
