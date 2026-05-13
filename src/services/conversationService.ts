@@ -312,7 +312,7 @@ export async function sendMediaMessage(
     tenant_id: tenantId,
     direction: "outbound",
     message_type: mediaType,
-    content: fileName,
+    content: mediaType === "document" ? fileName : "",
     media_url: mediaUrl,
     media_mime_type: mediaMimeType,
     status: "sent",
