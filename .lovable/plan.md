@@ -1,62 +1,65 @@
-## Diagnóstico — Andréia Simão (CPF 044.744.989-33), Y.BRASIL
 
-**Acordo:** `cb8efd07…` — Entrada R$ 111,61 (06/04) + 3 parcelas R$ 111,61 (06/05, 06/06, 06/07).
+# Garantias de preservação — adendo ao plano
 
-**Estado real no banco:**
-- `manual_payments`: 1 baixa confirmada da **entrada** (06/04).
-- `negociarie_cobrancas`: 3 boletos com `installment_key` **legado** (gerados em 16/04 antes da padronização canônica):
-  - `…:2` → vencimento 06/05 — **status `pago`**
-  - `…:3` → vencimento 06/06 — `registrado`
-  - `…:4` → vencimento 06/07 — `registrado`
+Resumo direto: **nada do que já existe muda de comportamento visível**. Toda a evolução é aditiva e idempotente. Pagamentos antigos, baixas confirmadas, acordos vigentes/quebrados, status atual da carteira e o frontend continuam exatamente iguais. O que muda é a **fonte de leitura interna** ficar única e confiável.
 
-**O que a UI está fazendo (bug):**
-`AgreementInstallments.tsx` agora monta a parcela 1 com `customKey="1"`, parcela 2 com `customKey="2"`, parcela 3 com `customKey="3"` (chaves canônicas, sem offset da entrada). O lookup tenta primeiro `agreementId:customKey` (canônico) e cai em `agreementId:displayNumber` (legado) só quando não encontra:
+## Princípios obrigatórios da migração
 
-```
-parcela 1 (customKey "1"): expectedKey :1 não existe → fallback :2 → acha cobrança PAGA ✓
-parcela 2 (customKey "2"): expectedKey :2 EXISTE (a mesma cobrança da parcela 1!) → marca como PAGA ❌
-parcela 3 (customKey "3"): expectedKey :3 EXISTE (cobrança da parcela 2 legada, "registrado") → não marca paga
-```
+1. **Aditivo, nunca destrutivo**
+   - Nenhuma coluna existente é removida nas Fases 1–4. As "aposentadorias" da Fase 5 só ocorrem depois de 100% das leituras estarem migradas e validadas em produção.
+   - `clients.valor_pago`, `clients.status`, `agreements.status`, `manual_payments.installment_number`, `negociarie_cobrancas.installment_key`, `client_events` — **todas permanecem**.
 
-A mesma `negociarie_cobrancas` (`347c39c2…`, `:2`) é reivindicada por **duas** parcelas diferentes, então 06/06 herda o "pago" do 06/05.
+2. **SSOTs já estabelecidas são respeitadas**
+   - `client_profiles` continua SSOT de contato (CPF/tenant). Não é tocada.
+   - `client_events` continua SSOT da timeline omnichannel. Não é tocada.
+   - `tipos_status.regras.papel_sistema` continua SSOT semântica de status. A nova SSOT de **parcela paga** (`agreement_installments`) se conecta a ela, não a substitui.
+   - Hierarquia de status por CPF/Credor (QUITADO > ACORDO VIGENTE > … > EM DIA) é preservada e passa a ser calculada a partir da SSOT, não recalculada de novo.
+   - Regra do `client_profiles` canônico, anti-leak de `negociarie_cobrancas` (Andreia Simão), `papel_sistema` em `tipos_status`, RLS via `get_my_tenant_id()`, paginação por `.range()` — tudo mantido.
 
-A regra existe ("RIVO_FIX v2" para `manual_payments` evita exatamente esse vazamento) mas **não foi aplicada às cobranças Negociarie**.
+3. **Backfill 1:1 com o estado atual**
+   - A nova `agreement_installments` será populada lendo exatamente o que `classifyInstallment` enxerga hoje (manual_payments confirmados + negociarie_cobrancas pagas + portal_payments confirmados + cancelled_installments). 
+   - Critério de aceite do backfill: para 100% dos acordos, `paid_count` materializado == `paid_count` calculado em runtime hoje. Diferença zero.
+   - Backfill rodado em batch por tenant, idempotente, com checkpoint. Pode rodar/re-rodar sem efeito colateral.
 
----
+4. **Dual-read antes de single-read** (zero downtime)
+   - Fase 2 cria a tabela e os triggers, mas o frontend continua lendo das tabelas atuais.
+   - Em paralelo, criamos um **shadow check**: edge function compara, por amostragem, o resultado da SSOT vs o classifier antigo. Só quando 0 divergências em N dias, mudamos a leitura.
+   - Quando a leitura migra, o classifier antigo permanece como fallback por mais um ciclo, atrás de feature flag.
 
-## Plano de correção
+5. **Frontend não muda**
+   - `AgreementInstallments.tsx`, `AcordosPage`, dashboard, ClientDetail continuam consumindo a mesma forma. O wrapper do classifier passa a ler a SSOT internamente — assinatura e shape de retorno preservados.
+   - Nenhuma rota, nenhum botão, nenhum status visível muda de nome, cor ou regra.
 
-### 1. Anti-vazamento no lookup de cobranças (frontend)
-Em `src/components/client-detail/AgreementInstallments.tsx`:
-- Manter um `Set<string> usedCobrancaIds` durante a montagem das parcelas.
-- Para cada parcela, escolher cobrança seguindo esta prioridade:
-  1. `installment_key === expectedKey` (canônico) **e** ainda não usado **e** com `data_vencimento` igual à `dueDate` da parcela.
-  2. `installment_key === expectedKey` ainda não usado.
-  3. `installment_key === legacyKey` ainda não usado.
-- Ao escolher, registrar o id no `Set`. Isso impede que duas parcelas reclamem o mesmo boleto.
+6. **Constraints novas só onde os dados já estão limpos**
+   - Antes de criar `UNIQUE (agreement_id, installment_key)` em `manual_payments`/`negociarie_cobrancas`, rodamos diagnóstico e, se houver duplicata histórica, criamos a constraint como `NOT VALID` + `VALIDATE` separadamente, com fix-up dirigido caso a caso. Nunca quebra insert existente.
+   - `clients.tenant_id NOT NULL` só após varredura confirmar zero órfãos (com tabela de quarentena se aparecer algum).
 
-### 2. Mesmo anti-vazamento em `agreementInstallmentClassifier.ts`
-A função `classifyInstallment` usa só `${agId}:${installment.key}` (sem fallback legado nem proteção). Aplicar a mesma estratégia (preferir match por `data_vencimento`, marcar consumido) — usado por `AcordosPage`, métricas e contagem de pagas/total. Hoje, para acordos legados, ela classifica como "vencido" parcelas pagas; para acordos novos, pode marcar errado igual à UI.
+7. **Reversibilidade**
+   - Cada fase é uma migration isolada com migration de rollback equivalente.
+   - Triggers novos podem ser desativados via `ALTER TABLE … DISABLE TRIGGER` sem perder dado (a tabela materializada vira só cache; o sistema volta a calcular do jeito antigo).
 
-### 3. Backfill canônico das `negociarie_cobrancas` legadas
-Migration que, para cada acordo com entrada, recalcula `installment_key`:
-- Casos com entrada única: subtrair 1 do índice numérico (`:2`→`:1`, `:3`→`:2`, `:4`→`:3`); `:1` vira `:entrada` quando aplicável.
-- Generalizado: usar `agreement.entrada_value > 0` + contagem de chaves `entrada*` para definir o offset.
-- Rodar como `UPDATE` idempotente, escrevendo só onde o novo valor difere e a chave alvo ainda não existe (evita conflito com a unique implícita por acordo+chave).
-- Logar quantos registros foram migrados em `audit_logs` (categoria `data_fix`).
+8. **Validação por tenant antes de avançar**
+   - Vamos escolher 1 tenant piloto (sugiro um pequeno + Y.brasil, que já tem casos conhecidos como Andreia Simão) para validar Fase 2 antes de propagar.
+   - Critério de promoção: shadow-check com 0 divergência em 7 dias corridos.
 
-### 4. Validação no caso reportado
-Após (1)+(2)+(3): recarregar o acordo da Andréia Simão e confirmar:
-- Entrada (06/04): pago ✓
-- Parcela 1 (06/05): pago ✓
-- Parcela 2 (06/06): **pendente / vigente** ✓
-- Parcela 3 (06/07): vigente ✓
-- Progresso: 2/4 (50%), não 3/4.
+## O que muda na ordem das fases (ajuste por causa da preservação)
 
-### Detalhes técnicos
-- Nenhuma alteração em RLS, edge functions de geração ou contratos. O gerador atual (`generate-agreement-boletos`) já grava chaves canônicas; o problema é só com dados legados + lookup ingênuo.
-- `manualPayments` continua inalterado (já é robusto via `RIVO_FIX v2`).
-- A correção é determinística: prioriza match por data, depois canônico, depois legado, sempre evitando reuso.
+| Fase | O que faz | Risco visível p/ usuário |
+|---|---|---|
+| 1 | Índices + UNIQUE parciais + `tenant_id NOT NULL` (após backfill) | Zero. Só performance + integridade. |
+| 2 | Cria `agreement_installments` + triggers + backfill + shadow-check (sem mudar leitura) | Zero. Frontend continua igual. |
+| 3 | Migrar leitura do classifier para SSOT atrás de feature flag, tenant a tenant | Zero esperado. Rollback por flag. |
+| 4 | `agreements.paid_count`, `last_paid_at`, status agregado mantidos por trigger | Zero. Substitui cálculos JS por valor já pronto. |
+| 5 (opcional, futuro) | Aposentar enum `clients.status` em favor de `status_cobranca_id` | Adiada até termos certeza. Pode ficar coexistindo indefinidamente. |
 
-### Memória a atualizar
-Adicionar em `mem://logic/agreements/...` regra: "Lookup de `negociarie_cobrancas` por parcela deve evitar reuso da mesma cobrança e priorizar `data_vencimento` quando há ambiguidade entre chave canônica e legada."
+## Garantias específicas para o que você levantou
+
+- **Baixas já realizadas (manual_payments confirmadas)**: continuam exatamente onde estão, sem reprocessamento. O backfill apenas as **lê** para popular a SSOT.
+- **Clientes que já pagaram (negociarie_cobrancas pagas + portal_payments confirmados)**: idem, leitura apenas. Nenhum status volta atrás.
+- **Acordos quitados/quebrados/ativos**: o status atual de `agreements.status` é preservado. A trigger de Fase 4 só passa a manter o valor a partir da SSOT — o estado inicial é o atual.
+- **Carteira importada (`clients`)**: nenhuma linha é alterada. `valor_pago`, `status`, `status_cobranca_id` continuam como estão. O ajuste futuro (Fase 5) é opcional e só acontece com aprovação separada.
+- **Histórico (`client_events`)**: intocado.
+
+## Próximo passo
+
+Aprovar a **Fase 1** isolada (índices + constraints com `NOT VALID`/`VALIDATE` + diagnóstico de órfãos antes de qualquer `NOT NULL`). É 100% segura, dá ganho imediato e nos dá o relatório de "está tudo limpo?" para decidir com confiança a Fase 2.
