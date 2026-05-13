@@ -712,10 +712,6 @@ const WhatsAppChatLayout = () => {
   const handleSend = async (text: string, replyToMessageId?: string | null) => {
     if (!selectedConv || !tenantId) return;
     const instance = getInstanceForConv();
-    if (!instance) {
-      toast.error("Instância não encontrada");
-      return;
-    }
 
     // Defensive gate (mirrors ChatPanel) — block if 5+ inbound and missing profile/disposition.
     const inboundCount = messages.filter((m) => m.direction === "inbound" && !m.is_internal).length;
