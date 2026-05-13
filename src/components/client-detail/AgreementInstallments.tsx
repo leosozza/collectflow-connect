@@ -417,7 +417,9 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       return {
         ...inst,
         status: "pago",
-        paidAt: ssotRow.paid_at || inst.paidAt,
+        // Prioriza data REAL da baixa (manual_payments.payment_date / negociarie.data_pagamento)
+        // já calculada pelo classifier — só cai no paid_at da SSOT se o classifier não tiver data.
+        paidAt: inst.paidAt || ssotRow.paid_at,
       };
     }
     if (ssotRow.pending_confirmation) {
