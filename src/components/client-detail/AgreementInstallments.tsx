@@ -375,6 +375,32 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     }
 
     return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
+  }).map((inst) => {
+    // SSOT overlay — se houver linha materializada para essa installment_key,
+    // a SSOT decide o status final (paid / cancelled / pending_confirmation).
+    // Demais campos (cobranca, value, dueDate) permanecem do classifier para preservar ações.
+    const ssotRow = ssotMap?.get(inst.customKey);
+    if (!ssotRow) return inst;
+    if (ssotRow.cancelled) {
+      return { ...inst, status: "cancelled", isCancelled: true };
+    }
+    if (ssotRow.paid) {
+      return {
+        ...inst,
+        status: "pago",
+        paidAt: ssotRow.paid_at || inst.paidAt,
+      };
+    }
+    if (ssotRow.pending_confirmation) {
+      return { ...inst, status: "pending_confirmation" };
+    }
+    // SSOT diz não-pago: revoga eventual "pago" do classifier (anti-leak).
+    if (inst.status === "pago") {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
+      return { ...inst, status: dueDay < today ? "vencido" : "pendente", paidAt: undefined };
+    }
+    return inst;
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
