@@ -175,6 +175,42 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     ? (entradaKeysFromCustom.length > 0 ? entradaKeysFromCustom : ["entrada"])
     : [];
 
+  // RIVO_FIX: Anti-vazamento de cobranças entre parcelas.
+  // Acordos legados gravavam `installment_key` com offset da entrada (ex.: parcela 1 → :2),
+  // enquanto o gerador atual usa chave canônica (parcela 1 → :1). Isso causa colisão:
+  // a parcela 2 (canônica) encontraria a cobrança legada da parcela 1 e herdaria o status "pago".
+  // Solução: rastrear cobranças já reivindicadas e priorizar match por data_vencimento.
+  const usedCobrancaIds = new Set<string>();
+  const pickCobranca = (
+    candidateKeys: string[],
+    dueDate: Date,
+  ): any | undefined => {
+    const dueIso = format(dueDate, "yyyy-MM-dd");
+    // Prioridade 1: chave válida + data de vencimento idêntica + não usada.
+    for (const key of candidateKeys) {
+      const match = cobrancas.find((c: any) =>
+        c.installment_key === key &&
+        !usedCobrancaIds.has(c.id) &&
+        String(c.data_vencimento || "").slice(0, 10) === dueIso
+      );
+      if (match) {
+        usedCobrancaIds.add(match.id);
+        return match;
+      }
+    }
+    // Prioridade 2: chave válida + não usada (qualquer data).
+    for (const key of candidateKeys) {
+      const match = cobrancas.find((c: any) =>
+        c.installment_key === key && !usedCobrancaIds.has(c.id)
+      );
+      if (match) {
+        usedCobrancaIds.add(match.id);
+        return match;
+      }
+    }
+    return undefined;
+  };
+
   entradaKeys.forEach((customKey, idx) => {
     const defaultDate = agreement.entrada_date
       ? new Date(agreement.entrada_date + "T00:00:00")
@@ -186,9 +222,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     // Mantém fallback legado `:0` para a primeira entrada (registros antigos).
     const expectedKey = `${agreementId}:${customKey}`;
     const legacyEntradaKey = idx === 0 ? `${agreementId}:0` : null;
-    const cobranca =
-      cobrancas.find((c: any) => c.installment_key === expectedKey) ||
-      (legacyEntradaKey ? cobrancas.find((c: any) => c.installment_key === legacyEntradaKey) : undefined);
+    const candidateKeys = [expectedKey, ...(legacyEntradaKey ? [legacyEntradaKey] : [])];
+    const cobranca = pickCobranca(candidateKeys, dueDate);
     installments.push({
       number: 0,
       displayNumber: idx + 1,
@@ -215,11 +250,10 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     // Lookup by canonical key first; fall back to legacy display-based key for old data.
     const expectedKey = `${agreementId}:${canonicalNum}`;
     const legacyKey = `${agreementId}:${displayNumber}`;
-    const cobranca =
-      cobrancas.find((c: any) => c.installment_key === expectedKey) ||
-      (canonicalNum !== displayNumber
-        ? cobrancas.find((c: any) => c.installment_key === legacyKey)
-        : undefined);
+    const candidateKeys = canonicalNum !== displayNumber
+      ? [expectedKey, legacyKey]
+      : [expectedKey];
+    const cobranca = pickCobranca(candidateKeys, dueDate);
     installments.push({
       number: canonicalNum,
       displayNumber,

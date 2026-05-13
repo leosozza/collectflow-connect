@@ -95,10 +95,12 @@ export function getInstallmentsForMonth(
 export type InstallmentClassification = "pago" | "vigente" | "vencido" | "pending_confirmation";
 
 export interface CobrancaRecord {
+  id?: string | null;
   agreement_id: string | null;
   installment_key: string | null;
   status: string | null;
   valor_pago: number | null;
+  data_vencimento?: string | null;
 }
 
 export interface ManualPaymentRecord {
@@ -111,12 +113,20 @@ export interface ManualPaymentRecord {
 
 /**
  * Classify a single installment based on payment data.
+ *
+ * `usedCobrancaIds` (optional) — when provided, the classifier marks the
+ * cobranca it consumed so siblings don't re-claim it. This prevents the
+ * legacy/canonical key collision bug where parcela 2 (canonical ":2") was
+ * matching the legacy ":2" cobranca actually belonging to parcela 1.
+ * When ambiguous (multiple keys match), we prefer the cobranca whose
+ * `data_vencimento` equals the installment dueDate.
  */
 export function classifyInstallment(
   installment: VirtualInstallment,
   cobrancas: CobrancaRecord[],
   manualPayments: ManualPaymentRecord[],
-  today: Date = new Date()
+  today: Date = new Date(),
+  usedCobrancaIds?: Set<string>
 ): InstallmentClassification {
   const agId = installment.agreementId;
 
@@ -142,11 +152,42 @@ export function classifyInstallment(
     return "pago";
   }
 
-  // Check negociarie cobrancas — use canonical installment.key (entrada, entrada_2, 1, 2, ...)
-  // so entradas pagas via Negociarie batem com installment_key "<agId>:entrada".
-  const installmentKey = `${agId}:${installment.key}`;
-  const cob = cobrancas.find(c => c.installment_key === installmentKey);
+  // Cobrança Negociarie — chave canônica + fallback legado (display number).
+  // Para acordos com entrada, parcela 1 canônica (":1") pode ainda estar gravada
+  // como ":2" (offset legado). Tentamos canônica primeiro, depois legado.
+  const canonicalKey = `${agId}:${installment.key}`;
+  const dueIso = installment.dueDate.toISOString().slice(0, 10);
+  const candidateKeys: string[] = [canonicalKey];
+  if (!installment.isEntrada) {
+    // legacy convention: parcela N indexada com offset da entrada (entrada conta como 1)
+    const legacyKey = `${agId}:${installment.number + 1}`;
+    if (legacyKey !== canonicalKey) candidateKeys.push(legacyKey);
+  }
+
+  const pickCobranca = (): CobrancaRecord | undefined => {
+    // 1) chave válida + data idêntica + não consumida
+    for (const k of candidateKeys) {
+      const m = cobrancas.find(c =>
+        c.installment_key === k &&
+        (!usedCobrancaIds || !c.id || !usedCobrancaIds.has(c.id)) &&
+        String(c.data_vencimento || "").slice(0, 10) === dueIso
+      );
+      if (m) return m;
+    }
+    // 2) chave válida + não consumida
+    for (const k of candidateKeys) {
+      const m = cobrancas.find(c =>
+        c.installment_key === k &&
+        (!usedCobrancaIds || !c.id || !usedCobrancaIds.has(c.id))
+      );
+      if (m) return m;
+    }
+    return undefined;
+  };
+
+  const cob = pickCobranca();
   if (cob) {
+    if (usedCobrancaIds && cob.id) usedCobrancaIds.add(cob.id);
     if (cob.status === "pago" || cob.status === "RECEIVED" || cob.status === "CONFIRMED") {
       return "pago";
     }
@@ -188,12 +229,15 @@ export function countPaidInstallments(
 ): { paid: number; total: number } {
   const schedule = buildInstallmentSchedule(agreement);
   const cancelled = getCancelledKeys(agreement);
+  // Compartilha o set de cobranças consumidas entre as parcelas para impedir
+  // que duas parcelas reivindiquem a mesma cobranca (ex.: ":2" canônica vs ":2" legada).
+  const usedCobrancaIds = new Set<string>();
   let paid = 0;
   let total = 0;
   for (const inst of schedule) {
     if (cancelled.has(inst.key)) continue;
     total++;
-    const cls = classifyInstallment(inst, cobrancas, manualPayments, today);
+    const cls = classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds);
     if (cls === "pago") paid++;
   }
   return { paid, total };

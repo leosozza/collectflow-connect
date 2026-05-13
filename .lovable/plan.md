@@ -1,42 +1,62 @@
-## Diagnóstico
+## Diagnóstico — Andréia Simão (CPF 044.744.989-33), Y.BRASIL
 
-A aba **Cadastros → Usuários** (`src/pages/UsersPage.tsx`, linha 461) bloqueia o acesso usando `profile?.role !== "admin"` — isto é, lê o campo `role` da tabela `profiles`.
+**Acordo:** `cb8efd07…` — Entrada R$ 111,61 (06/04) + 3 parcelas R$ 111,61 (06/05, 06/06, 06/07).
 
-Conferindo no banco para a Sabrina Leal (Candy Gloss):
+**Estado real no banco:**
+- `manual_payments`: 1 baixa confirmada da **entrada** (06/04).
+- `negociarie_cobrancas`: 3 boletos com `installment_key` **legado** (gerados em 16/04 antes da padronização canônica):
+  - `…:2` → vencimento 06/05 — **status `pago`**
+  - `…:3` → vencimento 06/06 — `registrado`
+  - `…:4` → vencimento 06/07 — `registrado`
+
+**O que a UI está fazendo (bug):**
+`AgreementInstallments.tsx` agora monta a parcela 1 com `customKey="1"`, parcela 2 com `customKey="2"`, parcela 3 com `customKey="3"` (chaves canônicas, sem offset da entrada). O lookup tenta primeiro `agreementId:customKey` (canônico) e cai em `agreementId:displayNumber` (legado) só quando não encontra:
 
 ```
-full_name     | profiles.role | tenant_users.role | tenant
-Sabrina Leal  | operador      | admin             | Candy Gloss
+parcela 1 (customKey "1"): expectedKey :1 não existe → fallback :2 → acha cobrança PAGA ✓
+parcela 2 (customKey "2"): expectedKey :2 EXISTE (a mesma cobrança da parcela 1!) → marca como PAGA ❌
+parcela 3 (customKey "3"): expectedKey :3 EXISTE (cobrança da parcela 2 legada, "registrado") → não marca paga
 ```
 
-Ela é admin do tenant em `tenant_users` (a fonte de verdade que o `useTenant` usa via RPC `is_tenant_admin`), mas em `profiles.role` ficou como `operador`. Como a página consulta `profiles.role`, ela vê "Acesso restrito a administradores".
+A mesma `negociarie_cobrancas` (`347c39c2…`, `:2`) é reivindicada por **duas** parcelas diferentes, então 06/06 herda o "pago" do 06/05.
 
-A causa raiz é dessincronização entre `profiles.role` e `tenant_users.role`: na criação/edição de usuários a `role` é gravada nas duas tabelas, mas qualquer alteração feita só em `tenant_users` (ou inconsistência histórica de onboarding) deixa `profiles.role` para trás. Esse problema vai se repetir em qualquer novo tenant onde o admin não for criado/editado pelo fluxo padrão.
+A regra existe ("RIVO_FIX v2" para `manual_payments` evita exatamente esse vazamento) mas **não foi aplicada às cobranças Negociarie**.
+
+---
 
 ## Plano de correção
 
-### 1. Frontend: usar a fonte de verdade correta
-Em `src/pages/UsersPage.tsx`:
-- Substituir o guard `profile?.role !== "admin"` (linha 461) por `!isTenantAdmin` vindo de `useTenant()` — esse hook já considera `is_super_admin` e `is_tenant_admin` (RPCs SECURITY DEFINER baseadas em `tenant_users`).
-- Trocar também o `enabled: profile?.role === "admin"` da query (linha 198) por `enabled: isTenantAdmin`.
+### 1. Anti-vazamento no lookup de cobranças (frontend)
+Em `src/components/client-detail/AgreementInstallments.tsx`:
+- Manter um `Set<string> usedCobrancaIds` durante a montagem das parcelas.
+- Para cada parcela, escolher cobrança seguindo esta prioridade:
+  1. `installment_key === expectedKey` (canônico) **e** ainda não usado **e** com `data_vencimento` igual à `dueDate` da parcela.
+  2. `installment_key === expectedKey` ainda não usado.
+  3. `installment_key === legacyKey` ainda não usado.
+- Ao escolher, registrar o id no `Set`. Isso impede que duas parcelas reclamem o mesmo boleto.
 
-Sem outras alterações de UI/lógica no arquivo.
+### 2. Mesmo anti-vazamento em `agreementInstallmentClassifier.ts`
+A função `classifyInstallment` usa só `${agId}:${installment.key}` (sem fallback legado nem proteção). Aplicar a mesma estratégia (preferir match por `data_vencimento`, marcar consumido) — usado por `AcordosPage`, métricas e contagem de pagas/total. Hoje, para acordos legados, ela classifica como "vencido" parcelas pagas; para acordos novos, pode marcar errado igual à UI.
 
-### 2. Backend: sincronização automática `tenant_users.role` → `profiles.role`
-Migration nova:
+### 3. Backfill canônico das `negociarie_cobrancas` legadas
+Migration que, para cada acordo com entrada, recalcula `installment_key`:
+- Casos com entrada única: subtrair 1 do índice numérico (`:2`→`:1`, `:3`→`:2`, `:4`→`:3`); `:1` vira `:entrada` quando aplicável.
+- Generalizado: usar `agreement.entrada_value > 0` + contagem de chaves `entrada*` para definir o offset.
+- Rodar como `UPDATE` idempotente, escrevendo só onde o novo valor difere e a chave alvo ainda não existe (evita conflito com a unique implícita por acordo+chave).
+- Logar quantos registros foram migrados em `audit_logs` (categoria `data_fix`).
 
-- **Backfill imediato**: `UPDATE public.profiles p SET role = tu.role FROM public.tenant_users tu WHERE tu.user_id = p.user_id AND p.role IS DISTINCT FROM tu.role;` (apenas para roles válidas em `profiles`, isto é, `admin`/`operador`; `gerente`/`supervisor` mapeiam para `operador` no schema atual de `profiles.role`).
-- **Trigger** `sync_profile_role_from_tenant_users` em `tenant_users` (AFTER INSERT OR UPDATE OF role): atualiza `profiles.role` do `user_id` correspondente. Para roles que não existem em `profiles` (gerente/supervisor), grava `operador`; `admin` grava `admin`. Não toca em super_admin (esse fluxo já é gerido por outro caminho).
-- Função `SECURITY DEFINER` com `set search_path = public` para respeitar RLS.
+### 4. Validação no caso reportado
+Após (1)+(2)+(3): recarregar o acordo da Andréia Simão e confirmar:
+- Entrada (06/04): pago ✓
+- Parcela 1 (06/05): pago ✓
+- Parcela 2 (06/06): **pendente / vigente** ✓
+- Parcela 3 (06/07): vigente ✓
+- Progresso: 2/4 (50%), não 3/4.
 
-Isso garante que qualquer novo tenant criado e qualquer mudança de papel feita pelo painel (super admin ou admin do tenant) mantenha as duas tabelas alinhadas, eliminando a regressão para os próximos tenants.
+### Detalhes técnicos
+- Nenhuma alteração em RLS, edge functions de geração ou contratos. O gerador atual (`generate-agreement-boletos`) já grava chaves canônicas; o problema é só com dados legados + lookup ingênuo.
+- `manualPayments` continua inalterado (já é robusto via `RIVO_FIX v2`).
+- A correção é determinística: prioriza match por data, depois canônico, depois legado, sempre evitando reuso.
 
-### 3. Verificação
-Após a migration:
-- Conferir via `SELECT` que Sabrina Leal aparece com `profiles.role = 'admin'`.
-- Logar com a Sabrina (ou simular) e abrir Cadastros → Usuários: deve carregar a listagem normalmente.
-
-## Fora de escopo
-- Não mexer em `ThreeCPlusPanel`, `WhatsAppChatLayout`, `ChatPanel` agora — são checagens diferentes (operador vs admin para UI de telefonia/chat) e não causam o bug relatado. Podem ser revistas em tarefa separada se desejado.
-- Não alterar `AdminUsuariosPage` (Super Admin) — não é a tela do screenshot.
-- Sem alterações no fluxo de criação de usuário (`invokeCreateUser`) — o trigger cobre o caso.
+### Memória a atualizar
+Adicionar em `mem://logic/agreements/...` regra: "Lookup de `negociarie_cobrancas` por parcela deve evitar reuso da mesma cobrança e priorizar `data_vencimento` quando há ambiguidade entre chave canônica e legada."
