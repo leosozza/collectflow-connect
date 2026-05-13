@@ -5588,9 +5588,11 @@ export type Database = {
           entity_label: string | null
           expected: Json | null
           id: string
+          notes: string | null
           resolved_at: string | null
           run_at: string
           severity: string
+          subtype: string | null
           tenant_id: string
           updated_at: string
         }
@@ -5602,9 +5604,11 @@ export type Database = {
           entity_label?: string | null
           expected?: Json | null
           id?: string
+          notes?: string | null
           resolved_at?: string | null
           run_at?: string
           severity?: string
+          subtype?: string | null
           tenant_id: string
           updated_at?: string
         }
@@ -5616,9 +5620,11 @@ export type Database = {
           entity_label?: string | null
           expected?: Json | null
           id?: string
+          notes?: string | null
           resolved_at?: string | null
           run_at?: string
           severity?: string
+          subtype?: string | null
           tenant_id?: string
           updated_at?: string
         }
