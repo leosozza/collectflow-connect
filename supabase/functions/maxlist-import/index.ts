@@ -559,15 +559,22 @@ Deno.serve(async (req) => {
                 // Exceptional cases for protected fields:
                 // 1. If existing value is null/empty, we allow update (EXCEPT tipo_divida_id — once set, never overwrite via PaymentType)
                 // 2. status_cobranca_id, data_devolucao, motivo_devolucao can be updated if status is vencido (check return)
+                // 3. status_cobranca_id pode ser sobrescrito SOMENTE quando MaxSystem reporta a parcela como paga
+                //    E o status atual é "Inadimplente" do tenant. Promove Inadimplente → status novo (Em dia/Quitado).
+                //    Acordo Vigente, Acordo Atrasado, Quebra, Em Negociação, Quitado, Em dia continuam imutáveis via sync.
                 const isExistingEmpty = !oldVal || String(oldVal).trim() === "";
                 const isCheckReturnUpdate = (field === "status_cobranca_id" || field === "data_devolucao" || field === "motivo_devolucao") && rec.status === "vencido";
+                const isPagoOverridingInadimplente = field === "status_cobranca_id"
+                  && rec.status === "pago"
+                  && vencidoStatusId
+                  && String(oldVal) === String(vencidoStatusId);
                 // tipo_divida_id is fully protected after first definition to avoid PaymentType-driven misclassification
                 const isTipoDividaProtected = field === "tipo_divida_id" && !isExistingEmpty;
 
                 if (isTipoDividaProtected) {
                   continue;
                 }
-                if (!isExistingEmpty && !isCheckReturnUpdate) {
+                if (!isExistingEmpty && !isCheckReturnUpdate && !isPagoOverridingInadimplente) {
                   continue;
                 }
               }
@@ -747,7 +754,8 @@ Deno.serve(async (req) => {
     }
 
     // Auto-status-sync — fire in background to not block HTTP response
-    if (status_cobranca_id === "__auto__") {
+    // Dispara em qualquer update (rolls up CPF+Credor para hierarquia: Quitado/Acordo/Inadimplente/Em dia)
+    if (status_cobranca_id === "__auto__" || mode === "update") {
       console.log(`[maxlist-import] Scheduling auto-status-sync (background) for tenant ${tenant_id}`);
       const syncTask = fetch(`${supabaseUrl}/functions/v1/auto-status-sync`, {
         method: "POST",

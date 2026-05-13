@@ -955,6 +955,20 @@ const MaxListPage = () => {
       const fieldMapping = await getEffectiveMaxSystemMapping(true);
       if (!fieldMapping) throw new Error("Mapeamento MaxSystem não encontrado");
 
+      // Resolve "Em dia" status id do tenant — ponto neutro que deixa auto-status-sync
+      // decidir a hierarquia final (Quitado / Em dia / etc) no nível CPF+Credor.
+      // Necessário para que parcelas pagas vindas do MaxSystem promovam clientes
+      // que estavam INADIMPLENTE para Em dia/Quitado (ver maxlist-import: exceção
+      // isPagoOverridingInadimplente no bloco PROTECTED_FIELDS).
+      const { data: statusList } = await supabase
+        .from("tipos_status")
+        .select("id, nome, regras")
+        .eq("tenant_id", tenant.id);
+      const emDiaStatus = (statusList || []).find((s: any) => s.regras?.papel_sistema === "em_dia")
+        || (statusList || []).find((s: any) => (s.nome || "").toLowerCase() === "em dia");
+      const emDiaId = emDiaStatus?.id;
+      if (!emDiaId) throw new Error("Status 'Em dia' não encontrado para este tenant. Cadastre-o em Configurações > Status.");
+
       logAction({ action: "update_pagos_started", entity_type: "import", details: { module: "maxlist", credor: updatePagosCredor, period: { de: updatePagosDe, ate: updatePagosAte } } });
 
       progressInterval = setInterval(() => {
@@ -967,7 +981,7 @@ const MaxListPage = () => {
           filter,
           credor: updatePagosCredor,
           field_mapping: fieldMapping,
-          status_cobranca_id: "__auto__",
+          status_cobranca_id: emDiaId,
           mode: "update",
         },
       });
