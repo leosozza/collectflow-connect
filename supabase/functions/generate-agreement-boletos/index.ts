@@ -377,7 +377,7 @@ Deno.serve(async (req) => {
         success: 0, failed: 0, boleto_pendente: !singleMode,
         message: `Dados cadastrais incompletos (${missingFields.join(", ")}). Boletos poderão ser gerados manualmente após correção.`,
       }), {
-        status: singleMode ? 400 : 200,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
