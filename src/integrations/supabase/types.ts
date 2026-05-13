@@ -7077,6 +7077,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _oneshot_backfill_agreement_aggregates: { Args: never; Returns: number }
       add_operator_bonus_points: {
         Args: {
           _amount: number
