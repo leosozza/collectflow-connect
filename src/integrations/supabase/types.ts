@@ -5579,6 +5579,51 @@ export type Database = {
           },
         ]
       }
+      ssot_shadow_checks: {
+        Row: {
+          actual: Json | null
+          check_type: string
+          created_at: string
+          entity_id: string | null
+          entity_label: string | null
+          expected: Json | null
+          id: string
+          resolved_at: string | null
+          run_at: string
+          severity: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          actual?: Json | null
+          check_type: string
+          created_at?: string
+          entity_id?: string | null
+          entity_label?: string | null
+          expected?: Json | null
+          id?: string
+          resolved_at?: string | null
+          run_at?: string
+          severity?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          actual?: Json | null
+          check_type?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_label?: string | null
+          expected?: Json | null
+          id?: string
+          resolved_at?: string | null
+          run_at?: string
+          severity?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       support_ai_conversations: {
         Row: {
           category: string
@@ -8147,6 +8192,7 @@ export type Database = {
           priority: number
         }[]
       }
+      run_ssot_shadow_check: { Args: { _tenant_id: string }; Returns: Json }
       seed_default_achievement_templates: {
         Args: { _tenant_id: string }
         Returns: undefined
@@ -8162,6 +8208,18 @@ export type Database = {
         Returns: boolean
       }
       unaccent: { Args: { "": string }; Returns: string }
+      upsert_ssot_shadow_check: {
+        Args: {
+          _actual: Json
+          _check_type: string
+          _entity_id: string
+          _entity_label: string
+          _expected: Json
+          _severity: string
+          _tenant_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "operador"
