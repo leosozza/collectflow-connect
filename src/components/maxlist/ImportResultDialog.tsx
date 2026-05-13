@@ -4,10 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CheckCircle2, XCircle, RefreshCw, Download, Ban, CreditCard, MinusCircle, Copy, Clock, FileText } from "lucide-react";
+import { CheckCircle2, XCircle, RefreshCw, Download, Ban, CreditCard, MinusCircle, Copy, Clock, FileText, AlertTriangle } from "lucide-react";
 import * as XLSX from "xlsx";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface RejectedRecord {
   nome?: string;
@@ -19,6 +20,8 @@ export interface UpdatedRecord {
   nome: string;
   cpf: string;
   changes: Record<string, { old: any; new: any }>;
+  cod_contrato?: string | null;
+  numero_parcela?: number | string | null;
 }
 
 export interface ImportReport {
@@ -47,46 +50,130 @@ const fieldLabels: Record<string, string> = {
   phone: "Telefone 1",
   phone2: "Telefone 2",
   phone3: "Telefone 3",
-  valor_parcela: "Valor Parcela",
-  valor_pago: "Valor Pago",
-  valor_saldo: "Valor Saldo",
-  status: "Status",
-  data_vencimento: "Vencimento",
-  data_pagamento: "Pagamento",
-  status_cobranca_id: "Status Cobrança",
+  valor_parcela: "Valor da parcela",
+  valor_pago: "Valor pago",
+  valor_saldo: "Saldo devedor",
+  status: "Status MaxSystem",
+  data_vencimento: "Data de vencimento",
+  data_pagamento: "Data de pagamento",
+  data_devolucao: "Data de devolução",
+  motivo_devolucao: "Motivo de devolução",
+  status_cobranca_id: "Status na RIVO",
+  tipo_divida_id: "Tipo de dívida",
   cod_contrato: "Contrato",
-  numero_parcela: "Nº Parcela",
+  numero_parcela: "Nº da parcela",
   model_name: "Modelo",
-  external_id: "ID Externo",
+  external_id: "ID externo",
+  meio_pagamento_id: "Meio de pagamento",
+};
+
+const statusMaxSystemLabels: Record<string, string> = {
+  pago: "Pago",
+  vencido: "Vencido",
+  em_aberto: "Em aberto",
+  cancelado: "Cancelado",
+};
+
+const metricExplanations: Record<string, string> = {
+  "Total consultado": "Parcelas retornadas pelo MaxSystem no período sincronizado",
+  "Novos inseridos": "CPFs/parcelas que ainda não existiam na RIVO e foram criados",
+  "Atualizados": "Já existiam na base e tiveram algum dado alterado nesta sincronização",
+  "Pagos": "Parcelas marcadas como pagas no MaxSystem (Inadimplente passa para Em dia/Quitado)",
+  "Cancelados MaxList": "Parcelas que o MaxSystem devolveu como canceladas/excluídas",
+  "Sem alteração": "Já estavam idênticas à base — nada precisou ser tocado",
+  "Rejeitados": "Linhas inválidas (CPF ou contrato faltando, formato incorreto). Veja a aba Rejeitados",
+  "Duplicidades descartadas": "Mesma parcela veio repetida no lote e a duplicata foi ignorada",
+  "Erros": "Linhas que o banco recusou em algum chunk. Veja a aba Erros para detalhes",
+  "Tempo (s)": "Duração total da sincronização, em segundos",
+};
+
+const isUuid = (v: any) =>
+  typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+const isEmpty = (v: any) => v === null || v === undefined || v === "" || v === "null";
+
+const formatMoney = (v: any) => {
+  const n = Number(v);
+  if (!isFinite(n)) return String(v);
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+};
+
+const formatDate = (v: any) => {
+  if (isEmpty(v)) return "—";
+  const s = String(v);
+  // ISO: 2026-03-12 or 2026-03-12T...
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return s;
+};
+
+type Dicts = {
+  status: Record<string, string>;
+  tipoDivida: Record<string, string>;
+};
+
+const formatValue = (field: string, val: any, dicts: Dicts): string => {
+  if (isEmpty(val)) return "—";
+  if (field === "status_cobranca_id") {
+    if (isUuid(val)) return dicts.status[val] || `(status ${String(val).slice(0, 8)}…)`;
+    return String(val);
+  }
+  if (field === "tipo_divida_id") {
+    if (isUuid(val)) return dicts.tipoDivida[val] || `(tipo ${String(val).slice(0, 8)}…)`;
+    return String(val);
+  }
+  if (field === "status") {
+    return statusMaxSystemLabels[String(val).toLowerCase()] || String(val);
+  }
+  if (field === "valor_parcela" || field === "valor_pago" || field === "valor_saldo") {
+    return formatMoney(val);
+  }
+  if (field === "data_vencimento" || field === "data_pagamento" || field === "data_devolucao") {
+    return formatDate(val);
+  }
+  return String(val);
+};
+
+const formatChange = (field: string, oldV: any, newV: any, dicts: Dicts): string => {
+  const label = fieldLabels[field] || field;
+  return `${label}: ${formatValue(field, oldV, dicts)} → ${formatValue(field, newV, dicts)}`;
 };
 
 const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
   const isUpdate = report.mode === "update";
+  const [dicts, setDicts] = useState<Dicts>({ status: {}, tipoDivida: {} });
+
+  // Load dictionaries to translate UUIDs into names
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      const [statusRes, tipoRes] = await Promise.all([
+        supabase.from("tipos_status").select("id, nome"),
+        supabase.from("tipos_divida").select("id, nome"),
+      ]);
+      if (cancelled) return;
+      const status: Record<string, string> = {};
+      (statusRes.data || []).forEach((r: any) => { status[r.id] = r.nome; });
+      const tipoDivida: Record<string, string> = {};
+      (tipoRes.data || []).forEach((r: any) => { tipoDivida[r.id] = r.nome; });
+      setDicts({ status, tipoDivida });
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
+
+  // Extract chunk error lines from logs
+  const chunkErrors = useMemo(() => {
+    const logs = report.processingLogs || [];
+    return logs
+      .filter((l) => /error|exception|chunk/i.test(l) && /error|exception|conflict/i.test(l))
+      .filter((l) => l.startsWith("[ERROR]") || l.startsWith("[EXCEPTION]") || /chunk \d+/i.test(l));
+  }, [report.processingLogs]);
 
   const handleDownload = () => {
     const wb = XLSX.utils.book_new();
 
-    if (report.rejected.length > 0) {
-      const rejData = report.rejected.map((r) => ({
-        Nome: r.nome || "-",
-        CPF: r.cpf || "-",
-        Motivo: r.reason,
-      }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rejData), "Rejeitados");
-    }
-
-    if (report.updated.length > 0) {
-      const updData = report.updated.map((u) => ({
-        Nome: u.nome,
-        CPF: u.cpf,
-        "Campos Alterados": Object.entries(u.changes)
-          .map(([k, v]) => `${fieldLabels[k] || k}: ${v.old} → ${v.new}`)
-          .join("; "),
-      }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(updData), "Atualizados");
-    }
-
-    // Summary sheet
+    // Resumo (with explanations)
     const summaryData = [
       { Métrica: "Total consultado", Valor: report.totalFetched },
       { Métrica: "Novos inseridos", Valor: report.inserted },
@@ -98,8 +185,49 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
       { Métrica: "Duplicidades descartadas", Valor: report.duplicatesDiscarded },
       { Métrica: "Erros", Valor: report.skipped },
       { Métrica: "Tempo (s)", Valor: Math.round(report.durationMs / 1000) },
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), "Resumo");
+    ].map((r) => ({ ...r, "O que significa": metricExplanations[r.Métrica] || "" }));
+    const wsResumo = XLSX.utils.json_to_sheet(summaryData);
+    wsResumo["!cols"] = [{ wch: 26 }, { wch: 10 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+    // Atualizados — uma linha por mudança, em linguagem humana
+    if (report.updated.length > 0) {
+      const updRows: any[] = [];
+      report.updated.forEach((u) => {
+        Object.entries(u.changes).forEach(([field, val]) => {
+          updRows.push({
+            Nome: u.nome,
+            CPF: u.cpf,
+            Contrato: u.cod_contrato || "—",
+            Parcela: u.numero_parcela ?? "—",
+            "O que mudou": formatChange(field, val.old, val.new, dicts),
+          });
+        });
+      });
+      const wsUpd = XLSX.utils.json_to_sheet(updRows);
+      wsUpd["!cols"] = [{ wch: 32 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 70 }];
+      XLSX.utils.book_append_sheet(wb, wsUpd, "Atualizados");
+    }
+
+    // Rejeitados
+    if (report.rejected.length > 0) {
+      const rejData = report.rejected.map((r) => ({
+        Nome: r.nome || "—",
+        CPF: r.cpf || "—",
+        Motivo: r.reason,
+      }));
+      const wsRej = XLSX.utils.json_to_sheet(rejData);
+      wsRej["!cols"] = [{ wch: 32 }, { wch: 14 }, { wch: 60 }];
+      XLSX.utils.book_append_sheet(wb, wsRej, "Rejeitados");
+    }
+
+    // Erros de chunk
+    if (chunkErrors.length > 0) {
+      const errRows = chunkErrors.map((l) => ({ "Mensagem do banco": l }));
+      const wsErr = XLSX.utils.json_to_sheet(errRows);
+      wsErr["!cols"] = [{ wch: 120 }];
+      XLSX.utils.book_append_sheet(wb, wsErr, "Erros");
+    }
 
     XLSX.writeFile(wb, `Relatorio_${isUpdate ? "Atualizacao" : "Importacao"}.xlsx`);
   };
@@ -159,7 +287,10 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
             </div>
           )}
           {report.skipped > 0 && (
-            <Badge variant="outline">{report.skipped} erros de lote</Badge>
+            <div className="flex items-center gap-2 rounded-lg border bg-destructive/10 border-destructive/30 px-3 py-2">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              <span className="text-sm font-medium">{report.skipped} erros de banco</span>
+            </div>
           )}
         </div>
 
@@ -204,7 +335,7 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
                       <TableRow>
                         <TableHead>Nome</TableHead>
                         <TableHead>CPF</TableHead>
-                        <TableHead>Alterações</TableHead>
+                        <TableHead>O que mudou</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -217,8 +348,8 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
                               {Object.entries(u.changes).map(([field, val]) => (
                                 <div key={field} className="text-xs">
                                   <span className="font-medium">{fieldLabels[field] || field}:</span>{" "}
-                                  <span className="text-destructive line-through">{String(val.old || "-")}</span>{" "}
-                                  → <span className="text-emerald-600">{String(val.new || "-")}</span>
+                                  <span className="text-destructive line-through">{formatValue(field, val.old, dicts)}</span>{" "}
+                                  → <span className="text-emerald-600">{formatValue(field, val.new, dicts)}</span>
                                 </div>
                               ))}
                             </div>
@@ -263,6 +394,27 @@ const ImportResultDialog = ({ open, onOpenChange, report }: Props) => {
                       ))}
                     </TableBody>
                   </Table>
+                </ScrollArea>
+              </AccordionContent>
+            </AccordionItem>
+          )}
+
+          {/* Chunk errors */}
+          {chunkErrors.length > 0 && (
+            <AccordionItem value="errors">
+              <AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive" />
+                  Erros de banco ({chunkErrors.length})
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <ScrollArea className="max-h-[250px]">
+                  <div className="space-y-1 font-mono text-xs p-2 bg-muted rounded">
+                    {chunkErrors.map((l, i) => (
+                      <div key={i} className="text-destructive whitespace-pre-wrap break-all">{l}</div>
+                    ))}
+                  </div>
                 </ScrollArea>
               </AccordionContent>
             </AccordionItem>
