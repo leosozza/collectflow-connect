@@ -1,103 +1,50 @@
-## Análise Final + Próxima Correção
+## Validação da análise (verificação no banco)
 
-### O que validei (10 verificações cruzadas no banco)
+Confirmei tudo que o Antigravity afirma, com nuances importantes. Resumo factual antes do plano de correção.
 
-| Check | Resultado |
-|---|---|
-| `paid_count` da `agreements` bate com soma real de parcelas pagas | ✅ **0 divergências** |
-| Acordos ativos sem parcelas geradas | ✅ **0** |
-| Parcelas órfãs (sem acordo) | ✅ **0** |
-| Manual payments confirmados sem casar com SSOT | ✅ Só **1** (caso TESS já documentado) |
-| Status mismatch entre carteira legacy e SSOT | ✅ **0** após sync |
-| Auditoria SSOT diária funcionando | ✅ Cron 03:00 BRT estável |
+### ✅ O que está correto na análise
 
-**Conclusão**: SSOT está íntegro, recebimentos batem, lógica de pagamento parcial preserva dívida em aberto. Migração foi bem-sucedida.
+1. **Não existe UNIQUE em `manual_payments(agreement_id, installment_key)` nem em `negociarie_cobrancas(agreement_id, installment_key)`.** Verificado em `pg_index`: só existem índices NÃO-únicos (`idx_manual_pay_tenant_agr_key`, `idx_neg_cob_tenant_agr_key`, `idx_manual_payments_agreement_key`). O ÚNICO `UNIQUE (agreement_id, installment_key)` criado foi em `agreement_installments` (a tabela nova da SSOT). Então a "trava de idempotência da raiz" realmente ficou de fora.
+2. **`tenant_id NOT NULL` + índices compostos por tenant aplicados** em `clients`, `agreements`, `manual_payments`, `negociarie_cobrancas`. Confirmado (vi `idx_clients_tenant_cpfnorm_credor`, `idx_agreements_tenant_cpfnorm_credor`, etc.).
+3. **SSOT (`agreement_installments`) + Shadow Check + cron** estão criados e ativos. Confirmado.
 
-### 2 problemas reais encontrados
+### ⚠️ Onde o risco é menor do que o texto sugere (mas ainda real)
 
-**🔴 #1 — CRÍTICO: `maxlist-import` está perdendo dados em silêncio**
+- **Duplicatas atuais**: rodei a checagem agora — `manual_payments` tem **0** pares duplicados de (agreement_id, installment_key) com status confirmado/approved; `negociarie_cobrancas` tem **1** par duplicado. Ou seja, hoje o estrago é mínimo, mas a porta está aberta.
+- **Clique-duplo na UI duplicando pagamento**: o `rebuild_agreement_installments` agrega manual_payments com `SUM(amount_paid)` e `MAX(payment_date)` por `(agreement_id, installment_key)`. **Se o usuário clicar duas vezes em "Confirmar Pagamento" no mesmo segundo, vão entrar 2 linhas em `manual_payments` e a SSOT vai somar os dois valores** — então o risco de "parcela paga em dobro" no agregado é real, exatamente como o Antigravity descreve. Não é loop infinito, mas infla `paid_amount` e pode marcar como pago algo que era parcial.
+- **Negociarie**: o lookup tem proteção `usedCobrancaIds` por parcela, então mesmo com 2 cobranças idênticas, só uma é "consumida" por parcela. A duplicata existente provavelmente está sendo ignorada pela rotina anti-leak, mas continua poluindo a fonte e o Shadow Check.
 
-Nos logs do import recente vi:
-```
-Chunk upsert error: invalid input value for enum client_status: "cancelado_maxlist"
-```
+### ❌ Onde discordo da análise
 
-A edge function `maxlist-import` (linhas 357–359, 525, 591, 690) gera o valor `cancelado_maxlist` quando o registro vem com `cancellation_date` da MaxList, mas o enum `client_status` no banco só aceita: `pendente, pago, quebrado, vencido, em_acordo`. **Resultado: chunks inteiros falham e os clientes cancelados na MaxList não são atualizados no Rivo.**
+- **"Atropelou as fases"**: a Fase 5 (SSOT como verdade única) já estava combinada e foi entregue na rodada anterior. O Antigravity está olhando só os arquivos novos e concluindo que ele pulou etapa, mas a SSOT não foi criada agora — foi criada nas rodadas de migração anteriores que você aprovou (`20260513151251_*` e antes). O que faltou de fato foi a **trava UNIQUE nas tabelas de origem**, que é diferente.
+- **"Pode receber duas parcelas idênticas em `agreement_installments`"**: não. A própria `agreement_installments` tem UNIQUE `(agreement_id, installment_key)` e o `rebuild` faz `DELETE` + `INSERT` por acordo. O risco real está **no agregado de valor pago** (somar duplicado), não em criar 2 linhas iguais na SSOT.
 
-**🟡 #2 — 4 acordos `status='completed'` com parcelas ainda em aberto**
+### 📋 Plano (mínimo necessário, sem mexer em recebimento)
 
-A função `complete_agreement` (ou equivalente) marcou esses acordos como concluídos cedo demais. Casos:
-- `715e16a3` (CPF 41679072838) — pago R$ 118,87 da parcela R$ 133,52 (parcial)
-- `0165fc54` (CPF 33816949878) — parcela 2 (R$ 250,74) sem pagamento
-- `8df557ee` (CPF 15199482980) — parcela 3 (R$ 269,12) sem pagamento
-- `c7493649` (CPF 30654851840) — caso TESS já documentado
+**Parte 1 — Limpar a única duplicata existente em `negociarie_cobrancas`**
+- Identificar o par duplicado, manter o registro mais antigo (ou o que está vinculado ao `paid_source_id` da SSOT, se houver), apagar o restante.
+- Sem isso o UNIQUE da Parte 2 não vai conseguir ser criado.
 
-A SSOT está correta (parcelas de fato em aberto), só o flag `agreements.status='completed'` está errado.
+**Parte 2 — Criar as travas UNIQUE que faltaram (a trava de raiz da Fase 1)**
+- `manual_payments`: UNIQUE parcial `(agreement_id, installment_key) WHERE installment_key IS NOT NULL AND status IN ('confirmed','approved','pending_confirmation')`. Parcial para não quebrar registros legados sem `installment_key` e para não bloquear `cancelled/rejected`.
+- `negociarie_cobrancas`: UNIQUE parcial `(agreement_id, installment_key) WHERE installment_key IS NOT NULL`. Igualmente parcial para preservar histórico legado.
+- Ambos via `CREATE UNIQUE INDEX CONCURRENTLY` se possível, ou normal dentro de migration.
 
-### Plano desta rodada
+**Parte 3 — Proteção UI/serviço contra clique-duplo (defesa em profundidade)**
+- Em `manualPaymentService.ts`: antes do INSERT, fazer `SELECT 1 FROM manual_payments WHERE agreement_id=? AND installment_key=? AND status IN ('confirmed','approved','pending_confirmation') LIMIT 1`. Se existir, retornar erro amigável "Esta parcela já tem pagamento registrado".
+- O UNIQUE da Parte 2 cobre o pior caso a nível de banco; este check evita o usuário ver erro genérico.
 
-**Parte A — Corrigir o bug crítico do maxlist** (5 min, 1 migration + 1 edge edit)
-
-Tenho 2 opções:
-- **A1 (recomendado)**: Adicionar `'cancelado_maxlist'` ao enum `client_status` para refletir o que o código realmente quer. Mantém histórico distinguível de cancelamento upstream vs quebra interna.
-- **A2**: Mapear `cancelado_maxlist` → `quebrado` no código e remover o enum novo.
-
-Recomendo **A1**: é mais informativo e a MaxList realmente diferencia "cancelado pelo credor" de "quebra de acordo". Posso já refletir esse status na hierarquia (vai ser tratado como `vencido` para fins de cobrança, mas exibido distintamente).
-
-**Parte B — Reverter os 4 acordos `completed` indevidos**
-
-Atualizar `agreements.status` desses 4 IDs de `completed` → `approved` e disparar `rebuild_agreement_installments` para recalcular tudo. Nenhum dado de pagamento é alterado, só o flag de "concluído".
-
-**Parte C — Criar guard preventivo**
-
-Adicionar trigger `BEFORE UPDATE ON agreements` que bloqueia transição para `status='completed'` enquanto existir parcela `NOT paid AND NOT cancelled`. Isso impede o problema de voltar a ocorrer.
+**Parte 4 — Não fazer nada na lógica de SSOT, triggers, recebimento, edge functions financeiras.** Tudo isso foi auditado nas rodadas anteriores e está convergente (0 drift, 0 órfãs, cron estável).
 
 ### O que NÃO mexer
 
-- ❌ SSOT (`agreement_installments`, `manual_payments`, `negociarie_cobrancas`) intocada
-- ❌ Triggers de pagamento intocados
-- ❌ Lógica de cobrança intocada
+- ❌ `agreement_installments`, `rebuild_agreement_installments`, triggers de recompute
+- ❌ Edge functions de Negociarie / pagamento / portal
+- ❌ Lógica de status hierárquico, carteira, dashboard
+- ❌ Shadow check / cron
 
----
+### Resumo em uma frase
 
-## Explicação simples (para responder "o que fizemos e por quê")
+A análise do Antigravity está **factualmente certa no ponto que importa** (faltou UNIQUE nas tabelas de origem), **exagera no diagnóstico de "atropelou fases"** (a SSOT foi aprovada antes) e o risco prático hoje é só **1 duplicata** em `negociarie_cobrancas` + **porta aberta** para clique-duplo em `manual_payments`. O plano acima fecha essa porta sem encostar em nada que envolva recebimento.
 
-### 🎯 O problema original
-
-Antes da migração SSOT, **a verdade sobre "quem pagou o quê" estava espalhada em 3 lugares diferentes** que podiam discordar entre si:
-
-1. `agreements.paid_count` (um contador)
-2. `manual_payments` (pagamentos confirmados pelo admin)
-3. `negociarie_cobrancas` (recebimentos automáticos da Negociarie)
-
-Resultado: às vezes o painel mostrava 2 parcelas pagas, o relatório mostrava 3, e a parcela do cliente continuava cobrando porque o sistema não tinha certeza se foi paga.
-
-### 🔧 O que fizemos (5 fases)
-
-1. **Criamos uma única tabela "verdade"**: `agreement_installments` — uma linha por parcela, com `paid=true/false`, `paid_amount`, `paid_source` (manual ou negociarie), `paid_at`. **Toda regra de cobrança lê daqui.**
-
-2. **Padronizamos as chaves das parcelas**: `entrada`, `entrada_2`, `1`, `2`, `3`... (canônico, independente da entrada). Antes o sistema misturava numeração com e sem entrada e bagunçava o casamento de pagamentos.
-
-3. **Backfill histórico**: rodamos a função `rebuild_agreement_installments` em todos os acordos existentes, recalculando do zero a partir das fontes brutas (manual_payments + negociarie_cobrancas), com regra anti-leak (mesmo pagamento não pode ser usado em 2 parcelas).
-
-4. **Trigger automático**: toda vez que um manual_payment é criado/atualizado/deletado, ou uma cobrança Negociarie chega, a SSOT é recalculada **automaticamente** para aquele acordo.
-
-5. **Auditoria diária com cron**: às 3h da manhã uma edge function compara a SSOT com as fontes brutas e registra qualquer divergência em `ssot_shadow_checks`. Hoje refinamos para eliminar 51 falsos positivos — restou só **1 caso real** que merece ação humana.
-
-### 💡 O que melhorou
-
-| Antes | Depois |
-|---|---|
-| Painel, relatório e cobrança discordavam às vezes | Todos lêem da mesma fonte → sempre consistentes |
-| Pagamento manual + cobrança Negociarie podiam contar dobrado | Anti-leak garante 1 pagamento = 1 parcela |
-| Pagamento parcial era mascarado como "pago" em alguns lugares | Continua devendo até quitar (correto) |
-| Bug silencioso podia ficar meses sem ser detectado | Cron diário detecta em até 24h |
-| Não tinha como provar que os números estavam corretos | Auditoria automática com histórico em `ssot_shadow_checks` |
-
-### 🎁 Bônus desta rodada (se você aprovar)
-
-- Para de perder dados de cancelamento da MaxList (bug crítico atual)
-- 4 acordos voltam a aparecer como ativos (faturamento correto)
-- Trigger preventivo impede que algum código futuro marque acordo como concluído antes da hora
-
-Posso executar as Partes A, B e C?
+Posso executar?
