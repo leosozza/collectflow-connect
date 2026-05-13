@@ -250,9 +250,11 @@ const AcordosPage = () => {
         const installments = getInstallmentsForMonth(agreement, m, y);
         if (installments.length === 0) continue; // No installment in this month
 
+        // Compartilhado entre as parcelas deste acordo — evita reuso da mesma cobranca.
+        const usedCobrancaIds = new Set<string>();
         // SPLIT: emit one row per installment in the selected month
         for (const inst of installments) {
-          const cls = classifyInstallment(inst, cobrancas, manualPayments, today);
+          const cls = classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds);
           result.push({
             ...agreement,
             _installmentClass: cls,
@@ -281,16 +283,18 @@ const AcordosPage = () => {
             return true;
           });
           if (inRange.length === 0) continue;
+          const usedCobrancaIds = new Set<string>();
           scopedHasPaid = inRange.some(inst =>
-            classifyInstallment(inst, cobrancas, manualPayments, today) === "pago"
+            classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds) === "pago"
           );
         } else if (selectedYear) {
           // "todos os meses" but year selected — show agreements with installments in that year
           const schedule = buildInstallmentSchedule(agreement);
           const inYear = schedule.filter((inst: any) => inst.dueDate.getFullYear() === y);
           if (inYear.length === 0) continue;
+          const usedCobrancaIds = new Set<string>();
           scopedHasPaid = inYear.some(inst =>
-            classifyInstallment(inst, cobrancas, manualPayments, today) === "pago"
+            classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds) === "pago"
           );
         }
 
