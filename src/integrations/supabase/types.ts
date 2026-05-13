@@ -7687,6 +7687,18 @@ export type Database = {
           cpf: string
         }[]
       }
+      get_financial_received_by_day: {
+        Args: {
+          _date_from: string
+          _date_to: string
+          _operator_ids?: string[]
+          _tenant_id: string
+        }
+        Returns: {
+          payment_date: string
+          total_recebido: number
+        }[]
+      }
       get_my_enabled_modules: { Args: never; Returns: string[] }
       get_my_integrations_status: {
         Args: never
