@@ -167,18 +167,10 @@ export default function ParcelasProgramadasCard({
                     key={`${v.agreement_id}-${v.numero_parcela}-${idx}`}
                     className="border-b border-border/30 hover:bg-muted/30 transition-colors"
                   >
-                    <TableCell
-                      className="py-1.5 xl:py-2 px-3 xl:px-4 text-[12px] xl:text-sm font-medium max-w-[200px] cursor-copy"
-                      title="Clique fora do nome para copiar"
-                      onClick={(e) => {
-                        // Only copy when clicking the cell padding (not the link itself)
-                        if ((e.target as HTMLElement).closest("a")) return;
-                        navigator.clipboard?.writeText(v.client_name).catch(() => {});
-                      }}
-                    >
+                    <TableCell className="py-1.5 xl:py-2 px-3 xl:px-4 text-[12px] xl:text-sm font-medium max-w-[200px]">
                       <Link
                         to={`/carteira/${encodeURIComponent(v.client_cpf.replace(/\D/g, ""))}`}
-                        className="text-primary hover:underline underline-offset-2 truncate block"
+                        className="text-primary hover:underline underline-offset-2 truncate inline-block max-w-full align-middle"
                         title={v.client_name}
                       >
                         {v.client_name}
