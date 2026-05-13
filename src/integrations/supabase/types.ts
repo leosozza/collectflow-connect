@@ -332,6 +332,7 @@ export type Database = {
       }
       agreements: {
         Row: {
+          aggregates_updated_at: string | null
           approval_reason: string | null
           approved_by: string | null
           boleto_pendente: boolean
@@ -354,20 +355,27 @@ export type Database = {
           id: string
           installment_breakdown: Json
           interest_amount: number
+          last_paid_at: string | null
           new_installment_value: number
           new_installments: number
+          next_due_date: string | null
           notes: string | null
           original_total: number
+          overdue_count: number
+          paid_count: number
           penalty_amount: number
+          pending_count: number
           portal_origin: boolean
           previous_agreement_id: string | null
           proposed_total: number
           requires_approval: boolean
           status: string
           tenant_id: string
+          total_count: number
           updated_at: string
         }
         Insert: {
+          aggregates_updated_at?: string | null
           approval_reason?: string | null
           approved_by?: string | null
           boleto_pendente?: boolean
@@ -390,20 +398,27 @@ export type Database = {
           id?: string
           installment_breakdown?: Json
           interest_amount?: number
+          last_paid_at?: string | null
           new_installment_value?: number
           new_installments?: number
+          next_due_date?: string | null
           notes?: string | null
           original_total?: number
+          overdue_count?: number
+          paid_count?: number
           penalty_amount?: number
+          pending_count?: number
           portal_origin?: boolean
           previous_agreement_id?: string | null
           proposed_total?: number
           requires_approval?: boolean
           status?: string
           tenant_id: string
+          total_count?: number
           updated_at?: string
         }
         Update: {
+          aggregates_updated_at?: string | null
           approval_reason?: string | null
           approved_by?: string | null
           boleto_pendente?: boolean
@@ -426,17 +441,23 @@ export type Database = {
           id?: string
           installment_breakdown?: Json
           interest_amount?: number
+          last_paid_at?: string | null
           new_installment_value?: number
           new_installments?: number
+          next_due_date?: string | null
           notes?: string | null
           original_total?: number
+          overdue_count?: number
+          paid_count?: number
           penalty_amount?: number
+          pending_count?: number
           portal_origin?: boolean
           previous_agreement_id?: string | null
           proposed_total?: number
           requires_approval?: boolean
           status?: string
           tenant_id?: string
+          total_count?: number
           updated_at?: string
         }
         Relationships: [
@@ -8054,6 +8075,10 @@ export type Database = {
       recalculate_tenant_gamification_snapshot: {
         Args: { _month: number; _year: number }
         Returns: Json
+      }
+      recompute_agreement_aggregates: {
+        Args: { p_agreement_id: string }
+        Returns: undefined
       }
       recompute_campaign_counters: {
         Args: { _campaign_id: string }

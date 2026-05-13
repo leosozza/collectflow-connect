@@ -214,8 +214,14 @@ const AcordosPage = () => {
       const ssotRows = ssotMap.get(agreement.id) || [];
       const hasEntrada = (agreement.entrada_value ?? 0) > 0;
 
-      // Compute paid/total counts (full schedule) — usado pela coluna "Parcelas Pagas"
-      const { paid: paidCount, total: totalCount } = countPaidFromSSOT(ssotRows);
+      // Fase 4: contadores vêm direto de `agreements.paid_count/total_count`,
+      // mantidos por trigger na SSOT. Fallback para SSOT/contagem em runtime caso
+      // ainda não materializados (compat com acordos legados sem aggregates_updated_at).
+      const aggPaid = (agreement as any).paid_count;
+      const aggTotal = (agreement as any).total_count;
+      const fallback = countPaidFromSSOT(ssotRows);
+      const paidCount = typeof aggPaid === "number" && aggPaid >= 0 ? aggPaid : fallback.paid;
+      const totalCount = typeof aggTotal === "number" && aggTotal > 0 ? aggTotal : fallback.total;
 
       // For global statuses (cancelled, pending_approval), no installment logic needed
       if (agreement.status === "cancelled" || agreement.status === "rejected") {
