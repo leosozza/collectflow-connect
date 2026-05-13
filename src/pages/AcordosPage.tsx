@@ -211,13 +211,11 @@ const AcordosPage = () => {
         if (!agreement.client_name.toLowerCase().includes(q) && !agreement.client_cpf.toLowerCase().includes(q)) continue;
       }
 
-      // Compute paid/total counts (full schedule) — used for the new "Parcelas Pagas" column
-      const { paid: paidCount, total: totalCount } = countPaidInstallments(
-        agreement,
-        cobrancas,
-        manualPayments,
-        today
-      );
+      const ssotRows = ssotMap.get(agreement.id) || [];
+      const hasEntrada = (agreement.entrada_value ?? 0) > 0;
+
+      // Compute paid/total counts (full schedule) — usado pela coluna "Parcelas Pagas"
+      const { paid: paidCount, total: totalCount } = countPaidFromSSOT(ssotRows);
 
       // For global statuses (cancelled, pending_approval), no installment logic needed
       if (agreement.status === "cancelled" || agreement.status === "rejected") {
@@ -230,65 +228,43 @@ const AcordosPage = () => {
       }
 
       if (isMonthSelected) {
-        // Get installments for this month
-        const installments = getInstallmentsForMonth(agreement, m, y);
-        if (installments.length === 0) continue; // No installment in this month
+        const installments = getSSOTInstallmentsForMonth(ssotRows, m, y);
+        if (installments.length === 0) continue;
 
-        // Compartilhado entre as parcelas deste acordo — evita reuso da mesma cobranca.
-        const usedCobrancaIds = new Set<string>();
         // SPLIT: emit one row per installment in the selected month
         for (const inst of installments) {
-          const cls = classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds);
+          const cls = classifySSOTInstallment(inst, today);
+          if (cls === "cancelled") continue; // canceladas não aparecem na lista
           result.push({
             ...agreement,
             _installmentClass: cls,
             _hasPaidInScope: cls === "pago",
             _paidCount: paidCount,
             _totalCount: totalCount,
-            _installmentNumber: inst.number,
-            _installmentKey: inst.key,
-            _installmentDueDate: inst.dueDate,
-            _installmentValue: inst.value,
+            _installmentNumber: displayNumberForSSOT(inst, hasEntrada),
+            _installmentKey: inst.installment_key,
+            _installmentDueDate: new Date(inst.due_date + "T00:00:00"),
+            _installmentValue: inst.amount,
           });
         }
       } else {
-        // Date range or "todos" — filter by due date range if applicable
         let scopedHasPaid = paidCount > 0;
         if (dateFrom || dateTo) {
-          const schedule = buildInstallmentSchedule(agreement);
-          const inRange = schedule.filter((inst: any) => {
-            const d = inst.dueDate;
-            if (dateFrom && d < dateFrom) return false;
-            if (dateTo) {
-              const end = new Date(dateTo);
-              end.setHours(23, 59, 59, 999);
-              if (d > end) return false;
-            }
-            return true;
-          });
+          const inRange = filterSSOTByDateRange(ssotRows, dateFrom, dateTo);
           if (inRange.length === 0) continue;
-          const usedCobrancaIds = new Set<string>();
-          scopedHasPaid = inRange.some(inst =>
-            classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds) === "pago"
-          );
+          scopedHasPaid = inRange.some(r => !r.cancelled && r.paid);
         } else if (selectedYear) {
-          // "todos os meses" but year selected — show agreements with installments in that year
-          const schedule = buildInstallmentSchedule(agreement);
-          const inYear = schedule.filter((inst: any) => inst.dueDate.getFullYear() === y);
+          const inYear = ssotRows.filter(r => new Date(r.due_date + "T00:00:00").getFullYear() === y);
           if (inYear.length === 0) continue;
-          const usedCobrancaIds = new Set<string>();
-          scopedHasPaid = inYear.some(inst =>
-            classifyInstallment(inst, cobrancas, manualPayments, today, usedCobrancaIds) === "pago"
-          );
+          scopedHasPaid = inYear.some(r => !r.cancelled && r.paid);
         }
 
-        // Use global status mapping
         result.push({ ...agreement, _installmentClass: undefined, _hasPaidInScope: scopedHasPaid, _paidCount: paidCount, _totalCount: totalCount });
       }
     }
 
     return result;
-  }, [agreements, cobrancas, manualPayments, credorFilter, operatorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
+  }, [agreements, ssotMap, credorFilter, operatorFilter, searchQuery, selectedMonth, selectedYear, dateFrom, dateTo]);
 
   // Filter by selected tab
   const filteredAgreements = useMemo(() => {
