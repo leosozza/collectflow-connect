@@ -748,7 +748,7 @@ const WhatsAppChatLayout = () => {
     // operador digite a próxima mensagem enquanto esta vai sendo entregue
     // em segundo plano (o status da bolha otimista reflete o resultado).
     try {
-      await sendTextMessage(selectedConv.id, tenantId, text, instance.instance_name, replyToMessageId);
+      await sendTextMessage(selectedConv.id, tenantId, text, instance?.instance_name || "", replyToMessageId);
       // Real message will arrive via Realtime and replace the optimistic one.
     } catch (err: any) {
       // Mark optimistic message as failed
