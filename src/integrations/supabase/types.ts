@@ -8192,12 +8192,10 @@ export type Database = {
           priority: number
         }[]
       }
-      run_ssot_shadow_check:
-        | { Args: { _tenant_id: string }; Returns: Json }
-        | {
-            Args: { _status_sample?: number; _tenant_id: string }
-            Returns: Json
-          }
+      run_ssot_shadow_check: {
+        Args: { _status_sample?: number; _tenant_id: string }
+        Returns: Json
+      }
       seed_default_achievement_templates: {
         Args: { _tenant_id: string }
         Returns: undefined
