@@ -58,8 +58,12 @@ export function buildInstallmentSchedule(agreement: Agreement): VirtualInstallme
   const hasEntrada = entradaKeys.length > 0;
 
   for (let i = 0; i < agreement.new_installments; i++) {
-    const instNum = (hasEntrada ? 1 : 0) + i + 1;
-    const dateKey = String(instNum);
+    // Convenção canônica: parcelas mensais sempre numeradas 1..N (independente de entrada).
+    // `key` é o que casa com installment_key persistido nas cobranças/pagamentos manuais.
+    // `number` permanece como número de exibição (com offset da entrada) — não usar para lookup.
+    const canonicalNum = i + 1;
+    const displayNum = (hasEntrada ? 1 : 0) + i + 1;
+    const dateKey = String(canonicalNum);
     let dueDate: Date;
     if (customDates[dateKey]) {
       dueDate = new Date(customDates[dateKey] + "T00:00:00");
@@ -69,7 +73,7 @@ export function buildInstallmentSchedule(agreement: Agreement): VirtualInstallme
 
     installments.push({
       agreementId: agreement.id,
-      number: instNum,
+      number: displayNum,
       key: dateKey,
       dueDate,
       value: customValues[dateKey] ?? agreement.new_installment_value,
