@@ -498,7 +498,14 @@ Deno.serve(async (req) => {
           }
         }
 
-        const toUpsert: any[] = [];
+        // Two separate buckets — never mix inserts (no id) with updates (with id)
+        // num único upsert, pois colisões de external_id quebram o chunk inteiro
+        // com erro "null value in column id".
+        const toInsert: any[] = [];
+        const toUpdate: any[] = [];
+        const pendingInsertChanges: Array<{ rec: any; isPaid: boolean; isCancelled: boolean }> = [];
+        const pendingUpdateChanges: Array<{ rec: any; existing: any; changes: Record<string, { old: any; new: any }>; isPaidStatusChange: boolean; isCancelledStatusChange: boolean }> = [];
+        const seenInsertExternalIds = new Set<string>();
 
         for (const rec of chunk) {
           let existing = existingMap.get(rec.external_id);
@@ -518,11 +525,22 @@ Deno.serve(async (req) => {
           }
 
           if (!existing) {
-            // New record: queue for insert
-            toUpsert.push(rec);
-            inserted++;
-            if (rec.status === "pago") paid++;
-            if (rec.status === "cancelado_maxlist") cancelledMaxlist++;
+            // Dedup intra-batch para evitar colisão de external_id+tenant_id no insert
+            const dedupKey = String(rec.external_id || "");
+            if (dedupKey && seenInsertExternalIds.has(dedupKey)) {
+              unchanged++;
+              if (processingLogs.length < 50) {
+                processingLogs.push(`Skipped duplicate external_id ${dedupKey} within same batch (CPF ${rec.cpf})`);
+              }
+              continue;
+            }
+            if (dedupKey) seenInsertExternalIds.add(dedupKey);
+            toInsert.push(rec);
+            pendingInsertChanges.push({
+              rec,
+              isPaid: rec.status === "pago",
+              isCancelled: rec.status === "cancelado_maxlist",
+            });
             continue;
           }
 
