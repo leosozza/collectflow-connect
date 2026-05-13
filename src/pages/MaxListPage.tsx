@@ -61,21 +61,27 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
 
   return (
     <Popover modal>
-      <PopoverTrigger asChild>
-        <div className="relative w-full">
-          <Input
-            value={inputValue}
-            onChange={handleInputChange}
-            placeholder="dd/mm/aaaa"
-            className="h-9 text-sm pr-9"
-            maxLength={10}
-          />
-          <CalendarIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        </div>
-      </PopoverTrigger>
+      <div className="relative w-full">
+        <Input
+          value={inputValue}
+          onChange={handleInputChange}
+          placeholder="dd/mm/aaaa"
+          className="h-9 text-sm pr-9"
+          maxLength={10}
+        />
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center rounded hover:bg-accent text-muted-foreground"
+            aria-label="Abrir calendário"
+          >
+            <CalendarIcon className="h-4 w-4" />
+          </button>
+        </PopoverTrigger>
+      </div>
       <PopoverContent
         className="w-auto p-0"
-        align="start"
+        align="end"
         side="bottom"
         sideOffset={4}
         avoidCollisions={false}
