@@ -754,7 +754,8 @@ Deno.serve(async (req) => {
     }
 
     // Auto-status-sync — fire in background to not block HTTP response
-    if (status_cobranca_id === "__auto__") {
+    // Dispara em qualquer update (rolls up CPF+Credor para hierarquia: Quitado/Acordo/Inadimplente/Em dia)
+    if (status_cobranca_id === "__auto__" || mode === "update") {
       console.log(`[maxlist-import] Scheduling auto-status-sync (background) for tenant ${tenant_id}`);
       const syncTask = fetch(`${supabaseUrl}/functions/v1/auto-status-sync`, {
         method: "POST",
