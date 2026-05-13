@@ -24,14 +24,15 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
-  getInstallmentsForMonth,
-  classifyInstallment,
-  buildInstallmentSchedule,
-  countPaidInstallments,
-  type CobrancaRecord,
-  type ManualPaymentRecord,
-  type InstallmentClassification,
-} from "@/lib/agreementInstallmentClassifier";
+  fetchSSOTInstallments,
+  classifySSOTInstallment,
+  countPaidFromSSOT,
+  getSSOTInstallmentsForMonth,
+  filterSSOTByDateRange,
+  displayNumberForSSOT,
+  type SSOTInstallment,
+} from "@/lib/agreementInstallmentsSSOT";
+import type { InstallmentClassification } from "@/lib/agreementInstallmentClassifier";
 
 type StatusFilter = "vigentes" | "approved" | "overdue" | "pending_approval" | "cancelled" | "payment_confirmation";
 
