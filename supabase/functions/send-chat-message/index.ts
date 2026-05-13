@@ -210,7 +210,7 @@ Deno.serve(async (req) => {
       media = {
         mediaUrl,
         mediaType,
-        caption: content || safeFileName || "",
+        caption: content || "",
         fileName: safeFileName,
         mimeType: mediaMimeType || undefined,
       };
