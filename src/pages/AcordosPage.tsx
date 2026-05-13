@@ -109,36 +109,19 @@ const AcordosPage = () => {
   // Agreement IDs visible in the current dataset — used to scope payment lookups.
   const visibleIds = useMemo(() => agreements.map(a => a.id), [agreements]);
 
-  const { data: paymentData = { cobrancas: [] as CobrancaRecord[], manualPayments: [] as ManualPaymentRecord[] } } = useQuery({
-    queryKey: ["agreements-payment-data", tenant?.id, visibleIds.length, visibleIds[0] ?? "", visibleIds[visibleIds.length - 1] ?? ""],
-    queryFn: async () => {
-      if (visibleIds.length === 0) return { cobrancas: [], manualPayments: [] };
-      const [cobRes, mpRes] = await Promise.all([
-        supabase
-          .from("negociarie_cobrancas" as any)
-          .select("agreement_id, installment_key, status, valor_pago")
-          .in("agreement_id", visibleIds),
-        supabase
-          .from("manual_payments" as any)
-          .select("agreement_id, installment_number, installment_key, amount_paid, status")
-          .in("agreement_id", visibleIds),
-      ]);
-      return {
-        cobrancas: ((cobRes.data || []) as unknown) as CobrancaRecord[],
-        manualPayments: ((mpRes.data || []) as unknown) as ManualPaymentRecord[],
-      };
-    },
+  // SSOT: parcelas materializadas (Fase 2). Substitui o fetch de cobrancas + manualPayments
+  // e o cálculo JS — agora a fonte é única e consistente entre todas as telas.
+  const { data: ssotMap = new Map<string, SSOTInstallment[]>() } = useQuery({
+    queryKey: ["agreement-installments-ssot", tenant?.id, visibleIds.length, visibleIds[0] ?? "", visibleIds[visibleIds.length - 1] ?? ""],
+    queryFn: () => fetchSSOTInstallments(visibleIds),
     enabled: !!tenant?.id,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
 
-  const cobrancas = paymentData.cobrancas;
-  const manualPayments = paymentData.manualPayments;
-
   const reload = () => {
     queryClient.invalidateQueries({ queryKey: ["agreements-list"] });
-    queryClient.invalidateQueries({ queryKey: ["agreements-payment-data"] });
+    queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot"] });
   };
 
   const handleApprove = async (agreement: Agreement) => {
