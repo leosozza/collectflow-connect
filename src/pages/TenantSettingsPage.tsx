@@ -441,7 +441,7 @@ const TenantSettingsPage = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="max-h-[500px] overflow-y-auto bg-muted/30 rounded-lg p-6 border border-border">
-                <pre className="whitespace-pre-wrap text-sm text-foreground font-sans leading-relaxed">{CONTRATO_PADRAO}</pre>
+                <pre className="whitespace-pre-wrap text-sm text-foreground font-sans leading-relaxed">{buildContrato(tenant)}</pre>
               </div>
               {!contractSigned && (
                 <AlertDialog>
