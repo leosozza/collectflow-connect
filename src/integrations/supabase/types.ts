@@ -7636,6 +7636,15 @@ export type Database = {
           valor_total: number
         }[]
       }
+      get_client_consolidated_status: {
+        Args: {
+          _atraso_quebra_dias?: number
+          _cpf: string
+          _credor: string
+          _tenant_id: string
+        }
+        Returns: string
+      }
       get_dashboard_stats: {
         Args: {
           _month?: number
@@ -8058,6 +8067,10 @@ export type Database = {
           primary_color: string
           slug: string
         }[]
+      }
+      map_canonical_to_legacy_status: {
+        Args: { _canonical: string }
+        Returns: string
       }
       mark_overdue_clients: {
         Args: { p_batch_size?: number; p_today: string }
