@@ -58,8 +58,12 @@ export function buildInstallmentSchedule(agreement: Agreement): VirtualInstallme
   const hasEntrada = entradaKeys.length > 0;
 
   for (let i = 0; i < agreement.new_installments; i++) {
-    const instNum = (hasEntrada ? 1 : 0) + i + 1;
-    const dateKey = String(instNum);
+    // Convenção canônica: parcelas mensais sempre numeradas 1..N (independente de entrada).
+    // `key` é o que casa com installment_key persistido nas cobranças/pagamentos manuais.
+    // `number` permanece como número de exibição (com offset da entrada) — não usar para lookup.
+    const canonicalNum = i + 1;
+    const displayNum = (hasEntrada ? 1 : 0) + i + 1;
+    const dateKey = String(canonicalNum);
     let dueDate: Date;
     if (customDates[dateKey]) {
       dueDate = new Date(customDates[dateKey] + "T00:00:00");
@@ -69,7 +73,7 @@ export function buildInstallmentSchedule(agreement: Agreement): VirtualInstallme
 
     installments.push({
       agreementId: agreement.id,
-      number: instNum,
+      number: displayNum,
       key: dateKey,
       dueDate,
       value: customValues[dateKey] ?? agreement.new_installment_value,
@@ -152,15 +156,14 @@ export function classifyInstallment(
     return "pago";
   }
 
-  // Cobrança Negociarie — chave canônica + fallback legado (display number).
-  // Para acordos com entrada, parcela 1 canônica (":1") pode ainda estar gravada
-  // como ":2" (offset legado). Tentamos canônica primeiro, depois legado.
+  // Cobrança Negociarie — chave canônica (i+1) + fallback legado (display number, com offset
+  // da entrada) para registros antigos gerados antes da padronização.
   const canonicalKey = `${agId}:${installment.key}`;
   const dueIso = installment.dueDate.toISOString().slice(0, 10);
   const candidateKeys: string[] = [canonicalKey];
   if (!installment.isEntrada) {
-    // legacy convention: parcela N indexada com offset da entrada (entrada conta como 1)
-    const legacyKey = `${agId}:${installment.number + 1}`;
+    // Legado: chave era o display number (com offset da entrada).
+    const legacyKey = `${agId}:${installment.number}`;
     if (legacyKey !== canonicalKey) candidateKeys.push(legacyKey);
   }
 

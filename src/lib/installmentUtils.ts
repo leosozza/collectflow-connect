@@ -116,8 +116,11 @@ export function getEffectiveAgreementSummary(agreement: {
 
   const effectiveInstallmentValues: number[] = [];
   for (let i = 0; i < agreement.new_installments; i++) {
-    const instNum = (hasEntrada ? 1 : 0) + i + 1;
-    const val = customValues[String(instNum)] ?? agreement.new_installment_value;
+    // Convenção canônica: parcelas mensais sempre numeradas 1..N, independente de entrada.
+    // (Alinhada com custom_installment_dates/values, manual_payments.installment_number e
+    // installment_key das cobranças Negociarie.)
+    const canonicalNum = i + 1;
+    const val = customValues[String(canonicalNum)] ?? agreement.new_installment_value;
     effectiveInstallmentValues.push(val);
   }
 
