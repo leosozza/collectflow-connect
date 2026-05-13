@@ -18,8 +18,13 @@ export const parseCurrencyInput = (value: string): number => {
   return parseFloat(clean) || 0;
 };
 
-export const formatDate = (date: string): string => {
-  return new Date(date + "T00:00:00").toLocaleDateString("pt-BR");
+export const formatDate = (input: string | Date | null | undefined): string => {
+  if (!input) return "—";
+  const s = typeof input === "string" ? input.trim() : input.toISOString();
+  if (!s) return "—";
+  // Aceita "YYYY-MM-DD" puro OU timestamp ISO completo (ou qualquer string parseável).
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + "T00:00:00") : new Date(s);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
 };
 
 export const formatCredorName = (name?: string | null): string => {
