@@ -20,6 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
+import { fetchSSOTInstallments, type SSOTInstallment } from "@/lib/agreementInstallmentsSSOT";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -94,12 +95,20 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   useEffect(() => {
     if (!agreementId) return;
     const channel = supabase
-      .channel(`negociarie_cobrancas_${agreementId}`)
+      .channel(`agreement_inst_realtime_${agreementId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "negociarie_cobrancas", filter: `agreement_id=eq.${agreementId}` },
         () => {
           refetchCobrancas();
+          queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agreement_installments", filter: `agreement_id=eq.${agreementId}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
         },
       )
       .subscribe();
@@ -152,6 +161,22 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
         .eq("status", "paid");
       if (error) return [];
       return (data as any[]) || [];
+    },
+    enabled: !!agreementId,
+  });
+
+  // SSOT — fonte canônica do "esta parcela está paga?".
+  // Lemos `agreement_installments` e sobrescrevemos status/paidAt do classifier legado
+  // sempre que houver linha SSOT correspondente. Mantemos o objeto `inst` intacto
+  // (com `cobranca`, `customKey`, etc) para preservar todas as ações de escrita.
+  const { data: ssotMap } = useQuery({
+    queryKey: ["agreement-installments-ssot", agreementId],
+    queryFn: async () => {
+      const m = await fetchSSOTInstallments([agreementId]);
+      const rows = m.get(agreementId) || [];
+      const byKey = new Map<string, SSOTInstallment>();
+      for (const r of rows) byKey.set(r.installment_key, r);
+      return byKey;
     },
     enabled: !!agreementId,
   });
@@ -358,6 +383,32 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
     }
 
     return { ...inst, status, isOverdue, pendingManual, paidAt, isCancelled: false };
+  }).map((inst) => {
+    // SSOT overlay — se houver linha materializada para essa installment_key,
+    // a SSOT decide o status final (paid / cancelled / pending_confirmation).
+    // Demais campos (cobranca, value, dueDate) permanecem do classifier para preservar ações.
+    const ssotRow = ssotMap?.get(inst.customKey);
+    if (!ssotRow) return inst;
+    if (ssotRow.cancelled) {
+      return { ...inst, status: "cancelled", isCancelled: true };
+    }
+    if (ssotRow.paid) {
+      return {
+        ...inst,
+        status: "pago",
+        paidAt: ssotRow.paid_at || inst.paidAt,
+      };
+    }
+    if (ssotRow.pending_confirmation) {
+      return { ...inst, status: "pending_confirmation" };
+    }
+    // SSOT diz não-pago: revoga eventual "pago" do classifier (anti-leak).
+    if (inst.status === "pago") {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const dueDay = new Date(inst.dueDate); dueDay.setHours(0, 0, 0, 0);
+      return { ...inst, status: dueDay < today ? "vencido" : "pendente", paidAt: undefined };
+    }
+    return inst;
   });
 
   const paidCount = installmentsWithStatus.filter(i => i.status === "pago").length;
@@ -426,6 +477,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       }
       toast({ title: "Data atualizada com sucesso" });
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
       await Promise.resolve(onRefresh?.());
@@ -574,6 +626,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       if (error) throw error;
       toast({ title: "Baixa revertida para pendente de confirmação." });
       queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
       onRefresh?.();
     } catch (err: any) {
       toast({ title: "Erro ao desconfirmar", description: err.message, variant: "destructive" });
@@ -593,6 +646,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       if (error) throw error;
       toast({ title: "Solicitação de baixa cancelada." });
       queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
       onRefresh?.();
     } catch (err: any) {
       toast({ title: "Erro ao cancelar", description: err.message, variant: "destructive" });
@@ -649,6 +703,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
       toast({ title: "Pagamento estornado com sucesso." });
       queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       refetchCobrancas();
       onRefresh?.();
@@ -1250,6 +1305,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
               profileId={profile.id}
               onSuccess={() => {
                 queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
                 onRefresh?.();
               }}
             />
