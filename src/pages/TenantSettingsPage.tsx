@@ -21,9 +21,22 @@ import TokenHistoryTable from "@/components/tokens/TokenHistoryTable";
 import ServiceCatalogGrid from "@/components/services/ServiceCatalogGrid";
 import type { ServiceCatalogItem, TenantService, TenantTokens, TokenPackage, TokenTransaction } from "@/types/tokens";
 
-const CONTRATO_PADRAO = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE SOFTWARE
+const formatCnpj = (cnpj?: string | null) => {
+  const digits = (cnpj || "").replace(/\D/g, "");
+  if (digits.length !== 14) return null;
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+};
 
-CONTRATANTE: A empresa identificada nos dados cadastrais deste sistema.
+const buildContrato = (tenant: { name?: string | null; cnpj?: string | null } | null | undefined) => {
+  const nome = tenant?.name?.trim() || "[Nome da empresa não informado]";
+  const cnpjFmt = formatCnpj(tenant?.cnpj);
+  const contratanteLine = cnpjFmt
+    ? `CONTRATANTE: ${nome}, inscrita no CNPJ sob nº ${cnpjFmt}.`
+    : `CONTRATANTE: ${nome} (CNPJ não informado — atualize na aba Dados).`;
+
+  return `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE SOFTWARE
+
+${contratanteLine}
 CONTRATADA: Rivo Connect - Plataforma SaaS de Gestão de Cobrança.
 
 CLÁUSULA 1ª - DO OBJETO
