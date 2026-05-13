@@ -498,7 +498,14 @@ Deno.serve(async (req) => {
           }
         }
 
-        const toUpsert: any[] = [];
+        // Two separate buckets — never mix inserts (no id) with updates (with id)
+        // num único upsert, pois colisões de external_id quebram o chunk inteiro
+        // com erro "null value in column id".
+        const toInsert: any[] = [];
+        const toUpdate: any[] = [];
+        const pendingInsertChanges: Array<{ rec: any; isPaid: boolean; isCancelled: boolean }> = [];
+        const pendingUpdateChanges: Array<{ rec: any; existing: any; changes: Record<string, { old: any; new: any }>; isPaidStatusChange: boolean; isCancelledStatusChange: boolean }> = [];
+        const seenInsertExternalIds = new Set<string>();
 
         for (const rec of chunk) {
           let existing = existingMap.get(rec.external_id);
@@ -518,11 +525,22 @@ Deno.serve(async (req) => {
           }
 
           if (!existing) {
-            // New record: queue for insert
-            toUpsert.push(rec);
-            inserted++;
-            if (rec.status === "pago") paid++;
-            if (rec.status === "cancelado_maxlist") cancelledMaxlist++;
+            // Dedup intra-batch para evitar colisão de external_id+tenant_id no insert
+            const dedupKey = String(rec.external_id || "");
+            if (dedupKey && seenInsertExternalIds.has(dedupKey)) {
+              unchanged++;
+              if (processingLogs.length < 50) {
+                processingLogs.push(`Skipped duplicate external_id ${dedupKey} within same batch (CPF ${rec.cpf})`);
+              }
+              continue;
+            }
+            if (dedupKey) seenInsertExternalIds.add(dedupKey);
+            toInsert.push(rec);
+            pendingInsertChanges.push({
+              rec,
+              isPaid: rec.status === "pago",
+              isCancelled: rec.status === "cancelado_maxlist",
+            });
             continue;
           }
 
@@ -584,95 +602,112 @@ Deno.serve(async (req) => {
           }
 
           if (needsUpdate) {
-            // Build merged record for upsert
+            // Hardening: nunca enfileirar update sem id válido (evita "null value in column id")
+            if (!existing.id) {
+              errors++;
+              if (processingLogs.length < 50) {
+                processingLogs.push(`Skipped update without valid id for CPF ${rec.cpf}, contrato ${rec.cod_contrato}, parcela ${rec.numero_parcela}`);
+              }
+              continue;
+            }
+
             const updatedRec = {
               ...rec,
               external_id: matchedByFallback && existing.external_id ? existing.external_id : rec.external_id,
-              id: existing.id, // Mandatory to target existing row in upsert
-              updated_at: new Date().toISOString()
+              id: existing.id,
+              updated_at: new Date().toISOString(),
             };
-            toUpsert.push(updatedRec);
-            updated++;
-
-            if (changes.status && rec.status === "pago") paid++;
-            if (changes.status && rec.status === "cancelado_maxlist") cancelledMaxlist++;
-
-            if (updatedRecords.length < 100) {
-              updatedRecords.push({
-                nome: existing.nome_completo || rec.nome_completo,
-                cpf: rec.cpf,
-                changes,
-              });
-            }
+            toUpdate.push(updatedRec);
+            pendingUpdateChanges.push({
+              rec: updatedRec,
+              existing,
+              changes,
+              isPaidStatusChange: !!changes.status && rec.status === "pago",
+              isCancelledStatusChange: !!changes.status && rec.status === "cancelado_maxlist",
+            });
           } else {
             unchanged++;
           }
         }
 
-        // Apply chunk changes in one single database call
-        if (toUpsert.length > 0) {
-          const { error: upsertErr } = await supabase
+        // === INSERT path: pure insert, no onConflict ===
+        if (toInsert.length > 0) {
+          const { error: insertErr } = await supabase
             .from("clients")
-            .upsert(toUpsert, { onConflict: "external_id,tenant_id" });
+            .insert(toInsert);
 
-          if (upsertErr) {
-            console.error(`[maxlist-import] Chunk upsert error:`, upsertErr.message);
-            errors += toUpsert.length;
+          if (insertErr) {
+            console.error(`[maxlist-import] Chunk insert error:`, insertErr.message);
+            errors += toInsert.length;
+            if (processingLogs.length < 50) {
+              processingLogs.push(`Insert error chunk ${i / CHUNK_SIZE + 1}: ${insertErr.message}`);
+            }
           } else {
-            // Log individual changes to client_update_logs for history tracking
+            inserted += toInsert.length;
+            for (const p of pendingInsertChanges) {
+              if (p.isPaid) paid++;
+              if (p.isCancelled) cancelledMaxlist++;
+            }
+          }
+        }
+
+        // === UPDATE path: upsert by primary key (id) ===
+        if (toUpdate.length > 0) {
+          const { error: updateErr } = await supabase
+            .from("clients")
+            .upsert(toUpdate, { onConflict: "id" });
+
+          if (updateErr) {
+            console.error(`[maxlist-import] Chunk update error:`, updateErr.message);
+            errors += toUpdate.length;
+            if (processingLogs.length < 50) {
+              processingLogs.push(`Update error chunk ${i / CHUNK_SIZE + 1}: ${updateErr.message}`);
+            }
+          } else {
+            updated += toUpdate.length;
+
             const updateLogs: any[] = [];
-            for (const rec of toUpsert) {
-              const existing = existingMap.get(rec.external_id);
-              if (!existing || !rec.id) continue; // Only for updated records (not new inserts)
-              const recChanges: Record<string, { old: any; new: any }> = {};
-              for (const field of SYNC_FIELDS) {
-                const oldVal = existing[field] ?? null;
-                const newVal = rec[field] ?? null;
-                if (String(oldVal ?? "") !== String(newVal ?? "")) {
-                  recChanges[field] = { old: oldVal, new: newVal };
-                }
+            for (const p of pendingUpdateChanges) {
+              if (p.isPaidStatusChange) paid++;
+              if (p.isCancelledStatusChange) cancelledMaxlist++;
+
+              if (updatedRecords.length < 100) {
+                updatedRecords.push({
+                  nome: p.existing.nome_completo || p.rec.nome_completo,
+                  cpf: p.rec.cpf,
+                  changes: p.changes,
+                });
               }
-              if (Object.keys(recChanges).length > 0) {
+
+              if (Object.keys(p.changes).length > 0 && p.rec.id) {
                 updateLogs.push({
-                  client_id: rec.id,
+                  client_id: p.rec.id,
                   tenant_id,
                   source: "maxlist",
-                  changes: recChanges,
+                  changes: p.changes,
                   updated_by: null,
                 });
               }
             }
 
-            // Insert update logs — single call when small, batched only if very large
             if (updateLogs.length > 0) {
               const LOG_BATCH = 1000;
-              if (updateLogs.length <= LOG_BATCH) {
+              for (let j = 0; j < updateLogs.length; j += LOG_BATCH) {
+                const logBatch = updateLogs.slice(j, j + LOG_BATCH);
                 const { error: logErr } = await supabase
                   .from("client_update_logs")
-                  .insert(updateLogs);
+                  .insert(logBatch);
                 if (logErr) {
                   console.error(`[maxlist-import] client_update_logs error:`, logErr.message);
                 }
-              } else {
-                for (let j = 0; j < updateLogs.length; j += LOG_BATCH) {
-                  const logBatch = updateLogs.slice(j, j + LOG_BATCH);
-                  const { error: logErr } = await supabase
-                    .from("client_update_logs")
-                    .insert(logBatch);
-                  if (logErr) {
-                    console.error(`[maxlist-import] client_update_logs error:`, logErr.message);
-                  }
-                }
               }
-            }
-            if (updateLogs.length > 0) {
               console.log(`[maxlist-import] Logged ${updateLogs.length} individual changes to client_update_logs`);
             }
           }
+        }
 
-          if (processingLogs.length < 50) {
-            processingLogs.push(`Processed chunk ${i / CHUNK_SIZE + 1}: upserted ${toUpsert.length}`);
-          }
+        if (processingLogs.length < 50) {
+          processingLogs.push(`Processed chunk ${i / CHUNK_SIZE + 1}: inserted ${toInsert.length}, updated ${toUpdate.length}`);
         }
       }
     } else {
