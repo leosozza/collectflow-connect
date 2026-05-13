@@ -23,4 +23,9 @@ Colunas `paid_count`, `total_count`, `pending_count`, `overdue_count`, `last_pai
 2. **Lista de Acordos com filtro por mês ou ações por parcela**: usar `agreement_installments` via `fetchSSOTInstallments` + `classifySSOTInstallment`.
 3. **Detalhe do cliente (botão "gerar boleto" etc)**: continuar usando classifier legado (`agreementInstallmentClassifier`) que tem acesso aos registros brutos para ações.
 
+**Fase 5.1 — Dashboard:**
+- `get_dashboard_stats_v2(_user_id, _year, _month, _user_ids)` substitui SOMENTE `total_recebido` e `total_recebido_mes_anterior` pela SSOT (`agreement_installments` paid+não-cancelado, fuso America/Sao_Paulo). Demais métricas reaproveitadas via SELECT INTO da função legada — preserva regras já validadas. Não aceita `_tenant_id` (deriva via auth.uid()).
+- `get_financial_received_by_day(_tenant_id, _date_from, _date_to, _operator_ids)` lê SSOT por dia para o gráfico do `TotalRecebidoCard`. Antes não existia: front sempre caía no fallback que somava 3 tabelas e podia duplicar.
+- Diferença observada legacy vs SSOT em maio/2026: R$ 56.197,82 (legacy) vs R$ 55.311,27 (SSOT) — SSOT corrige duplicidade.
+
 Classifier JS (`agreementInstallmentClassifier.ts`) permanece como fallback, mas qualquer nova feature deve preferir SSOT.

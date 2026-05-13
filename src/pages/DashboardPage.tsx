@@ -59,7 +59,10 @@ const pctDelta = (current: number, previous: number, invert = false) =>
   formatTrendPct(current, previous, { invert });
 
 async function callDashboardStats(params: Record<string, unknown>) {
-  const { data, error } = await supabase.rpc("get_dashboard_stats_v2" as any, params as any);
+  // v2 deriva tenant via auth.uid() — não aceita _tenant_id
+  const v2Params = { ...params };
+  delete v2Params._tenant_id;
+  const { data, error } = await supabase.rpc("get_dashboard_stats_v2" as any, v2Params as any);
   if (!error) return data;
 
   console.warn("[Dashboard] get_dashboard_stats_v2 failed; falling back to get_dashboard_stats", error);

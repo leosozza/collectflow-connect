@@ -1,65 +1,62 @@
 
-# Garantias de preservação — adendo ao plano
+# Fase 5 — Propagação da SSOT e início da SSOT de status
 
-Resumo direto: **nada do que já existe muda de comportamento visível**. Toda a evolução é aditiva e idempotente. Pagamentos antigos, baixas confirmadas, acordos vigentes/quebrados, status atual da carteira e o frontend continuam exatamente iguais. O que muda é a **fonte de leitura interna** ficar única e confiável.
+## Estado atual (validado)
 
-## Princípios obrigatórios da migração
-
-1. **Aditivo, nunca destrutivo**
-   - Nenhuma coluna existente é removida nas Fases 1–4. As "aposentadorias" da Fase 5 só ocorrem depois de 100% das leituras estarem migradas e validadas em produção.
-   - `clients.valor_pago`, `clients.status`, `agreements.status`, `manual_payments.installment_number`, `negociarie_cobrancas.installment_key`, `client_events` — **todas permanecem**.
-
-2. **SSOTs já estabelecidas são respeitadas**
-   - `client_profiles` continua SSOT de contato (CPF/tenant). Não é tocada.
-   - `client_events` continua SSOT da timeline omnichannel. Não é tocada.
-   - `tipos_status.regras.papel_sistema` continua SSOT semântica de status. A nova SSOT de **parcela paga** (`agreement_installments`) se conecta a ela, não a substitui.
-   - Hierarquia de status por CPF/Credor (QUITADO > ACORDO VIGENTE > … > EM DIA) é preservada e passa a ser calculada a partir da SSOT, não recalculada de novo.
-   - Regra do `client_profiles` canônico, anti-leak de `negociarie_cobrancas` (Andreia Simão), `papel_sistema` em `tipos_status`, RLS via `get_my_tenant_id()`, paginação por `.range()` — tudo mantido.
-
-3. **Backfill 1:1 com o estado atual**
-   - A nova `agreement_installments` será populada lendo exatamente o que `classifyInstallment` enxerga hoje (manual_payments confirmados + negociarie_cobrancas pagas + portal_payments confirmados + cancelled_installments). 
-   - Critério de aceite do backfill: para 100% dos acordos, `paid_count` materializado == `paid_count` calculado em runtime hoje. Diferença zero.
-   - Backfill rodado em batch por tenant, idempotente, com checkpoint. Pode rodar/re-rodar sem efeito colateral.
-
-4. **Dual-read antes de single-read** (zero downtime)
-   - Fase 2 cria a tabela e os triggers, mas o frontend continua lendo das tabelas atuais.
-   - Em paralelo, criamos um **shadow check**: edge function compara, por amostragem, o resultado da SSOT vs o classifier antigo. Só quando 0 divergências em N dias, mudamos a leitura.
-   - Quando a leitura migra, o classifier antigo permanece como fallback por mais um ciclo, atrás de feature flag.
-
-5. **Frontend não muda**
-   - `AgreementInstallments.tsx`, `AcordosPage`, dashboard, ClientDetail continuam consumindo a mesma forma. O wrapper do classifier passa a ler a SSOT internamente — assinatura e shape de retorno preservados.
-   - Nenhuma rota, nenhum botão, nenhum status visível muda de nome, cor ou regra.
-
-6. **Constraints novas só onde os dados já estão limpos**
-   - Antes de criar `UNIQUE (agreement_id, installment_key)` em `manual_payments`/`negociarie_cobrancas`, rodamos diagnóstico e, se houver duplicata histórica, criamos a constraint como `NOT VALID` + `VALIDATE` separadamente, com fix-up dirigido caso a caso. Nunca quebra insert existente.
-   - `clients.tenant_id NOT NULL` só após varredura confirmar zero órfãos (com tabela de quarentena se aparecer algum).
-
-7. **Reversibilidade**
-   - Cada fase é uma migration isolada com migration de rollback equivalente.
-   - Triggers novos podem ser desativados via `ALTER TABLE … DISABLE TRIGGER` sem perder dado (a tabela materializada vira só cache; o sistema volta a calcular do jeito antigo).
-
-8. **Validação por tenant antes de avançar**
-   - Vamos escolher 1 tenant piloto (sugiro um pequeno + Y.brasil, que já tem casos conhecidos como Andreia Simão) para validar Fase 2 antes de propagar.
-   - Critério de promoção: shadow-check com 0 divergência em 7 dias corridos.
-
-## O que muda na ordem das fases (ajuste por causa da preservação)
-
-| Fase | O que faz | Risco visível p/ usuário |
+| Fonte | Pagas | Total |
 |---|---|---|
-| 1 | Índices + UNIQUE parciais + `tenant_id NOT NULL` (após backfill) | Zero. Só performance + integridade. |
-| 2 | Cria `agreement_installments` + triggers + backfill + shadow-check (sem mudar leitura) | Zero. Frontend continua igual. |
-| 3 | Migrar leitura do classifier para SSOT atrás de feature flag, tenant a tenant | Zero esperado. Rollback por flag. |
-| 4 | `agreements.paid_count`, `last_paid_at`, status agregado mantidos por trigger | Zero. Substitui cálculos JS por valor já pronto. |
-| 5 (opcional, futuro) | Aposentar enum `clients.status` em favor de `status_cobranca_id` | Adiada até termos certeza. Pode ficar coexistindo indefinidamente. |
+| `agreement_installments` (SSOT) | 556 | 3.235 |
+| `agreements.paid_count/total_count` (agregados) | 556 | 3.235 |
 
-## Garantias específicas para o que você levantou
+704/704 acordos com agregados populados. Trigger de recursão eliminada. Frontend de `/acordos` já lê os agregados (com fallback para SSOT).
 
-- **Baixas já realizadas (manual_payments confirmadas)**: continuam exatamente onde estão, sem reprocessamento. O backfill apenas as **lê** para popular a SSOT.
-- **Clientes que já pagaram (negociarie_cobrancas pagas + portal_payments confirmados)**: idem, leitura apenas. Nenhum status volta atrás.
-- **Acordos quitados/quebrados/ativos**: o status atual de `agreements.status` é preservado. A trigger de Fase 4 só passa a manter o valor a partir da SSOT — o estado inicial é o atual.
-- **Carteira importada (`clients`)**: nenhuma linha é alterada. `valor_pago`, `status`, `status_cobranca_id` continuam como estão. O ajuste futuro (Fase 5) é opcional e só acontece com aprovação separada.
-- **Histórico (`client_events`)**: intocado.
+## Pontos ainda inconsistentes no sistema
 
-## Próximo passo
+Mapeei 3 lugares onde "está pago?" e "quantas parcelas pagas?" ainda são calculados em runtime ou lidos de fontes secundárias:
 
-Aprovar a **Fase 1** isolada (índices + constraints com `NOT VALID`/`VALIDATE` + diagnóstico de órfãos antes de qualquer `NOT NULL`). É 100% segura, dá ganho imediato e nos dá o relatório de "está tudo limpo?" para decidir com confiança a Fase 2.
+1. **Dashboard** (`TotalRecebidoCard` e congêneres) — soma valores pagando direto de `manual_payments` + `negociarie_cobrancas`. Pode divergir da SSOT em casos de borda (parcela cancelada, pagamento duplicado, anti-leak).
+2. **Detalhe do Cliente** (`AgreementInstallments.tsx`) — usa o classifier JS legado para renderizar a lista de parcelas. Funciona, mas duplica regra que já existe no SSOT.
+3. **Carteira** (status QUITADO/ACORDO VIGENTE/ACORDO ATRASADO/QUEBRA) — calculado por hierarquia em runtime, lendo `agreements.status` + `clients.valor_pago`. Não considera o estado real da SSOT.
+
+## Plano da Fase 5
+
+### 5.1 — Dashboard lê agregados (zero query extra)
+- `TotalRecebidoCard` e widgets de "acordos quitados", "acordos vigentes", "parcelas em atraso" passam a ler de `agreements.paid_count`, `total_count`, `overdue_count`, `last_paid_at`, `next_due_date`.
+- Cálculo de "valor recebido total" passa a usar `SUM(paid_amount) FROM agreement_installments WHERE paid AND tenant_id=X` via uma RPC nova `get_dashboard_received_totals(tenant_id, from, to)` — uma única consulta indexada, em vez de varrer manual_payments + negociarie_cobrancas no cliente.
+- Risco visível: zero. Mantemos os mesmos rótulos. Se número divergir, é porque a SSOT está mais correta (anti-leak).
+
+### 5.2 — `AgreementInstallments` (Detalhe do Cliente) lê SSOT
+- Componente passa a renderizar a lista de parcelas direto da `agreement_installments` em vez de reconstruir via classifier.
+- Ações ("gerar boleto", "marcar pago manual", "cancelar parcela") continuam batendo nas tabelas de origem (`manual_payments`, `cancelled_installments`) — só mudou a leitura.
+- Garante que a UI sempre mostra exatamente o que a SSOT diz. Fim das divergências entre "lista de Acordos" e "Detalhe do Cliente".
+
+### 5.3 — RPC unificada de status por CPF/Credor
+- Cria função `get_client_consolidated_status(tenant_id, cpf, credor)` que aplica a hierarquia (QUITADO > ACORDO VIGENTE > ACORDO ATRASADO > QUEBRA > INADIMPLENTE > EM DIA) lendo da SSOT — não mais do `clients.valor_pago`.
+- **Não mexe em `clients.status` ainda** — só expõe a função. Carteira pode adotá-la opcionalmente em uma sub-fase.
+- Backfill: nenhum (função é stateless).
+
+### 5.4 — Shadow-check (opcional, recomendado)
+- Edge function `agreements-aggregates-audit` que roda 1x/dia e compara, por amostragem de N acordos:
+  - `agreements.paid_count` vs contagem ao vivo na SSOT
+  - SSOT vs classifier JS legado
+- Loga divergências em `audit_logs` com `action='ssot_drift_detected'`.
+- Se 7 dias com 0 divergência, podemos aposentar o classifier JS com confiança.
+
+## Ordem de execução proposta
+
+| Sub-fase | Risco | Reversível? |
+|---|---|---|
+| 5.1 Dashboard | Baixo (RPC adicional, leitura migrada) | Sim, voltar ao path antigo |
+| 5.2 AgreementInstallments | Baixo (só leitura) | Sim |
+| 5.3 RPC status consolidado | Zero (função nova, não consumida) | Sim, drop function |
+| 5.4 Shadow-check | Zero | Sim |
+
+Posso seguir direto na 5.1 (Dashboard), que é a que dá ganho mais visível e crítico para confiança no número de "valor recebido".
+
+## Garantias preservadas
+
+- Nenhuma coluna removida.
+- `agreements.status` legado intocado.
+- Pagamentos antigos, baixas, quebras: sem reprocessamento.
+- Frontend mantém os mesmos componentes, mesmos rótulos, mesmas cores.
+- `manual_payments` / `negociarie_cobrancas` continuam sendo as tabelas de escrita (ações do operador). Só a leitura para "está pago?" passa a ser SSOT.
