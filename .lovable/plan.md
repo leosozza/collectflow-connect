@@ -1,80 +1,103 @@
-## Plano de Correção — Refinar Auditoria SSOT (Fase 5.4.1)
+## Análise Final + Próxima Correção
 
-### Diagnóstico das 52 divergências
+### O que validei (10 verificações cruzadas no banco)
 
-Investiguei cada bucket. Resultado:
+| Check | Resultado |
+|---|---|
+| `paid_count` da `agreements` bate com soma real de parcelas pagas | ✅ **0 divergências** |
+| Acordos ativos sem parcelas geradas | ✅ **0** |
+| Parcelas órfãs (sem acordo) | ✅ **0** |
+| Manual payments confirmados sem casar com SSOT | ✅ Só **1** (caso TESS já documentado) |
+| Status mismatch entre carteira legacy e SSOT | ✅ **0** após sync |
+| Auditoria SSOT diária funcionando | ✅ Cron 03:00 BRT estável |
 
-| Bucket | Total | Tipo | Diagnóstico |
-|---|---|---|---|
-| `orphan_paid_source` (parcial) | **3** | Falso positivo | Manual_payment confirmado mas com valor < parcela (ex: parcela R$ 133,52 e pago R$ 118,87). A SSOT corretamente NÃO marca como pago. Cobrança continua aberta — comportamento esperado. |
-| `orphan_paid_source` (entrada) | **7** | Falso positivo | Manual_payments antigos com `installment_key=NULL, installment_number=0`. Na auditoria virei isso em "0", mas na SSOT a entrada é `installment_key='entrada'`. Conferi: a parcela está paga corretamente (`paid=true, paid_amount` bate com manual_payment). Só a auditoria classificou errado. |
-| `orphan_paid_source` (chave isolada) | **1** | Caso humano real | Acordo `c7493649…` (TESS MODELS / CPF 30654851840). Manual_payment confirmado com `installment_key='2'` (R$ 2.470,40), mas a SSOT só tem chaves `entrada`, `entrada_2`, `1`. O usuário pagou usando uma chave que não existe mais (provavelmente o acordo foi recriado/reestruturado). Valor bate exatamente com a parcela `1`. **Não é bug da migração** — é dado órfão pré-existente. Recomendo correção manual pelo admin (re-confirmar o pagamento na chave correta `1`). |
-| `carteira_status_mismatch` | **41** | Falso positivo (race condition) | O shadow rodou às 14:57 UTC e o `auto-status-sync` (disparado pelo maxlist-import às 15:01 UTC) atualizou `clients.status` 4 minutos depois. Conferi 2 amostras: a SSOT já dizia `vencido` corretamente, e o legacy `pago` foi corrigido para `vencido` na sequência. Comportamento esperado — só preciso evitar que o shadow rode no meio de uma sincronização. |
+**Conclusão**: SSOT está íntegro, recebimentos batem, lógica de pagamento parcial preserva dívida em aberto. Migração foi bem-sucedida.
 
-**Conclusão**: **0 bugs reais.** Recebimentos íntegros, SSOT funcionando, lógica de pagamento parcial mantém o cliente devendo (correto).
+### 2 problemas reais encontrados
 
-### Correções na função de auditoria
+**🔴 #1 — CRÍTICO: `maxlist-import` está perdendo dados em silêncio**
 
-**1. `orphan_paid_source` — só sinalizar quando for divergência real**
-
-```text
-WHERE mp.status='confirmed'
-  AND mp.amount_paid >= ai.amount - 0.01     -- ignora pagamentos parciais
-  AND ai.id IS NOT NULL                      -- ignora chaves sem instalment correspondente
-  AND (ai.paid=false OR ai.cancelled=true)
+Nos logs do import recente vi:
+```
+Chunk upsert error: invalid input value for enum client_status: "cancelado_maxlist"
 ```
 
-E aplicar a mesma normalização que `rebuild_agreement_installments` usa para casar manual_payment ↔ installment:
-- `(installment_key IS NOT NULL AND installment_key = ai.installment_key)`
-- `OR (installment_key IS NULL AND installment_number = canon_num)` (entrada=0, parcela=N)
+A edge function `maxlist-import` (linhas 357–359, 525, 591, 690) gera o valor `cancelado_maxlist` quando o registro vem com `cancellation_date` da MaxList, mas o enum `client_status` no banco só aceita: `pendente, pago, quebrado, vencido, em_acordo`. **Resultado: chunks inteiros falham e os clientes cancelados na MaxList não são atualizados no Rivo.**
 
-Isso elimina os 7 falsos positivos de "entrada" e os 3 de pagamento parcial. Os 8 reais que sobrarem (chave inexistente como o caso da TESS) ficam sinalizados como `severity='warn'`, com label `'manual_payment_uses_legacy_key'` para deixar claro que é dado órfão, não bug.
+**🟡 #2 — 4 acordos `status='completed'` com parcelas ainda em aberto**
 
-**2. `carteira_status_mismatch` — anti-race com auto-status-sync**
+A função `complete_agreement` (ou equivalente) marcou esses acordos como concluídos cedo demais. Casos:
+- `715e16a3` (CPF 41679072838) — pago R$ 118,87 da parcela R$ 133,52 (parcial)
+- `0165fc54` (CPF 33816949878) — parcela 2 (R$ 250,74) sem pagamento
+- `8df557ee` (CPF 15199482980) — parcela 3 (R$ 269,12) sem pagamento
+- `c7493649` (CPF 30654851840) — caso TESS já documentado
 
-Antes de rodar a verificação, checar se houve `clients` atualizado nos últimos 5 minutos. Se sim, pular este check (ele será refeito no próximo run). Pseudocódigo:
+A SSOT está correta (parcelas de fato em aberto), só o flag `agreements.status='completed'` está errado.
 
-```sql
-IF EXISTS (SELECT 1 FROM clients WHERE tenant_id=_tenant_id AND updated_at > now() - interval '5 min') THEN
-  SKIP carteira check, registrar 'skipped_due_to_recent_sync'
-ELSE
-  rodar amostra de 500
-END IF;
-```
+### Plano desta rodada
 
-E aumentar o tamanho da amostra para 1000 (já temos índice funcional, suporta).
+**Parte A — Corrigir o bug crítico do maxlist** (5 min, 1 migration + 1 edge edit)
 
-**3. Auto-resolver as 52 divergências antigas**
+Tenho 2 opções:
+- **A1 (recomendado)**: Adicionar `'cancelado_maxlist'` ao enum `client_status` para refletir o que o código realmente quer. Mantém histórico distinguível de cancelamento upstream vs quebra interna.
+- **A2**: Mapear `cancelado_maxlist` → `quebrado` no código e remover o enum novo.
 
-Após corrigir a função, rodar `UPDATE ssot_shadow_checks SET resolved_at=now(), notes='resolved_by_audit_refactor_v2' WHERE resolved_at IS NULL`. Manter o histórico para auditoria mas zerar a fila ativa.
+Recomendo **A1**: é mais informativo e a MaxList realmente diferencia "cancelado pelo credor" de "quebra de acordo". Posso já refletir esse status na hierarquia (vai ser tratado como `vencido` para fins de cobrança, mas exibido distintamente).
 
-**4. Documentar o caso humano (TESS / 30654851840)**
+**Parte B — Reverter os 4 acordos `completed` indevidos**
 
-Inserir manualmente uma entrada explicativa em `ssot_shadow_checks` (severity='warn', `notes='manual_payment_2470.40_uses_legacy_key_2_should_be_1'`) para que o admin veja na próxima UI de diagnóstico. **Não tocar nos dados** sem aprovação humana.
+Atualizar `agreements.status` desses 4 IDs de `completed` → `approved` e disparar `rebuild_agreement_installments` para recalcular tudo. Nenhum dado de pagamento é alterado, só o flag de "concluído".
 
-### Mudanças
+**Parte C — Criar guard preventivo**
 
-**1 migration** que faz:
-- Recria `run_ssot_shadow_check` com as 2 melhorias acima
-- Acrescenta colunas opcionais em `ssot_shadow_checks`: `notes text`, `subtype text`
-- Resolve as 52 divergências antigas (UPDATE com `notes='resolved_by_audit_refactor_v2'`)
-- Re-roda o shadow para o tenant principal e mostra o resultado limpo
+Adicionar trigger `BEFORE UPDATE ON agreements` que bloqueia transição para `status='completed'` enquanto existir parcela `NOT paid AND NOT cancelled`. Isso impede o problema de voltar a ocorrer.
 
-### Garantias (o que NÃO vou tocar)
+### O que NÃO mexer
 
-- ❌ Não altero `rebuild_agreement_installments` (ela está correta).
-- ❌ Não altero `agreement_installments` (SSOT íntegra).
-- ❌ Não altero nenhum trigger de pagamento.
-- ❌ Não altero `manual_payments` nem `negociarie_cobrancas` (dados crus preservados).
-- ❌ Não altero a lógica de status da carteira nem `get_client_consolidated_status`.
+- ❌ SSOT (`agreement_installments`, `manual_payments`, `negociarie_cobrancas`) intocada
+- ❌ Triggers de pagamento intocados
+- ❌ Lógica de cobrança intocada
 
-Apenas refino a auditoria para parar de gerar falsos positivos.
+---
 
-### Validação
+## Explicação simples (para responder "o que fizemos e por quê")
 
-Após o deploy:
-1. `SELECT count(*) FROM ssot_shadow_checks WHERE resolved_at IS NULL` deve voltar a ≤ 1 (só o caso humano da TESS).
-2. Re-rodar manualmente a edge function (`x-shadow-secret`) e confirmar que não regenera os 51 falsos positivos.
-3. Aguardar 24h e ver o run automático estável.
+### 🎯 O problema original
 
-Posso executar?
+Antes da migração SSOT, **a verdade sobre "quem pagou o quê" estava espalhada em 3 lugares diferentes** que podiam discordar entre si:
+
+1. `agreements.paid_count` (um contador)
+2. `manual_payments` (pagamentos confirmados pelo admin)
+3. `negociarie_cobrancas` (recebimentos automáticos da Negociarie)
+
+Resultado: às vezes o painel mostrava 2 parcelas pagas, o relatório mostrava 3, e a parcela do cliente continuava cobrando porque o sistema não tinha certeza se foi paga.
+
+### 🔧 O que fizemos (5 fases)
+
+1. **Criamos uma única tabela "verdade"**: `agreement_installments` — uma linha por parcela, com `paid=true/false`, `paid_amount`, `paid_source` (manual ou negociarie), `paid_at`. **Toda regra de cobrança lê daqui.**
+
+2. **Padronizamos as chaves das parcelas**: `entrada`, `entrada_2`, `1`, `2`, `3`... (canônico, independente da entrada). Antes o sistema misturava numeração com e sem entrada e bagunçava o casamento de pagamentos.
+
+3. **Backfill histórico**: rodamos a função `rebuild_agreement_installments` em todos os acordos existentes, recalculando do zero a partir das fontes brutas (manual_payments + negociarie_cobrancas), com regra anti-leak (mesmo pagamento não pode ser usado em 2 parcelas).
+
+4. **Trigger automático**: toda vez que um manual_payment é criado/atualizado/deletado, ou uma cobrança Negociarie chega, a SSOT é recalculada **automaticamente** para aquele acordo.
+
+5. **Auditoria diária com cron**: às 3h da manhã uma edge function compara a SSOT com as fontes brutas e registra qualquer divergência em `ssot_shadow_checks`. Hoje refinamos para eliminar 51 falsos positivos — restou só **1 caso real** que merece ação humana.
+
+### 💡 O que melhorou
+
+| Antes | Depois |
+|---|---|
+| Painel, relatório e cobrança discordavam às vezes | Todos lêem da mesma fonte → sempre consistentes |
+| Pagamento manual + cobrança Negociarie podiam contar dobrado | Anti-leak garante 1 pagamento = 1 parcela |
+| Pagamento parcial era mascarado como "pago" em alguns lugares | Continua devendo até quitar (correto) |
+| Bug silencioso podia ficar meses sem ser detectado | Cron diário detecta em até 24h |
+| Não tinha como provar que os números estavam corretos | Auditoria automática com histórico em `ssot_shadow_checks` |
+
+### 🎁 Bônus desta rodada (se você aprovar)
+
+- Para de perder dados de cancelamento da MaxList (bug crítico atual)
+- 4 acordos voltam a aparecer como ativos (faturamento correto)
+- Trigger preventivo impede que algum código futuro marque acordo como concluído antes da hora
+
+Posso executar as Partes A, B e C?
