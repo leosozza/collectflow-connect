@@ -365,6 +365,26 @@ Deno.serve(async (req) => {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Guard: do not reissue boleto over an already-paid installment.
+      // Prevents UNIQUE violation on uq_negociarie_cob_agreement_inst_active
+      // (pago + new pendente in the active set), and is correct business-wise.
+      const installmentKeyFq = `${agreement_id}:${requestedKey}`;
+      const { data: paidRow } = await supabaseAdmin
+        .from("negociarie_cobrancas")
+        .select("id")
+        .eq("agreement_id", agreement_id)
+        .eq("installment_key", installmentKeyFq)
+        .eq("status", "pago")
+        .limit(1)
+        .maybeSingle();
+      if (paidRow) {
+        return new Response(JSON.stringify({
+          error: "Parcela já paga — não é possível reemitir boleto",
+        }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const today = getTodayIso();
