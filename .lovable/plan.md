@@ -1,101 +1,82 @@
+## Objetivo
 
-## Diagnóstico confirmado (banco real, agora)
+Fazer o **"Sincronizar por Período"** (em `/configuracoes/maxlist`) refletir corretamente parcelas pagas vindas do MaxSystem — exatamente como já acontece no fluxo CPF por CPF. Cliente sem acordo que estava INADIMPLENTE e teve a parcela paga passa para **EM DIA** (ou **QUITADO** se todas pagas). Demais status ficam intocados.
 
-### Problema 1 — Dashboard ≠ Baixas Realizadas (R$ 1.005,42 de diferença em Maio)
+## Diagnóstico (curto)
 
-| Métrica | Valor | Fonte |
-|---|---|---|
-| Baixas Realizadas (Maio/2026, Y.BRASIL) | **R$ 58.867,23** | UNION manual_payments + portal_payments + negociarie_cobrancas (tabelas brutas) |
-| Dashboard "Total Recebido" | **R$ 57.861,81** | `agreement_installments` (SSOT) onde `paid=true` |
-| Diferença | R$ 1.005,42 | 8 pagamentos brutos sem `paid=true` na SSOT |
+Hoje o "Sincronizar por Período" envia `status_cobranca_id = "__auto__"` para a edge function `maxlist-import`. Isso faz duas coisas que quebram o fluxo:
 
-A causa é a mesma já mapeada na memory `negociarie-cobranca-lookup`: depois das mudanças deste mês, alguns pagamentos brutos não conseguem casar com a parcela canônica na SSOT (chave legada com prefixo do agreement_id, entrada com offset, `data_vencimento` sem match exato). Eles **continuam corretos** em `negociarie_cobrancas`/`manual_payments` (Baixas mostra) mas a SSOT não reflete (Dashboard encolhe).
+1. Em registros novos, grava `status_cobranca_id = NULL`.
+2. Em registros existentes, **não consegue sobrescrever** o status antigo (INADIMPLENTE) porque `status_cobranca_id` está marcado como `PROTECTED_FIELD` na edge function, e a única exceção atual é para `status='vencido'` (cheque devolvido).
 
-### Problema 2 — "Invalid Date" na coluna Pagamento da tela de Acordos
+Resultado: 67.353 parcelas no tenant Y.BRASIL estão com `clients.status = 'pago'` mas `status_cobranca_id = Inadimplente`.
 
-Bug isolado em `src/lib/formatters.ts:21-23`:
+## Mudanças (mínimas, cirúrgicas)
 
-```ts
-export const formatDate = (date: string): string =>
-  new Date(date + "T00:00:00").toLocaleDateString("pt-BR");
+### 1. Frontend — `src/pages/MaxListPage.tsx`
+
+No diálogo "Sincronizar por Período", **trocar `__auto__` pelo id de "Em dia" do tenant**, resolvido no momento do submit (consultando `tipos_status` por `regras.papel_sistema = 'em_dia'`).
+
+A escolha pelo "Em dia" e não "Quitado" é proposital: se o cliente tem outras parcelas vencidas no mesmo grupo, o **`auto-status-sync`** que roda em background depois do import já promove o grupo para o status correto da hierarquia (`Quitado` se todas pagas, `Inadimplente` se ainda há vencidas, `Acordo Vigente` se tem acordo, etc). Em dia é o "ponto neutro" que deixa a hierarquia decidir.
+
+### 2. Edge function — `supabase/functions/maxlist-import/index.ts`
+
+Adicionar **uma única exceção** no bloco `PROTECTED_FIELDS` (linhas 558‑572): permitir overwrite de `status_cobranca_id` **apenas** quando `rec.status === 'pago'` E `oldVal` corresponde ao status `Inadimplente` do tenant.
+
+Em pseudocódigo:
+
+```text
+isPagoOverridingInadimplente =
+  field === 'status_cobranca_id'
+  && rec.status === 'pago'
+  && oldVal === inadimplenteIdDoTenant
 ```
 
-E em `AgreementInstallments.tsx:420`:
+Resolução do `inadimplenteIdDoTenant`: já é feita logo no início da função (mesma forma como `vencidoStatusId` é resolvido na linha ~31). Reusar o padrão.
 
-```ts
-paidAt: ssotRow.paid_at || inst.paidAt,
-```
+Isso garante que **somente** a transição "INADIMPLENTE → Em dia (e depois auto-status-sync decide)" é permitida. Acordo Vigente, Acordo Atrasado, Quebra de Acordo, Em Negociação, Quitado e Em dia atual continuam **bloqueados** contra sobrescrita pelo MaxSystem.
 
-`ssotRow.paid_at` é um **timestamp ISO completo** (`2026-05-13T14:23:55.000Z`). O legado armazenava só `YYYY-MM-DD`. Então `formatDate` concatena `+ "T00:00:00"` virando `"2026-05-13T14:23:55.000ZT00:00:00"` → **Invalid Date**.
+### 3. Sem migração de dados
 
-Antes da migração SSOT, `paidAt` vinha do classifier como `YYYY-MM-DD` (data do `manual_payments.payment_date` ou `negociarie_cobrancas.data_pagamento`). Agora a SSOT sobrescreve com o timestamp completo do `paid_at` e quebra o `formatDate`.
+- **Não** mexemos nas 67.353 linhas atuais.
+- **Não** rodamos backfill.
+- **Não** alteramos nenhuma RPC (`get_dashboard_stats_v2`, `get_baixas_realizadas`, `get_carteira_grouped`, `get_client_consolidated_status`, `auto-status-sync`).
+- Vale **só daqui pra frente**: na próxima sincronização por período, os clientes que ainda estiverem INADIMPLENTE e tiverem parcelas pagas no MaxSystem serão atualizados.
 
-## Princípio confirmado pelo usuário
+## O que não muda (garantido)
 
-> **Baixas Realizadas é a verdade.** O Dashboard tem que refletir Baixas, e nunca o contrário. A data de pagamento exibida tem que ser a data **registrada na baixa** (manual ou cobrança Negociarie), não um timestamp interno da SSOT.
+| Status | Comportamento |
+|---|---|
+| Acordo Vigente | Intocado — protegido |
+| Acordo Atrasado | Intocado — protegido |
+| Quebra de Acordo | Intocado — protegido |
+| Em Negociação | Intocado — protegido |
+| Quitado | Intocado — protegido |
+| Em dia | Intocado (não recebe override) |
+| **Inadimplente** | **Único que pode virar Em dia / Quitado quando MaxSystem reporta parcela paga** |
 
-## Correção (mínima, cirúrgica, sem migrar dados em massa)
+Lógicas que **não** são tocadas:
+- Fluxo CPF por CPF (já funciona).
+- `auto-status-sync` (continua decidindo a hierarquia no nível CPF+Credor).
+- `get_client_consolidated_status` e regras da Carteira.
+- Tela Baixas Realizadas.
+- Dashboard.
+- Tela "Atualizar Parcelas" do MaxList.
 
-### Fix 1 — Dashboard passa a ler da fonte de Baixas Realizadas
+## Memory a atualizar
 
-Alterar **2 funções SQL** (única mudança no backend):
+- `mem://integrations/maxsystem/unified-import-logic`: adicionar regra "Sincronização por período pode promover Inadimplente → Em dia/Quitado quando MaxSystem reporta parcela paga; demais status são imutáveis via sync."
 
-- **`get_dashboard_stats_v2`**: trocar o cálculo de `_recebido_ssot` e `_recebido_ant_ssot`. Em vez de `SUM(agreement_installments.paid_amount WHERE paid)`, somar exatamente o mesmo UNION que `get_baixas_realizadas` usa (manual_payments confirmados + portal_payments pagos + negociarie_cobrancas pagas), filtrado por `payment_date BETWEEN _month_start AND _month_end` e por operador.
-- **`get_financial_received_by_day`** (gráfico do card "Total Recebido"): mesma troca — `GROUP BY payment_date` em cima do UNION dos 3, em vez de `paid_at` da SSOT.
+## Validação após aplicar
 
-Resultado imediato após migrar: o número da Maria Eduarda (e de todos os operadores e do total do tenant) **bate exato** com Baixas Realizadas, sem alterar uma única linha de pagamento.
-
-### Fix 2 — Coluna "Pagamento" volta a mostrar a data real da baixa
-
-Duas mudanças cirúrgicas:
-
-**a) `src/lib/formatters.ts` — tornar `formatDate` defensivo** (qualquer entrada — `YYYY-MM-DD`, ISO timestamp, `Date`, ou string vazia):
-
-```ts
-export const formatDate = (input: string | Date | null | undefined): string => {
-  if (!input) return "—";
-  const s = typeof input === "string" ? input : input.toISOString();
-  // Aceita "YYYY-MM-DD" puro OU timestamp ISO completo
-  const d = s.length === 10 ? new Date(s + "T00:00:00") : new Date(s);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
-};
-```
-
-Isso já elimina "Invalid Date" em **toda** a UI sem riscos.
-
-**b) `src/components/client-detail/AgreementInstallments.tsx:420` — preferir a data da baixa real**
-
-Ao sobrepor com SSOT, manter como `paidAt` a data **registrada na baixa** (que é o que o operador vê em Baixas Realizadas e o que ele espera). Hoje o classifier já calcula `paidAt` a partir de `manual_payments.payment_date` ou `negociarie_cobrancas.data_pagamento` — basta **não** sobrescrever:
-
-```ts
-if (ssotRow.paid) {
-  return {
-    ...inst,
-    status: "pago",
-    paidAt: inst.paidAt || ssotRow.paid_at,  // prioriza data da baixa real
-  };
-}
-```
-
-Assim, mesmo se a SSOT tiver `paid_at` com timestamp diferente, a coluna Pagamento mostra a **mesma data** que aparece em Baixas Realizadas.
-
-### Fora de escopo (intencional)
-
-- **Não vamos** rodar backfill, rebuild em massa, nem mexer em `manual_payments` / `negociarie_cobrancas` / `agreement_installments`.
-- **Não vamos** alterar a tela Baixas Realizadas (já é a verdade).
-- **Não vamos** criar tabelas, triggers, edge functions ou shadow-checks novos.
-- A SSOT continua existindo e sendo útil para status de parcela, `next_due_date`, agregados — apenas deixa de ser fonte de "Recebido em R$" nas telas financeiras.
-
-## Memórias a atualizar
-
-- `mem://logic/agreements/installment-key-canonical`: adicionar regra explícita "**Recebido em R$ = UNION das tabelas de pagamento bruto** (manual_payments + portal_payments + negociarie_cobrancas). SSOT em `agreement_installments` é apoio para status/agregados, NUNCA fonte de soma financeira."
-- `mem://logic/relatorios/consolidacao-pagamentos`: mesma regra reforçada.
-- `mem://features/dashboard/unified-interface`: documentar que Total Recebido segue Baixas Realizadas.
+1. Rodar Sincronizar por Período em janela curta (últimos 7 dias) no tenant Y.BRASIL.
+2. Pegar 3 CPFs sem acordo que apareceram como `paid` no resultado e conferir na Carteira: devem estar **Em dia** ou **Quitado** (não mais Inadimplente).
+3. Pegar 1 CPF que tem **Acordo Vigente** e confirmar que continua Acordo Vigente (não foi tocado).
+4. Conferir Baixas Realizadas — números seguem iguais à fonte de verdade (UNION manual+portal+negociarie).
 
 ## Ordem de execução
 
-1. Migração SQL alterando `get_dashboard_stats_v2` e `get_financial_received_by_day` (Fix 1).
-2. Edição de `src/lib/formatters.ts` (Fix 2a) e `AgreementInstallments.tsx` linha 420 (Fix 2b).
-3. Atualizar as 3 memories.
-4. Refresh do Dashboard e do detalhe do cliente Kethlenn — números batem com Baixas, "Invalid Date" some.
-
+1. Editar `supabase/functions/maxlist-import/index.ts` (resolver `inadimplenteIdDoTenant` + adicionar a exceção).
+2. Editar `src/pages/MaxListPage.tsx` (resolver e enviar `emDiaId` no `handleUpdatePagos` em vez de `"__auto__"`).
+3. Atualizar memory `unified-import-logic`.
+4. Validar com a Maria Eduarda.
