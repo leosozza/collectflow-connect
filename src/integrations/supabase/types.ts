@@ -211,6 +211,74 @@ export type Database = {
         }
         Relationships: []
       }
+      agreement_installments: {
+        Row: {
+          agreement_id: string
+          amount: number
+          cancelled: boolean
+          created_at: string
+          due_date: string
+          id: string
+          installment_key: string
+          is_entrada: boolean
+          paid: boolean
+          paid_amount: number | null
+          paid_at: string | null
+          paid_source: string | null
+          paid_source_id: string | null
+          pending_confirmation: boolean
+          seq: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          agreement_id: string
+          amount?: number
+          cancelled?: boolean
+          created_at?: string
+          due_date: string
+          id?: string
+          installment_key: string
+          is_entrada?: boolean
+          paid?: boolean
+          paid_amount?: number | null
+          paid_at?: string | null
+          paid_source?: string | null
+          paid_source_id?: string | null
+          pending_confirmation?: boolean
+          seq: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          agreement_id?: string
+          amount?: number
+          cancelled?: boolean
+          created_at?: string
+          due_date?: string
+          id?: string
+          installment_key?: string
+          is_entrada?: boolean
+          paid?: boolean
+          paid_amount?: number | null
+          paid_at?: string | null
+          paid_source?: string | null
+          paid_source_id?: string | null
+          pending_confirmation?: boolean
+          seq?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agreement_installments_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agreement_signatures: {
         Row: {
           agreement_id: string
@@ -7958,6 +8026,10 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      rebuild_agreement_installments: {
+        Args: { p_agreement_id: string }
+        Returns: undefined
       }
       recalculate_campaign_scores: {
         Args: { _campaign_id: string }
