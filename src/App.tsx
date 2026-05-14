@@ -119,6 +119,7 @@ const App = () => (
               <Route path="carteira" element={<CarteiraPage />} />
               <Route path="setup" element={<TenantSetupPage />} />
               <Route path="carteira/:cpf" element={<ClientDetailPage />} />
+              <Route path="carteira/perfil/:id" element={<ClientDetailPage />} />
               <Route path="cadastro" element={<CadastroPage />} />
               <Route path="cadastros/:tab?" element={<CadastrosPage />} />
               <Route path="cadastros/credores/novo" element={<CadastrosPage />} />

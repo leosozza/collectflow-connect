@@ -42,8 +42,9 @@ function buildInstallmentMatchKey(row: any): string | null {
   const cpf = cleanCPF(row?.cpf);
   const contract = normalizeContract(row?.cod_contrato);
   const installment = String(row?.numero_parcela || 1).trim();
-  if (!cpf || !contract || !installment) return null;
-  return `${cpf}|${contract}|${installment}`;
+  const credor = String(row?.credor || "").trim().toLowerCase();
+  if (!cpf || !contract || !installment || !credor) return null;
+  return `${cpf}|${credor}|${contract}|${installment}`;
 }
 
 /** Helper for case-insensitive access to object properties */
@@ -778,7 +779,7 @@ Deno.serve(async (req) => {
         const batch = profileBatch.slice(i, i + PROFILE_BATCH);
         const { error: profileErr } = await supabase
           .from("client_profiles")
-          .upsert(batch, { onConflict: "tenant_id,cpf" });
+          .upsert(batch, { onConflict: "tenant_id,cpf,nome_completo" });
         if (profileErr) {
           console.error("[maxlist-import] client_profiles upsert error:", profileErr.message);
         }

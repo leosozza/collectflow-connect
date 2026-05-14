@@ -71,7 +71,7 @@ const editableStatuses = ["pending", "pending_approval", "approved", "overdue", 
 const cancellableStatuses = ["pending", "pending_approval", "approved", "overdue"];
 
 const ClientDetailPage = () => {
-  const { cpf } = useParams<{ cpf: string }>();
+  const { cpf, id } = useParams<{ cpf?: string; id?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -174,33 +174,73 @@ const ClientDetailPage = () => {
   const backTo = (location.state as any)?.from || "/carteira";
 
   const { data: clients = [], isLoading, refetch } = useQuery({
-    queryKey: ["client-detail", cpf, credorFilter],
+    queryKey: ["client-detail", cpf, id, credorFilter, tenant?.id],
     queryFn: async () => {
-      const rawCpf = (cpf || "").replace(/\D/g, "");
+      if (!tenant?.id) return [];
+
+      let targetCpf = (cpf || "").replace(/\D/g, "");
+      let targetCredor = credorFilter;
+
+      // Se temos ID, buscamos o registro mestre primeiro para pegar o CPF/Credor correto
+      if (id) {
+        const { data: master } = await supabase
+          .from("clients")
+          .select("cpf, credor")
+          .eq("id", id)
+          .eq("tenant_id", tenant.id)
+          .single();
+        
+        if (master) {
+          targetCpf = master.cpf.replace(/\D/g, "");
+          targetCredor = master.credor;
+        }
+      }
+
+      if (!targetCpf) return [];
+
       let query = supabase
         .from("clients")
         .select("*")
-        .or(`cpf.eq.${rawCpf},cpf.eq.${formatCPF(rawCpf)}`);
-      if (credorFilter) {
-        query = query.eq("credor", credorFilter);
+        .eq("tenant_id", tenant.id)
+        .or(`cpf.eq.${targetCpf},cpf.eq.${formatCPF(targetCpf)}`);
+
+      if (targetCredor) {
+        query = query.eq("credor", targetCredor);
       }
+
       const { data, error } = await query.order("numero_parcela", { ascending: true });
       if (error) throw error;
       return data || [];
     },
-    enabled: !!cpf,
+    enabled: !!(cpf || id) && !!tenant?.id,
   });
 
   const { data: agreements = [], refetch: refetchAgreements } = useQuery({
-    queryKey: ["client-agreements", cpf, credorFilter],
+    queryKey: ["client-agreements", cpf, id, credorFilter, tenant?.id],
     queryFn: async () => {
-      const rawCpf = (cpf || "").replace(/\D/g, "");
+      if (!tenant?.id) return [];
+      
+      let targetCpf = (cpf || "").replace(/\D/g, "");
+      let targetCredor = credorFilter;
+
+      if (id) {
+        const master = clients.find(c => c.id === id) || (clients.length > 0 ? clients[0] : null);
+        if (master) {
+          targetCpf = master.cpf.replace(/\D/g, "");
+          targetCredor = master.credor;
+        }
+      }
+
+      if (!targetCpf) return [];
+
       let query = supabase
         .from("agreements")
         .select("*")
-        .or(`client_cpf.eq.${rawCpf},client_cpf.eq.${formatCPF(rawCpf)}`);
-      if (credorFilter) {
-        query = query.eq("credor", credorFilter);
+        .eq("tenant_id", tenant.id)
+        .or(`client_cpf.eq.${targetCpf},client_cpf.eq.${formatCPF(targetCpf)}`);
+
+      if (targetCredor) {
+        query = query.eq("credor", targetCredor);
       }
       const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;

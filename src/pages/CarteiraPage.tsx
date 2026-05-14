@@ -959,7 +959,7 @@ const CarteiraPage = () => {
                         </TableCell>
                         <TableCell>
                           <Link
-                            to={`/carteira/${encodeURIComponent(client.cpf.replace(/\D/g, ""))}?credor=${encodeURIComponent(client.credor)}`}
+                            to={`/carteira/perfil/${client.id}?credor=${encodeURIComponent(client.credor)}`}
                             className="font-medium text-primary hover:underline"
                           >
                             {client.nome_completo}
