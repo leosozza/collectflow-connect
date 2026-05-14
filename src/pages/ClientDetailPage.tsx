@@ -829,7 +829,7 @@ const ClientDetailPage = () => {
         </TabsContent>
 
         <TabsContent value="anexos">
-          <ClientAttachments cpf={cpf || ""} />
+          <ClientAttachments cpf={effectiveCpf} />
         </TabsContent>
       </Tabs>
 
