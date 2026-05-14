@@ -1036,7 +1036,7 @@ const ClientDetailPage = () => {
                 <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
               </div>
 
-              <AgreementInstallments agreementId={editingAgreement.id} agreement={agreements.find((a: any) => a.id === editingAgreement.id) || editingAgreement} cpf={cpf || ""} tenantId={tenant?.id} onRefresh={() => { refetch(); refetchAgreements(); }} />
+              <AgreementInstallments agreementId={editingAgreement.id} agreement={agreements.find((a: any) => a.id === editingAgreement.id) || editingAgreement} cpf={effectiveCpf} tenantId={tenant?.id} onRefresh={() => { refetch(); refetchAgreements(); }} />
 
               <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
                 {editLoading ? "Salvando..." : "Salvar Alterações"}
