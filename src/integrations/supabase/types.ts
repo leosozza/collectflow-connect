@@ -7760,6 +7760,25 @@ export type Database = {
           valor_parcela: number
         }[]
       }
+      get_dashboard_vencimentos_v2: {
+        Args: {
+          _target_date?: string
+          _tenant_id?: string
+          _user_id?: string
+          _user_ids?: string[]
+        }
+        Returns: {
+          agreement_id: string
+          agreement_status: string
+          client_cpf: string
+          client_name: string
+          credor: string
+          effective_status: string
+          numero_parcela: number
+          total_parcelas: number
+          valor_parcela: number
+        }[]
+      }
       get_distinct_credores: {
         Args: { _tenant_id: string }
         Returns: {
