@@ -78,7 +78,15 @@ const ManualPaymentDialog = ({
         payment_date: paymentDate,
         payment_method: paymentMethod,
         receiver,
-        notes: notes || undefined,
+        notes: (() => {
+          const diff = Math.abs(amountPaid - installmentValue);
+          if (diff > 0.01) {
+            const reason = adjustReason || "ajuste do operador";
+            const tag = `[Divergência: contratado R$ ${installmentValue.toFixed(2)}, recebido R$ ${amountPaid.toFixed(2)} — ${reason}]`;
+            return notes ? `${tag}\n${notes}` : tag;
+          }
+          return notes || undefined;
+        })(),
       };
       await manualPaymentService.create(data, tenantId, profileId);
       toast({ title: "Solicitação de baixa registrada", description: "Aguardando confirmação do administrador." });
