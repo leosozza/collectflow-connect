@@ -189,7 +189,10 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
         onOpenChange(false);
       }
     },
-    onError: () => toast.error("Erro ao salvar credor"),
+    onError: (err: any) => {
+      console.error(err);
+      toast.error(`Erro ao salvar credor: ${err.message || "Verifique os dados e tente novamente"}`);
+    },
   });
 
   const [savingGrade, setSavingGrade] = useState(false);
@@ -270,8 +273,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Grade de honorários salva!");
-    } catch {
-      toast.error("Erro ao salvar grade");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao salvar grade: ${err.message || "Tente novamente"}`);
     } finally {
       setSavingGrade(false);
     }
@@ -288,8 +292,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Faixas de aging salvas!");
-    } catch {
-      toast.error("Erro ao salvar faixas");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao salvar faixas: ${err.message || "Tente novamente"}`);
     } finally {
       setSavingAging(false);
     }
@@ -426,7 +431,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
             <div className="border-t border-border pt-4">
               <p className="text-sm font-medium text-foreground mb-1">Logo dos Documentos</p>
               <p className="text-xs text-muted-foreground mb-3">
-                Aparece no canto superior esquerdo de todos os documentos gerados (~20mm). Recomendado: PNG transparente.
+                Aparece no canto superior esquerdo de todos os documentos gerados.
+                <br />
+                <strong>Tamanho recomendado: 400x120px (proporção 3:1). Formatos: PNG transparente ou JPG. Máximo 2MB.</strong>
               </p>
               <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
                 <div
@@ -467,9 +474,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                         const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
                         set("document_logo_url", urlData.publicUrl);
                         toast.success("Logo do documento enviado!");
-                      } catch (err) {
+                      } catch (err: any) {
                         console.error(err);
-                        toast.error("Erro ao enviar logo");
+                        toast.error(`Erro ao enviar logo: ${err.message || "Verifique o arquivo e tente novamente"}`);
                       } finally {
                         setUploadingDocLogo(false);
                         e.target.value = "";
@@ -959,6 +966,9 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div>
                   <p className="font-medium text-foreground text-sm">Portal Personalizado</p>
                   <p className="text-xs text-muted-foreground">Ativar branding personalizado deste credor no Portal do Devedor</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    <strong>Recomendado: Logo em PNG transparente, 400x120px (proporção 3:1). Máximo 2MB.</strong>
+                  </p>
                 </div>
                 <Switch checked={form.portal_enabled || false} onCheckedChange={v => set("portal_enabled", v)} />
               </div>
@@ -1038,10 +1048,10 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                               .getPublicUrl(path);
                             set("portal_logo_url", urlData.publicUrl);
                             toast.success("Logo enviado com sucesso!");
-                          } catch (err) {
-                            console.error(err);
-                            toast.error("Erro ao enviar logo");
-                          } finally {
+                      } catch (err: any) {
+                        console.error(err);
+                        toast.error(`Erro ao enviar logo: ${err.message || "Verifique o arquivo e tente novamente"}`);
+                      } finally {
                             setUploadingLogo(false);
                             e.target.value = "";
                           }
