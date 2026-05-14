@@ -103,6 +103,7 @@ const BaixasRealizadasPage = () => {
         _local: localFilter === "todos" ? null : localFilter,
         _payment_method: methodFilter === "todos" ? null : methodFilter,
         _operator_id: lockedOperatorId,
+        _tenant_id: tenant?.id ?? null,
       } as any);
       if (error) throw error;
       return (data ?? []) as unknown as BaixaRow[];
