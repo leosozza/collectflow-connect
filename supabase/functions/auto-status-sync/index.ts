@@ -187,6 +187,7 @@ async function syncTenant(supabase: any, tenant_id: string) {
       .eq("tenant_id", tenant_id)
       .order("cpf", { ascending: true })
       .order("credor", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
