@@ -290,6 +290,10 @@ const ClientDetailPage = () => {
     return base;
   }, [clients]);
 
+  // CPF canônico (apenas dígitos). Quando a rota é `/carteira/perfil/:id` o
+  // param `cpf` vem undefined — caímos para o CPF do registro carregado.
+  const effectiveCpf = ((cpf || first?.cpf || "") as string).replace(/\D/g, "");
+
   if (isLoading) {
     return (
       <div className="space-y-4 animate-fade-in">
@@ -526,7 +530,7 @@ const ClientDetailPage = () => {
       <ClientDetailHeader
         client={first}
         clients={clients}
-        cpf={cpf || ""}
+        cpf={effectiveCpf}
         agreements={agreements}
         onFormalizarAcordo={() => setShowAcordoDialog(true)}
         backTo={backTo}
@@ -786,7 +790,7 @@ const ClientDetailPage = () => {
                           <AgreementInstallments
                             agreementId={agreement.id}
                             agreement={agreement}
-                            cpf={cpf || ""}
+                            cpf={effectiveCpf}
                             tenantId={tenant?.id}
                             onRefresh={() => { refetch(); refetchAgreements(); }}
                           />
@@ -804,7 +808,7 @@ const ClientDetailPage = () => {
           <ClientTimeline
             dispositions={[]}
             agreements={agreements}
-            clientCpf={cpf}
+            clientCpf={effectiveCpf}
           />
         </TabsContent>
 
@@ -812,7 +816,7 @@ const ClientDetailPage = () => {
           <ClientDocuments
             client={first}
             clients={clients}
-            cpf={cpf || ""}
+            cpf={effectiveCpf}
             totalAberto={clients
               .filter((c) => c.status !== "pago")
               .reduce((sum, c) => sum + Math.max(0, (Number(c.valor_parcela) || Number(c.valor_saldo) || 0) - Number(c.valor_pago)), 0)}
@@ -825,7 +829,7 @@ const ClientDetailPage = () => {
         </TabsContent>
 
         <TabsContent value="anexos">
-          <ClientAttachments cpf={cpf || ""} />
+          <ClientAttachments cpf={effectiveCpf} />
         </TabsContent>
       </Tabs>
 
@@ -836,7 +840,7 @@ const ClientDetailPage = () => {
           </DialogHeader>
           <AgreementCalculator
             clients={clients}
-            cpf={cpf || ""}
+            cpf={effectiveCpf}
             clientName={first.nome_completo}
             credor={first.credor}
             onAgreementCreated={handleAgreementCreated}
@@ -1032,7 +1036,7 @@ const ClientDetailPage = () => {
                 <Textarea value={editForm.notes || ""} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} rows={2} />
               </div>
 
-              <AgreementInstallments agreementId={editingAgreement.id} agreement={agreements.find((a: any) => a.id === editingAgreement.id) || editingAgreement} cpf={cpf || ""} tenantId={tenant?.id} onRefresh={() => { refetch(); refetchAgreements(); }} />
+              <AgreementInstallments agreementId={editingAgreement.id} agreement={agreements.find((a: any) => a.id === editingAgreement.id) || editingAgreement} cpf={effectiveCpf} tenantId={tenant?.id} onRefresh={() => { refetch(); refetchAgreements(); }} />
 
               <Button className="w-full" onClick={handleEditSubmit} disabled={editLoading}>
                 {editLoading ? "Salvando..." : "Salvar Alterações"}
