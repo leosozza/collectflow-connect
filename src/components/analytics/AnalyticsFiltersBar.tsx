@@ -92,7 +92,7 @@ export const AnalyticsFiltersBar = (p: Props) => {
     <div className="bg-card rounded-xl border border-border shadow-sm p-3">
       <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
         <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0 text-xs font-normal" onClick={goPrevMonth}>
-          <ChevronLeft className="w-3.5 h-3.5" /> Mês anterior
+          <CalendarDays className="w-3.5 h-3.5" /> Mês anterior
         </Button>
         <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0 text-xs font-normal" onClick={goCurrentMonth}>
           <CalendarDays className="w-3.5 h-3.5" /> Mês atual
