@@ -76,11 +76,21 @@ async function callDashboardStats(params: Record<string, unknown>) {
   return legacy.data;
 }
 
+// v2 lê do SSOT (agreement_installments). O legado já apresentou
+// "pago aparecendo como vencido"; só caímos para ele em erro 5xx
+// transitório (timeout/conexão), nunca em erro de schema/auth/RLS.
 async function callDashboardVencimentos(params: Record<string, unknown>) {
   const { data, error } = await supabase.rpc("get_dashboard_vencimentos_v2" as any, params as any);
   if (!error) return data;
 
-  console.warn("[Dashboard] get_dashboard_vencimentos_v2 failed; falling back to get_dashboard_vencimentos", error);
+  const code = (error as any)?.code as string | undefined;
+  const isTransient = !code || code.startsWith("57") || code === "08006" || code === "08001";
+  if (!isTransient) {
+    console.error("[Dashboard] get_dashboard_vencimentos_v2 failed (não transitório, sem fallback)", error);
+    throw error;
+  }
+
+  console.warn("[Dashboard] v2 transitório; tentando legado get_dashboard_vencimentos", error);
   const legacyParams = { ...params };
   delete legacyParams._tenant_id;
   const legacy = await supabase.rpc("get_dashboard_vencimentos", legacyParams as any);

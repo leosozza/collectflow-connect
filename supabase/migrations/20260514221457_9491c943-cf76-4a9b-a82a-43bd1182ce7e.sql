@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.get_baixas_realizadas(date, date, text, text, text, uuid);

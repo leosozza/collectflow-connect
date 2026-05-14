@@ -7300,6 +7300,7 @@ export type Database = {
           _local?: string
           _operator_id?: string
           _payment_method?: string
+          _tenant_id?: string
         }
         Returns: {
           agreement_id: string
