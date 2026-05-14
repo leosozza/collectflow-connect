@@ -91,16 +91,16 @@ export const AnalyticsFiltersBar = (p: Props) => {
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm p-3">
       <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
-        <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0" onClick={goPrevMonth}>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0 text-xs font-normal" onClick={goPrevMonth}>
           <ChevronLeft className="w-3.5 h-3.5" /> Mês anterior
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0" onClick={goCurrentMonth}>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0 text-xs font-normal" onClick={goCurrentMonth}>
           <CalendarDays className="w-3.5 h-3.5" /> Mês atual
         </Button>
 
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 shrink-0", !p.dateFrom && "text-muted-foreground")}>
+            <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 shrink-0 text-xs font-normal", !p.dateFrom && "text-muted-foreground")}>
               <CalendarIcon className="w-3.5 h-3.5" /> De: {fmt(p.dateFrom)}
             </Button>
           </PopoverTrigger>
@@ -117,7 +117,7 @@ export const AnalyticsFiltersBar = (p: Props) => {
 
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 shrink-0", !p.dateTo && "text-muted-foreground")}>
+            <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 shrink-0 text-xs font-normal", !p.dateTo && "text-muted-foreground")}>
               <CalendarIcon className="w-3.5 h-3.5" /> Até: {fmt(p.dateTo)}
             </Button>
           </PopoverTrigger>
@@ -136,7 +136,7 @@ export const AnalyticsFiltersBar = (p: Props) => {
           options={credorOpts}
           selected={p.credores}
           onChange={p.setCredores}
-          allLabel="Todos Credores"
+          allLabel="Credores"
           className="w-[180px] shrink-0"
         />
         {!p.isOperator && (
@@ -144,7 +144,7 @@ export const AnalyticsFiltersBar = (p: Props) => {
             options={operatorOpts}
             selected={p.operators}
             onChange={p.setOperators}
-            allLabel="Todos Operadores"
+            allLabel="Operadores"
             className="w-[180px] shrink-0"
           />
         )}
@@ -153,7 +153,7 @@ export const AnalyticsFiltersBar = (p: Props) => {
             options={CHANNEL_OPTIONS}
             selected={p.channels}
             onChange={p.setChannels}
-            allLabel="Todos Canais"
+            allLabel="Canais"
             className="w-[150px] shrink-0"
           />
         )}
