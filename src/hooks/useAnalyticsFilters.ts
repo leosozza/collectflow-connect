@@ -18,7 +18,7 @@ const monthStart = () => format(startOfMonth(new Date()), "yyyy-MM-dd");
 
 export function useAnalyticsFilters(tenantId: string | undefined) {
   const [tab, setTab] = useUrlState("tab", "receita");
-  const [dateFrom, setDateFrom] = useUrlState("from", daysAgo(30));
+  const [dateFrom, setDateFrom] = useUrlState("from", monthStart());
   const [dateTo, setDateTo] = useUrlState("to", today());
   const [credores, setCredores] = useUrlState("credores", [] as string[]);
   const [operators, setOperators] = useUrlState("operators", [] as string[]);
