@@ -530,7 +530,7 @@ const ClientDetailPage = () => {
       <ClientDetailHeader
         client={first}
         clients={clients}
-        cpf={cpf || ""}
+        cpf={effectiveCpf}
         agreements={agreements}
         onFormalizarAcordo={() => setShowAcordoDialog(true)}
         backTo={backTo}
