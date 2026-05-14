@@ -27,6 +27,17 @@ function normalizePhoneBR(phone: string): string {
   return digits;
 }
 
+function getAlternativePhoneBR(phone: string): string | null {
+  if (!phone.startsWith("55")) return null;
+  if (phone.length === 13) {
+    return phone.slice(0, 4) + phone.slice(5);
+  }
+  if (phone.length === 12) {
+    return phone.slice(0, 4) + "9" + phone.slice(4);
+  }
+  return null;
+}
+
 export interface SendResult {
   ok: boolean;
   result: any;
@@ -140,14 +151,31 @@ async function sendEvolutionText(
       };
     }
 
-    const resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
+    let resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
       method: "POST",
       headers: { apikey: instanceKey, "Content-Type": "application/json" },
-      // options.checkExists: false → força envio mesmo se a verificação heurística
-      // do Evolution (que remove o 9º dígito) não confirmar a conta.
       body: JSON.stringify(payload),
     });
-    const result = await resp.json();
+    let result = await resp.json();
+
+    // Estratégia de Dupla-Tentativa (Double-Try) para contornar o problema do 9º dígito no WhatsApp Brasil
+    if (!resp.ok && resp.status === 400 && typeof result?.error === "string" && result.error.includes("Bad Request")) {
+      const isDisconnected = JSON.stringify(result).toLowerCase().includes("not connected");
+      if (!isDisconnected) {
+        const altPhone = getAlternativePhoneBR(phone);
+        if (altPhone) {
+          console.log(`[evolution-sender] 400 Bad Request on text, trying alternative JID: ${altPhone}`);
+          payload.number = altPhone;
+          resp = await fetch(`${instanceUrl}/message/sendText/${inst.instance_name}`, {
+            method: "POST",
+            headers: { apikey: instanceKey, "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          result = await resp.json();
+        }
+      }
+    }
+
     return { ok: resp.ok, result, providerMessageId: result?.key?.id || result?.messageId || null, provider };
   } catch (err) {
     console.error("[evolution-sender] Network error:", err);
@@ -296,12 +324,31 @@ async function sendEvolutionMedia(
     console.log(`[evolution-sender] Sending audio via sendWhatsAppAudio: url=${media.mediaUrl.substring(0, 80)}`);
 
     try {
-      const resp = await fetch(`${instanceUrl}/message/sendWhatsAppAudio/${inst.instance_name}`, {
+      let resp = await fetch(`${instanceUrl}/message/sendWhatsAppAudio/${inst.instance_name}`, {
         method: "POST",
         headers: { apikey: instanceKey, "Content-Type": "application/json" },
         body: JSON.stringify(audioPayload),
       });
-      const result = await resp.json();
+      let result = await resp.json();
+
+      // Estratégia Double-Try (9º dígito) para Áudio
+      if (!resp.ok && resp.status === 400 && typeof result?.error === "string" && result.error.includes("Bad Request")) {
+        const isDisconnected = JSON.stringify(result).toLowerCase().includes("not connected");
+        if (!isDisconnected) {
+          const altPhone = getAlternativePhoneBR(phone);
+          if (altPhone) {
+            console.log(`[evolution-sender] 400 Bad Request on audio, trying alternative JID: ${altPhone}`);
+            audioPayload.number = altPhone;
+            resp = await fetch(`${instanceUrl}/message/sendWhatsAppAudio/${inst.instance_name}`, {
+              method: "POST",
+              headers: { apikey: instanceKey, "Content-Type": "application/json" },
+              body: JSON.stringify(audioPayload),
+            });
+            result = await resp.json();
+          }
+        }
+      }
+
       if (!resp.ok) {
         console.error(`[evolution-sender] Audio error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
       }
@@ -339,12 +386,31 @@ async function sendEvolutionMedia(
   console.log(`[evolution-sender] Sending ${media.mediaType}: url=${media.mediaUrl.substring(0, 80)}, mime=${media.mimeType}`);
 
   try {
-    const resp = await fetch(`${instanceUrl}/message/sendMedia/${inst.instance_name}`, {
+    let resp = await fetch(`${instanceUrl}/message/sendMedia/${inst.instance_name}`, {
       method: "POST",
       headers: { apikey: instanceKey, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const result = await resp.json();
+    let result = await resp.json();
+
+    // Estratégia Double-Try (9º dígito) para Mídia
+    if (!resp.ok && resp.status === 400 && typeof result?.error === "string" && result.error.includes("Bad Request")) {
+      const isDisconnected = JSON.stringify(result).toLowerCase().includes("not connected");
+      if (!isDisconnected) {
+        const altPhone = getAlternativePhoneBR(phone);
+        if (altPhone) {
+          console.log(`[evolution-sender] 400 Bad Request on media, trying alternative JID: ${altPhone}`);
+          payload.number = altPhone;
+          resp = await fetch(`${instanceUrl}/message/sendMedia/${inst.instance_name}`, {
+            method: "POST",
+            headers: { apikey: instanceKey, "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          result = await resp.json();
+        }
+      }
+    }
+
     if (!resp.ok) {
       console.error(`[evolution-sender] Error HTTP ${resp.status}:`, JSON.stringify(result).substring(0, 300));
     }
