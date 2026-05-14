@@ -7292,70 +7292,38 @@ export type Database = {
           total_pago: number
         }[]
       }
-      get_baixas_realizadas:
-        | {
-            Args: {
-              _credor?: string
-              _date_from?: string
-              _date_to?: string
-              _local?: string
-              _operator_id?: string
-              _payment_method?: string
-            }
-            Returns: {
-              agreement_id: string
-              client_cpf: string
-              client_name: string
-              credor: string
-              desconto: number
-              honorarios: number
-              installment_key: string
-              installment_number: number
-              juros: number
-              local_pagamento: string
-              multa: number
-              operator_id: string
-              payment_date: string
-              payment_id: string
-              payment_method: string
-              source: string
-              total_installments: number
-              valor_original: number
-              valor_pago: number
-            }[]
-          }
-        | {
-            Args: {
-              _credor?: string
-              _date_from?: string
-              _date_to?: string
-              _local?: string
-              _operator_id?: string
-              _payment_method?: string
-              _tenant_id?: string
-            }
-            Returns: {
-              agreement_id: string
-              client_cpf: string
-              client_name: string
-              credor: string
-              desconto: number
-              honorarios: number
-              installment_key: string
-              installment_number: number
-              juros: number
-              local_pagamento: string
-              multa: number
-              operator_id: string
-              payment_date: string
-              payment_id: string
-              payment_method: string
-              source: string
-              total_installments: number
-              valor_original: number
-              valor_pago: number
-            }[]
-          }
+      get_baixas_realizadas: {
+        Args: {
+          _credor?: string
+          _date_from?: string
+          _date_to?: string
+          _local?: string
+          _operator_id?: string
+          _payment_method?: string
+          _tenant_id?: string
+        }
+        Returns: {
+          agreement_id: string
+          client_cpf: string
+          client_name: string
+          credor: string
+          desconto: number
+          honorarios: number
+          installment_key: string
+          installment_number: number
+          juros: number
+          local_pagamento: string
+          multa: number
+          operator_id: string
+          payment_date: string
+          payment_id: string
+          payment_method: string
+          source: string
+          total_installments: number
+          valor_original: number
+          valor_pago: number
+        }[]
+      }
       get_bi_breakage_analysis: {
         Args: {
           _channel?: string[]
