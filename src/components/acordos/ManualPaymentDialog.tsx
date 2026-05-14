@@ -143,10 +143,24 @@ const ManualPaymentDialog = ({
               <Label className="text-xs">Valor Pago *</Label>
               <CurrencyInput value={amountPaid} onValueChange={setAmountPaid} />
               {Math.abs(amountPaid - installmentValue) > 0.01 && (
-                <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                  Valor pago difere do valor da parcela em <strong>{formatBR(Math.abs(amountPaid - installmentValue))}</strong>.
-                  Ao confirmar, o valor da parcela será atualizado para refletir o valor recebido.
-                </p>
+                <div className="mt-2 space-y-2">
+                  <p className="text-[11px] text-muted-foreground bg-muted/40 border border-border rounded px-2 py-1">
+                    Valor diverge do contratado em <strong>{formatBR(Math.abs(amountPaid - installmentValue))}</strong>.
+                    A baixa será registrada pelo valor digitado e a parcela ficará marcada com observação.
+                  </p>
+                  <div>
+                    <Label className="text-xs">Motivo do ajuste</Label>
+                    <Select value={adjustReason} onValueChange={setAdjustReason}>
+                      <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="desconto">Desconto concedido</SelectItem>
+                        <SelectItem value="juros">Juros / mora cobrados</SelectItem>
+                        <SelectItem value="acordo verbal">Acordo verbal</SelectItem>
+                        <SelectItem value="outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               )}
             </div>
 
