@@ -1,41 +1,39 @@
-## Diagnóstico
+## Objetivo
 
-**Confirmado no banco:** existe 1 anexo da Ana da Silva Fernandes (CPF `83447148500`) no tenant `39a450f8...` (Y.BRASIL). A Barbara é `admin` do **mesmo** tenant — a RLS de `client_attachments` (`tenant_id = get_my_tenant_id()`) permite ler. Não é problema de permissão.
+Corrigir a classificação `Quitado` indevida no `auto-status-sync` e reclassificar os 9 clientes já afetados — sem alterar a hierarquia de status nem a SSOT.
 
-**Causa real:** o componente `ClientAttachments` recebe o CPF errado em dois cenários:
+## Causa
 
-1. **Rota nova `/carteira/perfil/:id`** (App.tsx linha 122): o `useParams` devolve `cpf = undefined`. Em `ClientDetailPage.tsx` linha 828:
-   ```tsx
-   <ClientAttachments cpf={cpf || ""} />
-   ```
-   passa **string vazia** → query `.eq("client_cpf", "")` devolve 0 resultados.
+Em `supabase/functions/auto-status-sync/index.ts` o stream de `clients` é ordenado apenas por `(cpf, credor)` (linhas 179-180). PostgREST não garante ordem estável entre páginas para empates → o agrupamento contíguo no JS pode receber **subconjuntos** de um grupo. O check `clients.every(c => c.status === 'pago')` (linha 122) então acerta `true` sobre 5 das 12 linhas pagas e marca `quitado`, deixando as parcelas vencidas em aberto escondidas. O cliente fica bloqueado de receber novo acordo porque o papel `quitado` tem `somente_leitura: true`.
 
-2. **Rota antiga `/carteira/:cpf`**: o CPF pode chegar formatado (`834.471.485-00`), mas o componente faz `.eq("client_cpf", cpf)` **sem normalizar**, enquanto o banco guarda só dígitos (`83447148500`).
+## Mudanças
 
-A Barbara provavelmente abriu o cliente por uma lista que usa a rota `/perfil/:id` (ex.: cards agrupados da Carteira), enquanto o outro operador (screenshot 2) entrou por uma lista que usa `/carteira/:cpf` com CPF cru — por isso vê os anexos.
-
-Outros componentes da página (`PaymentDialog`, `ClientTimeline`, etc.) sofrem do mesmo padrão `cpf={cpf || ""}` e podem ter sintomas idênticos quando o usuário entra pela rota `/perfil/:id`.
-
-## Correção (UI/presentation, sem mexer em RLS nem schema)
-
-### 1. `src/components/clients/ClientAttachments.tsx`
-- Normalizar internamente: `const cpfDigits = (cpf || "").replace(/\D/g, "");`
-- Usar `cpfDigits` no `queryKey`, na query (`.eq("client_cpf", cpfDigits)`), no upload e no insert.
-- `enabled: !!cpfDigits` (em vez de `!!cpf`) para não disparar query com string vazia.
-
-### 2. `src/pages/ClientDetailPage.tsx`
-- Derivar um `effectiveCpf` único no topo do componente:
+### 1. `supabase/functions/auto-status-sync/index.ts`
+- **Tiebreaker determinístico**: na query do passo 4 (linhas 174-181), adicionar `.order("id", { ascending: true })` como terceira chave, garantindo que todas as linhas de uma `(cpf, credor)` apareçam contíguas e na mesma ordem em runs sucessivos.
+- **Defesa em profundidade contra fragmentação**: antes do `flushUpdates` periódico (linha 209) **NÃO** processar grupos que sejam apenas o `carry` na primeira página seguinte. O fluxo já cobre: o `carry` só é processado quando aparece um `cpf/credor` diferente — adequado se a ordenação for estável. Com o tiebreaker por `id` adicionado, isso passa a ser garantido.
+- **Guard explícito no `processGroup`**: trocar `const allPago = clients.every(c => c.status === "pago")` por:
   ```ts
-  const effectiveCpf = ((cpf || clientData?.cpf || "") as string).replace(/\D/g, "");
+  const allPago = clients.length > 0 && clients.every(
+    (c: any) => c.status === "pago"
+  );
+  const hasOpenOverdue = clients.some(
+    (c: any) => c.data_vencimento < today && c.status !== "pago" && c.status !== "cancelado_maxlist"
+  );
+  if (allPago && !hasOpenOverdue && quitadoId) { ... }
   ```
-  (usando o CPF retornado pela query `client-detail` quando a rota é por `id`).
-- Substituir todas as ocorrências de `cpf={cpf || ""}` (linhas 529, 789, 815, 828, 839, 1035) e `clientCpf={cpf}` (807) por `effectiveCpf`.
-- Manter `enabled` das queries dependentes desse valor.
+  Mesmo que um grupo chegue fragmentado por algum motivo futuro, qualquer linha vencida em aberto vista no subconjunto impede o `quitado`.
 
-### 3. Verificação
-- Recarregar o perfil da Ana pelos dois caminhos (`/carteira/83447148500` e `/carteira/perfil/<id>`) com a sessão da Barbara e confirmar que a aba **Anexos** lista o PDF.
-- Conferir que Histórico, Pagamentos e Documentos continuam funcionando nas duas rotas.
+### 2. Reclassificação dos 9 clientes já afetados (uma vez)
+- Após o deploy, disparar `auto-status-sync` em modo single-tenant para `39a450f8-7a40-46e5-8bc7-708da5043ec7` via `supabase--curl_edge_functions` (admin já autenticado).
+- Validar com a mesma query do diagnóstico: o resultado esperado é **0 clientes** com `(vencidas em aberto > 0) AND (papel = quitado)`.
+
+### 3. Verificação cruzada
+- Spot-check dos 9 CPFs listados: confirmar que voltam para `Inadimplente` e que o botão "Formalizar Acordo" passa a aparecer para o operador.
+- Conferir o caso do Wanderson em específico (era o reportado).
 
 ## Fora de escopo
-- Nenhuma alteração em RLS, edge functions, storage ou schema.
-- Não vamos mexer no segundo PDF que aparece no screenshot 2 — ele não está no banco hoje (provavelmente foi excluído ou nunca foi confirmado o insert); se o usuário quiser, investigamos depois em tarefa separada.
+
+- Não vamos mexer na regra `somente_leitura` do papel `quitado` — está correta.
+- Não vamos remover as 12 linhas duplicadas do Wanderson — são contratos distintos legítimos do MaxSystem (IdRecords distintos), conforme o modelo já documentado.
+- Não vamos alterar a hierarquia de status. A correção é apenas no algoritmo de detecção.
+- Acordo "que o Vitor disse ter feito" não existe — não há nada para recuperar; após o fix ele consegue criar normalmente.
