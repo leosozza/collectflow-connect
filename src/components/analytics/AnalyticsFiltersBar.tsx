@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, subDays, startOfMonth } from "date-fns";
+import { format, parseISO, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, ChevronLeft, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -31,34 +31,30 @@ interface Props {
   setScoreMax: (v: string) => void;
 }
 
-// Apenas canais reais de atendimento existentes hoje no sistema.
-// Os identificadores precisam bater com a normalização feita em
-// public.get_bi_channel_performance ('whatsapp' | 'voice').
 const CHANNEL_OPTIONS = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "voice", label: "Ligação" },
 ];
 
 const fmt = (d: string) => (d ? format(parseISO(d), "dd MMM", { locale: ptBR }) : "—");
+const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
 export const AnalyticsFiltersBar = (p: Props) => {
   const { data: credorOpts = [] } = useQuery({
     queryKey: ["analytics-credor-opts", p.tenantId],
     queryFn: async () => {
-      // RPC server-side: retorna DISTINCT credor sem o limite de 1000 do PostgREST.
       const { data, error } = await supabase.rpc("get_distinct_credores", {
         _tenant_id: p.tenantId!,
       });
       if (error) {
-        // Fallback defensivo: mantém o comportamento antigo se a RPC falhar.
         const { data: rows } = await supabase
           .from("clients")
           .select("credor")
           .eq("tenant_id", p.tenantId!)
           .not("credor", "is", null)
           .limit(1000);
-          const set = new Set<string>((rows || []).map((r: any) => r.credor).filter(Boolean));
-          return Array.from(set).sort().map((c) => ({ value: c, label: c }));
+        const set = new Set<string>((rows || []).map((r: any) => r.credor).filter(Boolean));
+        return Array.from(set).sort().map((c) => ({ value: c, label: c }));
       }
       return (data || [])
         .map((r: any) => r.credor)
@@ -80,120 +76,110 @@ export const AnalyticsFiltersBar = (p: Props) => {
     enabled: !!p.tenantId && !p.isOperator,
   });
 
-  const ymd = (d: Date) => format(d, "yyyy-MM-dd");
-  const today = new Date();
-  const presets = [
-    { key: "7d", label: "7 dias", from: ymd(subDays(today, 6)), to: ymd(today) },
-    { key: "30d", label: "30 dias", from: ymd(subDays(today, 29)), to: ymd(today) },
-    { key: "90d", label: "90 dias", from: ymd(subDays(today, 89)), to: ymd(today) },
-    { key: "month", label: "Mês atual", from: ymd(startOfMonth(today)), to: ymd(today) },
-  ];
-  const activePreset = presets.find((pr) => pr.from === p.dateFrom && pr.to === p.dateTo)?.key;
-  const applyPreset = (pr: { from: string; to: string }) => {
-    p.setDateFrom(pr.from);
-    p.setDateTo(pr.to);
+  const goPrevMonth = () => {
+    const ref = p.dateFrom ? parseISO(p.dateFrom) : new Date();
+    const prev = subMonths(ref, 1);
+    p.setDateFrom(ymd(startOfMonth(prev)));
+    p.setDateTo(ymd(endOfMonth(prev)));
+  };
+  const goCurrentMonth = () => {
+    const now = new Date();
+    p.setDateFrom(ymd(startOfMonth(now)));
+    p.setDateTo(ymd(now));
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm p-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-medium text-muted-foreground mr-1">Período rápido:</span>
-        {presets.map((pr) => (
-          <Button
-            key={pr.key}
-            size="sm"
-            variant={activePreset === pr.key ? "default" : "outline"}
-            className="h-7 px-2.5 text-xs"
-            onClick={() => applyPreset(pr)}
-          >
-            {pr.label}
-          </Button>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-      {/* date from */}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className={cn("h-8 gap-1.5", !p.dateFrom && "text-muted-foreground")}>
-            <CalendarIcon className="w-3.5 h-3.5" /> De: {fmt(p.dateFrom)}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={p.dateFrom ? parseISO(p.dateFrom) : undefined}
-            onSelect={(d) => d && p.setDateFrom(format(d, "yyyy-MM-dd"))}
-            initialFocus
-            className={cn("p-3 pointer-events-auto")}
-          />
-        </PopoverContent>
-      </Popover>
-      {/* date to */}
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className={cn("h-8 gap-1.5", !p.dateTo && "text-muted-foreground")}>
-            <CalendarIcon className="w-3.5 h-3.5" /> Até: {fmt(p.dateTo)}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={p.dateTo ? parseISO(p.dateTo) : undefined}
-            onSelect={(d) => d && p.setDateTo(format(d, "yyyy-MM-dd"))}
-            initialFocus
-            className={cn("p-3 pointer-events-auto")}
-          />
-        </PopoverContent>
-      </Popover>
+    <div className="bg-card rounded-xl border border-border shadow-sm p-3">
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto">
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0" onClick={goPrevMonth}>
+          <ChevronLeft className="w-3.5 h-3.5" /> Mês anterior
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 shrink-0" onClick={goCurrentMonth}>
+          <CalendarDays className="w-3.5 h-3.5" /> Mês atual
+        </Button>
 
-      <MultiSelect
-        options={credorOpts}
-        selected={p.credores}
-        onChange={p.setCredores}
-        allLabel="Todos Credores"
-        className="w-[160px]"
-      />
-      {!p.isOperator && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 shrink-0", !p.dateFrom && "text-muted-foreground")}>
+              <CalendarIcon className="w-3.5 h-3.5" /> De: {fmt(p.dateFrom)}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={p.dateFrom ? parseISO(p.dateFrom) : undefined}
+              onSelect={(d) => d && p.setDateFrom(format(d, "yyyy-MM-dd"))}
+              initialFocus
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 shrink-0", !p.dateTo && "text-muted-foreground")}>
+              <CalendarIcon className="w-3.5 h-3.5" /> Até: {fmt(p.dateTo)}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={p.dateTo ? parseISO(p.dateTo) : undefined}
+              onSelect={(d) => d && p.setDateTo(format(d, "yyyy-MM-dd"))}
+              initialFocus
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </PopoverContent>
+        </Popover>
+
         <MultiSelect
-          options={operatorOpts}
-          selected={p.operators}
-          onChange={p.setOperators}
-          allLabel="Todos Operadores"
-          className="w-[160px]"
+          options={credorOpts}
+          selected={p.credores}
+          onChange={p.setCredores}
+          allLabel="Todos Credores"
+          className="w-[180px] shrink-0"
         />
-      )}
-      {p.showChannel && (
-        <MultiSelect
-          options={CHANNEL_OPTIONS}
-          selected={p.channels}
-          onChange={p.setChannels}
-          allLabel="Todos Canais"
-          className="w-[140px]"
-        />
-      )}
-      {p.showScore && (
-        <div className="flex items-center gap-1">
-          <Input
-            type="number"
-            min={0}
-            max={100}
-            placeholder="Score min"
-            value={p.scoreMin}
-            onChange={(e) => p.setScoreMin(e.target.value)}
-            className="h-8 w-[90px] text-xs"
+        {!p.isOperator && (
+          <MultiSelect
+            options={operatorOpts}
+            selected={p.operators}
+            onChange={p.setOperators}
+            allLabel="Todos Operadores"
+            className="w-[180px] shrink-0"
           />
-          <span className="text-xs text-muted-foreground">–</span>
-          <Input
-            type="number"
-            min={0}
-            max={100}
-            placeholder="Score max"
-            value={p.scoreMax}
-            onChange={(e) => p.setScoreMax(e.target.value)}
-            className="h-8 w-[90px] text-xs"
+        )}
+        {p.showChannel && (
+          <MultiSelect
+            options={CHANNEL_OPTIONS}
+            selected={p.channels}
+            onChange={p.setChannels}
+            allLabel="Todos Canais"
+            className="w-[150px] shrink-0"
           />
-        </div>
-      )}
+        )}
+        {p.showScore && (
+          <div className="flex items-center gap-1 shrink-0">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              placeholder="Score min"
+              value={p.scoreMin}
+              onChange={(e) => p.setScoreMin(e.target.value)}
+              className="h-8 w-[90px] text-xs"
+            />
+            <span className="text-xs text-muted-foreground">–</span>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              placeholder="Score max"
+              value={p.scoreMax}
+              onChange={(e) => p.setScoreMax(e.target.value)}
+              className="h-8 w-[90px] text-xs"
+            />
+          </div>
+        )}
       </div>
     </div>
   );
