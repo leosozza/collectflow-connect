@@ -19,18 +19,20 @@ const ClientAttachments = ({ cpf }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  const cpfDigits = (cpf || "").replace(/\D/g, "");
+
   const { data: attachments = [], isLoading } = useQuery({
-    queryKey: ["client-attachments", cpf],
+    queryKey: ["client-attachments", cpfDigits],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_attachments" as any)
         .select("*")
-        .eq("client_cpf", cpf)
+        .eq("client_cpf", cpfDigits)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
-    enabled: !!cpf,
+    enabled: !!cpfDigits,
   });
 
   const deleteMutation = useMutation({
