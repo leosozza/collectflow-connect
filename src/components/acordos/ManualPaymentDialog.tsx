@@ -46,6 +46,7 @@ const ManualPaymentDialog = ({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [receiver, setReceiver] = useState("");
   const [notes, setNotes] = useState("");
+  const [adjustReason, setAdjustReason] = useState<string>("");
   const [existing, setExisting] = useState<ManualPayment | null>(null);
   const [checkingExisting, setCheckingExisting] = useState(false);
 
