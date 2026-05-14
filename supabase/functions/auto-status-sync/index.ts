@@ -119,8 +119,17 @@ async function syncTenant(supabase: any, tenant_id: string) {
       return db - da;
     });
 
-    const allPago = clients.every((c: any) => c.status === "pago");
-    if (allPago && quitadoId) {
+    // Defesa em profundidade: NUNCA marcar como Quitado se houver QUALQUER
+    // parcela vencida em aberto no subconjunto recebido. Mesmo que o grupo
+    // chegue fragmentado por algum motivo (ordenação não-determinística,
+    // chunking futuro, etc.), uma vencida em aberto basta para impedir.
+    const hasOpenOverdue = clients.some((c: any) =>
+      c.data_vencimento < today &&
+      c.status !== "pago" &&
+      c.status !== "cancelado_maxlist"
+    );
+    const allPago = clients.length > 0 && clients.every((c: any) => c.status === "pago");
+    if (allPago && !hasOpenOverdue && quitadoId) {
       targetStatusId = quitadoId;
       countQuitado += clients.length;
     }
@@ -178,6 +187,7 @@ async function syncTenant(supabase: any, tenant_id: string) {
       .eq("tenant_id", tenant_id)
       .order("cpf", { ascending: true })
       .order("credor", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
