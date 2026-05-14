@@ -47,7 +47,7 @@ const ClientAttachments = ({ cpf }: Props) => {
       await supabase.storage.from("client-attachments").remove([attachment.file_path]);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-attachments", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["client-attachments", cpfDigits] });
       toast.success("Arquivo excluído!");
     },
     onError: () => toast.error("Erro ao excluir arquivo"),
@@ -55,12 +55,12 @@ const ClientAttachments = ({ cpf }: Props) => {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !tenant || !profile) return;
+    if (!file || !tenant || !profile || !cpfDigits) return;
 
     setUploading(true);
     try {
       const safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_");
-      const filePath = `${tenant.id}/${cpf}/${Date.now()}_${safeName}`;
+      const filePath = `${tenant.id}/${cpfDigits}/${Date.now()}_${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from("client-attachments")
         .upload(filePath, file);
@@ -70,14 +70,14 @@ const ClientAttachments = ({ cpf }: Props) => {
         .from("client_attachments" as any)
         .insert({
           tenant_id: tenant.id,
-          client_cpf: cpf,
+          client_cpf: cpfDigits,
           file_name: file.name,
           file_path: filePath,
           uploaded_by: profile.user_id,
         });
       if (insertError) throw insertError;
 
-      queryClient.invalidateQueries({ queryKey: ["client-attachments", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["client-attachments", cpfDigits] });
       toast.success("Arquivo enviado!");
     } catch {
       toast.error("Erro ao enviar arquivo");
