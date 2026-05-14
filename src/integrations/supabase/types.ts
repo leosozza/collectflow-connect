@@ -222,6 +222,7 @@ export type Database = {
           installment_key: string
           is_entrada: boolean
           paid: boolean
+          paid_after_break: boolean
           paid_amount: number | null
           paid_at: string | null
           paid_source: string | null
@@ -241,6 +242,7 @@ export type Database = {
           installment_key: string
           is_entrada?: boolean
           paid?: boolean
+          paid_after_break?: boolean
           paid_amount?: number | null
           paid_at?: string | null
           paid_source?: string | null
@@ -260,6 +262,7 @@ export type Database = {
           installment_key?: string
           is_entrada?: boolean
           paid?: boolean
+          paid_after_break?: boolean
           paid_amount?: number | null
           paid_at?: string | null
           paid_source?: string | null
@@ -3975,6 +3978,7 @@ export type Database = {
           link_cartao: string | null
           pix_copia_cola: string | null
           status: string
+          superseded: boolean
           tenant_id: string
           tipo: string
           updated_at: string
@@ -3998,6 +4002,7 @@ export type Database = {
           link_cartao?: string | null
           pix_copia_cola?: string | null
           status?: string
+          superseded?: boolean
           tenant_id: string
           tipo?: string
           updated_at?: string
@@ -4021,6 +4026,7 @@ export type Database = {
           link_cartao?: string | null
           pix_copia_cola?: string | null
           status?: string
+          superseded?: boolean
           tenant_id?: string
           tipo?: string
           updated_at?: string
@@ -4259,6 +4265,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      payment_orphans: {
+        Row: {
+          agreement_id: string | null
+          amount: number | null
+          created_at: string
+          details: Json | null
+          id: string
+          paid_at: string | null
+          reason: string
+          resolved_at: string | null
+          resolved_by: string | null
+          source: string
+          source_ref_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          agreement_id?: string | null
+          amount?: number | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          paid_at?: string | null
+          reason: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source: string
+          source_ref_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          agreement_id?: string | null
+          amount?: number | null
+          created_at?: string
+          details?: Json | null
+          id?: string
+          paid_at?: string | null
+          reason?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source?: string
+          source_ref_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: []
       }
       payment_records: {
         Row: {
