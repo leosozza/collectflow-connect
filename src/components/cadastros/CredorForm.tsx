@@ -134,12 +134,36 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const set = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
 
-  const applyMask = (value: string, mask: "cnpj" | "phone") => {
+  const applyMask = (value: string, mask: "cnpj" | "phone" | "cep") => {
     const n = value.replace(/\D/g, "");
     if (mask === "cnpj") {
       return n.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*/, "$1.$2.$3/$4-$5").slice(0, 18);
     }
+    if (mask === "cep") {
+      return n.replace(/^(\d{5})(\d{3}).*/, "$1-$2").slice(0, 9);
+    }
     return n.replace(/^(\d{2})(\d{5})(\d{4}).*/, "($1) $2-$3").slice(0, 15);
+  };
+
+  const handleCepBlur = async () => {
+    const cep = form.cep?.replace(/\D/g, "");
+    if (cep?.length === 8) {
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await res.json();
+        if (!data.erro) {
+          setForm((prev: any) => ({
+            ...prev,
+            endereco: data.logradouro || prev.endereco,
+            bairro: data.bairro || prev.bairro,
+            cidade: data.localidade || prev.cidade,
+            uf: data.uf || prev.uf,
+          }));
+        }
+      } catch (e) {
+        console.error("Erro ao buscar CEP", e);
+      }
+    }
   };
 
   const saveMutation = useMutation({
@@ -239,7 +263,11 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     if (!editing?.id) return;
     setSavingGrade(true);
     try {
-      await upsertCredor({ id: editing.id, tenant_id: tenant!.id, honorarios_grade: honorarios });
+      const { error } = await supabase
+        .from("credores" as any)
+        .update({ honorarios_grade: honorarios } as any)
+        .eq("id", editing.id);
+      if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Grade de honorários salva!");
     } catch {
@@ -253,7 +281,11 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
     if (!editing?.id) return;
     setSavingAging(true);
     try {
-      await upsertCredor({ id: editing.id, tenant_id: tenant!.id, aging_discount_tiers: agingTiers });
+      const { error } = await supabase
+        .from("credores" as any)
+        .update({ aging_discount_tiers: agingTiers } as any)
+        .eq("id", editing.id);
+      if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["credores"] });
       toast.success("Faixas de aging salvas!");
     } catch {
@@ -265,7 +297,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   const handleSave = () => {
     if (!form.razao_social?.trim()) { toast.error("Razão Social obrigatória"); return; }
-    if (!form.cnpj?.replace(/\D/g, "") || form.cnpj.replace(/\D/g, "").length < 14) { toast.error("CNPJ inválido"); return; }
+    if (!form.cnpj?.replace(/\D/g, "") || form.cnpj.replace(/\D/g, "").length !== 14) { toast.error("CNPJ inválido"); return; }
     saveMutation.mutate({
       ...(editing?.id ? { id: editing.id } : {}),
       tenant_id: tenant!.id,
@@ -379,7 +411,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-3">
                 <div className="grid grid-cols-3 gap-4">
-                  <div><Label>CEP</Label><Input value={form.cep || ""} onChange={e => set("cep", e.target.value)} /></div>
+                  <div><Label>CEP</Label><Input value={applyMask(form.cep || "", "cep")} onChange={e => set("cep", e.target.value)} onBlur={handleCepBlur} placeholder="00000-000" /></div>
                   <div className="col-span-2"><Label>Rua</Label><Input value={form.endereco || ""} onChange={e => set("endereco", e.target.value)} /></div>
                   <div><Label>Número</Label><Input value={form.numero || ""} onChange={e => set("numero", e.target.value)} /></div>
                   <div><Label>Complemento</Label><Input value={form.complemento || ""} onChange={e => set("complemento", e.target.value)} /></div>
@@ -430,7 +462,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                         const path = `credor-doc-logos/${cId}/${Date.now()}.${ext}`;
                         const { error: uploadError } = await supabase.storage
                           .from("avatars")
-                          .upload(path, file, { upsert: true });
+                          .upload(path, file, { upsert: true, contentType: file.type });
                         if (uploadError) throw uploadError;
                         const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
                         set("document_logo_url", urlData.publicUrl);
@@ -999,7 +1031,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                             const path = `credor-logos/${credorId}/${Date.now()}.${ext}`;
                             const { error: uploadError } = await supabase.storage
                               .from("avatars")
-                              .upload(path, file, { upsert: true });
+                              .upload(path, file, { upsert: true, contentType: file.type });
                             if (uploadError) throw uploadError;
                             const { data: urlData } = supabase.storage
                               .from("avatars")
