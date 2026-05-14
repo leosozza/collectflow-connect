@@ -385,7 +385,11 @@ const AppLayout = () => {
                 "/admin/tenants": "Super Admin",
                 "/maxlist": "MaxList - Importação",
               };
-              const title = pageTitles[location.pathname];
+              const path = location.pathname;
+              const matchedKey = Object.keys(pageTitles).find(
+                (k) => path === k || path.startsWith(k + "/")
+              );
+              const title = matchedKey ? pageTitles[matchedKey] : undefined;
               return title ? (
                 <h1 className="text-lg font-bold text-foreground">{title}</h1>
               ) : null;
