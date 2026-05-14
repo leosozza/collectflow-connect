@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useUrlState } from "./useUrlState";
-import { format, subDays } from "date-fns";
+import { format, startOfMonth } from "date-fns";
 
 export type AnalyticsRpcParams = {
   _tenant_id: string;
@@ -14,7 +14,7 @@ export type AnalyticsRpcParams = {
 };
 
 const today = () => format(new Date(), "yyyy-MM-dd");
-const daysAgo = (n: number) => format(subDays(new Date(), n), "yyyy-MM-dd");
+const monthStart = () => format(startOfMonth(new Date()), "yyyy-MM-dd");
 
 export function useAnalyticsFilters(tenantId: string | undefined) {
   const [tab, setTab] = useUrlState("tab", "receita");
