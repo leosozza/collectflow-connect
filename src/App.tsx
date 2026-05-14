@@ -153,7 +153,10 @@ const App = () => (
               <Route path="financeiro/baixas" element={<BaixasRealizadasPage />} />
               <Route path="financeiro/aguardando-liberacao" element={<AguardandoLiberacaoPage />} />
               <Route path="financeiro/confirmacao-pagamento" element={<ConfirmacaoPagamentoPage />} />
-              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="analytics" element={<AnalyticsPage />}>
+                <Route index element={<Navigate to="receita" replace />} />
+                <Route path=":analyticsTab" element={null} />
+              </Route>
               <Route path="auditoria" element={<AuditoriaPage />} />
               <Route path="atendimento/:clientId?" element={<AtendimentoPage />} />
               <Route path="signs" element={<SignsPage />} />
