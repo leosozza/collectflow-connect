@@ -290,6 +290,10 @@ const ClientDetailPage = () => {
     return base;
   }, [clients]);
 
+  // CPF canônico (apenas dígitos). Quando a rota é `/carteira/perfil/:id` o
+  // param `cpf` vem undefined — caímos para o CPF do registro carregado.
+  const effectiveCpf = ((cpf || first?.cpf || "") as string).replace(/\D/g, "");
+
   if (isLoading) {
     return (
       <div className="space-y-4 animate-fade-in">
