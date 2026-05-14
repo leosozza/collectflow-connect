@@ -840,7 +840,7 @@ const ClientDetailPage = () => {
           </DialogHeader>
           <AgreementCalculator
             clients={clients}
-            cpf={cpf || ""}
+            cpf={effectiveCpf}
             clientName={first.nome_completo}
             credor={first.credor}
             onAgreementCreated={handleAgreementCreated}
