@@ -1,137 +1,88 @@
 ## Objetivo
-
-Travar a lógica de baixa (manual + Negociarie) tratando dois cenários reais como **normais** (com aviso), não como erro:
-
-1. **Valor pago ≠ valor da parcela** (operador deu desconto / cobrou juros) → aceitar o valor digitado, marcar parcela como paga, anexar comentário.
-2. **Parcela paga depois do acordo quebrado** (boleto continuou ativo) → aceitar a baixa, marcar parcela como paga, **avisar admin + operador do acordo** via sininho.
-
-E reconciliar os 9 órfãos atuais da Y.BRASIL com essa mesma lógica.
+Padronizar a página `/analytics` com o mesmo visual de navegação dos Cadastros (tabs horizontais com ícone + sublinhado primary), expor cada aba como rota própria, simplificar a barra de filtros (uma linha só) e remover o cabeçalho "Analytics" duplicado.
 
 ---
 
-## Parte 1 — Reconciliação dos 9 órfãos atuais (Y.BRASIL)
+## 1. Rotas por aba
 
-Migration `reconcile_orphan_payments_ybrasil()` (one-shot, idempotente):
-
-| Caso | Ação |
-|---|---|
-| Natani (R$118,87 vs 133,52) | Marca parcela 1 como paga, valor = 118,87, comentário "Baixa com valor divergente — desconto/ajuste do operador" |
-| Carolina (−R$0,12) | Idem parcela 1 |
-| Maria Aux. (−R$1,00) | Idem parcela 1 |
-| Samantha (legacy `installment_number=2`) | Match por `installment_key='1'` (canônica), marca paga |
-| Valdenice (`:1` sem parcela 1) | Backfill: cria `installment_key=':1'` na SSOT com valor pago, marca paga, log "Parcela paga após quebra de acordo" |
-| Ivanessa (key vazia) | Match por `data_vencimento + valor`, fallback parcela 1 |
-| Fernanda (`:0` legado) | Re-mapeia para `entrada` |
-| Gabriella (duplicata) | Marca a 2ª como `superseded` em `manual_payments`/`negociarie_cobrancas`, **não** mexe na parcela |
-| Sem nome (sem agreement_id) | Insere em nova tabela `payment_orphans` com motivo `missing_agreement_id` |
-
-Cada caso gera linha em `audit_logs` com `action='orphan_reconciled'` + metadata.
-
----
-
-## Parte 2 — Trigger canônico de reflexão (anti-órfão futuro)
-
-Reescreve `reflect_payment_to_installment()` com regras determinísticas:
+Em `src/App.tsx`, transformar a rota única em rotas filhas:
 
 ```text
-1. Se installment_key presente → match exato em agreement_installments
-2. Se ausente → match por (agreement_id, data_vencimento, valor ±5%)
-3. Se ainda assim não achar:
-   - INSERT em payment_orphans (tenant, source, ref_id, motivo)
-   - INSERT notification para admin do tenant
-4. Se achar parcela já paga (não-cancelada) com source diferente:
-   - Marca o pagamento novo como 'duplicate_ignored'
-   - audit_log + notification "Pagamento duplicado detectado"
-5. Sempre persiste paid_amount = valor REAL recebido (não o valor da parcela)
+/analytics                  → redirect para /analytics/receita
+/analytics/receita
+/analytics/funil
+/analytics/performance      (Operadores)
+/analytics/canais
+/analytics/qualidade
+/analytics/inteligencia
 ```
 
-Nova tabela `payment_orphans`:
-- `tenant_id, source ('manual'|'negociarie'|'portal'), source_ref_id, agreement_id, amount, paid_at, reason, resolved_at`
-- RLS por tenant; admin pode resolver manualmente via UI futura
+- `AnalyticsPage` passa a ler a aba ativa do `useParams()` (ou do último segmento da URL) em vez do `useUrlState("tab")`.
+- Trocar cliques de aba por `navigate(`/analytics/${key}`)`.
+- Manter os demais filtros em querystring (`?from`, `?to`, `?credores`, `?operators`).
 
----
+## 2. Visual das abas (padrão sistema)
 
-## Parte 3 — Valor divergente é NORMAL (não bloqueia)
+Substituir o `<Tabs>` shadcn atual por uma `<nav>` horizontal idêntica à de `CadastrosPage` (linhas 113‑132): botões com ícone + label, fundo `bg-primary/10`, borda inferior `border-b-[3px] border-primary` na ativa, separador `border-b border-border`.
 
-### Backend
-- Ao confirmar baixa manual, se `|amount_paid - installment.amount| > 0.01`:
-  - **Aceita** o pagamento normalmente
-  - Atualiza `agreement_installments.paid_amount = amount_paid` (valor real)
-  - **Não** altera `agreement_installments.amount` (valor contratado fica preservado para histórico)
-  - Insere comentário automático em `agreement_installment_notes` (nova tabela leve) ou em `manual_payments.notes` prefixado: `[Divergência: contratado R$X, recebido R$Y — desconto/juros aplicado pelo operador]`
+Ícones mantidos: `DollarSign`, `Filter`, `Users`, `MessageSquare`, `ShieldAlert`, `Brain`.
 
-### Frontend (`AgreementInstallments.tsx`)
-- Badge discreto na parcela: ⚠️ "Valor ajustado" (tooltip mostra contratado vs pago + observação)
-- Em `ManualPaymentDialog`: remove o aviso amarelo atual de "será atualizado" — substitui por campo opcional **"Motivo do ajuste"** (desconto / juros / outro), salvo em `notes`
+## 3. Barra de filtros — uma linha
 
----
+Em `src/components/analytics/AnalyticsFiltersBar.tsx`:
 
-## Parte 4 — Pagamento após quebra de acordo (NORMAL + alerta)
+- **Remover** a linha "Período rápido" e os presets `7d / 30d / 90d / Mês atual` (incluindo o array `presets` e `activePreset`).
+- **Manter** em uma única linha (`flex flex-nowrap items-center gap-2 overflow-x-auto`):
+  1. Botão "← Mês anterior" (decrementa `dateFrom`/`dateTo` para o mês anterior completo).
+  2. Botão "Mês atual" (volta para `startOfMonth(today)` → `today`).
+  3. Date picker "De".
+  4. Date picker "Até".
+  5. MultiSelect Credores.
+  6. MultiSelect Operadores (oculto para operador).
+  7. MultiSelect Canais / Score continuam condicionais por aba, no mesmo flex.
+- Padding e bordas iguais ao card de filtros do sistema (`bg-card rounded-xl border border-border p-3`).
 
-### Backend
-Trigger detecta no momento da reflexão:
-```text
-SE agreement.status IN ('cancelled','broken') E pagamento entrou depois de status_changed_at:
-  - Marca parcela como paga normalmente
-  - Adiciona flag agreement_installments.paid_after_break = true
-  - Cria notification para:
-      • admin(s) do tenant
-      • operador dono do acordo (agreements.operator_id / created_by)
-    Título: "Pagamento recebido em acordo quebrado"
-    Mensagem: "Cliente {nome} pagou parcela {N} de R$ {valor} mesmo com acordo quebrado em {data}."
-    reference_type='agreement', reference_id={agreement_id}
-  - audit_logs action='payment_after_break'
+## 4. Default ao entrar = mês atual
+
+Em `src/hooks/useAnalyticsFilters.ts`:
+
+- Trocar default `dateFrom` de `daysAgo(30)` para `format(startOfMonth(new Date()), "yyyy-MM-dd")`.
+- `dateTo` permanece `today()`.
+
+## 5. Remover cabeçalho "Analytics" duplicado
+
+`AppLayout` já injeta o título "Analytics" no topo. Em `AnalyticsPage.tsx` remover o bloco:
+
+```tsx
+<div className="flex items-center gap-2">
+  <Button …><ArrowLeft/></Button>
+  <h1 className="text-xl font-bold">Analytics</h1>
+</div>
 ```
 
-### Frontend (`AgreementInstallments.tsx`)
-- Badge na parcela: 🔔 "Paga após quebra" (vermelho suave, tooltip com data da quebra)
-- Sininho (`NotificationBell`) já consome `notifications` — apenas garantir que o tipo novo `payment_after_break` aparece com ícone/cor adequados
-
-### Não muda
-- O acordo permanece `cancelled/broken` (não "ressuscita" automaticamente — admin decide se reativa manualmente)
-- Status canônico do CPF: continua `quebra_acordo` até admin reabrir
+(mantendo apenas o banner amarelo do modo suporte quando aplicável).
 
 ---
 
-## Parte 5 — Travamento (memória + docs)
+## Detalhes técnicos
 
-Após aprovação e migration aplicada, atualizo:
-- `mem://logic/agreements/installment-key-canonical` — adiciona regras 1-5 do trigger + paid_amount real
-- `mem://features/billing/manual-payment-confirmation` — divergência é normal, fluxo de comentário
-- Nova memória `mem://logic/agreements/payment-after-break` — comportamento + notificação
-- Marca como **lógica congelada** — qualquer mudança futura precisa de aprovação explícita
+- **Sem mudança de RPC ou backend** — somente UI/roteamento.
+- `useUrlState("tab")` é descontinuado; manter retrocompatibilidade redirecionando `/analytics?tab=funil` → `/analytics/funil` no `useEffect` inicial.
+- `restrictToSelf` / `isOperator` / `scopedRpcParams` permanecem inalterados.
+- Mês anterior: usar `subMonths(parseISO(dateFrom), 1)` → `startOfMonth` e `endOfMonth` daquele mês.
+- A11y: cada botão de aba recebe `aria-current="page"` quando ativo.
 
----
+## Arquivos a editar
 
-## Entregáveis técnicos
+- `src/App.tsx` — rotas filhas de `/analytics`.
+- `src/pages/AnalyticsPage.tsx` — nav horizontal estilo Cadastros, leitura de aba via rota, remoção do h1 duplicado.
+- `src/components/analytics/AnalyticsFiltersBar.tsx` — remover presets, adicionar Mês anterior/atual, layout uma linha.
+- `src/hooks/useAnalyticsFilters.ts` — default = mês atual.
 
-1. Migration `reconcile_orphans_and_harden_reflection.sql`:
-   - Reconcilia os 9 (com `SET LOCAL app.force_status_override`)
-   - Cria tabela `payment_orphans` + RLS
-   - Adiciona coluna `agreement_installments.paid_after_break BOOLEAN DEFAULT false`
-   - Adiciona coluna `agreement_installments.paid_amount NUMERIC` (se ainda não existir como real)
-   - Reescreve `reflect_payment_to_installment()` com as 5 regras
-   - Trigger de notificação `notify_payment_after_break()`
-2. Edge `negociarie-webhook`: rejeita HTTP 400 se `agreement_id` ausente; aceita `installment_key` vazio (deixa trigger resolver)
-3. `ManualPaymentDialog.tsx`: troca aviso amarelo por campo "Motivo do ajuste"
-4. `AgreementInstallments.tsx`: 2 badges novos (valor ajustado / paga após quebra) + tooltip
-5. `NotificationBell` / list: ícone para `payment_after_break`
+## Validação
 
----
-
-## Validação final
-
-```sql
--- Deve retornar 0 linhas
-SELECT * FROM payment_orphans WHERE tenant_id = 'YBRASIL' AND resolved_at IS NULL;
-
--- Deve bater exato
-SELECT
-  (SELECT SUM(amount_paid) FROM manual_payments WHERE tenant_id='YBRASIL' AND status='confirmed' AND date_trunc('month',payment_date)='2026-05-01')
-  + (SELECT SUM(valor_pago) FROM negociarie_cobrancas WHERE tenant_id='YBRASIL' AND status='pago' AND date_trunc('month',data_pagamento)='2026-05-01')
-  AS ssot_recebido,
-  (SELECT SUM(paid_amount) FROM agreement_installments WHERE tenant_id='YBRASIL' AND paid AND date_trunc('month',paid_at)='2026-05-01') AS ssot_parcelas;
--- ssot_recebido = ssot_parcelas (diferença esperada: 0)
-```
-
-Posso aplicar?
+1. `/analytics` redireciona para `/analytics/receita`.
+2. Cada aba muda a URL e mantém filtros na query.
+3. Default abre no mês corrente; "Mês anterior" navega corretamente.
+4. Filtros em uma única linha em 1326px (viewport atual).
+5. Visual das abas idêntico ao screenshot anexado.
