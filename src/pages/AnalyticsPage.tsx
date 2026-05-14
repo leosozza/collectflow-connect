@@ -1,10 +1,9 @@
-import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useEffectiveTenantId } from "@/hooks/useEffectiveTenantId";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, Filter, Users, MessageSquare, ShieldAlert, Brain, Headphones } from "lucide-react";
+import { ShieldAlert, DollarSign, Filter, Users, MessageSquare, Brain, Headphones } from "lucide-react";
 import { useAnalyticsFilters } from "@/hooks/useAnalyticsFilters";
 import { AnalyticsFiltersBar } from "@/components/analytics/AnalyticsFiltersBar";
 import { RevenueTab } from "@/components/analytics/tabs/RevenueTab";
@@ -13,23 +12,40 @@ import { PerformanceTab } from "@/components/analytics/tabs/PerformanceTab";
 import { ChannelsTab } from "@/components/analytics/tabs/ChannelsTab";
 import { QualityTab } from "@/components/analytics/tabs/QualityTab";
 import { IntelligenceTab } from "@/components/analytics/tabs/IntelligenceTab";
+import { cn } from "@/lib/utils";
+
+const TABS = [
+  { key: "receita", label: "Receita", icon: DollarSign },
+  { key: "funil", label: "Funil de Cobrança", icon: Filter },
+  { key: "performance", label: "Operadores", icon: Users },
+  { key: "canais", label: "Canais", icon: MessageSquare },
+  { key: "qualidade", label: "Quebras & Risco", icon: ShieldAlert },
+  { key: "inteligencia", label: "Score & Propensão", icon: Brain },
+];
 
 const AnalyticsPage = () => {
   const { profile } = useAuth();
   const { canViewAllAnalytics, canViewOwnAnalytics } = usePermissions();
   const { tenantId, isSupportMode, supportTenantName } = useEffectiveTenantId();
   const navigate = useNavigate();
+  const { analyticsTab } = useParams<{ analyticsTab?: string }>();
+  const [searchParams] = useSearchParams();
 
-  // Regra de escopo:
-  //  - Super admin em modo suporte → vê tudo do tenant alvo (sem _operator_ids).
-  //  - canViewAllAnalytics → vê tudo do tenant.
-  //  - canViewOwnAnalytics (sem all) → escopa em [profile.user_id].
-  //  - Sem nenhuma das duas e sem suporte → bloqueado.
   const hasAccess = isSupportMode || canViewAllAnalytics || canViewOwnAnalytics;
   const restrictToSelf = !isSupportMode && !canViewAllAnalytics && canViewOwnAnalytics;
   const isOperator = restrictToSelf;
 
   const f = useAnalyticsFilters(tenantId);
+
+  // Retrocompat: /analytics?tab=funil → /analytics/funil
+  useEffect(() => {
+    const legacy = searchParams.get("tab");
+    if (legacy && !analyticsTab) {
+      navigate(`/analytics/${legacy}`, { replace: true });
+    }
+  }, [searchParams, analyticsTab, navigate]);
+
+  const activeTab = TABS.find((t) => t.key === analyticsTab)?.key || "receita";
 
   const scopedRpcParams = f.rpcParams
     ? (restrictToSelf && profile?.user_id
@@ -37,19 +53,12 @@ const AnalyticsPage = () => {
         : f.rpcParams)
     : null;
 
-  const showChannel = ["funil", "performance", "canais"].includes(f.tab);
-  const showScore = ["funil", "inteligencia"].includes(f.tab);
+  const showChannel = ["funil", "performance", "canais"].includes(activeTab);
+  const showScore = ["funil", "inteligencia"].includes(activeTab);
 
-  // Sem permissão alguma → tela bloqueada
   if (!hasAccess) {
     return (
       <div className="space-y-5 animate-fade-in">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <h1 className="text-xl font-bold text-foreground">Analytics</h1>
-        </div>
         <div className="bg-card rounded-xl border border-border p-8 text-center">
           <ShieldAlert className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-sm font-medium text-foreground mb-1">Sem permissão para Analytics</p>
@@ -64,12 +73,6 @@ const AnalyticsPage = () => {
   if (!tenantId || !scopedRpcParams) {
     return (
       <div className="space-y-5 animate-fade-in">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <h1 className="text-xl font-bold text-foreground">Analytics</h1>
-        </div>
         <div className="bg-card rounded-xl border border-border p-8 text-center text-sm text-muted-foreground">
           {isSupportMode
             ? "Selecione um tenant no Modo Suporte para ver o Analytics."
@@ -89,14 +92,30 @@ const AnalyticsPage = () => {
           </p>
         </div>
       )}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("/")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <h1 className="text-xl font-bold text-foreground">Analytics</h1>
-        </div>
-      </div>
+
+      {/* Navegação Horizontal Premium (padrão Cadastros) */}
+      <nav className="flex flex-wrap items-center gap-1 border-b border-border pb-px">
+        {TABS.map((item) => {
+          const isActive = activeTab === item.key;
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.key}
+              onClick={() => navigate(`/analytics/${item.key}?${searchParams.toString()}`)}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-all relative rounded-t-lg",
+                isActive
+                  ? "bg-primary/10 text-primary border-b-[3px] border-primary"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground border-b-[3px] border-transparent"
+              )}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       <AnalyticsFiltersBar
         tenantId={tenantId}
@@ -119,35 +138,14 @@ const AnalyticsPage = () => {
         setScoreMax={f.setScoreMax}
       />
 
-      <Tabs value={f.tab} onValueChange={f.setTab}>
-        <TabsList className="flex flex-wrap h-auto gap-1">
-          <TabsTrigger value="receita" className="gap-1.5"><DollarSign className="w-3.5 h-3.5" /> Receita</TabsTrigger>
-          <TabsTrigger value="funil" className="gap-1.5"><Filter className="w-3.5 h-3.5" /> Funil de Cobrança</TabsTrigger>
-          <TabsTrigger value="performance" className="gap-1.5"><Users className="w-3.5 h-3.5" /> Operadores</TabsTrigger>
-          <TabsTrigger value="canais" className="gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Canais</TabsTrigger>
-          <TabsTrigger value="qualidade" className="gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> Quebras & Risco</TabsTrigger>
-          <TabsTrigger value="inteligencia" className="gap-1.5"><Brain className="w-3.5 h-3.5" /> Score & Propensão</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="receita" className="mt-4">
-          {f.tab === "receita" && <RevenueTab params={scopedRpcParams} periodDays={f.periodDays} />}
-        </TabsContent>
-        <TabsContent value="funil" className="mt-4">
-          {f.tab === "funil" && <FunnelTab params={scopedRpcParams} />}
-        </TabsContent>
-        <TabsContent value="performance" className="mt-4">
-          {f.tab === "performance" && <PerformanceTab params={scopedRpcParams} />}
-        </TabsContent>
-        <TabsContent value="canais" className="mt-4">
-          {f.tab === "canais" && <ChannelsTab params={scopedRpcParams} />}
-        </TabsContent>
-        <TabsContent value="qualidade" className="mt-4">
-          {f.tab === "qualidade" && <QualityTab params={scopedRpcParams} />}
-        </TabsContent>
-        <TabsContent value="inteligencia" className="mt-4">
-          {f.tab === "inteligencia" && <IntelligenceTab params={scopedRpcParams} />}
-        </TabsContent>
-      </Tabs>
+      <div className="mt-2">
+        {activeTab === "receita" && <RevenueTab params={scopedRpcParams} periodDays={f.periodDays} />}
+        {activeTab === "funil" && <FunnelTab params={scopedRpcParams} />}
+        {activeTab === "performance" && <PerformanceTab params={scopedRpcParams} />}
+        {activeTab === "canais" && <ChannelsTab params={scopedRpcParams} />}
+        {activeTab === "qualidade" && <QualityTab params={scopedRpcParams} />}
+        {activeTab === "inteligencia" && <IntelligenceTab params={scopedRpcParams} />}
+      </div>
     </div>
   );
 };
