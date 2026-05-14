@@ -808,7 +808,7 @@ const ClientDetailPage = () => {
           <ClientTimeline
             dispositions={[]}
             agreements={agreements}
-            clientCpf={cpf}
+            clientCpf={effectiveCpf}
           />
         </TabsContent>
 
