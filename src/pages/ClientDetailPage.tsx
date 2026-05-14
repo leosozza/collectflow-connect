@@ -790,7 +790,7 @@ const ClientDetailPage = () => {
                           <AgreementInstallments
                             agreementId={agreement.id}
                             agreement={agreement}
-                            cpf={cpf || ""}
+                            cpf={effectiveCpf}
                             tenantId={tenant?.id}
                             onRefresh={() => { refetch(); refetchAgreements(); }}
                           />
