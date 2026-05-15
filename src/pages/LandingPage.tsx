@@ -284,73 +284,93 @@ const WhatsAppMockup = () => {
   );
 };
 
-/* ───────── Hero ───────── */
+/* ───────── Hero (escuro · estilo antigo) ───────── */
 const Hero = () => (
-  <section className={`relative ${grid}`}>
-    <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+  <section className="relative bg-[#0F1117] text-white overflow-hidden">
+    {/* Pattern de conexões */}
+    <ConnectionsBg />
+    {/* Glow laranja radial */}
+    <div
+      aria-hidden
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background:
+          "radial-gradient(60% 50% at 25% 35%, rgba(255,127,0,0.18), transparent 70%), radial-gradient(50% 40% at 85% 70%, rgba(255,127,0,0.12), transparent 70%)",
+      }}
+    />
+    {/* Grid sutil branco */}
+    <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none" />
+
+    <div className="relative max-w-7xl mx-auto px-6 lg:px-10 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
       <div>
-        <div className="inline-flex items-center gap-2 text-[11px] tracking-[0.18em] uppercase text-neutral-600 mb-6">
-          <span className="w-2 h-2 rounded-full bg-primary" />
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/15 ring-1 ring-primary/30 text-[11px] tracking-[0.18em] uppercase text-primary font-semibold mb-6">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
           Plataforma para assessorias de cobrança
         </div>
 
-        <h1 className={`${serif} text-5xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-tight text-neutral-950`}>
-          Sua assessoria recupera<br />
-          mais quando a <em className="italic text-primary">IA<br />trabalha junto</em>.
+        <h1 className="font-sans font-black text-5xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-tight">
+          Sua assessoria recupera{" "}
+          <span className="text-primary">mais</span> cobrando do{" "}
+          <span className="text-primary">jeito certo</span>.
         </h1>
 
-        <p className="mt-7 text-lg text-neutral-700 max-w-xl leading-relaxed">
-          RIVO CONNECT unifica <strong className="font-semibold text-neutral-950">WhatsApp oficial e não oficial</strong>, discador,
-          score de IA, portal do credor e analytics em uma única plataforma —
-          construída para quem vive de cobrança.
+        <p className="mt-7 text-lg text-white/70 max-w-xl leading-relaxed">
+          WhatsApp oficial e não oficial, discador, score de IA e portal do credor —
+          tudo em <strong className="font-semibold text-white">uma única plataforma</strong>,
+          feita para quem vive de cobrança.
         </p>
 
+        {/* CTAs */}
+        <div className="mt-9 flex flex-wrap items-center gap-3">
+          <Link to="/auth">
+            <Button
+              className="rounded-full bg-primary hover:bg-primary/90 text-white px-7 h-12 text-sm font-semibold shadow-[0_0_40px_rgba(255,127,0,0.45)]"
+            >
+              Teste grátis 14 dias <ArrowRight className="w-4 h-4 ml-1.5" />
+            </Button>
+          </Link>
+          <a href="#hero-chat">
+            <Button
+              variant="outline"
+              className="rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 px-6 h-12 text-sm font-medium"
+            >
+              Ver demonstração
+            </Button>
+          </a>
+        </div>
+
+        {/* Trust badges */}
+        <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-xs text-white/60">
+          {[
+            { i: ShieldCheck, t: "Sem cartão de crédito" },
+            { i: Zap, t: "Setup em 24h" },
+            { i: ShieldCheck, t: "LGPD compliant" },
+            { i: Plug, t: "Funciona com seu CRM" },
+          ].map((s) => (
+            <span key={s.t} className="inline-flex items-center gap-1.5">
+              <s.i className="w-3.5 h-3.5 text-primary" /> {s.t}
+            </span>
+          ))}
+        </div>
+
         {/* KPIs */}
-        <div className="mt-10 grid grid-cols-3 gap-6 max-w-xl border-t border-black/10 pt-6">
+        <div className="mt-10 grid grid-cols-3 gap-6 max-w-xl border-t border-white/10 pt-6">
           {[
             { label: "RECUPERAÇÃO", value: "+30%", sub: "vs. operação manual" },
             { label: "PRODUTIVIDADE", value: "3×", sub: "mais contatos / operador" },
             { label: "CREDORES", value: "Multi", sub: "em uma só plataforma" },
           ].map((k) => (
             <div key={k.label}>
-              <div className="text-[10px] tracking-[0.18em] uppercase text-neutral-500">{k.label}</div>
-              <div className={`${serif} text-4xl text-neutral-950 mt-1 leading-none`}>
-                {k.value.startsWith("+") ? <span className="text-primary">{k.value}</span> : k.value}
+              <div className="text-[10px] tracking-[0.18em] uppercase text-white/50">{k.label}</div>
+              <div className="font-sans font-black text-3xl text-white mt-1 leading-none">
+                {k.value.startsWith("+") || k.value.startsWith("3") ? (
+                  <span className="text-primary">{k.value}</span>
+                ) : (
+                  k.value
+                )}
               </div>
-              <div className="text-[11px] text-neutral-500 mt-1.5">{k.sub}</div>
+              <div className="text-[11px] text-white/50 mt-1.5">{k.sub}</div>
             </div>
-          ))}
-        </div>
-
-        {/* CTAs */}
-        <div className="mt-10 flex flex-wrap items-center gap-3">
-          <Link to="/auth">
-            <Button className="rounded-full bg-neutral-950 hover:bg-neutral-800 text-white px-6 h-12 text-sm font-medium">
-              Agendar demo <ArrowRight className="w-4 h-4 ml-1.5" />
-            </Button>
-          </Link>
-          <a href="#recursos">
-            <Button variant="outline" className="rounded-full border-neutral-950/15 hover:bg-neutral-950/5 px-6 h-12 text-sm font-medium">
-              Ver plataforma
-            </Button>
-          </a>
-          <a href="#hero-chat" className="hidden sm:inline-flex items-center gap-1.5 text-sm text-neutral-700 hover:text-neutral-950 px-3">
-            <span className="w-7 h-7 rounded-full bg-neutral-950 text-white flex items-center justify-center">▸</span>
-            Ver IA negociando
-          </a>
-        </div>
-
-        {/* Selos */}
-        <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs text-neutral-600">
-          {[
-            { c: "bg-emerald-500", t: "Multi-tenant seguro" },
-            { c: "bg-blue-500", t: "LGPD compliant" },
-            { c: "bg-neutral-400", t: "API REST oficial" },
-            { c: "bg-primary", t: "Setup < 1 dia" },
-          ].map((s) => (
-            <span key={s.t} className="inline-flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-sm ${s.c}`} /> {s.t}
-            </span>
           ))}
         </div>
       </div>
