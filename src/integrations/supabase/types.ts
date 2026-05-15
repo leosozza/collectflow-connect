@@ -8291,6 +8291,21 @@ export type Database = {
           updated: number
         }[]
       }
+      sync_clients_status_loop: {
+        Args: {
+          _after_id?: string
+          _max_pages?: number
+          _page?: number
+          _tenant_id: string
+        }
+        Returns: {
+          finished: boolean
+          last_id: string
+          pages: number
+          processed: number
+          updated: number
+        }[]
+      }
       try_lock_campaign: {
         Args: { _campaign_id: string; _worker_id: string }
         Returns: boolean
