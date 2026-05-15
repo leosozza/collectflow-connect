@@ -20,6 +20,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
+import ReconciliationAlertModal from "@/components/acordos/ReconciliationAlertModal";
+import { useReconciliationAlerts } from "@/hooks/useReconciliationAlerts";
+import type { ReconciliationAlert } from "@/services/reconciliationAlertService";
 import { fetchSSOTInstallments, type SSOTInstallment } from "@/lib/agreementInstallmentsSSOT";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
