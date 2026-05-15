@@ -15,8 +15,143 @@ import logoImg from "@/assets/rivo_connect.png";
    foco em assessorias de cobrança.
 ============================================================ */
 
-const serif = "font-['Instrument_Serif'] font-normal";
+// Tipografia: tudo em Inter, headings em peso black para impacto.
+const serif = "font-sans font-black";
 const grid = "bg-[linear-gradient(to_right,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.04)_1px,transparent_1px)] bg-[size:48px_48px]";
+
+/* ───────── Pattern de conexões (rede neural sutil) ───────── */
+const ConnectionsBg = ({ className = "" }: { className?: string }) => {
+  // Grid 7×5 de nós com linhas conectando vizinhos próximos.
+  const cols = 7, rows = 5;
+  const nodes = Array.from({ length: rows * cols }, (_, i) => ({
+    x: ((i % cols) + 0.5) * (100 / cols),
+    y: (Math.floor(i / cols) + 0.5) * (100 / rows),
+  }));
+  const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  nodes.forEach((a, i) => {
+    nodes.slice(i + 1).forEach((b) => {
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d < 22) lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+    });
+  });
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      className={`absolute inset-0 w-full h-full pointer-events-none ${className}`}
+    >
+      {lines.map((l, i) => (
+        <line
+          key={i}
+          x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth={0.08}
+        />
+      ))}
+      {nodes.map((n, i) => (
+        <circle key={i} cx={n.x} cy={n.y} r={0.35} fill="rgba(255,127,0,0.35)" />
+      ))}
+    </svg>
+  );
+};
+
+/* ───────── MacBook Frame ───────── */
+const MacBookFrame = ({ children }: { children: React.ReactNode }) => (
+  <div className="relative mx-auto w-full max-w-5xl">
+    {/* Tela */}
+    <div className="relative rounded-t-2xl bg-neutral-900 p-3 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.5)] ring-1 ring-black/20">
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-1 rounded-full bg-neutral-800" />
+      <div className="overflow-hidden rounded-lg bg-white aspect-[16/10]">
+        {children}
+      </div>
+    </div>
+    {/* Base trapezoidal */}
+    <div className="relative">
+      <div className="h-3 bg-gradient-to-b from-neutral-300 to-neutral-400" style={{ clipPath: "polygon(2% 0, 98% 0, 100% 100%, 0 100%)" }} />
+      <div className="h-1.5 bg-neutral-500/80 mx-auto rounded-b-xl" style={{ width: "18%" }} />
+    </div>
+  </div>
+);
+
+/* ───────── Mockup Dashboard (placeholder estilizado) ───────── */
+const DashboardMockup = () => (
+  <div className="w-full h-full bg-[#FAFAF7] flex flex-col text-[10px]">
+    {/* Top bar */}
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-black/10 bg-white">
+      <div className="flex gap-1">
+        <span className="w-2 h-2 rounded-full bg-red-400" />
+        <span className="w-2 h-2 rounded-full bg-yellow-400" />
+        <span className="w-2 h-2 rounded-full bg-green-400" />
+      </div>
+      <div className="ml-3 text-[9px] font-semibold text-neutral-700">RIVO CONNECT · Dashboard</div>
+      <div className="ml-auto flex gap-2 text-neutral-400">
+        <span>Hoje</span><span>Mês</span><span className="text-primary font-semibold">Ano</span>
+      </div>
+    </div>
+    <div className="flex flex-1 min-h-0">
+      {/* Sidebar */}
+      <div className="w-28 bg-[#0F1117] text-white/80 px-2 py-3 space-y-1 text-[8px]">
+        {["Dashboard", "Carteira", "Atendimento", "Acordos", "WhatsApp", "Discador", "Analytics", "Gamificação"].map((m, i) => (
+          <div key={m} className={`px-2 py-1.5 rounded ${i === 0 ? "bg-primary text-white" : ""}`}>{m}</div>
+        ))}
+      </div>
+      {/* Conteúdo */}
+      <div className="flex-1 p-3 space-y-2 overflow-hidden">
+        {/* KPIs */}
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { l: "Recebido", v: "R$ 487 K", c: "text-emerald-600" },
+            { l: "Acordos", v: "1.284", c: "text-primary" },
+            { l: "Carteira", v: "R$ 4,2 Mi", c: "text-neutral-700" },
+            { l: "Conversão", v: "32%", c: "text-blue-600" },
+          ].map((k) => (
+            <div key={k.l} className="bg-white border border-black/5 rounded-md px-2 py-1.5">
+              <div className="text-[7px] uppercase tracking-wider text-neutral-400">{k.l}</div>
+              <div className={`text-[11px] font-bold ${k.c}`}>{k.v}</div>
+            </div>
+          ))}
+        </div>
+        {/* Gráfico */}
+        <div className="bg-white border border-black/5 rounded-md p-2">
+          <div className="text-[8px] font-semibold text-neutral-600 mb-1.5">Recuperação · 12 meses</div>
+          <div className="flex items-end gap-1 h-14">
+            {[35, 48, 42, 60, 55, 72, 68, 80, 75, 88, 92, 100].map((h, i) => (
+              <div key={i} className="flex-1 bg-gradient-to-t from-primary to-primary/50 rounded-t" style={{ height: `${h}%` }} />
+            ))}
+          </div>
+        </div>
+        {/* Tabela */}
+        <div className="bg-white border border-black/5 rounded-md p-2 flex-1">
+          <div className="text-[8px] font-semibold text-neutral-600 mb-1">Top operadores</div>
+          {["Carla M. · 42 acordos", "Pedro R. · 38 acordos", "Joana S. · 31 acordos"].map((r, i) => (
+            <div key={r} className="flex items-center justify-between py-1 border-t border-black/5 first:border-0 text-[8px]">
+              <span className="text-neutral-700">{r}</span>
+              <span className="text-primary font-semibold">+{(15 - i * 3)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const ProductShowcase = () => (
+  <section className={`relative bg-gradient-to-b from-[#FAFAF7] to-[#F0EDE5] ${grid}`}>
+    <div className="max-w-7xl mx-auto px-6 lg:px-10 py-20">
+      <div className="text-center max-w-2xl mx-auto mb-12">
+        <div className="text-[11px] tracking-[0.18em] uppercase text-primary mb-3">A plataforma</div>
+        <h2 className={`${serif} text-4xl lg:text-5xl tracking-tight text-neutral-950`}>
+          Tudo o que você precisa em <span className="text-primary">uma única tela</span>.
+        </h2>
+        <p className="mt-4 text-neutral-600">Carteira, atendimento, acordos, WhatsApp, discador e analytics — sem trocar de aba, sem trocar de senha.</p>
+      </div>
+      <MacBookFrame>
+        <DashboardMockup />
+      </MacBookFrame>
+    </div>
+  </section>
+);
 
 /* ───────── Top Nav ───────── */
 const Nav = () => (
