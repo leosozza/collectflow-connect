@@ -145,7 +145,7 @@ const AcordosPage = () => {
 
   const handleCancel = async (id: string) => {
     await cancelAgreement(id);
-    toast({ title: "Acordo cancelado. Parcelas marcadas como quebra." });
+    toast({ title: "Acordo cancelado." });
     reload();
   };
 
