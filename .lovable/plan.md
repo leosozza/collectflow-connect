@@ -1,110 +1,72 @@
+## Resultado da execução
 
-## SSOT de Status — 7 estados imutáveis decididos pelo banco
+Disparei o `auto-status-sync` em modo cron (todos os tenants ativos). A base do **Y.BRASIL (465.855 clientes)** terminou de ser reprocessada usando os novos 7 status oficiais.
 
-### Regra final dos 7 estados
+### Distribuição final em `clients.status_cobranca_id`
 
-| # | Categoria | Status | Regra (calculada por CPF+Credor) |
-|---|---|---|---|
-| 1 | Dívida Original | **Quitado** | Sem acordo na história + todas parcelas de `clients` pagas |
-| 2 | Dívida Original | **Em Dia** | Sem acordo na história + parcelas a vencer, nenhuma vencida |
-| 3 | Dívida Original | **Inadimplente** | **Sem acordo na história** + ≥1 parcela vencida em aberto |
-| 4 | Acordo Rivo | **Acordo Vigente** | `agreements.status='approved'` + nenhuma parcela do acordo vencida |
-| 5 | Acordo Rivo | **Acordo em Atraso** | Parcela do acordo vencida ≤ `prazo_dias_acordo` (credor; fallback 10) |
-| 6 | Acordo Rivo | **Acordo Cancelado** | Atraso > prazo **OU** `agreements.status='cancelled'` (TERMINAL — não regride) |
-| 7 | Acordo Rivo | **Acordo Quitado** | `agreements.status='completed'` (todas parcelas do acordo pagas) |
+| Status | Qtd |
+|---|---|
+| Inadimplente | 186.585 |
+| Quitado | 147.205 |
+| Em Dia | 127.589 |
+| Acordo Vigente | 4.124 |
+| Acordo Cancelado | 277 |
+| (sem status) | 75 |
+| **Acordo em Atraso** | **0** ⚠️ |
+| **Acordo Quitado** | **0** ⚠️ |
 
-**Regra de ouro**: a partir do momento em que existe qualquer acordo na história do CPF+Credor, o status sempre vem da família "Acordo Rivo". Inadimplente fica reservado a dívidas originais que nunca tiveram acordo.
+### `tipos_status` confirmado ✅
 
-### Hierarquia (quando há múltiplos acordos no mesmo CPF+Credor)
-```
-Acordo Vigente > Acordo em Atraso > Acordo Cancelado > Acordo Quitado
-```
-Se o cliente tem 1 acordo cancelado e abre 1 novo acordo vigente, vence Acordo Vigente. Se o último acordo foi cancelado e não há novo, fica Acordo Cancelado (terminal até abrir um novo).
+Os 7 oficiais existem em todos os tenants ativos com os `papel_sistema` corretos:
+`quitado`, `em_dia`, `inadimplente`, `acordo_vigente`, `acordo_atrasado`, `acordo_cancelado`, `acordo_quitado`.
+
+### Comparação SSOT vs auto-sync (amostra 500 grupos)
+
+Rodando `get_client_consolidated_status(...)` direto na amostra:
+- Quitado 401 · Inadimplente 95 · Em Dia 2 · **Acordo Quitado 2**
+
+A SSOT (RPC) **gera** Acordo Quitado corretamente. Mas a base gravada não tem nenhum, porque o `auto-status-sync` tem lógica JS própria — duplicada e desatualizada — que **nunca** atribui `Acordo Quitado` nem `Acordo em Atraso`:
+
+- `Acordo em Atraso` só dispara se `agreements.status='overdue'`, e a base usa `pending`/`approved`/`completed`/`cancelled` — não existe linha `overdue`.
+- `Acordo Quitado` é resolvido como ID mas **nunca é setado** em ramo algum do código. Acordos `completed` caem para Quitado/Em Dia/Inadimplente conforme parcelas em `clients`.
+
+Resultado: a primeira parte da migração (Cofre/SSOT) funciona, mas **o sincronizador não reflete o Cofre**. Há divergência entre a verdade calculada pela RPC e o que persistimos em `clients`.
 
 ---
 
-## Migration única (eu reescrevo as 2 funções dentro dela)
+## Plano de correção (parte 2)
 
-```text
-PASSO 1 — Reescrever map_canonical_to_legacy_status
-  Retorna os 7 nomes em PT-BR:
-    quitado          → 'Quitado'
-    em_dia           → 'Em Dia'
-    inadimplente     → 'Inadimplente'
-    acordo_vigente   → 'Acordo Vigente'
-    acordo_atrasado  → 'Acordo em Atraso'
-    acordo_cancelado → 'Acordo Cancelado'
-    acordo_quitado   → 'Acordo Quitado'
+Trocar a lógica JS do `auto-status-sync` pela invocação direta da SSOT, eliminando a duplicação.
 
-PASSO 2 — Reescrever get_client_consolidated_status
-  Assinatura: (_tenant_id uuid, _cpf text, _credor text,
-               _atraso_quebra_dias int DEFAULT NULL)
-  Quando _atraso_quebra_dias é NULL:
-    SELECT prazo_dias_acordo FROM credores
-      WHERE tenant_id=_tenant_id AND (razao_social=_credor OR nome_fantasia=_credor)
-    fallback 10.
-  Lógica:
-    A) Existe agreements para o CPF+Credor? Sim → status vem da família Acordo:
-       - has 'approved' sem atraso       → acordo_vigente
-       - has parcela vencida ≤ prazo     → acordo_atrasado
-       - has parcela vencida > prazo
-         OR status='cancelled' (último)  → acordo_cancelado  (TERMINAL)
-       - all installments paid
-         OR status='completed'           → acordo_quitado
-       (hierarquia acima resolve empates)
-    B) Nunca houve agreements:
-       - todas parcelas de clients pagas → quitado
-       - alguma vencida em aberto        → inadimplente
-       - só a vencer                     → em_dia
+### 1. Refatorar `supabase/functions/auto-status-sync/index.ts`
 
-PASSO 3 — Garantir UNIQUE (tenant_id, nome) em tipos_status
+Substituir o bloco `processGroup(...)` por uma chamada à RPC canônica:
 
-PASSO 4 — DELETE de tipos_status:
-  'Risco de Processo', 'Em negociação', 'Em Negociação'
-
-PASSO 5 — UPDATE rename de legados:
-  'Quebra de Acordo' → 'Acordo Cancelado'
-  'Acordo Atrasado'  → 'Acordo em Atraso'
-  'Em dia'           → 'Em Dia'
-
-PASSO 6 — UPSERT por tenant dos 7 oficiais
-  (com cor + papel_sistema correto em regras JSONB)
-
-PASSO 7 — DELETE de duplicatas residuais (a.id < b.id por tenant+nome)
-
-PASSO 8 — Vincular clients.status_cobranca_id
-  BEGIN;
-    SET LOCAL app.force_status_override = 'true';   -- bypass do trigger
-    UPDATE clients c
-      SET status_cobranca_id = ts.id
-      FROM tipos_status ts
-      WHERE ts.tenant_id = c.tenant_id
-        AND ts.nome = map_canonical_to_legacy_status(
-              get_client_consolidated_status(c.tenant_id, c.cpf, c.credor, NULL))
-        AND ts.nome IS NOT NULL;
-  COMMIT;
-
-PASSO 9 — Validação
-  SELECT tenant_id, ts.nome, count(*)
-  FROM clients c JOIN tipos_status ts ON ts.id = c.status_cobranca_id
-  GROUP BY 1,2 ORDER BY 1,2;
+```ts
+const { data: canonical } = await supabase.rpc('get_client_consolidated_status', {
+  _tenant_id: tenant_id,
+  _cpf: clients[0].cpf,
+  _credor: clients[0].credor,
+  _atraso_quebra_dias: null   // RPC busca prazo do credor sozinha
+});
+const legacy = await supabase.rpc('map_canonical_to_legacy_status', { _canonical: canonical });
+const targetStatusId = statusByName.get(legacy);
 ```
 
-## Em paralelo (mesma leva)
+Mantém a paginação por `(cpf, credor)` e o flush em lotes de 200, mas remove ~150 linhas de regras paralelas (hasOverdueAgreement, etc.).
 
-- Conferir `src/components/cadastros/TipoStatusList.tsx`. Se ainda tiver `quebra_acordo` ou `em_negociacao` em `PAPEIS_SISTEMA`, removo. Garantir que os 7 papéis listados sejam: `quitado`, `em_dia`, `inadimplente`, `acordo_vigente`, `acordo_atrasado`, `acordo_cancelado`, `acordo_quitado`.
+### 2. Resolver os 75 clientes com status NULL
 
-## Os 4 efeitos prometidos — confirmados
+Após o refator, rodar uma vez novamente para varrer os 75 órfãos.
 
-1. **Limpeza de filtros** ✅ — "Risco de Processo" e "Em Negociação" somem do menu de Status na Carteira (passo 4).
-2. **Transição p/ Tabulação** ✅ — sem `em_negociacao` na tabela e sem o cron escrevendo esse papel, clientes voltam ao status financeiro real. "Em Negociação" continua existindo apenas como tabulação/histórico.
-3. **Quitado real** ✅ — passo 2 garante `quitado` para CPF sem acordo cuja dívida original está toda paga. Passo 8 grava no banco.
-4. **Quebra zero** ✅ — toda tela lê de `clients.status_cobranca_id` (alimentado pela função canônica) ou chama o helper diretamente. Fonte única.
+### 3. Validação pós-execução
 
-## Memória que vou atualizar pós-aplicação
+Conferir que `Acordo em Atraso` e `Acordo Quitado` agora apresentam valores > 0 coerentes com `agreement_installments` vencidos / acordos com todas as parcelas pagas.
 
-`mem://logic/status-standardization-cpf-centric` — substituir hierarquia antiga pelos 7 estados imutáveis e marcar `acordo_cancelado` como terminal (não regride para `inadimplente`).
+### 4. (Opcional, recomendado) Trigger de manutenção em tempo real
 
-## Próximo passo
+Criar trigger em `agreements` e `agreement_installments` que chama `get_client_consolidated_status` + atualiza `clients.status_cobranca_id` do grupo afetado, com `SET LOCAL app.force_status_override='true'` quando vier de QUITADO. Garante que o Cofre fica sempre em sincronia sem depender do cron noturno.
 
-Aprova → eu saio do plano, disparo a migration e atualizo a UI na mesma leva.
+---
+
+Posso prosseguir com os passos 1–3 (refator + reexecução + validação)? O passo 4 fica para outro round se você quiser.

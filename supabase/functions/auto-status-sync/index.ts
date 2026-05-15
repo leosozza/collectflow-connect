@@ -97,80 +97,39 @@ async function syncTenant(supabase: any, tenant_id: string) {
     pendingUpdates.clear();
   };
 
-  const processGroup = (clients: any[]) => {
+  // SSOT: delega para get_client_consolidated_status (RPC canônica do banco).
+  // Não duplica regras aqui — apenas persiste em clients.status_cobranca_id.
+  const processGroup = async (clients: any[]) => {
     if (clients.length === 0) return;
-    const rawCpf = (clients[0].cpf || "").replace(/\D/g, "");
-    const agreementKey = `${rawCpf}|${clients[0].credor}`;
-    const agreements = agreementsByKey.get(agreementKey) || [];
+    const cpf = clients[0].cpf;
+    const credor = clients[0].credor;
 
-    // "Em Negociação" não é mais um status financeiro soberano.
-    // O sistema agora foca nos 7 status financeiros oficiais.
-
-    let targetStatusId: string | null = null;
-    const activeAgreementStatuses = new Set(["pending", "approved", "pending_approval", "overdue"]);
-    const hasActiveAgreement = agreements.some((a: any) => activeAgreementStatuses.has(a.status));
-    const hasOverdueAgreement = agreements.some((a: any) => a.status === "overdue");
-    const hasCurrentAgreement = agreements.some((a: any) =>
-      a.status === "pending" || a.status === "approved" || a.status === "pending_approval"
+    const { data: canonical, error: errCanon } = await supabase.rpc(
+      "get_client_consolidated_status",
+      { _tenant_id: tenant_id, _cpf: cpf, _credor: credor, _atraso_quebra_dias: null }
     );
-    const sortedAgreements = [...agreements].sort((a, b) => {
-      const da = new Date(a.updated_at || a.created_at || 0).getTime();
-      const db = new Date(b.updated_at || b.created_at || 0).getTime();
-      return db - da;
-    });
+    if (errCanon || !canonical) return;
 
-    // Defesa em profundidade: NUNCA marcar como Quitado se houver QUALQUER
-    // parcela vencida em aberto no subconjunto recebido. Mesmo que o grupo
-    // chegue fragmentado por algum motivo (ordenação não-determinística,
-    // chunking futuro, etc.), uma vencida em aberto basta para impedir.
-    const hasOpenOverdue = clients.some((c: any) =>
-      c.data_vencimento < today &&
-      c.status !== "pago" &&
-      c.status !== "cancelado_maxlist"
+    const { data: legacy, error: errLegacy } = await supabase.rpc(
+      "map_canonical_to_legacy_status",
+      { _canonical: canonical }
     );
-    const allPago = clients.length > 0 && clients.every((c: any) => c.status === "pago");
-    if (allPago && !hasOpenOverdue && quitadoId) {
-      targetStatusId = quitadoId;
-      countQuitado += clients.length;
-    }
+    if (errLegacy || !legacy) return;
 
-    if (!targetStatusId && quebraAcordoId) {
-      if (!hasActiveAgreement && sortedAgreements.length > 0 && sortedAgreements[0].status === "cancelled") {
-        targetStatusId = quebraAcordoId;
-        countQuebraAcordo += clients.length;
-      }
-    }
-
-    if (!targetStatusId && acordoAtrasadoId) {
-      if (hasOverdueAgreement) {
-        targetStatusId = acordoAtrasadoId;
-        countAcordoAtrasado += clients.length;
-      }
-    }
-
-    if (!targetStatusId && acordoVigenteId) {
-      if (hasCurrentAgreement) {
-        targetStatusId = acordoVigenteId;
-        countAcordoVigente += clients.length;
-      }
-    }
-
-    if (!targetStatusId) {
-      const hasOverdue = clients.some((c: any) =>
-        c.data_vencimento < today && (c.status === "pendente" || c.status === "vencido")
-      );
-      if (hasOverdue && !hasActiveAgreement) {
-        targetStatusId = inadimplenteId;
-        countInadimplente += clients.length;
-      }
-    }
-
-    if (!targetStatusId) {
-      targetStatusId = emDiaId;
-      countEmDia += clients.length;
-    }
-
+    const targetStatusId = statusByName.get(legacy);
     if (!targetStatusId) return;
+
+    // Contagens por papel canônico
+    switch (canonical) {
+      case "quitado": countQuitado += clients.length; break;
+      case "acordo_vigente": countAcordoVigente += clients.length; break;
+      case "acordo_atrasado": countAcordoAtrasado += clients.length; break;
+      case "acordo_cancelado": countQuebraAcordo += clients.length; break;
+      case "acordo_quitado": (counts.acordo_quitado = (counts.acordo_quitado || 0) + clients.length); break;
+      case "inadimplente": countInadimplente += clients.length; break;
+      case "em_dia": countEmDia += clients.length; break;
+    }
+
     for (const c of clients) {
       if (c.status_cobranca_id !== targetStatusId) {
         if (!pendingUpdates.has(targetStatusId)) pendingUpdates.set(targetStatusId, []);
@@ -201,13 +160,13 @@ async function syncTenant(supabase: any, tenant_id: string) {
       ) {
         cur.push(c);
       } else {
-        processGroup(cur);
+        await processGroup(cur);
         cur = [c];
       }
     }
     if (data.length < PAGE) {
       // Last page — process the final group too
-      processGroup(cur);
+      await processGroup(cur);
       carry = [];
       break;
     } else {
