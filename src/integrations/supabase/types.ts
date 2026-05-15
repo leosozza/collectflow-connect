@@ -282,6 +282,115 @@ export type Database = {
           },
         ]
       }
+      agreement_reconciliation_alerts: {
+        Row: {
+          agreement_id: string
+          assigned_operator_id: string | null
+          client_cpf: string
+          created_at: string
+          credor: string
+          id: string
+          installment_id: string | null
+          installment_key: string | null
+          linked_manual_payment_id: string | null
+          maxlist_payment_date: string | null
+          maxlist_payment_value: number
+          maxlist_source_meta: Json
+          maxlist_source_ref: string
+          resolution_notes: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          agreement_id: string
+          assigned_operator_id?: string | null
+          client_cpf: string
+          created_at?: string
+          credor: string
+          id?: string
+          installment_id?: string | null
+          installment_key?: string | null
+          linked_manual_payment_id?: string | null
+          maxlist_payment_date?: string | null
+          maxlist_payment_value?: number
+          maxlist_source_meta?: Json
+          maxlist_source_ref: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          agreement_id?: string
+          assigned_operator_id?: string | null
+          client_cpf?: string
+          created_at?: string
+          credor?: string
+          id?: string
+          installment_id?: string | null
+          installment_key?: string | null
+          linked_manual_payment_id?: string | null
+          maxlist_payment_date?: string | null
+          maxlist_payment_value?: number
+          maxlist_source_meta?: Json
+          maxlist_source_ref?: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agreement_reconciliation_alerts_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_reconciliation_alerts_assigned_operator_id_fkey"
+            columns: ["assigned_operator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_reconciliation_alerts_installment_id_fkey"
+            columns: ["installment_id"]
+            isOneToOne: false
+            referencedRelation: "agreement_installments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_reconciliation_alerts_linked_manual_payment_id_fkey"
+            columns: ["linked_manual_payment_id"]
+            isOneToOne: false
+            referencedRelation: "manual_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_reconciliation_alerts_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agreement_reconciliation_alerts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agreement_signatures: {
         Row: {
           agreement_id: string
@@ -3714,6 +3823,7 @@ export type Database = {
           payment_method: string
           penalty_amount: number
           receiver: string
+          reconciliation_alert_id: string | null
           requested_by: string
           review_notes: string | null
           reviewed_at: string | null
@@ -3736,6 +3846,7 @@ export type Database = {
           payment_method: string
           penalty_amount?: number
           receiver: string
+          reconciliation_alert_id?: string | null
           requested_by: string
           review_notes?: string | null
           reviewed_at?: string | null
@@ -3758,6 +3869,7 @@ export type Database = {
           payment_method?: string
           penalty_amount?: number
           receiver?: string
+          reconciliation_alert_id?: string | null
           requested_by?: string
           review_notes?: string | null
           reviewed_at?: string | null
@@ -3771,6 +3883,13 @@ export type Database = {
             columns: ["agreement_id"]
             isOneToOne: false
             referencedRelation: "agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_payments_reconciliation_alert_id_fkey"
+            columns: ["reconciliation_alert_id"]
+            isOneToOne: false
+            referencedRelation: "agreement_reconciliation_alerts"
             referencedColumns: ["id"]
           },
           {
@@ -7293,6 +7412,10 @@ export type Database = {
           _user_id: string
         }
         Returns: string
+      }
+      create_reconciliation_alerts_from_maxlist: {
+        Args: { _payments: Json; _tenant_id: string }
+        Returns: number
       }
       delete_email: {
         Args: { message_id: number; queue_name: string }
