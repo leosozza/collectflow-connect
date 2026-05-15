@@ -352,8 +352,8 @@ Deno.serve(async (req) => {
       }
 
       case "parcelas-pagas": {
-        const data = params.data || new Date().toISOString().split("T")[0];
-        result = await negociarieRequest(tenantId, "GET", `/cobranca/parcelas-pagas?data=${data}`);
+        const data = (params as any).data || (params as any).date || new Date().toISOString().split("T")[0];
+        result = await negociarieRequest(tenantId, "GET", `/cobranca/parcelas-pagas?data=${data}`, undefined, creditorIdCtx);
         break;
       }
 
