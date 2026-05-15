@@ -671,7 +671,23 @@ Deno.serve(async (req) => {
 
             const updateLogs: any[] = [];
             for (const p of pendingUpdateChanges) {
-              if (p.isPaidStatusChange) paid++;
+              if (p.isPaidStatusChange) {
+                paid++;
+                // Captura para criar alerta de conciliação no acordo (se houver acordo ativo)
+                paidPaymentsForReconciliation.push({
+                  cpf: p.rec.cpf,
+                  credor: p.rec.credor,
+                  valor_pago: p.rec.valor_pago ?? p.rec.valor_parcela ?? 0,
+                  data_pagamento: p.rec.data_pagamento || null,
+                  source_ref: p.rec.id,
+                  meta: {
+                    cod_contrato: p.rec.cod_contrato,
+                    numero_parcela: p.rec.numero_parcela,
+                    external_id: p.rec.external_id,
+                    nome: p.existing?.nome_completo || p.rec.nome_completo,
+                  },
+                });
+              }
               if (p.isCancelledStatusChange) cancelledMaxlist++;
 
               if (updatedRecords.length < 100) {
