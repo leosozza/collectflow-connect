@@ -9,34 +9,63 @@ const NEGOCIARIE_BASE = "https://sistema.negociarie.com.br/api/v2";
 const LOGIN_URL = "https://sistema.negociarie.com.br/api/login";
 const CONCURRENCY = 5;
 
-let cachedToken: string | null = null;
-let tokenExpiry = 0;
+// Token cache por escopo (tenant ou credor) — evita misturar contas Negociarie distintas
+const cachedTokens: Record<string, string> = {};
+const tokenExpiries: Record<string, number> = {};
 
-async function getToken(admin: any): Promise<string> {
-  // 1. In-memory cache (warm invocations)
-  if (cachedToken && Date.now() < tokenExpiry) return cachedToken;
+interface ResolvedCreds { clientId: string; clientSecret: string; scope: string; }
 
-  // 2. DB cache (survives cold starts)
-  try {
-    const { data: row } = await admin
-      .from("integration_tokens")
-      .select("access_token, expires_at")
-      .eq("provider", "negociarie")
-      .is("tenant_id", null)
+async function resolveNegociarieCreds(
+  admin: any,
+  tenantId: string,
+  creditorId?: string,
+): Promise<ResolvedCreds> {
+  // 1. Credenciais do CREDOR (cobrança direta)
+  if (creditorId) {
+    const { data: creditor } = await admin
+      .from("credores")
+      .select("cobrança_direta_ativa")
+      .eq("id", creditorId)
       .maybeSingle();
-    if (row?.access_token && row?.expires_at && new Date(row.expires_at).getTime() > Date.now() + 60_000) {
-      cachedToken = row.access_token;
-      tokenExpiry = new Date(row.expires_at).getTime();
-      return cachedToken;
+    if (creditor?.cobrança_direta_ativa) {
+      const { data: credIntg } = await admin
+        .from("tenant_integrations")
+        .select("config")
+        .eq("tenant_id", tenantId)
+        .eq("creditor_id", creditorId)
+        .eq("provider", "negociarie")
+        .eq("is_active", true)
+        .maybeSingle();
+      const cfg = (credIntg?.config as Record<string, any>) || {};
+      if (cfg.client_id && cfg.client_secret) {
+        return { clientId: cfg.client_id, clientSecret: cfg.client_secret, scope: `creditor:${creditorId}` };
+      }
+      throw new Error(
+        "Cobrança direta ativa para este credor mas credenciais Negociarie não cadastradas. Cadastre em Cadastros → Credores → Bancário."
+      );
     }
-  } catch (e) {
-    console.warn("[generate-agreement-boletos] integration_tokens read failed:", (e as Error).message);
   }
-
-  // 3. Fresh login
-  const clientId = Deno.env.get("NEGOCIARIE_CLIENT_ID");
-  const clientSecret = Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
+  // 2. Credenciais do TENANT
+  const { data: tenIntg } = await admin
+    .from("tenant_integrations")
+    .select("config")
+    .eq("tenant_id", tenantId)
+    .is("creditor_id", null)
+    .eq("provider", "negociarie")
+    .eq("is_active", true)
+    .maybeSingle();
+  const cfg = (tenIntg?.config as Record<string, any>) || {};
+  const useGlobal = cfg.uses_global_fallback === true;
+  const clientId = (!useGlobal && cfg.client_id) || Deno.env.get("NEGOCIARIE_CLIENT_ID");
+  const clientSecret = (!useGlobal && cfg.client_secret) || Deno.env.get("NEGOCIARIE_CLIENT_SECRET");
   if (!clientId || !clientSecret) throw new Error("Credenciais Negociarie não configuradas");
+  return { clientId, clientSecret, scope: `tenant:${tenantId}` };
+}
+
+async function getToken(admin: any, tenantId: string, creditorId?: string): Promise<string> {
+  const { clientId, clientSecret, scope } = await resolveNegociarieCreds(admin, tenantId, creditorId);
+  const cacheKey = `tok_${scope}`;
+  if (cachedTokens[cacheKey] && Date.now() < tokenExpiries[cacheKey]) return cachedTokens[cacheKey];
 
   const res = await fetch(LOGIN_URL, {
     method: "POST",
@@ -45,39 +74,25 @@ async function getToken(admin: any): Promise<string> {
   });
   if (!res.ok) {
     const txt = await res.text();
-    throw new Error(`Falha ao autenticar na Negociarie: ${res.status} - ${txt.substring(0, 200)}`);
+    throw new Error(`Falha ao autenticar na Negociarie (${scope}): ${res.status} - ${txt.substring(0, 200)}`);
   }
   const data = await res.json();
   const token = data.access_token || data.token;
   if (!token) throw new Error("Token não retornado pela API Negociarie");
-
-  cachedToken = token;
-  const expiresAt = new Date(Date.now() + 50 * 60 * 1000);
-  tokenExpiry = expiresAt.getTime();
-
-  // Persist to DB cache (best-effort)
-  try {
-    await admin
-      .from("integration_tokens")
-      .upsert(
-        { provider: "negociarie", tenant_id: null, access_token: token, expires_at: expiresAt.toISOString() },
-        { onConflict: "provider,tenant_id" } as any,
-      );
-  } catch (e) {
-    // upsert with COALESCE-based unique index may not match; fallback to delete+insert
-    try {
-      await admin.from("integration_tokens").delete().eq("provider", "negociarie").is("tenant_id", null);
-      await admin.from("integration_tokens").insert({ provider: "negociarie", tenant_id: null, access_token: token, expires_at: expiresAt.toISOString() });
-    } catch (e2) {
-      console.warn("[generate-agreement-boletos] integration_tokens write failed:", (e2 as Error).message);
-    }
-  }
-
+  cachedTokens[cacheKey] = token;
+  tokenExpiries[cacheKey] = Date.now() + 50 * 60 * 1000;
   return token;
 }
 
-async function negociarieRequest(admin: any, method: string, endpoint: string, body?: unknown) {
-  const token = await getToken(admin);
+async function negociarieRequest(
+  admin: any,
+  tenantId: string,
+  creditorId: string | undefined,
+  method: string,
+  endpoint: string,
+  body?: unknown,
+) {
+  const token = await getToken(admin, tenantId, creditorId);
   const url = `${NEGOCIARIE_BASE}${endpoint}`;
   const opts: RequestInit = {
     method,
