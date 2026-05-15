@@ -1,35 +1,51 @@
-# Correção global: Acordos não aparecem no perfil de NENHUM cliente
+# Corrigir exibição de Juros / Multa / Honorários / Descontos em `/financeiro/baixas`
 
-## Diagnóstico confirmado
+## Diagnóstico
 
-Verifiquei o banco da Y.BRASIL: o acordo da Gabriella Rocha Costa (criado pela Maria Eduarda em 20/04/2026, R$ 1.761,90, status `pending`) **existe normalmente**. O dado está certo — o problema é 100% front-end e afeta **todos os clientes**, não só esse.
+Hoje as 4 colunas aparecem quase sempre como `—` porque cada fonte de baixa expõe esses valores de jeito diferente:
 
-## Causa raiz (única, global)
+| Fonte | Como vem hoje | Problema |
+|---|---|---|
+| `manual_payments` | colunas `interest_amount`, `penalty_amount`, `fees_amount`, `discount_amount` | operador raramente preenche → vira 0 |
+| `portal_payments` | `payment_data->>'interest'…` com fallback de rateio do acordo | gateway quase nunca envia decomposto |
+| `negociarie_cobrancas` | **não existe coluna nenhuma** | RPC retorna `0` fixo |
 
-Em `src/pages/ClientDetailPage.tsx`, a query que carrega os acordos do perfil (linha 218) está com:
+Conclusão: a decomposição **não existe no nível da baixa em lugar nenhum**. O que existe, sempre, é a decomposição **no nível do acordo** (`agreements.interest_amount / penalty_amount / fees_amount / discount_amount`). Isso é a "verdade contábil" do acordo — o valor de juros/multa/honorários/desconto pactuado, distribuído entre as parcelas.
 
-```ts
-enabled: !!cpf
+## Caminho correto (simples, sem gambiarra)
+
+**Ratear o valor planejado do acordo proporcionalmente por parcela**, sempre, para todas as 3 fontes — usando exatamente a mesma fórmula que o portal já usa hoje no fallback.
+
+Regra única, aplicada na RPC `get_baixas_realizadas`:
+
+```text
+para cada baixa (manual | portal | negociarie):
+  total_parcelas = agreements.installments_count   (entrada + parcelas mensais, sem canceladas)
+  juros_parcela     = agreements.interest_amount  / total_parcelas
+  multa_parcela     = agreements.penalty_amount   / total_parcelas
+  honor_parcela     = agreements.fees_amount      / total_parcelas
+  desc_parcela      = agreements.discount_amount  / total_parcelas
 ```
 
-A rota da Carteira para o perfil é `/carteira/perfil/:id` — abre pelo UUID do registro mestre, **sem `:cpf` na URL**. Resultado: `cpf` é `undefined`, a query **nunca dispara** e a aba "Acordos" sempre mostra "Nenhum acordo registrado", para qualquer cliente acessado por essa rota.
+Em manual_payments, **se o operador preencheu manualmente** (`interest_amount > 0` etc.), respeita o valor manual; **senão** usa o rateio do acordo. Mesmo princípio para portal (gateway primeiro, rateio depois). Negociarie sempre usa rateio (não há outra fonte).
 
-A query irmã de `clients` (linha 176) já tem o `enabled` correto (`!!(cpf || id) && !!tenant?.id`) e resolve `targetCpf`/`targetCredor` a partir do `id`. A regressão foi só na query de `agreements`.
+Resultado: as colunas passam a refletir a verdade contábil pactuada no acordo, sem inventar dados, sem nova rota, sem nova tabela, sem mudança de UI.
 
-Há ainda uma fragilidade: dentro do `queryFn` de agreements, a resolução do CPF tenta usar `clients.find(...)` em memória, mas `clients` não está em `queryKey`/`enabled` — corrida potencial. Vou alinhar com o padrão da query de `clients` (buscar o master direto no Supabase).
+## Mudanças
 
-## Mudança (mínima e cirúrgica)
+**Único arquivo afetado:** migration recriando a RPC `get_baixas_realizadas`.
 
-Arquivo único: `src/pages/ClientDetailPage.tsx`, bloco da query `agreements` (linhas 218–267).
+- Bloco `manual`: `COALESCE(NULLIF(mp.interest_amount,0), a.interest_amount / total_parcelas)` e idem para os outros 3.
+- Bloco `portal`: `COALESCE(NULLIF((pp.payment_data->>'interest')::numeric,0), a.interest_amount / total_parcelas)` e idem.
+- Bloco `negociarie`: `a.interest_amount / total_parcelas` (substitui o `0::numeric` atual).
 
-1. Trocar `enabled: !!cpf` por `enabled: !!(cpf || id) && !!tenant?.id` (igual à query `clients`).
-2. No `queryFn`, quando houver `id`, buscar o master via `supabase.from("clients").select("cpf, credor").eq("id", id).eq("tenant_id", tenant.id).maybeSingle()` em vez de depender do array `clients` em memória.
-3. Manter intactos: filtro `tenant_id`, OR de `client_cpf` com/sem máscara, filtro de `credor`, enriquecimento de `creator_name`, ordenação `created_at desc`.
+`total_parcelas` = `(SELECT count(*) FROM agreement_installments ai WHERE ai.agreement_id = a.id AND ai.cancelled = false)`. Se 0 (defensivo), usa 1.
 
-Sem mudanças de schema, RLS, edge functions ou regra de negócio. Sem impacto em Dashboard, Baixas Realizadas, Ranking ou qualquer outra tela.
+**Sem mudanças** em: assinatura/retorno da RPC, `BaixasRealizadasPage.tsx`, manual_payments, portal_payments, negociarie_cobrancas, dashboard, ranking. `valor_pago` continua intocado.
 
 ## Validação
 
-- Abrir o perfil da Gabriella (`/carteira/perfil/8b0078fa-...?credor=TESS+MODELS...`) como admin Y.BRASIL → aba **Acordos** deve listar o `pending` da Maria Eduarda (R$ 1.761,90) e o `cancelled` anterior.
-- Abrir 2–3 outros clientes da Carteira (ex: um com acordo vigente, um sem acordo) → vigentes aparecem, "sem acordo" continua mostrando vazio corretamente.
-- Spot-check em rota legada com `:cpf` (se ainda houver entrada por essa rota) para garantir não-regressão.
+1. Abrir `/financeiro/baixas` em maio/26 → as 4 colunas passam a mostrar valor (≠ —) em ~todas as linhas.
+2. Soma de `valor_pago` continua = R$ 64.463,99 (Dashboard "Recebido").
+3. Em uma linha de acordo X com 10 parcelas: juros exibido = `agreements.interest_amount / 10`.
+4. Baixa manual onde o operador preencheu juros = R$ 50: continua mostrando R$ 50 (manual prevalece).
