@@ -807,6 +807,29 @@ Deno.serve(async (req) => {
       console.error("[maxlist-import] client_profiles consolidation error:", profileErr.message);
     }
 
+    // === Bridge Maxlist → Acordo: cria alertas de conciliação ===
+    if (paidPaymentsForReconciliation.length > 0) {
+      try {
+        const RECON_BATCH = 500;
+        let totalAlerts = 0;
+        for (let i = 0; i < paidPaymentsForReconciliation.length; i += RECON_BATCH) {
+          const batch = paidPaymentsForReconciliation.slice(i, i + RECON_BATCH);
+          const { data: alertCount, error: reconErr } = await supabase.rpc(
+            "create_reconciliation_alerts_from_maxlist",
+            { _tenant_id: tenant_id, _payments: batch }
+          );
+          if (reconErr) {
+            console.error(`[maxlist-import] reconciliation alerts error:`, reconErr.message);
+          } else {
+            totalAlerts += Number(alertCount || 0);
+          }
+        }
+        console.log(`[maxlist-import] Reconciliation alerts created: ${totalAlerts} from ${paidPaymentsForReconciliation.length} paid Maxlist updates`);
+      } catch (reconCatchErr: any) {
+        console.error(`[maxlist-import] reconciliation alerts unexpected error:`, reconCatchErr?.message);
+      }
+    }
+
     // Auto-status-sync — fire in background to not block HTTP response
     // Dispara em qualquer update (rolls up CPF+Credor para hierarquia: Quitado/Acordo/Inadimplente/Em dia)
     if (status_cobranca_id === "__auto__" || mode === "update") {
