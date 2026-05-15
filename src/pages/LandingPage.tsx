@@ -779,6 +779,7 @@ const LandingPage = () => {
       <Nav />
       <main>
         <Hero />
+        <ProductShowcase />
         <TargetBar />
         <BigNumbers />
         <Features />
