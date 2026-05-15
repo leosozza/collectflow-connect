@@ -82,7 +82,6 @@ const AppLayout = () => {
   ];
 
   // Financeiro group
-  const isAdminLike = permissions.canApproveAcordos;
   const financeiroItems = [
     ...(permissions.canViewAcordos ? [{ label: "Gestão de Acordos", icon: Handshake, path: "/acordos" }] : []),
     ...(permissions.canViewAcordos ? [{ label: "Baixas Realizadas", icon: Receipt, path: "/financeiro/baixas" }] : []),
