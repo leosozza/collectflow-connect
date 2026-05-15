@@ -40,8 +40,8 @@ const statusFilterConfig: { key: StatusFilter; label: string; icon: React.Elemen
   { key: "approved", label: "Pagos", icon: CheckCircle2 },
   { key: "vigentes", label: "Vigentes", icon: ListChecks },
   { key: "overdue", label: "Vencidos", icon: AlertTriangle },
-  { key: "pending_approval", label: "Aguardando Liberação", icon: Clock },
   { key: "cancelled", label: "Cancelados", icon: XCircle },
+  { key: "pending_approval", label: "Aguardando Liberação", icon: Clock },
   { key: "payment_confirmation", label: "Confirmação de Pagamento", icon: HandCoins },
 ];
 
