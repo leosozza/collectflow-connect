@@ -206,7 +206,7 @@ const WhatsAppMockup = () => {
       {/* Tag flutuante */}
       <div className="absolute -top-3 left-6 z-10 bg-neutral-950 text-white text-[10px] tracking-[0.18em] uppercase px-3 py-1.5 rounded-full flex items-center gap-2">
         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-        IA · negociando · MARIA L.
+        IA · contornando objeção · JOÃO M.
       </div>
 
       {/* Marcas de canto laranja */}
