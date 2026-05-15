@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ShieldCheck, Zap, Play, Eye, EyeOff, Save, Trash2 } from "lucide-react";
+import { negociarieService } from "@/services/negociarieService";
+import { ShieldCheck, Zap, Play, Eye, EyeOff, Save, Trash2, Link2, Copy, Send, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 
