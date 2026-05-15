@@ -82,12 +82,9 @@ const AppLayout = () => {
   ];
 
   // Financeiro group
-  const isAdminLike = permissions.canApproveAcordos;
   const financeiroItems = [
-    ...(permissions.canViewAcordos ? [{ label: "Acordos", icon: Handshake, path: "/acordos" }] : []),
+    ...(permissions.canViewAcordos ? [{ label: "Gestão de Acordos", icon: Handshake, path: "/acordos" }] : []),
     ...(permissions.canViewAcordos ? [{ label: "Baixas Realizadas", icon: Receipt, path: "/financeiro/baixas" }] : []),
-    ...(isAdminLike ? [{ label: "Aguardando Liberação", icon: ClipboardCheck, path: "/financeiro/aguardando-liberacao" }] : []),
-    ...(isAdminLike ? [{ label: "Confirmação de Pagamento", icon: CheckCircle2, path: "/financeiro/confirmacao-pagamento" }] : []),
   ];
   const isFinanceiroRoute =
     location.pathname.startsWith("/acordos") || location.pathname.startsWith("/financeiro");
