@@ -455,7 +455,7 @@ Deno.serve(async (req) => {
 
     // Pre-warm token before fanning out
     const tAuth0 = Date.now();
-    await getToken(supabaseAdmin);
+    await getToken(supabaseAdmin, agreement.tenant_id, creditorIdForCreds);
     const auth_ms = Date.now() - tAuth0;
 
     // Filter installments to actually process (skip past-due / non-boleto)
@@ -538,7 +538,7 @@ Deno.serve(async (req) => {
           }],
         };
 
-        const apiResult = await negociarieRequest(supabaseAdmin, "POST", "/cobranca/nova", payload);
+        const apiResult = await negociarieRequest(supabaseAdmin, agreement.tenant_id, creditorIdForCreds, "POST", "/cobranca/nova", payload);
 
         const parcelaResult = Array.isArray(apiResult?.parcelas) && apiResult.parcelas.length > 0
           ? apiResult.parcelas[0] : apiResult || {};
