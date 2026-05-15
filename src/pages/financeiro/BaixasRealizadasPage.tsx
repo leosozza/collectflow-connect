@@ -92,11 +92,13 @@ const BaixasRealizadasPage = () => {
   // forçamos o filtro server-side pelo próprio user.id — ele só vê suas baixas.
   const lockedOperatorId = !canViewAll ? (user?.id ?? null) : null;
 
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, error: rowsError } = useQuery({
     queryKey: ["baixas-realizadas", tenant?.id, dateFrom?.toISOString(), dateTo?.toISOString(), credorFilter, localFilter, methodFilter, lockedOperatorId],
-    enabled: !!tenant?.id && (canViewAll || !!user?.id),
+    // Aguarda permissions terminarem de carregar para evitar race condition
+    // (canViewAll começa false enquanto carrega → travaria a query no user.id do admin).
+    enabled: !!tenant?.id && !permissions.loading && (canViewAll || !!user?.id),
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_baixas_realizadas" as any, {
+      const params = {
         _date_from: dateFrom ? format(dateFrom, "yyyy-MM-dd") : null,
         _date_to: dateTo ? format(dateTo, "yyyy-MM-dd") : null,
         _credor: credorFilter === "todos" ? null : credorFilter,
@@ -104,8 +106,12 @@ const BaixasRealizadasPage = () => {
         _payment_method: methodFilter === "todos" ? null : methodFilter,
         _operator_id: lockedOperatorId,
         _tenant_id: tenant?.id ?? null,
-      } as any);
-      if (error) throw error;
+      };
+      const { data, error } = await supabase.rpc("get_baixas_realizadas" as any, params as any);
+      if (error) {
+        console.warn("[BaixasRealizadas] RPC error:", error, "params:", params);
+        throw error;
+      }
       return (data ?? []) as unknown as BaixaRow[];
     },
   });
