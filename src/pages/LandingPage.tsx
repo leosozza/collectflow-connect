@@ -722,8 +722,8 @@ const FinalCTA = () => (
       </p>
       <div className="mt-10 flex flex-wrap justify-center gap-3">
         <Link to="/auth">
-          <Button className="rounded-full bg-primary hover:bg-primary/90 text-white px-7 h-12 text-sm font-medium">
-            Agendar demo <ArrowRight className="w-4 h-4 ml-1.5" />
+          <Button className="rounded-full bg-primary hover:bg-primary/90 text-white px-7 h-12 text-sm font-semibold shadow-[0_0_40px_rgba(255,127,0,0.4)]">
+            Teste grátis 14 dias <ArrowRight className="w-4 h-4 ml-1.5" />
           </Button>
         </Link>
         <a href="#recursos">
