@@ -23,6 +23,7 @@ interface VaultStatus {
   last_test_at: string | null;
   last_test_ok: boolean | null;
   last_test_message: string | null;
+  callback_registered_at?: string | null;
   tenant_fallback_active?: boolean;
   tenant_uses_global_fallback?: boolean;
 }
