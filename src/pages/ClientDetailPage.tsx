@@ -716,7 +716,7 @@ const ClientDetailPage = () => {
                                 <Pencil className="w-4 h-4 text-muted-foreground" />
                               </Button>
                             )}
-                            {cancellableStatuses.includes(agreement.status) && (
+                            {cancellableStatuses.includes(agreement.status) && isTenantAdmin && (
                               <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </Button>
