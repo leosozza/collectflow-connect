@@ -171,8 +171,8 @@ const Nav = () => (
           Entrar
         </Link>
         <Link to="/auth">
-          <Button className="rounded-full bg-neutral-950 hover:bg-neutral-800 text-white px-5 h-10 text-sm font-medium">
-            Agendar demo
+          <Button className="rounded-full bg-primary hover:bg-primary/90 text-white px-5 h-10 text-sm font-semibold">
+            Teste grátis 14 dias
           </Button>
         </Link>
       </div>
