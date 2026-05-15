@@ -350,8 +350,13 @@ const BaixasRealizadasPage = () => {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : grouped.length === 0 ? (
-        <Card className="p-12 text-center text-muted-foreground">
-          Nenhuma baixa encontrada para os filtros selecionados.
+        <Card className="p-12 text-center text-muted-foreground space-y-2">
+          <div>Nenhuma baixa encontrada para os filtros selecionados.</div>
+          <div className="text-xs opacity-70">
+            Período: {dateFrom ? format(dateFrom, "dd/MM/yy") : "—"} → {dateTo ? format(dateTo, "dd/MM/yy") : "—"}
+            {lockedOperatorId && " · travado no seu usuário (sem permissão view_all)"}
+            {rowsError && ` · erro: ${(rowsError as any)?.message ?? String(rowsError)}`}
+          </div>
         </Card>
       ) : (
         grouped.map(([monthKey, items]) => {
