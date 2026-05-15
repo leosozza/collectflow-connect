@@ -98,6 +98,14 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [selectedDateForEdit, setSelectedDateForEdit] = useState<Date | undefined>(undefined);
   const [savingDate, setSavingDate] = useState(false);
 
+  // Reconciliation alert state
+  const [openAlert, setOpenAlert] = useState<{ alert: ReconciliationAlert; inst: any } | null>(null);
+  const { data: reconAlerts = [], refetch: refetchAlerts } = useReconciliationAlerts(agreementId, tenantId);
+  const alertByInstallmentKey = new Map<string, ReconciliationAlert>();
+  for (const a of reconAlerts) {
+    if (a.installment_key) alertByInstallmentKey.set(a.installment_key, a);
+  }
+
   const { data: cobrancas = [], refetch: refetchCobrancas } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
     queryFn: async () => {
