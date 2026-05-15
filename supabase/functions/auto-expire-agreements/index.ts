@@ -249,13 +249,20 @@ Deno.serve(async (req) => {
             .from("negociarie_cobrancas")
             .select("id, id_parcela, agreement_id")
             .in("agreement_id", ids)
-            .in("status", ["pendente", "em_aberto"]);
+            .in("status", ["pendente", "em_aberto", "registrado", "vencido"])
+            .eq("superseded", false);
 
           await supabase
             .from("negociarie_cobrancas")
             .update({ status: "cancelado" } as any)
             .in("agreement_id", ids)
-            .in("status", ["pendente", "em_aberto"]);
+            .in("status", ["pendente", "em_aberto", "registrado", "vencido"])
+            .eq("superseded", false);
+
+          // Apply balance credit for each cancelled agreement
+          await Promise.allSettled(
+            ids.map(id => supabase.rpc("apply_agreement_credit_on_cancel", { _agreement_id: id }))
+          );
 
           // Best-effort cancel at provider
           const cancelables = (pendingCobrancas || []).filter((c: any) => c.id_parcela);
@@ -466,13 +473,20 @@ Deno.serve(async (req) => {
           .from("negociarie_cobrancas")
           .select("id, id_parcela, agreement_id")
           .in("agreement_id", ids)
-          .in("status", ["pendente", "em_aberto"]);
+          .in("status", ["pendente", "em_aberto", "registrado", "vencido"])
+          .eq("superseded", false);
 
         await supabase
           .from("negociarie_cobrancas")
           .update({ status: "cancelado" } as any)
           .in("agreement_id", ids)
-          .in("status", ["pendente", "em_aberto"]);
+          .in("status", ["pendente", "em_aberto", "registrado", "vencido"])
+          .eq("superseded", false);
+
+        // Apply balance credit for each cancelled agreement
+        await Promise.allSettled(
+          ids.map(id => supabase.rpc("apply_agreement_credit_on_cancel", { _agreement_id: id }))
+        );
 
         const cancelables = (pendingCobrancas || []).filter((c: any) => c.id_parcela);
         if (cancelables.length > 0) {

@@ -570,14 +570,16 @@ export const cancelAgreement = async (id: string): Promise<void> => {
         .from("negociarie_cobrancas")
         .select("id, id_parcela")
         .eq("agreement_id", id)
-        .in("status", ["pendente", "em_aberto"]);
+        .in("status", ["pendente", "em_aberto", "registrado", "vencido"])
+        .eq("superseded", false);
 
       // Update local status first (UI consistency)
       await supabase
         .from("negociarie_cobrancas")
         .update({ status: "cancelado" } as any)
         .eq("agreement_id", id)
-        .in("status", ["pendente", "em_aberto"]);
+        .in("status", ["pendente", "em_aberto", "registrado", "vencido"])
+        .eq("superseded", false);
 
       // Fire cancellation calls to Negociarie in parallel (best-effort)
       const toCancel = (pendingCobrancas || []).filter((c: any) => c.id_parcela);
