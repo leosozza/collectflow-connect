@@ -300,6 +300,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Resolver credor (para usar credenciais Negociarie da própria conta do credor quando Cobrança Direta está ativa)
+    let creditorIdForCreds: string | undefined;
+    if (agreement.credor) {
+      const { data: credRow } = await supabaseAdmin
+        .from("credores")
+        .select("id, cobrança_direta_ativa")
+        .eq("tenant_id", agreement.tenant_id)
+        .or(`razao_social.eq.${agreement.credor},nome_fantasia.eq.${agreement.credor}`)
+        .maybeSingle();
+      if (credRow?.cobrança_direta_ativa) {
+        creditorIdForCreds = credRow.id;
+        console.log(`[generate-agreement-boletos] Usando conta Negociarie do credor ${credRow.id} (cobrança direta ativa)`);
+      }
+    }
+
     const cleanCpfStr = String(agreement.client_cpf).replace(/\D/g, "");
     const formattedCpf = cleanCpfStr.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
 
