@@ -34,13 +34,13 @@ async function syncTenant(supabase: any, tenant_id: string) {
   const resolveId = (papel: string, fallbackNome: string) =>
     statusByPapel.get(papel) || statusByName.get(fallbackNome);
 
-  const emDiaId = resolveId("em_dia", "Em dia");
+  const emDiaId = resolveId("em_dia", "Em Dia");
   const inadimplenteId = resolveId("inadimplente", "Inadimplente");
   const acordoVigenteId = resolveId("acordo_vigente", "Acordo Vigente");
-  const acordoAtrasadoId = resolveId("acordo_atrasado", "Acordo Atrasado");
-  const quebraAcordoId = resolveId("quebra_acordo", "Quebra de Acordo");
+  const acordoAtrasadoId = resolveId("acordo_atrasado", "Acordo em Atraso");
+  const quebraAcordoId = resolveId("acordo_cancelado", "Acordo Cancelado");
   const quitadoId = resolveId("quitado", "Quitado");
-  const emNegociacaoId = resolveId("em_negociacao", "Em negociação");
+  const acordoQuitadoId = resolveId("acordo_quitado", "Acordo Quitado");
 
   if (!emDiaId || !inadimplenteId) {
     return {
@@ -103,8 +103,8 @@ async function syncTenant(supabase: any, tenant_id: string) {
     const agreementKey = `${rawCpf}|${clients[0].credor}`;
     const agreements = agreementsByKey.get(agreementKey) || [];
 
-    const allInNegociacao = clients.every((c: any) => c.status_cobranca_id === emNegociacaoId);
-    if (allInNegociacao && emNegociacaoId) return;
+    // "Em Negociação" não é mais um status financeiro soberano.
+    // O sistema agora foca nos 7 status financeiros oficiais.
 
     let targetStatusId: string | null = null;
     const activeAgreementStatuses = new Set(["pending", "approved", "pending_approval", "overdue"]);
@@ -223,52 +223,7 @@ async function syncTenant(supabase: any, tenant_id: string) {
   // Final flush
   await flushUpdates();
 
-  // 5. Expire "Em negociação"
-  if (emNegociacaoId) {
-    const regras = regrasByPapel.get("em_negociacao") || regrasByName.get("Em negociação") || {};
-    const expiracaoDias = regras.tempo_expiracao_dias || 10;
-    const autoTransicaoNome = regras.auto_transicao || "Inadimplente";
-    const targetId = statusByName.get(autoTransicaoNome) || inadimplenteId;
-
-    const negociacaoClients: any[] = [];
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, status_cobranca_locked_at")
-        .eq("tenant_id", tenant_id)
-        .eq("status_cobranca_id", emNegociacaoId)
-        .range(from, from + PAGE - 1);
-      if (error) throw error;
-      if (!data || data.length === 0) break;
-      negociacaoClients.push(...data);
-      if (data.length < PAGE) break;
-    }
-
-    const idsToExpire: string[] = [];
-    negociacaoClients.forEach((c: any) => {
-      if (c.status_cobranca_locked_at) {
-        const lockedAt = new Date(c.status_cobranca_locked_at);
-        const diffDays = Math.floor((now.getTime() - lockedAt.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays >= expiracaoDias) idsToExpire.push(c.id);
-      }
-    });
-
-    if (idsToExpire.length > 0) {
-      for (let i = 0; i < idsToExpire.length; i += 200) {
-        const batch = idsToExpire.slice(i, i + 200);
-        await supabase
-          .from("clients")
-          .update({
-            status_cobranca_id: targetId,
-            status_cobranca_locked_by: null,
-            status_cobranca_locked_at: null,
-          })
-          .eq("tenant_id", tenant_id)
-          .in("id", batch);
-      }
-    }
-    counts.negociacao_expirada = idsToExpire.length;
-  }
+  // 5. Bloco de expiração de Negociação removido (agora é apenas Tabulação/Manual)
 
   counts.total_updated = totalUpdated;
   counts.quitado = countQuitado;

@@ -132,6 +132,7 @@ END;
 $$;
 
 -- 3. Atualizar o mapeamento para nomes em Português (Ouro do Sistema)
+-- Mapeamento exato solicitado pelo Lovable para consistência de UI
 CREATE OR REPLACE FUNCTION public.map_canonical_to_legacy_status(_canonical text)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE _canonical

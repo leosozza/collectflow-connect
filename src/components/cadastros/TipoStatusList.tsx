@@ -21,10 +21,10 @@ const PAPEIS_SISTEMA = [
   { value: "em_dia", label: "Em Dia", color: "bg-emerald-500/10 text-emerald-700 border-emerald-300" },
   { value: "inadimplente", label: "Inadimplente", color: "bg-red-500/10 text-red-700 border-red-300" },
   { value: "acordo_vigente", label: "Acordo Vigente", color: "bg-blue-500/10 text-blue-700 border-blue-300" },
-  { value: "acordo_atrasado", label: "Acordo Atrasado", color: "bg-orange-500/10 text-orange-700 border-orange-300" },
-  { value: "quebra_acordo", label: "Quebra de Acordo", color: "bg-rose-500/10 text-rose-700 border-rose-300" },
+  { value: "acordo_atrasado", label: "Acordo em Atraso", color: "bg-orange-500/10 text-orange-700 border-orange-300" },
+  { value: "acordo_cancelado", label: "Acordo Cancelado", color: "bg-rose-500/10 text-rose-700 border-rose-300" },
   { value: "quitado", label: "Quitado", color: "bg-sky-500/10 text-sky-700 border-sky-300" },
-  { value: "em_negociacao", label: "Em Negociação", color: "bg-purple-500/10 text-purple-700 border-purple-300" },
+  { value: "acordo_quitado", label: "Acordo Quitado", color: "bg-teal-500/10 text-teal-700 border-teal-300" },
 ] as const;
 
 const NONE_PAPEL = "__none__";
@@ -33,13 +33,13 @@ const getPapelMeta = (key?: string | null) =>
   PAPEIS_SISTEMA.find((p) => p.value === key);
 
 const DEFAULT_STATUS = [
-  { nome: "Em dia", descricao: "Cliente sem pendências", cor: "#22c55e", regras: { papel_sistema: "em_dia" } },
+  { nome: "Em Dia", descricao: "Cliente sem pendências", cor: "#22c55e", regras: { papel_sistema: "em_dia" } },
   { nome: "Inadimplente", descricao: "Cliente com parcelas vencidas sem acordo ativo", cor: "#6b7280", regras: { papel_sistema: "inadimplente", bloqueio: false } },
   { nome: "Acordo Vigente", descricao: "Apenas o operador responsável ou admin podem editar", cor: "#3b82f6", regras: { papel_sistema: "acordo_vigente", bloqueio: true, apenas_responsavel: true } },
-  { nome: "Acordo Atrasado", descricao: "Acordo com parcela vencida sem pagamento", cor: "#f97316", regras: { papel_sistema: "acordo_atrasado" } },
-  { nome: "Quebra de Acordo", descricao: "Muda automaticamente após 3 dias sem baixa da parcela", cor: "#ef4444", regras: { papel_sistema: "quebra_acordo", auto_quebra_dias: 3 } },
+  { nome: "Acordo em Atraso", descricao: "Acordo com parcela vencida sem pagamento", cor: "#f97316", regras: { papel_sistema: "acordo_atrasado" } },
+  { nome: "Acordo Cancelado", descricao: "Acordo quebrado ou cancelado manualmente", cor: "#ef4444", regras: { papel_sistema: "acordo_cancelado" } },
+  { nome: "Acordo Quitado", descricao: "Acordo com todas as parcelas pagas", cor: "#28cc39", regras: { papel_sistema: "acordo_quitado" } },
   { nome: "Quitado", descricao: "Somente leitura, nenhuma ação de cobrança disponível", cor: "#0ea5e9", regras: { papel_sistema: "quitado", somente_leitura: true } },
-  { nome: "Em negociação", descricao: "Cliente travado por 10 dias para o operador responsável", cor: "#a855f7", regras: { papel_sistema: "em_negociacao", bloqueio: true, tempo_expiracao_dias: 10, auto_transicao: "Inadimplente" } },
 ];
 
 const TipoStatusList = () => {
