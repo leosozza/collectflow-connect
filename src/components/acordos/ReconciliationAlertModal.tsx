@@ -51,16 +51,18 @@ const ReconciliationAlertModal = ({
   const handlePaymentSuccess = async () => {
     // Encontrar o último manual_payment criado para essa parcela e linkar ao alerta
     try {
-      const { data: lastMp } = await supabase
+      let q = supabase
         .from("manual_payments")
         .select("id")
         .eq("tenant_id", tenantId)
         .eq("agreement_id", agreementId)
-        .eq("installment_number", installmentNumber)
         .eq("status", "pending_confirmation")
         .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+      q = installmentKey
+        ? q.eq("installment_key", installmentKey)
+        : q.eq("installment_number", installmentNumber);
+      const { data: lastMp } = await q.maybeSingle();
 
       if (lastMp?.id) {
         await supabase
