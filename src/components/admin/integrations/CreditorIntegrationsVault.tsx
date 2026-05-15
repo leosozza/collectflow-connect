@@ -35,6 +35,11 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
   const [showSecret, setShowSecret] = useState(false);
   const [status, setStatus] = useState<VaultStatus | null>(null);
   const [form, setForm] = useState({ client_id: "", client_secret: "" });
+  const [registeringCallback, setRegisteringCallback] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncDays, setSyncDays] = useState(14);
+
+  const callbackUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/negociarie-callback`;
 
   const loadStatus = async () => {
     if (!creditorId) return;
