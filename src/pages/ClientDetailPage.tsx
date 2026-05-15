@@ -268,7 +268,7 @@ const ClientDetailPage = () => {
         creator_name: profilesMap[a.created_by] || (a.portal_origin ? "Portal" : null),
       }));
     },
-    enabled: !!cpf,
+    enabled: !!(cpf || id) && !!tenant?.id,
   });
 
   // Initialize first agreement as expanded when agreements load
