@@ -1,88 +1,102 @@
 ## Objetivo
-Padronizar a página `/analytics` com o mesmo visual de navegação dos Cadastros (tabs horizontais com ícone + sublinhado primary), expor cada aba como rota própria, simplificar a barra de filtros (uma linha só) e remover o cabeçalho "Analytics" duplicado.
+Reverter o estilo do hero da landing page para a identidade antiga RIVO (fundo escuro, tipografia bold sans em Inter, laranja vibrante), mas **mantendo** as seções visuais do meio do novo layout (mockup WhatsApp, recursos, portal do credor, planos, FAQ). Adicionar mockup MacBook com dashboard, novo roteiro do WhatsApp e foco em conversão.
 
 ---
 
-## 1. Rotas por aba
+## 1. Hero — voltar ao estilo antigo (referência: IMG_1896)
 
-Em `src/App.tsx`, transformar a rota única em rotas filhas:
+**Visual:**
+- Fundo `bg-[#0F1117]` (quase preto) com:
+  - Pattern sutil de **conexões/nós** (SVG inline: pontos + linhas finas em `rgba(255,255,255,0.04)`) ocupando todo o hero — efeito "rede neural apagada".
+  - Glow laranja radial atrás do título (`radial-gradient(circle at 30% 40%, rgba(255,127,0,0.15), transparent 60%)`).
+- Remover `font-['Instrument_Serif']` do hero. Voltar a **Inter 800/900** já configurado no `tailwind.config.ts`.
+- Pode remover o import de Instrument Serif do `index.css` (não será mais usado).
 
-```text
-/analytics                  → redirect para /analytics/receita
-/analytics/receita
-/analytics/funil
-/analytics/performance      (Operadores)
-/analytics/canais
-/analytics/qualidade
-/analytics/inteligencia
-```
-
-- `AnalyticsPage` passa a ler a aba ativa do `useParams()` (ou do último segmento da URL) em vez do `useUrlState("tab")`.
-- Trocar cliques de aba por `navigate(`/analytics/${key}`)`.
-- Manter os demais filtros em querystring (`?from`, `?to`, `?credores`, `?operators`).
-
-## 2. Visual das abas (padrão sistema)
-
-Substituir o `<Tabs>` shadcn atual por uma `<nav>` horizontal idêntica à de `CadastrosPage` (linhas 113‑132): botões com ícone + label, fundo `bg-primary/10`, borda inferior `border-b-[3px] border-primary` na ativa, separador `border-b border-border`.
-
-Ícones mantidos: `DollarSign`, `Filter`, `Users`, `MessageSquare`, `ShieldAlert`, `Brain`.
-
-## 3. Barra de filtros — uma linha
-
-Em `src/components/analytics/AnalyticsFiltersBar.tsx`:
-
-- **Remover** a linha "Período rápido" e os presets `7d / 30d / 90d / Mês atual` (incluindo o array `presets` e `activePreset`).
-- **Manter** em uma única linha (`flex flex-nowrap items-center gap-2 overflow-x-auto`):
-  1. Botão "← Mês anterior" (decrementa `dateFrom`/`dateTo` para o mês anterior completo).
-  2. Botão "Mês atual" (volta para `startOfMonth(today)` → `today`).
-  3. Date picker "De".
-  4. Date picker "Até".
-  5. MultiSelect Credores.
-  6. MultiSelect Operadores (oculto para operador).
-  7. MultiSelect Canais / Score continuam condicionais por aba, no mesmo flex.
-- Padding e bordas iguais ao card de filtros do sistema (`bg-card rounded-xl border border-border p-3`).
-
-## 4. Default ao entrar = mês atual
-
-Em `src/hooks/useAnalyticsFilters.ts`:
-
-- Trocar default `dateFrom` de `daysAgo(30)` para `format(startOfMonth(new Date()), "yyyy-MM-dd")`.
-- `dateTo` permanece `today()`.
-
-## 5. Remover cabeçalho "Analytics" duplicado
-
-`AppLayout` já injeta o título "Analytics" no topo. Em `AnalyticsPage.tsx` remover o bloco:
-
-```tsx
-<div className="flex items-center gap-2">
-  <Button …><ArrowLeft/></Button>
-  <h1 className="text-xl font-bold">Analytics</h1>
-</div>
-```
-
-(mantendo apenas o banner amarelo do modo suporte quando aplicável).
+**Conteúdo (foco em conversão B2B para assessorias):**
+- Badge: `PLATAFORMA PARA ASSESSORIAS DE COBRANÇA` (pill laranja translúcido).
+- H1 (Inter black, 4xl→6xl): "Sua assessoria recupera **mais** cobrando do **jeito certo**" — palavra "mais" e "jeito certo" em laranja.
+- Subhead branco/70: "WhatsApp oficial e não oficial, discador, score de IA e portal do credor — tudo em uma plataforma feita para quem vive de cobrança."
+- 2 CTAs:
+  - Primário grande laranja: **"Teste grátis 14 dias →"** (com glow `shadow-[0_0_40px_rgba(255,127,0,0.4)]`).
+  - Secundário outline branco: **"Ver demonstração"** (scroll para mockup WhatsApp).
+- Linha de trust badges (icones + texto branco/60): `Sem cartão · Setup em 24h · LGPD · Multi-tenant seguro`.
+- KPIs ainda presentes mas redesenhados como 3 cards horizontais discretos abaixo dos CTAs (não em serif).
 
 ---
 
-## Detalhes técnicos
+## 2. MacBook mockup com dashboard
 
-- **Sem mudança de RPC ou backend** — somente UI/roteamento.
-- `useUrlState("tab")` é descontinuado; manter retrocompatibilidade redirecionando `/analytics?tab=funil` → `/analytics/funil` no `useEffect` inicial.
-- `restrictToSelf` / `isOperator` / `scopedRpcParams` permanecem inalterados.
-- Mês anterior: usar `subMonths(parseISO(dateFrom), 1)` → `startOfMonth` e `endOfMonth` daquele mês.
-- A11y: cada botão de aba recebe `aria-current="page"` quando ativo.
+Nova seção logo após o hero (antes de "Por que RIVO"):
+- Frame de MacBook em CSS puro (moldura prata, tela `aspect-[16/10]`, base trapezoidal) — sem libs externas.
+- Tela exibe screenshot real do dashboard. **Plano:** capturar print da rota `/dashboard` (já existente) e salvar em `src/assets/dashboard-preview.png`. Importar como ES6.
+- Fundo da seção: gradiente claro `#FAFAF7 → #F0EDE5` com mesma textura de grid sutil que o resto.
+- Headline acima: "Tudo o que você precisa em **uma única tela**" (Inter bold, preto sobre claro).
 
-## Arquivos a editar
+> **Nota técnica:** Não posso capturar o screenshot do dashboard sozinho em modo plano. Vou usar um **placeholder estilizado** (mockup desenhado em divs simulando o dashboard com KPIs, gráfico e tabela) até que o usuário forneça o print real. Quando ele enviar a imagem, troco o placeholder pelo asset.
 
-- `src/App.tsx` — rotas filhas de `/analytics`.
-- `src/pages/AnalyticsPage.tsx` — nav horizontal estilo Cadastros, leitura de aba via rota, remoção do h1 duplicado.
-- `src/components/analytics/AnalyticsFiltersBar.tsx` — remover presets, adicionar Mês anterior/atual, layout uma linha.
-- `src/hooks/useAnalyticsFilters.ts` — default = mês atual.
+---
+
+## 3. Manter do design atual (parte do meio)
+
+Preservar com leves ajustes para combinar com hero escuro:
+- **Mockup WhatsApp animado** — manter, **trocar o roteiro** (ver §4).
+- **Seção de recursos** (Score IA, WhatsApp multi-provider, Discador, Portal credor, Gamificação, Analytics) — manter cards.
+- **Como funciona (4 passos)** — manter.
+- **Para quem (3 personas)** — manter.
+- **Portal do credor white-label** — manter mockup mini-dashboard.
+- **Planos** — manter.
+- **FAQ** — manter.
+- **CTA final** — atualizar para "Teste grátis 14 dias" (consistência com hero).
+
+Tipografia geral: **tudo em Inter** (sem mais serif itálico em lugar nenhum).
+
+---
+
+## 4. Novo roteiro do WhatsApp (não copiar CobreAI)
+
+Mostrar a IA fazendo algo que CobreAI **não** mostra: **negociação com objeção real + escalonamento inteligente**.
+
+```
+[IN]  "Não tenho como pagar isso agora, tô desempregado."
+[OUT] "Entendo, João. Posso te ajudar a montar uma proposta
+       que caiba no seu bolso. Quanto você consegue pagar
+       por mês, sem apertar?"            [score: 78% propensão]
+[IN]  "Talvez uns 150 reais."
+[OUT] "Fechado. Posso parcelar em 10x de R$ 152,30 com
+       30% de desconto sobre o saldo. Topa?"
+[IN]  "Topo!"
+[OUT] "Acordo registrado ✅ Boleto da 1ª no seu WhatsApp."
+       [card: Acordo #4821 · R$ 1.523,00 em 10x]
+```
+
+Tags flutuantes: "IA · negociando" + badge lateral "Escalonando para humano se score < 30%".
+
+---
+
+## 5. Detalhes técnicos
+
+- Arquivos a editar: `src/pages/LandingPage.tsx` (rewrite hero + adicionar seção MacBook + atualizar mockup WhatsApp).
+- `src/index.css`: remover import de Instrument Serif.
+- Novo asset placeholder: `src/assets/dashboard-mockup-placeholder` (componente React, não imagem) — fácil substituir depois por `<img src={dashboardPreview}/>`.
+- Pattern de conexões: SVG inline com `<circle>` + `<line>` posicionados em grid 6×4, opacidade 0.06, sem libs.
+- Sem mudanças de backend, rotas ou lógica.
+
+---
+
+## 6. Conversão — princípios aplicados
+
+1. **CTA primário acima da dobra** com glow + verbo de ação ("Teste grátis 14 dias").
+2. **Prova visual imediata** — MacBook com dashboard real logo após o hero (mostra o produto, não promete).
+3. **Demo interativa** — WhatsApp animado mostra a IA resolvendo objeção (gatilho emocional).
+4. **Remoção de fricção** — "Sem cartão · Setup 24h" visível no hero.
+5. **Hierarquia clara** — 1 CTA primário forte, 1 secundário, sem ruído.
+
+---
 
 ## Validação
 
-1. `/analytics` redireciona para `/analytics/receita`.
-2. Cada aba muda a URL e mantém filtros na query.
-3. Default abre no mês corrente; "Mês anterior" navega corretamente.
-4. Filtros em uma única linha em 1326px (viewport atual).
-5. Visual das abas idêntico ao screenshot anexado.
+1. Hero escuro com pattern de conexões + tipografia Inter bold (sem serif).
+2. MacBook visível na segunda dobra com placeholder do dashboard.
+3. Mockup WhatsApp roda novo script de objeção.
+4. CTAs unificados em "Teste grátis 14 dias".
+5. Nenhuma fonte serif/itálica restante na página.

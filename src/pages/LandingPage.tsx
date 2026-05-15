@@ -15,8 +15,143 @@ import logoImg from "@/assets/rivo_connect.png";
    foco em assessorias de cobrança.
 ============================================================ */
 
-const serif = "font-['Instrument_Serif'] font-normal";
+// Tipografia: tudo em Inter, headings em peso black para impacto.
+const serif = "font-sans font-black";
 const grid = "bg-[linear-gradient(to_right,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.04)_1px,transparent_1px)] bg-[size:48px_48px]";
+
+/* ───────── Pattern de conexões (rede neural sutil) ───────── */
+const ConnectionsBg = ({ className = "" }: { className?: string }) => {
+  // Grid 7×5 de nós com linhas conectando vizinhos próximos.
+  const cols = 7, rows = 5;
+  const nodes = Array.from({ length: rows * cols }, (_, i) => ({
+    x: ((i % cols) + 0.5) * (100 / cols),
+    y: (Math.floor(i / cols) + 0.5) * (100 / rows),
+  }));
+  const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  nodes.forEach((a, i) => {
+    nodes.slice(i + 1).forEach((b) => {
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d < 22) lines.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+    });
+  });
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      className={`absolute inset-0 w-full h-full pointer-events-none ${className}`}
+    >
+      {lines.map((l, i) => (
+        <line
+          key={i}
+          x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+          stroke="rgba(255,255,255,0.06)"
+          strokeWidth={0.08}
+        />
+      ))}
+      {nodes.map((n, i) => (
+        <circle key={i} cx={n.x} cy={n.y} r={0.35} fill="rgba(255,127,0,0.35)" />
+      ))}
+    </svg>
+  );
+};
+
+/* ───────── MacBook Frame ───────── */
+const MacBookFrame = ({ children }: { children: React.ReactNode }) => (
+  <div className="relative mx-auto w-full max-w-5xl">
+    {/* Tela */}
+    <div className="relative rounded-t-2xl bg-neutral-900 p-3 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.5)] ring-1 ring-black/20">
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-1 rounded-full bg-neutral-800" />
+      <div className="overflow-hidden rounded-lg bg-white aspect-[16/10]">
+        {children}
+      </div>
+    </div>
+    {/* Base trapezoidal */}
+    <div className="relative">
+      <div className="h-3 bg-gradient-to-b from-neutral-300 to-neutral-400" style={{ clipPath: "polygon(2% 0, 98% 0, 100% 100%, 0 100%)" }} />
+      <div className="h-1.5 bg-neutral-500/80 mx-auto rounded-b-xl" style={{ width: "18%" }} />
+    </div>
+  </div>
+);
+
+/* ───────── Mockup Dashboard (placeholder estilizado) ───────── */
+const DashboardMockup = () => (
+  <div className="w-full h-full bg-[#FAFAF7] flex flex-col text-[10px]">
+    {/* Top bar */}
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-black/10 bg-white">
+      <div className="flex gap-1">
+        <span className="w-2 h-2 rounded-full bg-red-400" />
+        <span className="w-2 h-2 rounded-full bg-yellow-400" />
+        <span className="w-2 h-2 rounded-full bg-green-400" />
+      </div>
+      <div className="ml-3 text-[9px] font-semibold text-neutral-700">RIVO CONNECT · Dashboard</div>
+      <div className="ml-auto flex gap-2 text-neutral-400">
+        <span>Hoje</span><span>Mês</span><span className="text-primary font-semibold">Ano</span>
+      </div>
+    </div>
+    <div className="flex flex-1 min-h-0">
+      {/* Sidebar */}
+      <div className="w-28 bg-[#0F1117] text-white/80 px-2 py-3 space-y-1 text-[8px]">
+        {["Dashboard", "Carteira", "Atendimento", "Acordos", "WhatsApp", "Discador", "Analytics", "Gamificação"].map((m, i) => (
+          <div key={m} className={`px-2 py-1.5 rounded ${i === 0 ? "bg-primary text-white" : ""}`}>{m}</div>
+        ))}
+      </div>
+      {/* Conteúdo */}
+      <div className="flex-1 p-3 space-y-2 overflow-hidden">
+        {/* KPIs */}
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { l: "Recebido", v: "R$ 487 K", c: "text-emerald-600" },
+            { l: "Acordos", v: "1.284", c: "text-primary" },
+            { l: "Carteira", v: "R$ 4,2 Mi", c: "text-neutral-700" },
+            { l: "Conversão", v: "32%", c: "text-blue-600" },
+          ].map((k) => (
+            <div key={k.l} className="bg-white border border-black/5 rounded-md px-2 py-1.5">
+              <div className="text-[7px] uppercase tracking-wider text-neutral-400">{k.l}</div>
+              <div className={`text-[11px] font-bold ${k.c}`}>{k.v}</div>
+            </div>
+          ))}
+        </div>
+        {/* Gráfico */}
+        <div className="bg-white border border-black/5 rounded-md p-2">
+          <div className="text-[8px] font-semibold text-neutral-600 mb-1.5">Recuperação · 12 meses</div>
+          <div className="flex items-end gap-1 h-14">
+            {[35, 48, 42, 60, 55, 72, 68, 80, 75, 88, 92, 100].map((h, i) => (
+              <div key={i} className="flex-1 bg-gradient-to-t from-primary to-primary/50 rounded-t" style={{ height: `${h}%` }} />
+            ))}
+          </div>
+        </div>
+        {/* Tabela */}
+        <div className="bg-white border border-black/5 rounded-md p-2 flex-1">
+          <div className="text-[8px] font-semibold text-neutral-600 mb-1">Top operadores</div>
+          {["Carla M. · 42 acordos", "Pedro R. · 38 acordos", "Joana S. · 31 acordos"].map((r, i) => (
+            <div key={r} className="flex items-center justify-between py-1 border-t border-black/5 first:border-0 text-[8px]">
+              <span className="text-neutral-700">{r}</span>
+              <span className="text-primary font-semibold">+{(15 - i * 3)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const ProductShowcase = () => (
+  <section className={`relative bg-gradient-to-b from-[#FAFAF7] to-[#F0EDE5] ${grid}`}>
+    <div className="max-w-7xl mx-auto px-6 lg:px-10 py-20">
+      <div className="text-center max-w-2xl mx-auto mb-12">
+        <div className="text-[11px] tracking-[0.18em] uppercase text-primary mb-3">A plataforma</div>
+        <h2 className={`${serif} text-4xl lg:text-5xl tracking-tight text-neutral-950`}>
+          Tudo o que você precisa em <span className="text-primary">uma única tela</span>.
+        </h2>
+        <p className="mt-4 text-neutral-600">Carteira, atendimento, acordos, WhatsApp, discador e analytics — sem trocar de aba, sem trocar de senha.</p>
+      </div>
+      <MacBookFrame>
+        <DashboardMockup />
+      </MacBookFrame>
+    </div>
+  </section>
+);
 
 /* ───────── Top Nav ───────── */
 const Nav = () => (
@@ -36,8 +171,8 @@ const Nav = () => (
           Entrar
         </Link>
         <Link to="/auth">
-          <Button className="rounded-full bg-neutral-950 hover:bg-neutral-800 text-white px-5 h-10 text-sm font-medium">
-            Agendar demo
+          <Button className="rounded-full bg-primary hover:bg-primary/90 text-white px-5 h-10 text-sm font-semibold">
+            Teste grátis 14 dias
           </Button>
         </Link>
       </div>
@@ -48,11 +183,12 @@ const Nav = () => (
 /* ───────── WhatsApp Mockup animado ───────── */
 const WhatsAppMockup = () => {
   const messages = [
-    { side: "in", text: "Boa tarde, recebi a mensagem. Posso parcelar?", time: "14:21" },
-    { side: "out", text: "Olá, Maria 👋. Sua dívida com Banco X é de R$ 1.487,50. Posso oferecer:", time: "14:22", emphasis: true },
-    { side: "out", text: "✅ À vista com 40% de desconto: R$ 892,50\n✅ Em 6× sem juros: R$ 247,90", time: "14:22" },
-    { side: "in", text: "Quero o à vista!", time: "14:22" },
-    { side: "out", text: "Perfeito. Boleto e Pix gerados:", time: "14:23", card: true },
+    { side: "in", text: "Olha, sinceramente não tenho como pagar isso agora. Tô desempregado.", time: "14:20" },
+    { side: "out", text: "Entendo, João. Bora montar algo que caiba no seu bolso? Quanto você consegue pagar por mês sem apertar?", time: "14:21", emphasis: true },
+    { side: "in", text: "No máximo uns R$ 150.", time: "14:22" },
+    { side: "out", text: "Fechado. Posso te dar:\n✅ 30% de desconto sobre o saldo\n✅ 10× de R$ 152,30\nPrimeira só daqui 15 dias. Topa?", time: "14:22" },
+    { side: "in", text: "Topo!", time: "14:23" },
+    { side: "out", text: "Acordo registrado ✅ Boleto da 1ª parcela já no seu WhatsApp.", time: "14:23", card: true },
   ];
 
   const [visible, setVisible] = useState(1);
@@ -70,7 +206,7 @@ const WhatsAppMockup = () => {
       {/* Tag flutuante */}
       <div className="absolute -top-3 left-6 z-10 bg-neutral-950 text-white text-[10px] tracking-[0.18em] uppercase px-3 py-1.5 rounded-full flex items-center gap-2">
         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-        IA · negociando · MARIA L.
+        IA · contornando objeção · JOÃO M.
       </div>
 
       {/* Marcas de canto laranja */}
@@ -120,9 +256,9 @@ const WhatsAppMockup = () => {
                   {m.text}
                   {m.card && (
                     <div className="mt-2 bg-white/80 border border-emerald-700/10 rounded-lg p-2 font-mono text-[10px] text-neutral-700 space-y-0.5">
-                      <div className="flex justify-between"><span className="text-neutral-500">VALOR</span><span className="font-semibold">R$ 892,50</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">VENCIMENTO</span><span>15/05</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">FORMA</span><span>Pix · QR</span></div>
+                      <div className="flex justify-between"><span className="text-neutral-500">ACORDO</span><span className="font-semibold">#4821</span></div>
+                      <div className="flex justify-between"><span className="text-neutral-500">TOTAL</span><span>R$ 1.523,00</span></div>
+                      <div className="flex justify-between"><span className="text-neutral-500">PARCELAS</span><span>10× R$ 152,30</span></div>
                     </div>
                   )}
                   <div className="text-right text-[9px] text-neutral-500 mt-1">{m.time}</div>
@@ -136,11 +272,11 @@ const WhatsAppMockup = () => {
         <div className="px-4 py-3 border-t border-black/5 bg-white flex items-center justify-between text-[10px] tracking-wider uppercase">
           <div>
             <div className="text-neutral-400">SPEC</div>
-            <div className="font-mono text-neutral-700">acordo · à vista · pix</div>
+            <div className="font-mono text-neutral-700">acordo · 10× · objeção tratada</div>
           </div>
           <div className="text-right">
-            <div className="text-neutral-400">CONFIDENCE</div>
-            <div className="font-mono text-primary font-semibold">0.94 · auto-aceito</div>
+            <div className="text-neutral-400">SCORE</div>
+            <div className="font-mono text-primary font-semibold">0.78 · auto-fechado</div>
           </div>
         </div>
       </div>
@@ -148,73 +284,93 @@ const WhatsAppMockup = () => {
   );
 };
 
-/* ───────── Hero ───────── */
+/* ───────── Hero (escuro · estilo antigo) ───────── */
 const Hero = () => (
-  <section className={`relative ${grid}`}>
-    <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+  <section className="relative bg-[#0F1117] text-white overflow-hidden">
+    {/* Pattern de conexões */}
+    <ConnectionsBg />
+    {/* Glow laranja radial */}
+    <div
+      aria-hidden
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background:
+          "radial-gradient(60% 50% at 25% 35%, rgba(255,127,0,0.18), transparent 70%), radial-gradient(50% 40% at 85% 70%, rgba(255,127,0,0.12), transparent 70%)",
+      }}
+    />
+    {/* Grid sutil branco */}
+    <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:48px_48px] pointer-events-none" />
+
+    <div className="relative max-w-7xl mx-auto px-6 lg:px-10 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
       <div>
-        <div className="inline-flex items-center gap-2 text-[11px] tracking-[0.18em] uppercase text-neutral-600 mb-6">
-          <span className="w-2 h-2 rounded-full bg-primary" />
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/15 ring-1 ring-primary/30 text-[11px] tracking-[0.18em] uppercase text-primary font-semibold mb-6">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
           Plataforma para assessorias de cobrança
         </div>
 
-        <h1 className={`${serif} text-5xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-tight text-neutral-950`}>
-          Sua assessoria recupera<br />
-          mais quando a <em className="italic text-primary">IA<br />trabalha junto</em>.
+        <h1 className="font-sans font-black text-5xl sm:text-6xl lg:text-7xl leading-[0.95] tracking-tight">
+          Sua assessoria recupera{" "}
+          <span className="text-primary">mais</span> cobrando do{" "}
+          <span className="text-primary">jeito certo</span>.
         </h1>
 
-        <p className="mt-7 text-lg text-neutral-700 max-w-xl leading-relaxed">
-          RIVO CONNECT unifica <strong className="font-semibold text-neutral-950">WhatsApp oficial e não oficial</strong>, discador,
-          score de IA, portal do credor e analytics em uma única plataforma —
-          construída para quem vive de cobrança.
+        <p className="mt-7 text-lg text-white/70 max-w-xl leading-relaxed">
+          WhatsApp oficial e não oficial, discador, score de IA e portal do credor —
+          tudo em <strong className="font-semibold text-white">uma única plataforma</strong>,
+          feita para quem vive de cobrança.
         </p>
 
+        {/* CTAs */}
+        <div className="mt-9 flex flex-wrap items-center gap-3">
+          <Link to="/auth">
+            <Button
+              className="rounded-full bg-primary hover:bg-primary/90 text-white px-7 h-12 text-sm font-semibold shadow-[0_0_40px_rgba(255,127,0,0.45)]"
+            >
+              Teste grátis 14 dias <ArrowRight className="w-4 h-4 ml-1.5" />
+            </Button>
+          </Link>
+          <a href="#hero-chat">
+            <Button
+              variant="outline"
+              className="rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 px-6 h-12 text-sm font-medium"
+            >
+              Ver demonstração
+            </Button>
+          </a>
+        </div>
+
+        {/* Trust badges */}
+        <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-xs text-white/60">
+          {[
+            { i: ShieldCheck, t: "Sem cartão de crédito" },
+            { i: Zap, t: "Setup em 24h" },
+            { i: ShieldCheck, t: "LGPD compliant" },
+            { i: Plug, t: "Funciona com seu CRM" },
+          ].map((s) => (
+            <span key={s.t} className="inline-flex items-center gap-1.5">
+              <s.i className="w-3.5 h-3.5 text-primary" /> {s.t}
+            </span>
+          ))}
+        </div>
+
         {/* KPIs */}
-        <div className="mt-10 grid grid-cols-3 gap-6 max-w-xl border-t border-black/10 pt-6">
+        <div className="mt-10 grid grid-cols-3 gap-6 max-w-xl border-t border-white/10 pt-6">
           {[
             { label: "RECUPERAÇÃO", value: "+30%", sub: "vs. operação manual" },
             { label: "PRODUTIVIDADE", value: "3×", sub: "mais contatos / operador" },
             { label: "CREDORES", value: "Multi", sub: "em uma só plataforma" },
           ].map((k) => (
             <div key={k.label}>
-              <div className="text-[10px] tracking-[0.18em] uppercase text-neutral-500">{k.label}</div>
-              <div className={`${serif} text-4xl text-neutral-950 mt-1 leading-none`}>
-                {k.value.startsWith("+") ? <span className="text-primary">{k.value}</span> : k.value}
+              <div className="text-[10px] tracking-[0.18em] uppercase text-white/50">{k.label}</div>
+              <div className="font-sans font-black text-3xl text-white mt-1 leading-none">
+                {k.value.startsWith("+") || k.value.startsWith("3") ? (
+                  <span className="text-primary">{k.value}</span>
+                ) : (
+                  k.value
+                )}
               </div>
-              <div className="text-[11px] text-neutral-500 mt-1.5">{k.sub}</div>
+              <div className="text-[11px] text-white/50 mt-1.5">{k.sub}</div>
             </div>
-          ))}
-        </div>
-
-        {/* CTAs */}
-        <div className="mt-10 flex flex-wrap items-center gap-3">
-          <Link to="/auth">
-            <Button className="rounded-full bg-neutral-950 hover:bg-neutral-800 text-white px-6 h-12 text-sm font-medium">
-              Agendar demo <ArrowRight className="w-4 h-4 ml-1.5" />
-            </Button>
-          </Link>
-          <a href="#recursos">
-            <Button variant="outline" className="rounded-full border-neutral-950/15 hover:bg-neutral-950/5 px-6 h-12 text-sm font-medium">
-              Ver plataforma
-            </Button>
-          </a>
-          <a href="#hero-chat" className="hidden sm:inline-flex items-center gap-1.5 text-sm text-neutral-700 hover:text-neutral-950 px-3">
-            <span className="w-7 h-7 rounded-full bg-neutral-950 text-white flex items-center justify-center">▸</span>
-            Ver IA negociando
-          </a>
-        </div>
-
-        {/* Selos */}
-        <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs text-neutral-600">
-          {[
-            { c: "bg-emerald-500", t: "Multi-tenant seguro" },
-            { c: "bg-blue-500", t: "LGPD compliant" },
-            { c: "bg-neutral-400", t: "API REST oficial" },
-            { c: "bg-primary", t: "Setup < 1 dia" },
-          ].map((s) => (
-            <span key={s.t} className="inline-flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-sm ${s.c}`} /> {s.t}
-            </span>
           ))}
         </div>
       </div>
@@ -566,8 +722,8 @@ const FinalCTA = () => (
       </p>
       <div className="mt-10 flex flex-wrap justify-center gap-3">
         <Link to="/auth">
-          <Button className="rounded-full bg-primary hover:bg-primary/90 text-white px-7 h-12 text-sm font-medium">
-            Agendar demo <ArrowRight className="w-4 h-4 ml-1.5" />
+          <Button className="rounded-full bg-primary hover:bg-primary/90 text-white px-7 h-12 text-sm font-semibold shadow-[0_0_40px_rgba(255,127,0,0.4)]">
+            Teste grátis 14 dias <ArrowRight className="w-4 h-4 ml-1.5" />
           </Button>
         </Link>
         <a href="#recursos">
@@ -623,6 +779,7 @@ const LandingPage = () => {
       <Nav />
       <main>
         <Hero />
+        <ProductShowcase />
         <TargetBar />
         <BigNumbers />
         <Features />
