@@ -219,14 +219,19 @@ const ClientDetailPage = () => {
     queryKey: ["client-agreements", cpf, id, credorFilter, tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return [];
-      
+
       let targetCpf = (cpf || "").replace(/\D/g, "");
       let targetCredor = credorFilter;
 
       if (id) {
-        const master = clients.find(c => c.id === id) || (clients.length > 0 ? clients[0] : null);
+        const { data: master } = await supabase
+          .from("clients")
+          .select("cpf, credor")
+          .eq("id", id)
+          .eq("tenant_id", tenant.id)
+          .maybeSingle();
         if (master) {
-          targetCpf = master.cpf.replace(/\D/g, "");
+          targetCpf = (master.cpf || "").replace(/\D/g, "");
           targetCredor = master.credor;
         }
       }
