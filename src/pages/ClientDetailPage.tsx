@@ -76,7 +76,7 @@ const ClientDetailPage = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const credorFilter = searchParams.get("credor");
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin } = useTenant();
   const { canReopenParcelas } = usePermissions();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
