@@ -2427,6 +2427,7 @@ export type Database = {
           cep: string | null
           cidade: string | null
           cnpj: string
+          cobrança_direta_ativa: boolean
           complemento: string | null
           conta: string | null
           contato_responsavel: string | null
@@ -2483,6 +2484,7 @@ export type Database = {
           cep?: string | null
           cidade?: string | null
           cnpj: string
+          cobrança_direta_ativa?: boolean
           complemento?: string | null
           conta?: string | null
           contato_responsavel?: string | null
@@ -2539,6 +2541,7 @@ export type Database = {
           cep?: string | null
           cidade?: string | null
           cnpj?: string
+          cobrança_direta_ativa?: boolean
           complemento?: string | null
           conta?: string | null
           contato_responsavel?: string | null

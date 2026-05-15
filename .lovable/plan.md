@@ -1,37 +1,31 @@
+## Causa do erro
 
-# Ajustes Visão 360 + cancelamento manual
+Ao salvar a aba **Bancário** do credor, o frontend manda o campo `cobrança_direta_ativa` (toggle "Cobrança Direta") para a tabela `credores`. Essa coluna **não existe** no schema atual — por isso o PostgREST retorna:
 
-## 1. Colchão — manter cancelados dentro do mês corrente
+> Could not find the 'cobrança_direta_ativa' column of 'credores' in the schema cache
 
-A regra do colchão hoje exclui qualquer acordo `cancelled` ou `rejected`. Como o usuário quer que cancelamentos feitos **dentro do mês corrente** continuem no colchão (só somem na virada do mês), ajustar a RPC `public.get_dashboard_stats`:
+Confirmações:
+- Lista atual de colunas em `public.credores` — não tem `cobrança_direta_ativa` (nem variante sem cedilha).
+- `src/components/cadastros/CredorForm.tsx` (linhas 533-563) faz `set("cobrança_direta_ativa", v)` e o `saveMutation` envia o `form` inteiro no upsert.
+- `src/components/admin/integrations/NegociarieTab.tsx` (linha 26) também filtra `eq("cobrança_direta_ativa", true)` para listar credores com recebimento direto.
 
-- **Mês corrente** (`_is_current_month = true`): incluir acordo se `status NOT IN ('cancelled','rejected') OR updated_at::date >= _month_start`. Ou seja, o cancelamento do mês não tira do colchão.
-- **Meses passados/futuros**: manter `status NOT IN ('cancelled','rejected')` (foto definitiva já consolidada).
+Ou seja, o nome da coluna sempre foi previsto **com cedilha**, mas a migration nunca foi criada.
 
-Aplicar nos 2 ramos do bloco do colchão (entrada + parcelas mensais). Demais métricas ficam como estão.
+## O que vou fazer
 
-## 2. Renomear "Quebra" → "Cancelados"
+1. Criar migration adicionando a coluna na tabela `credores`:
+   - Nome: `"cobrança_direta_ativa"` (com cedilha, mantendo identifier quoted, igual ao código).
+   - Tipo: `boolean`, `NOT NULL`, `DEFAULT false`.
+   - Index parcial em `(tenant_id) WHERE "cobrança_direta_ativa" = true` para acelerar o lookup do painel Negociarie.
+2. Não vou tocar em RLS (a tabela já tem políticas e a coluna apenas se acopla a elas).
+3. Após a migration, o tipo `Database` do Supabase é regenerado automaticamente — o código existente passa a compilar/funcionar sem mudanças adicionais.
 
-Apenas troca de label visual (variáveis SQL/props ficam como `quebra` para não cascatear refactor):
+## Verificação pós-migration
 
-- `src/components/dashboard/Visao360Card.tsx` linha 65: `label: "Quebra"` → `label: "Cancelados"`.
-- `src/components/dashboard/CustomizeDashboardDialog.tsx` linha 43: trocar texto "...e Quebra..." por "...e Cancelados...".
-- `src/pages/ClientDetailPage.tsx` linha 52: badge label `cancelled: "Quebra de Acordo"` → `"Cancelado"`.
-- `src/pages/AcordosPage.tsx` linha 148: toast "Acordo cancelado. Parcelas marcadas como quebra." → "Acordo cancelado."
+- Salvar novamente a aba Bancário com toggle ligado → deve persistir sem erro.
+- Abrir o painel **Configurações → Integrações → Negociarie** (admin) → o card "Contas de Credores Conectadas" deve listar credores com a flag.
+- Conferir que o credor `143cc8af…` (TESS MODELS) reflete o estado correto do switch.
 
-## 3. Operador não cancela mais — só Admin/Sistema. Operador ganha "Editar"
+## Observação
 
-Em `src/pages/ClientDetailPage.tsx`:
-
-- Importar `useTenant` e usar `isTenantAdmin`.
-- Linha 719: condicionar o botão "Cancelar Acordo" para `cancellableStatuses.includes(...) && isTenantAdmin`.
-- Garantir o botão "Editar" disponível para todos os perfis (operador inclusive) usando o handler de edição já existente. Verificar se `editableStatuses` já está em uso e expor o botão também para operador (hoje já não tem trava de role, então só confirmar).
-- Em `src/pages/AcordosPage.tsx`: a função `handleCancel` está definida mas não há botão na UI. Não mexer (dead code, sem risco).
-
-Cancelamento automático pelo sistema (`auto_expired`) continua funcionando normalmente — não muda nada no backend de cancelamento.
-
-## Riscos / efeitos
-
-- Colchão do mês corrente pode subir um pouco (cancelados do mês voltam).
-- Operador perde a ação destrutiva no detalhe do cliente; admin segue com acesso total.
-- Mudança de label não afeta cálculos.
+O nome da coluna usa caractere acentuado (`ç`). Funciona em Postgres porque o identifier vai quoted, mas é incomum. Se quiser, posso renomear para `cobranca_direta_ativa` (sem cedilha) e ajustar as 2 referências no frontend — diga se prefere essa variante mais limpa, senão sigo com o nome atual que o código já espera.
