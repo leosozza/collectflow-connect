@@ -62,7 +62,7 @@ const Visao360Card = ({ colchao, provisionado, pendentes, quebra, monthLabel }: 
     },
     {
       key: "quebra",
-      label: "Quebra",
+      label: "Cancelados",
       value: quebra,
       color: "hsl(var(--destructive))",
       bg: "hsl(var(--destructive) / 0.10)",

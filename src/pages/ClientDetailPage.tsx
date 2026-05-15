@@ -49,7 +49,7 @@ const statusLabelsMap: Record<string, string> = {
   pending: "Acordo Vigente",
   pending_approval: "Aguardando Liberação",
   rejected: "Rejeitado",
-  cancelled: "Quebra de Acordo",
+  cancelled: "Cancelado",
   overdue: "Acordo Atrasado",
 };
 
@@ -76,7 +76,7 @@ const ClientDetailPage = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const credorFilter = searchParams.get("credor");
-  const { tenant } = useTenant();
+  const { tenant, isTenantAdmin } = useTenant();
   const { canReopenParcelas } = usePermissions();
   const [showAcordoDialog, setShowAcordoDialog] = useState(false);
   const [activeTab, setActiveTab] = useUrlState("tab", "titulos");
@@ -716,7 +716,7 @@ const ClientDetailPage = () => {
                                 <Pencil className="w-4 h-4 text-muted-foreground" />
                               </Button>
                             )}
-                            {cancellableStatuses.includes(agreement.status) && (
+                            {cancellableStatuses.includes(agreement.status) && isTenantAdmin && (
                               <Button size="sm" variant="ghost" onClick={() => setCancelId(agreement.id)} title="Cancelar Acordo">
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </Button>
