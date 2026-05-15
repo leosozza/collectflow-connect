@@ -20,6 +20,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
+import ReconciliationAlertModal from "@/components/acordos/ReconciliationAlertModal";
+import { useReconciliationAlerts } from "@/hooks/useReconciliationAlerts";
+import type { ReconciliationAlert } from "@/services/reconciliationAlertService";
 import { fetchSSOTInstallments, type SSOTInstallment } from "@/lib/agreementInstallmentsSSOT";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
@@ -94,6 +97,14 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [selectedInstallmentForDateEdit, setSelectedInstallmentForDateEdit] = useState<any>(null);
   const [selectedDateForEdit, setSelectedDateForEdit] = useState<Date | undefined>(undefined);
   const [savingDate, setSavingDate] = useState(false);
+
+  // Reconciliation alert state
+  const [openAlert, setOpenAlert] = useState<{ alert: ReconciliationAlert; inst: any } | null>(null);
+  const { data: reconAlerts = [], refetch: refetchAlerts } = useReconciliationAlerts(agreementId, tenantId);
+  const alertByInstallmentKey = new Map<string, ReconciliationAlert>();
+  for (const a of reconAlerts) {
+    if (a.installment_key) alertByInstallmentKey.set(a.installment_key, a);
+  }
 
   const { data: cobrancas = [], refetch: refetchCobrancas } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
@@ -1079,6 +1090,27 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                             {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
                           </Badge>
                         )}
+                        {(() => {
+                          const reconAlert = inst.customKey ? alertByInstallmentKey.get(inst.customKey) : null;
+                          if (!reconAlert) return null;
+                          const isAwaiting = reconAlert.status === "pending_admin_approval";
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setOpenAlert({ alert: reconAlert, inst })}
+                              className={cn(
+                                "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border transition-colors",
+                                isAwaiting
+                                  ? "bg-blue-500/10 text-blue-700 border-blue-500/30 hover:bg-blue-500/20"
+                                  : "bg-orange-500/10 text-orange-700 border-orange-500/40 hover:bg-orange-500/20 animate-pulse"
+                              )}
+                              title={isAwaiting ? "Conciliação aguardando aprovação do admin" : "Conciliação Maxlist pendente — clique para resolver"}
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                              {isAwaiting ? "Aguardando admin" : "Conciliar Maxlist"}
+                            </button>
+                          );
+                        })()}
                       </TableCell>
 
                       {/* RIVO_FIX: Coluna obrigatoria */}
@@ -1334,6 +1366,29 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                 queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
       queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
+                onRefresh?.();
+              }}
+            />
+          )}
+
+          {openAlert && tenantId && profile && (
+            <ReconciliationAlertModal
+              open={!!openAlert}
+              onOpenChange={(open) => !open && setOpenAlert(null)}
+              alert={openAlert.alert}
+              installmentNumber={openAlert.inst.number}
+              installmentKey={openAlert.inst.customKey}
+              installmentLabel={openAlert.inst.isEntrada
+                ? (openAlert.inst.entradaCount > 1 ? `Entrada ${openAlert.inst.displayNumber}` : "Entrada")
+                : `Parcela ${openAlert.inst.displayNumber}/${totalInstallments}`}
+              installmentValue={Number(openAlert.inst.value)}
+              tenantId={tenantId}
+              profileId={profile.id}
+              agreementId={agreementId}
+              onResolved={() => {
+                refetchAlerts();
+                queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+                queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
                 onRefresh?.();
               }}
             />

@@ -444,6 +444,8 @@ Deno.serve(async (req) => {
     let errors = 0;
     const processingLogs: string[] = [];
     const updatedRecords: { nome: string; cpf: string; changes: Record<string, { old: any; new: any }> }[] = [];
+    // Acumula pagamentos Maxlist que viraram "pago" para criar alertas de conciliação no acordo
+    const paidPaymentsForReconciliation: any[] = [];
     const BATCH_SIZE = 500;
 
     if (mode === "update") {
@@ -669,7 +671,23 @@ Deno.serve(async (req) => {
 
             const updateLogs: any[] = [];
             for (const p of pendingUpdateChanges) {
-              if (p.isPaidStatusChange) paid++;
+              if (p.isPaidStatusChange) {
+                paid++;
+                // Captura para criar alerta de conciliação no acordo (se houver acordo ativo)
+                paidPaymentsForReconciliation.push({
+                  cpf: p.rec.cpf,
+                  credor: p.rec.credor,
+                  valor_pago: p.rec.valor_pago ?? p.rec.valor_parcela ?? 0,
+                  data_pagamento: p.rec.data_pagamento || null,
+                  source_ref: p.rec.id,
+                  meta: {
+                    cod_contrato: p.rec.cod_contrato,
+                    numero_parcela: p.rec.numero_parcela,
+                    external_id: p.rec.external_id,
+                    nome: p.existing?.nome_completo || p.rec.nome_completo,
+                  },
+                });
+              }
               if (p.isCancelledStatusChange) cancelledMaxlist++;
 
               if (updatedRecords.length < 100) {
@@ -787,6 +805,29 @@ Deno.serve(async (req) => {
       console.log(`[maxlist-import] Consolidated ${profileBatch.length} client_profiles`);
     } catch (profileErr: any) {
       console.error("[maxlist-import] client_profiles consolidation error:", profileErr.message);
+    }
+
+    // === Bridge Maxlist → Acordo: cria alertas de conciliação ===
+    if (paidPaymentsForReconciliation.length > 0) {
+      try {
+        const RECON_BATCH = 500;
+        let totalAlerts = 0;
+        for (let i = 0; i < paidPaymentsForReconciliation.length; i += RECON_BATCH) {
+          const batch = paidPaymentsForReconciliation.slice(i, i + RECON_BATCH);
+          const { data: alertCount, error: reconErr } = await supabase.rpc(
+            "create_reconciliation_alerts_from_maxlist",
+            { _tenant_id: tenant_id, _payments: batch }
+          );
+          if (reconErr) {
+            console.error(`[maxlist-import] reconciliation alerts error:`, reconErr.message);
+          } else {
+            totalAlerts += Number(alertCount || 0);
+          }
+        }
+        console.log(`[maxlist-import] Reconciliation alerts created: ${totalAlerts} from ${paidPaymentsForReconciliation.length} paid Maxlist updates`);
+      } catch (reconCatchErr: any) {
+        console.error(`[maxlist-import] reconciliation alerts unexpected error:`, reconCatchErr?.message);
+      }
     }
 
     // Auto-status-sync — fire in background to not block HTTP response

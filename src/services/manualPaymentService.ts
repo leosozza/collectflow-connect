@@ -46,6 +46,7 @@ export interface CreateManualPaymentData {
   payment_method: string;
   receiver: string;
   notes?: string;
+  reconciliation_alert_id?: string;
 }
 
 /**
