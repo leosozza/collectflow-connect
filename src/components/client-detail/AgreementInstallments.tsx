@@ -1370,6 +1370,29 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
               }}
             />
           )}
+
+          {openAlert && tenantId && profile && (
+            <ReconciliationAlertModal
+              open={!!openAlert}
+              onOpenChange={(open) => !open && setOpenAlert(null)}
+              alert={openAlert.alert}
+              installmentNumber={openAlert.inst.number}
+              installmentKey={openAlert.inst.customKey}
+              installmentLabel={openAlert.inst.isEntrada
+                ? (openAlert.inst.entradaCount > 1 ? `Entrada ${openAlert.inst.displayNumber}` : "Entrada")
+                : `Parcela ${openAlert.inst.displayNumber}/${totalInstallments}`}
+              installmentValue={Number(openAlert.inst.value)}
+              tenantId={tenantId}
+              profileId={profile.id}
+              agreementId={agreementId}
+              onResolved={() => {
+                refetchAlerts();
+                queryClient.invalidateQueries({ queryKey: ["manual-payments", agreementId] });
+                queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+                onRefresh?.();
+              }}
+            />
+          )}
         </CollapsibleContent>
       </Collapsible>
 
