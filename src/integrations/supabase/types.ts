@@ -8283,6 +8283,29 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      sync_clients_status_chunk: {
+        Args: { _after_id: string; _limit?: number; _tenant_id: string }
+        Returns: {
+          last_id: string
+          processed: number
+          updated: number
+        }[]
+      }
+      sync_clients_status_loop: {
+        Args: {
+          _after_id?: string
+          _max_pages?: number
+          _page?: number
+          _tenant_id: string
+        }
+        Returns: {
+          finished: boolean
+          last_id: string
+          pages: number
+          processed: number
+          updated: number
+        }[]
+      }
       try_lock_campaign: {
         Args: { _campaign_id: string; _worker_id: string }
         Returns: boolean
