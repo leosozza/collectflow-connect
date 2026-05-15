@@ -444,6 +444,8 @@ Deno.serve(async (req) => {
     let errors = 0;
     const processingLogs: string[] = [];
     const updatedRecords: { nome: string; cpf: string; changes: Record<string, { old: any; new: any }> }[] = [];
+    // Acumula pagamentos Maxlist que viraram "pago" para criar alertas de conciliação no acordo
+    const paidPaymentsForReconciliation: any[] = [];
     const BATCH_SIZE = 500;
 
     if (mode === "update") {
