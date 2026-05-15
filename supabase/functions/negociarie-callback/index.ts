@@ -124,12 +124,12 @@ Deno.serve(async (req) => {
 
     // ─── New format: body.parcelas[] ───
     if (Array.isArray(body.parcelas) && body.parcelas.length > 0) {
-      // Validate token usando credenciais do TENANT correto (descobrir via id_parcela)
+      // Validate token usando credenciais do TENANT/CREDOR correto (descoberto via id_parcela)
       if (body.token) {
         let tokenClientId = "";
         let tokenClientSecret = "";
 
-        // Descobre o tenant via primeira parcela
+        // Descobre tenant + agreement via primeira parcela
         const firstId = String(body.parcelas[0]?.id_parcela || "");
         if (firstId) {
           const { data: cob } = await supabase
@@ -139,23 +139,60 @@ Deno.serve(async (req) => {
             .maybeSingle();
 
           if (cob?.tenant_id) {
-            const { data: integ } = await supabase
-              .from("tenant_integrations")
-              .select("config")
-              .eq("tenant_id", cob.tenant_id)
-              .is("creditor_id", null)
-              .eq("provider", "negociarie")
-              .eq("is_active", true)
-              .maybeSingle();
+            // 1. Tenta credenciais do CREDOR (cobrança direta)
+            let creditorScopedFound = false;
+            if (cob.agreement_id) {
+              const { data: ag } = await supabase
+                .from("agreements")
+                .select("credor")
+                .eq("id", cob.agreement_id)
+                .maybeSingle();
+              if (ag?.credor) {
+                const { data: cred } = await supabase
+                  .from("credores")
+                  .select("id, cobrança_direta_ativa")
+                  .eq("tenant_id", cob.tenant_id)
+                  .or(`razao_social.eq.${ag.credor},nome_fantasia.eq.${ag.credor}`)
+                  .maybeSingle();
+                if (cred?.cobrança_direta_ativa) {
+                  const { data: credIntg } = await supabase
+                    .from("tenant_integrations")
+                    .select("config")
+                    .eq("tenant_id", cob.tenant_id)
+                    .eq("creditor_id", cred.id)
+                    .eq("provider", "negociarie")
+                    .eq("is_active", true)
+                    .maybeSingle();
+                  const cfg = (credIntg?.config as Record<string, any>) || {};
+                  if (cfg.client_id && cfg.client_secret) {
+                    tokenClientId = cfg.client_id;
+                    tokenClientSecret = cfg.client_secret;
+                    creditorScopedFound = true;
+                  }
+                }
+              }
+            }
 
-            const cfg = (integ?.config as Record<string, any>) || {};
-            const useGlobal = cfg.uses_global_fallback === true;
-            tokenClientId = (!useGlobal && cfg.client_id) || Deno.env.get("NEGOCIARIE_CLIENT_ID") || "";
-            tokenClientSecret = (!useGlobal && cfg.client_secret) || Deno.env.get("NEGOCIARIE_CLIENT_SECRET") || "";
+            // 2. Fallback para credenciais do TENANT
+            if (!creditorScopedFound) {
+              const { data: integ } = await supabase
+                .from("tenant_integrations")
+                .select("config")
+                .eq("tenant_id", cob.tenant_id)
+                .is("creditor_id", null)
+                .eq("provider", "negociarie")
+                .eq("is_active", true)
+                .maybeSingle();
+
+              const cfg = (integ?.config as Record<string, any>) || {};
+              const useGlobal = cfg.uses_global_fallback === true;
+              tokenClientId = (!useGlobal && cfg.client_id) || Deno.env.get("NEGOCIARIE_CLIENT_ID") || "";
+              tokenClientSecret = (!useGlobal && cfg.client_secret) || Deno.env.get("NEGOCIARIE_CLIENT_SECRET") || "";
+            }
           }
         }
 
-        // Fallback final para ENV (Y.BRASIL ou cobrança não localizada)
+        // Fallback final para ENV
         if (!tokenClientId || !tokenClientSecret) {
           tokenClientId = Deno.env.get("NEGOCIARIE_CLIENT_ID") || "";
           tokenClientSecret = Deno.env.get("NEGOCIARIE_CLIENT_SECRET") || "";
