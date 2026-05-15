@@ -4,7 +4,7 @@ import { logAction } from "@/services/auditService";
 import { cleanCPF } from "@/lib/cpfUtils";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO, subDays } from "date-fns";
+import { format, parseISO, subDays, isValid } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,12 +31,29 @@ import ImportResultDialog, { type ImportReport } from "@/components/maxlist/Impo
 import { fetchFieldMappings } from "@/services/fieldMappingService";
 
 const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
-  const selected = value ? parseISO(value) : undefined;
+  const safeParse = (v: string): Date | undefined => {
+    if (!v) return undefined;
+    try {
+      const d = parseISO(v);
+      return isValid(d) ? d : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const selected = safeParse(value);
   const [inputValue, setInputValue] = useState(selected ? format(selected, "dd/MM/yyyy") : "");
+  const [hasError, setHasError] = useState(false);
 
   // Sync inputValue when value changes externally
   useEffect(() => {
-    setInputValue(value ? format(parseISO(value), "dd/MM/yyyy") : "");
+    const d = safeParse(value);
+    if (d) {
+      setInputValue(format(d, "dd/MM/yyyy"));
+      setHasError(false);
+    } else if (!value) {
+      setInputValue("");
+      setHasError(false);
+    }
   }, [value]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,11 +68,23 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
       const day = parseInt(raw.slice(0, 2), 10);
       const month = parseInt(raw.slice(2, 4), 10);
       const year = parseInt(raw.slice(4, 8), 10);
-      if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= 2100) {
+      const candidate = new Date(year, month - 1, day);
+      const isReal =
+        year >= 1900 && year <= 2100 &&
+        candidate.getFullYear() === year &&
+        candidate.getMonth() === month - 1 &&
+        candidate.getDate() === day;
+      if (isReal) {
+        setHasError(false);
         onChange(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+      } else {
+        setHasError(true);
       }
     } else if (raw.length === 0) {
+      setHasError(false);
       onChange("");
+    } else {
+      setHasError(false);
     }
   };
 
@@ -66,8 +95,9 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
           value={inputValue}
           onChange={handleInputChange}
           placeholder="dd/mm/aaaa"
-          className="h-9 text-sm pr-9"
+          className={cn("h-9 text-sm pr-9", hasError && "border-destructive focus-visible:ring-destructive")}
           maxLength={10}
+          aria-invalid={hasError}
         />
         <PopoverTrigger asChild>
           <button
@@ -78,6 +108,9 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
             <CalendarIcon className="h-4 w-4" />
           </button>
         </PopoverTrigger>
+        {hasError && (
+          <p className="mt-1 text-xs text-destructive">Data inválida</p>
+        )}
       </div>
       <PopoverContent
         className="w-auto p-0"
@@ -90,7 +123,10 @@ const DatePickerField = ({ value, onChange }: { value: string; onChange: (v: str
         <Calendar
           mode="single"
           selected={selected}
-          onSelect={(d) => onChange(d ? format(d, "yyyy-MM-dd") : "")}
+          onSelect={(d) => {
+            setHasError(false);
+            onChange(d ? format(d, "yyyy-MM-dd") : "");
+          }}
           initialFocus
           className={cn("p-3 pointer-events-auto")}
         />
