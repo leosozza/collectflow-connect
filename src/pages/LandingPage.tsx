@@ -256,9 +256,9 @@ const WhatsAppMockup = () => {
                   {m.text}
                   {m.card && (
                     <div className="mt-2 bg-white/80 border border-emerald-700/10 rounded-lg p-2 font-mono text-[10px] text-neutral-700 space-y-0.5">
-                      <div className="flex justify-between"><span className="text-neutral-500">VALOR</span><span className="font-semibold">R$ 892,50</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">VENCIMENTO</span><span>15/05</span></div>
-                      <div className="flex justify-between"><span className="text-neutral-500">FORMA</span><span>Pix · QR</span></div>
+                      <div className="flex justify-between"><span className="text-neutral-500">ACORDO</span><span className="font-semibold">#4821</span></div>
+                      <div className="flex justify-between"><span className="text-neutral-500">TOTAL</span><span>R$ 1.523,00</span></div>
+                      <div className="flex justify-between"><span className="text-neutral-500">PARCELAS</span><span>10× R$ 152,30</span></div>
                     </div>
                   )}
                   <div className="text-right text-[9px] text-neutral-500 mt-1">{m.time}</div>
@@ -272,11 +272,11 @@ const WhatsAppMockup = () => {
         <div className="px-4 py-3 border-t border-black/5 bg-white flex items-center justify-between text-[10px] tracking-wider uppercase">
           <div>
             <div className="text-neutral-400">SPEC</div>
-            <div className="font-mono text-neutral-700">acordo · à vista · pix</div>
+            <div className="font-mono text-neutral-700">acordo · 10× · objeção tratada</div>
           </div>
           <div className="text-right">
-            <div className="text-neutral-400">CONFIDENCE</div>
-            <div className="font-mono text-primary font-semibold">0.94 · auto-aceito</div>
+            <div className="text-neutral-400">SCORE</div>
+            <div className="font-mono text-primary font-semibold">0.78 · auto-fechado</div>
           </div>
         </div>
       </div>
