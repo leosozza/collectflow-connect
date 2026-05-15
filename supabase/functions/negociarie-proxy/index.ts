@@ -352,8 +352,8 @@ Deno.serve(async (req) => {
       }
 
       case "parcelas-pagas": {
-        const data = params.data || new Date().toISOString().split("T")[0];
-        result = await negociarieRequest(tenantId, "GET", `/cobranca/parcelas-pagas?data=${data}`);
+        const data = (params as any).data || (params as any).date || new Date().toISOString().split("T")[0];
+        result = await negociarieRequest(tenantId, "GET", `/cobranca/parcelas-pagas?data=${data}`, undefined, creditorIdCtx);
         break;
       }
 
@@ -365,9 +365,20 @@ Deno.serve(async (req) => {
       case "atualizar-callback": {
         const cbUrl = (params.data as any)?.url || (params.data as any)?.url_callback || "";
         const callbackPayload = { url_callback: cbUrl };
-        console.log("[negociarie-proxy] Registrando callback:", JSON.stringify(callbackPayload));
-        result = await negociarieRequest(tenantId, "POST", "/cobranca/atualizar-url-callback", callbackPayload);
+        console.log(`[negociarie-proxy] Registrando callback (creditor=${creditorIdCtx || "tenant"}):`, JSON.stringify(callbackPayload));
+        result = await negociarieRequest(tenantId, "POST", "/cobranca/atualizar-url-callback", callbackPayload, creditorIdCtx);
         console.log("[negociarie-proxy] Resposta callback:", JSON.stringify(result));
+        // Persist callback_registered_at on the correct row (tenant-level or creditor-scoped)
+        try {
+          const upd = adminClient
+            .from("tenant_integrations")
+            .update({ callback_registered_at: new Date().toISOString() })
+            .eq("tenant_id", tenantId)
+            .eq("provider", "negociarie");
+          await (creditorIdCtx ? upd.eq("creditor_id", creditorIdCtx) : upd.is("creditor_id", null));
+        } catch (e) {
+          console.warn("[negociarie-proxy] Falha ao gravar callback_registered_at:", (e as Error).message);
+        }
         break;
       }
 

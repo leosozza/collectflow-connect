@@ -53,9 +53,21 @@ export const negociarieService = {
   consultaCobrancas: (filters?: { cpf?: string; id_geral?: string; limit?: number }) =>
     callProxy("consulta-cobrancas", filters || {}),
   baixaManual: (data: Record<string, unknown>) => callProxy("baixa-manual", { data }),
-  parcelasPagas: (data?: string) => callProxy("parcelas-pagas", { data }),
+  parcelasPagas: (data?: string, creditorId?: string) =>
+    callProxy("parcelas-pagas", { data, creditor_id: creditorId }),
   alteradasHoje: () => callProxy("alteradas-hoje"),
-  atualizarCallback: (data: { url: string }) => callProxy("atualizar-callback", { data }),
+  atualizarCallback: (data: { url: string }, creditorId?: string) =>
+    callProxy("atualizar-callback", { data, creditor_id: creditorId }),
+
+  // Sync retroativo de baixas (quando webhook não disparou)
+  async syncPayments(opts: { tenantId?: string; creditorId?: string; days?: number } = {}) {
+    const { data, error } = await supabase.functions.invoke("negociarie-sync-payments", {
+      body: { tenant_id: opts.tenantId, creditor_id: opts.creditorId, days: opts.days ?? 14 },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return data;
+  },
 
   // Pagamento crédito
   pagamentoCredito: (data: Record<string, unknown>) => callProxy("pagamento-credito", { data }),
