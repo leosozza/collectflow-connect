@@ -4,7 +4,7 @@ import { logAction } from "@/services/auditService";
 import { cleanCPF } from "@/lib/cpfUtils";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { format, parseISO, subDays } from "date-fns";
+import { format, parseISO, subDays, isValid } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { supabase } from "@/integrations/supabase/client";
