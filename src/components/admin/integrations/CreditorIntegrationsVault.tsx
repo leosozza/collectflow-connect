@@ -242,6 +242,114 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
         </div>
       </Card>
 
+      {/* Webhook de baixa automática (somente quando credenciais do credor existem) */}
+      {status?.has_credentials && (
+        <Card className="p-4 border-border bg-card">
+          <div className="flex items-center gap-2 mb-3">
+            <Link2 className="w-4 h-4 text-primary" />
+            <h4 className="text-sm font-semibold">Webhook de baixa automática</h4>
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-3 leading-snug">
+            Esta URL recebe da Negociarie a confirmação dos pagamentos e dá baixa automática nos acordos.
+            Registre-a uma vez na conta Negociarie deste credor — não precisa repetir a cada cobrança.
+          </p>
+
+          <div className="space-y-2">
+            <Label className="text-[11px] text-muted-foreground">URL do callback</Label>
+            <div className="flex gap-2">
+              <Input readOnly value={callbackUrl} className="bg-background font-mono text-xs" />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(callbackUrl);
+                  toast.success("URL copiada");
+                }}
+                title="Copiar URL"
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2 mt-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={registeringCallback}
+              onClick={async () => {
+                setRegisteringCallback(true);
+                try {
+                  await negociarieService.atualizarCallback({ url: callbackUrl }, creditorId);
+                  toast.success("Callback registrado na conta Negociarie deste credor");
+                  await loadStatus();
+                } catch (e: any) {
+                  toast.error("Falha ao registrar callback: " + e.message);
+                } finally {
+                  setRegisteringCallback(false);
+                }
+              }}
+              className="gap-2"
+            >
+              <Send className="w-4 h-4" />
+              {registeringCallback ? "Registrando..." : "Registrar callback na Negociarie"}
+            </Button>
+            {status.callback_registered_at && (
+              <span className="text-[10px] text-muted-foreground">
+                Último registro: {new Date(status.callback_registered_at).toLocaleString("pt-BR")}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-border/60">
+            <p className="text-[11px] text-muted-foreground mb-2 leading-snug">
+              <strong>Sincronizar baixas pagas:</strong> consulta os pagamentos dos últimos dias diretamente
+              na conta Negociarie deste credor e aplica a baixa no RIVO. Use após registrar o callback,
+              ou quando suspeitar que o webhook não disparou.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={60}
+                value={syncDays}
+                onChange={(e) => setSyncDays(Math.max(1, Math.min(60, Number(e.target.value) || 14)))}
+                className="w-20 h-9 text-xs"
+              />
+              <span className="text-[11px] text-muted-foreground">dias atrás</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={syncing}
+                onClick={async () => {
+                  setSyncing(true);
+                  try {
+                    const r = await negociarieService.syncPayments({
+                      tenantId, creditorId, days: syncDays,
+                    });
+                    toast.success(
+                      `Sincronização concluída: ${r.processed} parcela(s) baixada(s) ` +
+                      `(${r.matched}/${r.scanned} encontradas localmente)`
+                    );
+                  } catch (e: any) {
+                    toast.error("Falha na sincronização: " + e.message);
+                  } finally {
+                    setSyncing(false);
+                  }
+                }}
+                className="gap-2 ml-auto"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Sincronizando..." : "Sincronizar baixas pagas"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <p className="text-[10px] text-muted-foreground px-1 italic">
         * As credenciais são validadas na Negociarie antes de serem armazenadas, criptografadas e isoladas por Tenant e Credor.
       </p>
