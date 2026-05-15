@@ -276,11 +276,11 @@ const BaixasRealizadasPage = () => {
           </Popover>
 
           <Select value={credorFilter} onValueChange={setCredorFilter}>
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="Credor" />
+            <SelectTrigger className="h-9 w-44">
+              <SelectValue placeholder="Credores" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos credores</SelectItem>
+              <SelectItem value="todos">Credores</SelectItem>
               {credores.map(c => (
                 <SelectItem key={c} value={c}>
                   {shortCredor(c)}
@@ -291,11 +291,11 @@ const BaixasRealizadasPage = () => {
 
           {canViewAll && (
             <Select value={operatorFilter} onValueChange={setOperatorFilter}>
-              <SelectTrigger className="h-9 w-40">
-                <SelectValue placeholder="Operador" />
+              <SelectTrigger className="h-9 w-44">
+                <SelectValue placeholder="Operadores" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos operadores</SelectItem>
+                <SelectItem value="todos">Operadores</SelectItem>
                 {tenantOperators.map(op => (
                   <SelectItem key={op.user_id} value={op.user_id}>
                     {op.full_name}
@@ -306,22 +306,22 @@ const BaixasRealizadasPage = () => {
           )}
 
           <Select value={localFilter} onValueChange={setLocalFilter}>
-            <SelectTrigger className="h-9 w-32">
-              <SelectValue placeholder="Local" />
+            <SelectTrigger className="h-9 w-40">
+              <SelectValue placeholder="Recebedor" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos locais</SelectItem>
+              <SelectItem value="todos">Recebedor</SelectItem>
               <SelectItem value="credora">Credora</SelectItem>
               <SelectItem value="cobradora">Cobradora</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={methodFilter} onValueChange={setMethodFilter}>
-            <SelectTrigger className="h-9 w-36">
-              <SelectValue placeholder="Meio" />
+            <SelectTrigger className="h-9 w-52">
+              <SelectValue placeholder="Meios de pagamento" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos meios</SelectItem>
+              <SelectItem value="todos">Meios de pagamento</SelectItem>
               {methods.map(m => (
                 <SelectItem key={m} value={m}>
                   {m}
