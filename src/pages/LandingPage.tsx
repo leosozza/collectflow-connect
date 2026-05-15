@@ -183,11 +183,12 @@ const Nav = () => (
 /* ───────── WhatsApp Mockup animado ───────── */
 const WhatsAppMockup = () => {
   const messages = [
-    { side: "in", text: "Boa tarde, recebi a mensagem. Posso parcelar?", time: "14:21" },
-    { side: "out", text: "Olá, Maria 👋. Sua dívida com Banco X é de R$ 1.487,50. Posso oferecer:", time: "14:22", emphasis: true },
-    { side: "out", text: "✅ À vista com 40% de desconto: R$ 892,50\n✅ Em 6× sem juros: R$ 247,90", time: "14:22" },
-    { side: "in", text: "Quero o à vista!", time: "14:22" },
-    { side: "out", text: "Perfeito. Boleto e Pix gerados:", time: "14:23", card: true },
+    { side: "in", text: "Olha, sinceramente não tenho como pagar isso agora. Tô desempregado.", time: "14:20" },
+    { side: "out", text: "Entendo, João. Bora montar algo que caiba no seu bolso? Quanto você consegue pagar por mês sem apertar?", time: "14:21", emphasis: true },
+    { side: "in", text: "No máximo uns R$ 150.", time: "14:22" },
+    { side: "out", text: "Fechado. Posso te dar:\n✅ 30% de desconto sobre o saldo\n✅ 10× de R$ 152,30\nPrimeira só daqui 15 dias. Topa?", time: "14:22" },
+    { side: "in", text: "Topo!", time: "14:23" },
+    { side: "out", text: "Acordo registrado ✅ Boleto da 1ª parcela já no seu WhatsApp.", time: "14:23", card: true },
   ];
 
   const [visible, setVisible] = useState(1);
