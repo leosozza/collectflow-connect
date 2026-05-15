@@ -160,13 +160,13 @@ async function syncTenant(supabase: any, tenant_id: string) {
       ) {
         cur.push(c);
       } else {
-        processGroup(cur);
+        await processGroup(cur);
         cur = [c];
       }
     }
     if (data.length < PAGE) {
       // Last page — process the final group too
-      processGroup(cur);
+      await processGroup(cur);
       carry = [];
       break;
     } else {
