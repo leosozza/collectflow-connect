@@ -40,7 +40,7 @@ const DESCRIPTIONS: Record<DashboardBlockId, string> = {
   kpisGrid: "Acionados Hoje, Acordos do Dia e do Mês",
   agendamentos: "Callbacks agendados para hoje",
   parcelas: "Vencimentos do dia",
-  visao360: "Provisionado, Pendentes e Quebra em barras comparativas",
+  visao360: "Provisionado, Pendentes e Cancelados em barras comparativas",
 };
 
 export default function CustomizeDashboardDialog({
