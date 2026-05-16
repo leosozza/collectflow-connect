@@ -39,6 +39,8 @@ const PortalPage = () => {
   // Negotiation state
   const [negotiateCredor, setNegotiateCredor] = useState("");
   const [negotiateDebts, setNegotiateDebts] = useState<DebtItem[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [allowCustomProposal, setAllowCustomProposal] = useState(true);
 
   // Determine initial view from route
   useEffect(() => {
@@ -90,13 +92,24 @@ const PortalPage = () => {
     }
   };
 
-  const handleNegotiate = (credor: string, credorDebts: DebtItem[]) => {
+  const handleNegotiate = async (credor: string, credorDebts: DebtItem[]) => {
     setNegotiateCredor(credor);
     setNegotiateDebts(credorDebts);
+    // Fetch templates for this credor
+    try {
+      const { data } = await supabase.functions.invoke("portal-lookup", {
+        body: { action: "get-templates", tenant_slug: tenantSlug, credor },
+      });
+      setTemplates(data?.templates || []);
+      setAllowCustomProposal(data?.allow_custom_proposal ?? true);
+    } catch {
+      setTemplates([]);
+      setAllowCustomProposal(true);
+    }
     setView("negotiate");
   };
 
-  const handleSubmitProposal = async (option: { type: string; total: number; installments: number; installmentValue: number; notes: string }) => {
+  const handleSubmitProposal = async (option: { type: string; total: number; installments: number; installmentValue: number; notes: string; template_id?: string }) => {
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke("portal-lookup", {
