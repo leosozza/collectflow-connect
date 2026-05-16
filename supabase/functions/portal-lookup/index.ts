@@ -20,9 +20,38 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
+
+      // Compute aging (days overdue) from oldest open installment for this CPF/credor in this tenant
+      let agingDays: number | null = null;
+      if (cpf && tenant_slug && credor) {
+        const cleanCpfA = String(cpf).replace(/\D/g, "");
+        const formattedCpfA = cleanCpfA.length === 11
+          ? cleanCpfA.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+          : cleanCpfA;
+        const { data: tenantRow } = await supabase
+          .from("tenants").select("id").eq("slug", tenant_slug).single();
+        if (tenantRow?.id) {
+          const { data: oldest } = await supabase
+            .from("clients")
+            .select("data_vencimento")
+            .in("cpf", [cleanCpfA, formattedCpfA])
+            .eq("tenant_id", tenantRow.id)
+            .eq("credor", credor)
+            .eq("status", "pendente")
+            .order("data_vencimento", { ascending: true })
+            .limit(1);
+          const dv = oldest?.[0]?.data_vencimento;
+          if (dv) {
+            const diff = Math.floor((Date.now() - new Date(dv).getTime()) / 86400000);
+            agingDays = Math.max(0, diff);
+          }
+        }
+      }
+
       const { data, error } = await supabase.rpc("get_portal_agreement_templates", {
         _tenant_slug: tenant_slug,
         _credor_name: credor,
+        _aging_days: agingDays,
       });
       if (error) {
         return new Response(JSON.stringify({ error: error.message }), {
