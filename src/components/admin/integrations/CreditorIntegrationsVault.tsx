@@ -171,7 +171,7 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
               placeholder={status?.has_credentials ? "Manter atual" : "Insira o Client ID do Credor"}
               value={form.client_id}
               onChange={(e) => setForm(prev => ({ ...prev, client_id: e.target.value }))}
-              className="bg-background border-primary/10"
+              className="bg-background"
             />
           </div>
 
@@ -185,7 +185,7 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
                 placeholder="Insira o Client Secret"
                 value={form.client_secret}
                 onChange={(e) => setForm(prev => ({ ...prev, client_secret: e.target.value }))}
-                className="bg-background border-primary/10 pr-10"
+                className="bg-background pr-10"
               />
               <button
                 onClick={() => setShowSecret(!showSecret)}
