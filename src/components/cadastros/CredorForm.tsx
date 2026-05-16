@@ -5,7 +5,7 @@ import { useTenant } from "@/hooks/useTenant";
 import { upsertCredor, triggerExpireAgreementsForCredor } from "@/services/cadastrosService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link, Banknote, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, Copy, Upload, ImageIcon, FileText, Bold, Italic, Underline, Heading1, Heading2, List, Type, Link, Banknote, ShieldCheck, Info } from "lucide-react";
 import { CreditorIntegrationsVault } from "@/components/admin/integrations/CreditorIntegrationsVault";
 import {
   AlertDialog,
