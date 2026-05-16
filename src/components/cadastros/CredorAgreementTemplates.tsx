@@ -197,6 +197,7 @@ const CredorAgreementTemplates = ({ credorId, allowCustomProposal, onToggleCusto
                       <p className="font-medium text-sm text-foreground">{t.nome}</p>
                       {t.destaque && <Badge variant="default" className="bg-primary/15 text-primary text-[10px]"><Star className="w-2.5 h-2.5 mr-0.5" />Destaque</Badge>}
                       {!t.ativo && <Badge variant="outline" className="text-[10px]">Inativo</Badge>}
+                      <Badge variant="secondary" className="text-[10px] font-normal">{formatAging(t.aging_min_days, t.aging_max_days)}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {t.parcelas === 1 ? "À vista" : `${t.parcelas}x`} · {t.desconto_percent}% desc
