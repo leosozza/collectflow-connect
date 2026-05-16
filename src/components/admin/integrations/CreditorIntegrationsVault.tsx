@@ -243,11 +243,22 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
           <div className="flex items-center gap-2 mb-3">
             <Link2 className="w-4 h-4 text-primary" />
             <h4 className="text-sm font-semibold">Webhook de baixa automática</h4>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className="text-muted-foreground hover:text-primary transition-colors">
+                    <Info className="w-3.5 h-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-xs leading-snug">
+                    Esta URL recebe da Negociarie a confirmação dos pagamentos e dá baixa automática nos acordos.
+                    Registre-a uma vez na conta Negociarie deste credor — não precisa repetir a cada cobrança.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-          <p className="text-[11px] text-muted-foreground mb-3 leading-snug">
-            Esta URL recebe da Negociarie a confirmação dos pagamentos e dá baixa automática nos acordos.
-            Registre-a uma vez na conta Negociarie deste credor — não precisa repetir a cada cobrança.
-          </p>
 
           <div className="space-y-2">
             <Label className="text-[11px] text-muted-foreground">URL do callback</Label>
@@ -271,7 +282,6 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
           <div className="flex items-center justify-between flex-wrap gap-2 mt-3">
             <Button
               type="button"
-              variant="secondary"
               size="sm"
               disabled={registeringCallback}
               onClick={async () => {
@@ -286,23 +296,16 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
                   setRegisteringCallback(false);
                 }
               }}
-              className="gap-2"
+              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               <Send className="w-4 h-4" />
-              {registeringCallback ? "Registrando..." : "Registrar callback na Negociarie"}
+              {registeringCallback ? "Registrando..." : "Registrar Callback"}
             </Button>
-            {status.callback_registered_at && (
-              <span className="text-[10px] text-muted-foreground">
-                Último registro: {new Date(status.callback_registered_at).toLocaleString("pt-BR")}
-              </span>
-            )}
           </div>
 
           <div className="mt-4 pt-3 border-t border-border/60">
             <p className="text-[11px] text-muted-foreground mb-2 leading-snug">
-              <strong>Sincronizar baixas pagas:</strong> consulta os pagamentos dos últimos dias diretamente
-              na conta Negociarie deste credor e aplica a baixa no RIVO. Use após registrar o callback,
-              ou quando suspeitar que o webhook não disparou.
+              <strong>Sincronizar baixas pagas:</strong> quando suspeitar que o webhook não disparou.
             </p>
             <div className="flex items-center gap-2">
               <Input
