@@ -123,6 +123,7 @@ const PortalPage = () => {
           new_installments: option.installments,
           new_installment_value: option.installmentValue,
           notes: `[Portal - ${option.type}] ${option.notes}`.trim(),
+          template_id: option.template_id,
         },
       });
       if (error) throw error;
@@ -205,6 +206,8 @@ const PortalPage = () => {
             maxDiscount={maxDiscount}
             maxInstallments={maxInstallments}
             primaryColor={credorColor}
+            templates={templates}
+            allowCustomProposal={allowCustomProposal}
             onBack={() => setView("debts")}
             onSubmit={handleSubmitProposal}
             submitting={submitting}
