@@ -2419,6 +2419,8 @@ export type Database = {
       }
       credor_agreement_templates: {
         Row: {
+          aging_max_days: number | null
+          aging_min_days: number | null
           ativo: boolean
           created_at: string
           credor_id: string
@@ -2436,6 +2438,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          aging_max_days?: number | null
+          aging_min_days?: number | null
           ativo?: boolean
           created_at?: string
           credor_id: string
@@ -2453,6 +2457,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          aging_max_days?: number | null
+          aging_min_days?: number | null
           ativo?: boolean
           created_at?: string
           credor_id?: string
@@ -8155,8 +8161,14 @@ export type Database = {
         }[]
       }
       get_portal_agreement_templates: {
-        Args: { _credor_name: string; _tenant_slug: string }
+        Args: {
+          _aging_days?: number
+          _credor_name: string
+          _tenant_slug: string
+        }
         Returns: {
+          aging_max_days: number
+          aging_min_days: number
           allow_custom_proposal: boolean
           desconto_percent: number
           descricao: string

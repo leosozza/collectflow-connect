@@ -35,6 +35,8 @@ interface Template {
   destaque: boolean;
   ordem: number;
   descricao: string | null;
+  aging_min_days: number | null;
+  aging_max_days: number | null;
 }
 
 const EMPTY: Partial<Template> = {
@@ -48,6 +50,24 @@ const EMPTY: Partial<Template> = {
   destaque: false,
   ordem: 0,
   descricao: "",
+  aging_min_days: null,
+  aging_max_days: null,
+};
+
+const AGING_PRESETS: { label: string; min: number | null; max: number | null }[] = [
+  { label: "Qualquer", min: null, max: null },
+  { label: "0–30", min: 0, max: 30 },
+  { label: "31–90", min: 31, max: 90 },
+  { label: "91–180", min: 91, max: 180 },
+  { label: "181–360", min: 181, max: 360 },
+  { label: "360+", min: 361, max: null },
+];
+
+const formatAging = (min: number | null | undefined, max: number | null | undefined) => {
+  if (min == null && max == null) return "Qualquer aging";
+  if (min != null && max != null) return `${min}–${max} dias`;
+  if (min != null) return `${min}+ dias`;
+  return `até ${max} dias`;
 };
 
 const SAMPLE = 1000;
@@ -177,6 +197,7 @@ const CredorAgreementTemplates = ({ credorId, allowCustomProposal, onToggleCusto
                       <p className="font-medium text-sm text-foreground">{t.nome}</p>
                       {t.destaque && <Badge variant="default" className="bg-primary/15 text-primary text-[10px]"><Star className="w-2.5 h-2.5 mr-0.5" />Destaque</Badge>}
                       {!t.ativo && <Badge variant="outline" className="text-[10px]">Inativo</Badge>}
+                      <Badge variant="secondary" className="text-[10px] font-normal">{formatAging(t.aging_min_days, t.aging_max_days)}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {t.parcelas === 1 ? "À vista" : `${t.parcelas}x`} · {t.desconto_percent}% desc
@@ -239,6 +260,52 @@ const CredorAgreementTemplates = ({ credorId, allowCustomProposal, onToggleCusto
                 <Label className="text-xs">Juros mês (%) — opcional</Label>
                 <Input type="number" min={0} step="0.01" value={editing.juros_mes_percent ?? 0} onChange={(e) => setEditing({ ...editing, juros_mes_percent: Number(e.target.value) })} />
               </div>
+
+              {/* Aplicabilidade por aging */}
+              <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Aplicabilidade por aging (dias em atraso)</Label>
+                  <span className="text-[10px] text-muted-foreground">{formatAging(editing.aging_min_days, editing.aging_max_days)}</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {AGING_PRESETS.map((p) => {
+                    const active = (editing.aging_min_days ?? null) === p.min && (editing.aging_max_days ?? null) === p.max;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setEditing({ ...editing, aging_min_days: p.min, aging_max_days: p.max })}
+                        className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${active ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:border-primary/50"}`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">De (dias)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={editing.aging_min_days ?? ""}
+                      onChange={(e) => setEditing({ ...editing, aging_min_days: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Até (dias, vazio = sem limite)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="sem limite"
+                      value={editing.aging_max_days ?? ""}
+                      onChange={(e) => setEditing({ ...editing, aging_max_days: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Modelo só aparece no portal se a dívida do devedor estiver nessa faixa de atraso. Deixe ambos vazios para liberar para qualquer aging.</p>
+              </div>
               <div>
                 <Label className="text-xs">Descrição (opcional)</Label>
                 <Textarea rows={2} value={editing.descricao || ""} onChange={(e) => setEditing({ ...editing, descricao: e.target.value })} placeholder="Ex: Melhor opção para quitação imediata" />
@@ -273,7 +340,14 @@ const CredorAgreementTemplates = ({ credorId, allowCustomProposal, onToggleCusto
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
-            <Button onClick={() => editing && upsert.mutate(editing)} disabled={upsert.isPending || !editing?.nome}>
+            <Button onClick={() => {
+              if (!editing) return;
+              if (editing.aging_min_days != null && editing.aging_max_days != null && editing.aging_min_days > editing.aging_max_days) {
+                toast.error("Aging 'De' não pode ser maior que 'Até'");
+                return;
+              }
+              upsert.mutate(editing);
+            }} disabled={upsert.isPending || !editing?.nome}>
               {upsert.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
