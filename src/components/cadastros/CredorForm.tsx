@@ -526,6 +526,22 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
                 <div className="flex items-center gap-2">
                   <Banknote className="w-5 h-5 text-primary" />
                   <p className="text-sm font-semibold text-foreground">Configuração Bancária</p>
+                  {form.cobrança_direta_ativa && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button type="button" className="text-muted-foreground hover:text-primary transition-colors">
+                            <Info className="w-4 h-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-xs leading-relaxed">
+                            <strong>Modo Cobrança Direta Ativo:</strong> Ao gerar acordos para este credor, o sistema usará as chaves configuradas abaixo. O dinheiro cairá diretamente na conta deste credor.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 bg-background px-3 py-1.5 rounded-full border border-border shadow-sm">
                   <span className="text-[11px] font-medium text-muted-foreground">Cobrança Direta</span>
@@ -538,13 +554,6 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
               {form.cobrança_direta_ativa ? (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="mb-6 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 flex gap-3">
-                    <ShieldCheck className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-orange-900 dark:text-orange-200 leading-relaxed">
-                      <strong>Modo Cobrança Direta Ativo:</strong> Ao gerar acordos para este credor, o sistema usará as chaves configuradas abaixo. O dinheiro cairá diretamente na conta deste credor.
-                    </p>
-                  </div>
-                  
                   {editing?.id ? (
                     <CreditorIntegrationsVault 
                       tenantId={tenant?.id || ""} 
