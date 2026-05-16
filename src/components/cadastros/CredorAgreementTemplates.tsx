@@ -260,6 +260,52 @@ const CredorAgreementTemplates = ({ credorId, allowCustomProposal, onToggleCusto
                 <Label className="text-xs">Juros mês (%) — opcional</Label>
                 <Input type="number" min={0} step="0.01" value={editing.juros_mes_percent ?? 0} onChange={(e) => setEditing({ ...editing, juros_mes_percent: Number(e.target.value) })} />
               </div>
+
+              {/* Aplicabilidade por aging */}
+              <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Aplicabilidade por aging (dias em atraso)</Label>
+                  <span className="text-[10px] text-muted-foreground">{formatAging(editing.aging_min_days, editing.aging_max_days)}</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {AGING_PRESETS.map((p) => {
+                    const active = (editing.aging_min_days ?? null) === p.min && (editing.aging_max_days ?? null) === p.max;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setEditing({ ...editing, aging_min_days: p.min, aging_max_days: p.max })}
+                        className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${active ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:border-primary/50"}`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">De (dias)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={editing.aging_min_days ?? ""}
+                      onChange={(e) => setEditing({ ...editing, aging_min_days: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Até (dias, vazio = sem limite)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="sem limite"
+                      value={editing.aging_max_days ?? ""}
+                      onChange={(e) => setEditing({ ...editing, aging_max_days: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Modelo só aparece no portal se a dívida do devedor estiver nessa faixa de atraso. Deixe ambos vazios para liberar para qualquer aging.</p>
+              </div>
               <div>
                 <Label className="text-xs">Descrição (opcional)</Label>
                 <Textarea rows={2} value={editing.descricao || ""} onChange={(e) => setEditing({ ...editing, descricao: e.target.value })} placeholder="Ex: Melhor opção para quitação imediata" />
