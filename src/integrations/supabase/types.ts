@@ -7874,6 +7874,10 @@ export type Database = {
         }
         Returns: string
       }
+      get_client_real_balance: {
+        Args: { _client_cpf: string; _credor: string; _tenant_id: string }
+        Returns: Json
+      }
       get_dashboard_stats: {
         Args: {
           _month?: number
