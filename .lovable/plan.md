@@ -1,74 +1,64 @@
 ## Objetivo
 
-Criar 13 skills em `.workspace/skills/` espelhando o setup do Antigravity, cada uma como uma `SKILL.md` com frontmatter (`name` + `description`) e corpo com regras, exemplos e armadilhas conhecidas — tudo ancorado no que já está no `mem://index.md` (RLS, SSOT, hierarquia de status, `installment_key`, paginação, multichannel, etc.).
+Corrigir upload do Logo de Documentos e simplificar a aba **Bancário** do credor (`/cadastros/credores/:id/bancario`).
 
-As 6 skills já criadas anteriormente (`criar-migration-rls`, `criar-edge-function`, `acordos-installment-key`, `status-hierarchy`, `whatsapp-multichannel`, `paginacao-supabase`) serão **mantidas** e referenciadas/consolidadas pelas novas onde fizer sentido (sem duplicar conteúdo — as novas linkam para elas).
-
-## Skills a criar (13)
-
-### Estruturais (SaaS & Performance)
-1. **`saas-performance-scaling`** — Index strategy, RPCs agregadas (`get_carteira_grouped`, dashboards), `.range()`, SQL chunking para UPDATEs em massa, evitar joins client-side. Linka `paginacao-supabase`.
-2. **`saas-security-rls`** — `get_my_tenant_id()` obrigatório, `can_access_tenant()` em RPCs, `SECURITY DEFINER` + `search_path = public`, secrets no Vault/`secrets` do Edge, nunca `profiles.role='super_admin'`. Linka `criar-migration-rls`.
-3. **`saas-audit-trail`** — `audit_logs` com metadata obrigatória (actor, entity, before/after), `client_events` como SSOT da timeline, `operational_logs` para fluxos críticos, idempotency keys.
-4. **`saas-onboarding-growth`** — Tenant provisioning (CNPJ + 50 tokens cortesia), service catalog, GoLive checklist, setup banner/progress.
-
-### Domínio (Finanças & Cobrança)
-5. **`guardiao-logica-financeira`** — `clients` vs `agreements`, `installment_key` canônico, "Recebido em R$" via UNION (`manual_payments` + `portal_payments` + `negociarie_cobrancas`) — **nunca** `SUM(paid_amount)`, `get_client_real_balance`, hierarquia de status com trigger de proteção, ciclo de vida não-regressivo. Consolida e linka `acordos-installment-key` + `status-hierarchy`.
-6. **`debtor-scoring`** — Propensity score 5D, 4 perfis fixos (Ocasional/Recorrente/Resistente/Insatisfeito), regras de auto-classificação, gatilhos de recálculo.
-7. **`bi-financial-recovery`** — Aging bands, prestação de contas (exclusões), métricas de acordo (inicial vs ongoing), reconciliação manual, dashboards via RPC SQL.
-
-### Operação & Automação
-8. **`especialista-automacao-whatsapp`** — Arquitetura 3 camadas, `instance-proxy`, Anti-Ban 8-15s, E.164, virtual Gupshup routing, templates oficiais vs flexíveis, transcrição Gemini. Linka `whatsapp-multichannel`.
-9. **`external-integrations`** — Asaas (gateway switch + webhook proxies), Negociarie (cron 12h, `id_parcela`, cobrança lookup anti-leak, trigger cancel boletos no break), Serasa/CENPROT (auto-removal), 3CPlus (account isolation, polling adaptativo), Maxlist (avoid-overwrite + reconciliation alerts).
-10. **`auditor-tecnico-rivo`** — Checklist SSOT antes de qualquer alteração crítica: (1) tenant filter no JS + RLS, (2) `installment_key` consistente, (3) sem `fetchAllRows`, (4) sem `SUM(paid_amount)` pra recebimento, (5) status via hierarquia, (6) Edge com dual-mode auth, (7) `audit_logs` em mutações sensíveis, (8) E.164 em telefones. Modo "double-check" — invoque antes de PRs grandes.
-
-### Motor & UX
-11. **`motor-consistencia-ui-ux`** — Shadcn + Tailwind semantic tokens (nunca `bg-white`/`text-black`), HSL em `index.css`/`tailwind.config.ts`, primary laranja RIVO, dark mode, glassmorphism, variantes via `cva`, sem cores hardcoded.
-12. **`synapse-compression-engine`** — Execução cirúrgica: parallel tool calls, search-replace > rewrite, ler arquivos em batch, evitar passos triviais. Regras de eficiência meta-operacional.
-13. **`super-agent-orchestrator`** — Quando dividir trabalho em sub-tarefas, usar `task_tracking`, quando pedir aprovação via plan mode, quando rodar checks paralelos (linter + edge logs + read_query).
-
-## Estrutura de cada arquivo
-
-```
-.workspace/skills/{nome}/SKILL.md
-```
-
-Frontmatter:
-```yaml
 ---
-name: {nome}
-description: {1 linha para auto-discovery — específica o suficiente para matching}
----
+
+## 1. Upload de Logo (aba Dados) — corrigir falha em PNG
+
+**Causa raiz**: O upload em `CredorForm.tsx` usa o caminho `credor-doc-logos/{id}/...` no bucket `avatars`. As policies de INSERT/UPDATE no bucket `avatars` só permitem dois padrões:
+- `credor-logos/...` (logo da empresa)
+- `{auth.uid()}/...` (avatar pessoal)
+
+A pasta `credor-doc-logos` **não tem policy** → toda tentativa (PNG, JPG, qualquer formato) viola RLS. Se JPG "funcionou" antes, foi em outra pasta/credor já cadastrado (cache do `document_logo_url` antigo). Não é problema de MIME — é falta de policy.
+
+**Fix**: Migration adicionando duas policies para a pasta `credor-doc-logos` no bucket `avatars` (INSERT e UPDATE, autenticado).
+
+```sql
+CREATE POLICY "Authenticated users can upload doc logos"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'avatars' AND (storage.foldername(name))[1] = 'credor-doc-logos');
+
+CREATE POLICY "Authenticated users can update doc logos"
+ON storage.objects FOR UPDATE TO authenticated
+USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = 'credor-doc-logos');
 ```
 
-Corpo (~40-80 linhas):
-- **Quando aplicar** (3-5 bullets)
-- **Regras absolutas** (com links `mem://` quando aplicável)
-- **Exemplos de código** (✅ certo / ❌ errado)
-- **Armadilhas conhecidas** (regressões reais do projeto)
-- **Links para skills relacionadas**
+Sem mudanças no React — só backend.
 
-## Frase de ativação (conforme dica do usuário)
+---
 
-Cada SKILL.md inclui no topo do corpo:
+## 2. Aba Bancário — simplificar UI
 
-> "Você agora possui as diretrizes de **{Nome}**. Nunca realize alterações que violem os princípios de segurança e integridade financeira estabelecidos no Cofre do RIVO."
+Arquivo: `src/components/admin/integrations/CreditorIntegrationsVault.tsx`
 
-## Detalhes técnicos
+### 2.1 "Modo Cobrança Direta Ativo: …"
+- Hoje: bloco de texto sempre visível.
+- Novo: ícone `Info` (lucide) ao lado do título; texto aparece em `Tooltip` (shadcn) ao hover.
 
-- Total de arquivos novos: **13** (cada um sua pasta + `SKILL.md`)
-- Não modifica nenhum arquivo existente do projeto (apenas `.workspace/skills/`)
-- Não toca em código, migrations, edge functions ou memória
-- Skills antigas (6) **permanecem** — as novas não duplicam, apenas linkam
-- Após criar, **reload do chat** ativa as 13 novas + as 6 anteriores = 19 skills totais
+### 2.2 Remover "Último teste: dd/mm/yyyy — ✓ Conexão validada"
+- Apagar o bloco `{status?.last_test_at && …}` (linhas ~236-241).
 
-## Ordem de criação
+### 2.3 Texto do Webhook "Esta URL recebe da Negociarie…"
+- Hoje: parágrafo visível abaixo do título.
+- Novo: ícone `Info` ao lado de "Webhook de baixa automática"; texto vai pro `Tooltip` (versão curta solicitada: *"Esta URL recebe da Negociarie a confirmação dos pagamentos e dá baixa automática nos acordos. Registre-a uma vez na conta Negociarie deste credor — não precisa repetir a cada cobrança."*).
 
-Em batch paralelo (1 mensagem, 13 `code--write`), pois são arquivos independentes.
+### 2.4 Remover "Último registro: …"
+- Apagar o `<span>` `{status.callback_registered_at && …}` (linhas ~299-303).
 
-## O que NÃO faz
+### 2.5 Botão "Registrar callback na Negociarie"
+- Renomear para **"Registrar Callback"**.
+- Trocar `variant="secondary"` por classe laranja do RIVO: `className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"` (remove `variant="secondary"`).
 
-- Não altera regras de negócio existentes
-- Não cria migrations, RPCs ou edge functions
-- Não modifica `mem://index.md` (skills referenciam memórias, não as substituem)
-- Não toca em `.lovable/plan.md` nem código de produção
+### 2.6 Reduzir parágrafo "Sincronizar baixas pagas"
+- De: *"Sincronizar baixas pagas: consulta os pagamentos dos últimos dias diretamente na conta Negociarie deste credor e aplica a baixa no RIVO. Use após registrar o callback, ou quando suspeitar que o webhook não disparou."*
+- Para: **"Sincronizar baixas pagas: quando suspeitar que o webhook não disparou."**
+
+---
+
+## Arquivos tocados
+
+1. **Migration nova** — policies do bucket `avatars` para `credor-doc-logos`.
+2. `src/components/admin/integrations/CreditorIntegrationsVault.tsx` — apenas UI (tooltips, remoções, texto do botão, cor).
+
+Nenhuma lógica de negócio (acordos, baixas, RLS de tenant) é alterada.
