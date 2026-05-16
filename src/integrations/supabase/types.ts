@@ -2417,6 +2417,68 @@ export type Database = {
           },
         ]
       }
+      credor_agreement_templates: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          credor_id: string
+          desconto_percent: number
+          descricao: string | null
+          destaque: boolean
+          entrada_percent: number | null
+          id: string
+          juros_mes_percent: number | null
+          nome: string
+          ordem: number
+          parcelas: number
+          tenant_id: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          credor_id: string
+          desconto_percent?: number
+          descricao?: string | null
+          destaque?: boolean
+          entrada_percent?: number | null
+          id?: string
+          juros_mes_percent?: number | null
+          nome: string
+          ordem?: number
+          parcelas?: number
+          tenant_id: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          credor_id?: string
+          desconto_percent?: number
+          descricao?: string | null
+          destaque?: boolean
+          entrada_percent?: number | null
+          id?: string
+          juros_mes_percent?: number | null
+          nome?: string
+          ordem?: number
+          parcelas?: number
+          tenant_id?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credor_agreement_templates_credor_id_fkey"
+            columns: ["credor_id"]
+            isOneToOne: false
+            referencedRelation: "credores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credores: {
         Row: {
           agencia: string | null
@@ -2453,6 +2515,7 @@ export type Database = {
           parcelas_max: number | null
           parcelas_min: number | null
           pix_chave: string | null
+          portal_allow_custom_proposal: boolean
           portal_enabled: boolean | null
           portal_hero_subtitle: string | null
           portal_hero_title: string | null
@@ -2510,6 +2573,7 @@ export type Database = {
           parcelas_max?: number | null
           parcelas_min?: number | null
           pix_chave?: string | null
+          portal_allow_custom_proposal?: boolean
           portal_enabled?: boolean | null
           portal_hero_subtitle?: string | null
           portal_hero_title?: string | null
@@ -2567,6 +2631,7 @@ export type Database = {
           parcelas_max?: number | null
           parcelas_min?: number | null
           pix_chave?: string | null
+          portal_allow_custom_proposal?: boolean
           portal_enabled?: boolean | null
           portal_hero_subtitle?: string | null
           portal_hero_title?: string | null
@@ -8087,6 +8152,22 @@ export type Database = {
           last_interaction_at: string
           remote_phone: string
           status: string
+        }[]
+      }
+      get_portal_agreement_templates: {
+        Args: { _credor_name: string; _tenant_slug: string }
+        Returns: {
+          allow_custom_proposal: boolean
+          desconto_percent: number
+          descricao: string
+          destaque: boolean
+          entrada_percent: number
+          id: string
+          juros_mes_percent: number
+          nome: string
+          ordem: number
+          parcelas: number
+          tipo: string
         }[]
       }
       get_rule_eligible_targets: {

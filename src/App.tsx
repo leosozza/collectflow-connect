@@ -168,6 +168,9 @@ const App = () => (
             <Route path="/api-docs-public" element={<Navigate to="/api-docs/public" replace />} />
             <Route path="/site" element={<LandingPage />} />
             <Route path="/portal" element={<PortalPage />} />
+            <Route path="/portal/:tenantSlug" element={<PortalPage />} />
+            <Route path="/portal/:tenantSlug/checkout/:token" element={<PortalPage />} />
+            <Route path="/portal/:tenantSlug/termo/:token" element={<PortalPage />} />
             {/* Super Admin area with isolated layout */}
             <Route
               element={

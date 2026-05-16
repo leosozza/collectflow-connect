@@ -12,7 +12,28 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { cpf, tenant_slug, action, notes, credor, original_total, proposed_total, new_installments, new_installment_value } = body;
+    const { cpf, tenant_slug, action, notes, credor, original_total, proposed_total, new_installments, new_installment_value, template_id } = body;
+
+    // Action: get-templates - public lookup of credor's active agreement templates
+    if (action === "get-templates") {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { data, error } = await supabase.rpc("get_portal_agreement_templates", {
+        _tenant_slug: tenant_slug,
+        _credor_name: credor,
+      });
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const allowCustom = data && data.length > 0 ? Boolean(data[0].allow_custom_proposal) : true;
+      return new Response(JSON.stringify({ templates: data || [], allow_custom_proposal: allowCustom }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -111,7 +132,7 @@ Deno.serve(async (req) => {
         portal_origin: true,
         checkout_token: checkoutToken,
         created_by: "00000000-0000-0000-0000-000000000000",
-        notes: notes || "[Solicitação via Portal]",
+        notes: (template_id ? `[Template: ${template_id}] ` : "") + (notes || "[Solicitação via Portal]"),
       }).select().single();
 
       if (insertError) throw insertError;
