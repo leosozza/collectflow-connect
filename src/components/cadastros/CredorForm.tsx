@@ -24,6 +24,7 @@ import CustomFieldsConfig from "./CustomFieldsConfig";
 import CredorScriptsTab from "./CredorScriptsTab";
 import CredorDebtorCategoriesConfig from "./CredorDebtorCategoriesConfig";
 import CredorDocumentTemplates from "./CredorDocumentTemplates";
+import CredorAgreementTemplates from "./CredorAgreementTemplates";
 import TipoDividaList from "./TipoDividaList";
 import PaymentMethodsConfig from "./PaymentMethodsConfig";
 import { Button } from "@/components/ui/button";
@@ -972,137 +973,180 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
           <TabsContent value="portal" className="space-y-4 mt-4">
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 rounded-lg border border-border">
-                <div>
-                  <p className="font-medium text-foreground text-sm">Portal Personalizado</p>
-                  <p className="text-xs text-muted-foreground">Ativar branding personalizado deste credor no Portal do Devedor</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    <strong>Recomendado: Logo em PNG transparente, 400x120px (proporção 3:1). Máximo 2MB.</strong>
-                  </p>
+                <div className="flex items-start gap-2">
+                  <div>
+                    <p className="font-medium text-foreground text-sm">Portal Personalizado</p>
+                    <p className="text-xs text-muted-foreground">Ativar branding personalizado deste credor no Portal do Devedor</p>
+                  </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="w-3.5 h-3.5 text-muted-foreground mt-0.5 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="text-xs">
+                          <strong>Logo recomendado:</strong> PNG com fundo transparente · 400×120px (proporção 3:1) · máximo 2MB.
+                          O preview com fundo xadrez evidencia se a transparência está correta.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
                 <Switch checked={form.portal_enabled || false} onCheckedChange={v => set("portal_enabled", v)} />
               </div>
 
               {form.portal_enabled && (
                 <div className="space-y-4 animate-fade-in">
-                  {/* Item 7: Redesigned Portal Link */}
-                  {tenant?.slug && (
-                    <Card className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                            <Link className="w-4 h-4 text-primary" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-foreground">Link do Portal</p>
-                            <p className="text-xs text-muted-foreground font-mono truncate">
-                              {`${window.location.origin}/portal/${tenant.slug}`}
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="gap-1.5 shrink-0 ml-3"
-                          onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/portal/${tenant.slug}`);
-                            toast.success("Link copiado!");
-                          }}
-                        >
-                          <Copy className="w-3.5 h-3.5" /> Copiar
-                        </Button>
-                      </div>
-                    </Card>
-                  )}
+                  <Tabs defaultValue="branding" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="branding">Identidade Visual</TabsTrigger>
+                      <TabsTrigger value="modelos">Modelos de Acordo</TabsTrigger>
+                    </TabsList>
 
-                  {/* Item 8: Optimized layout - Logo + Color grouped */}
-                  <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
-                    {/* Logo Upload */}
-                    <div
-                      className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors overflow-hidden shrink-0"
-                      onClick={() => logoInputRef.current?.click()}
-                    >
-                      {form.portal_logo_url ? (
-                        <img src={form.portal_logo_url} alt="Logo preview" className="w-full h-full object-contain" />
-                      ) : (
-                        <div className="flex flex-col items-center gap-1 text-muted-foreground">
-                          <ImageIcon className="w-5 h-5" />
-                          <span className="text-[9px]">Logo</span>
-                        </div>
+                    <TabsContent value="branding" className="space-y-4 mt-4">
+                      {tenant?.slug && (
+                        <Card className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                <Link className="w-4 h-4 text-primary" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground">Link do Portal</p>
+                                <p className="text-xs text-muted-foreground font-mono truncate">
+                                  {`${window.location.origin}/portal/${tenant.slug}`}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="gap-1.5 shrink-0 ml-3"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/portal/${tenant.slug}`);
+                                toast.success("Link copiado!");
+                              }}
+                            >
+                              <Copy className="w-3.5 h-3.5" /> Copiar
+                            </Button>
+                          </div>
+                        </Card>
                       )}
-                    </div>
-                    <div className="space-y-2">
-                      <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept=".png,.jpg,.jpeg,.svg,.webp"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          if (file.size > 2 * 1024 * 1024) {
-                            toast.error("Imagem deve ter no máximo 2MB");
-                            return;
-                          }
-                          setUploadingLogo(true);
-                          try {
-                            const credorId = editing?.id || "new";
-                            const ext = file.name.split(".").pop();
-                            const path = `credor-logos/${credorId}/${Date.now()}.${ext}`;
-                            const { error: uploadError } = await supabase.storage
-                              .from("avatars")
-                              .upload(path, file, { upsert: true, contentType: file.type });
-                            if (uploadError) throw uploadError;
-                            const { data: urlData } = supabase.storage
-                              .from("avatars")
-                              .getPublicUrl(path);
-                            set("portal_logo_url", urlData.publicUrl);
-                            toast.success("Logo enviado com sucesso!");
-                      } catch (err: any) {
-                        console.error(err);
-                        toast.error(`Erro ao enviar logo: ${err.message || "Verifique o arquivo e tente novamente"}`);
-                      } finally {
-                            setUploadingLogo(false);
-                            e.target.value = "";
-                          }
-                        }}
-                      />
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          disabled={uploadingLogo}
+
+                      <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
+                        {/* Logo Upload com fundo xadrez para evidenciar transparência */}
+                        <div
+                          className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors overflow-hidden shrink-0"
+                          style={{
+                            backgroundImage: `linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(-45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, hsl(var(--muted)) 75%), linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%)`,
+                            backgroundSize: "10px 10px",
+                            backgroundPosition: "0 0, 0 5px, 5px -5px, -5px 0px",
+                          }}
                           onClick={() => logoInputRef.current?.click()}
                         >
-                          <Upload className="w-3.5 h-3.5" />
-                          {uploadingLogo ? "Enviando..." : "Upload"}
-                        </Button>
-                        <Input
-                          value={form.portal_logo_url || ""}
-                          onChange={e => set("portal_logo_url", e.target.value)}
-                          placeholder="Ou cole a URL do logo..."
-                          className="text-xs flex-1"
-                        />
+                          {form.portal_logo_url ? (
+                            <img src={form.portal_logo_url} alt="Logo preview" className="w-full h-full object-contain" />
+                          ) : (
+                            <div className="flex flex-col items-center gap-1 text-muted-foreground bg-background/70 rounded px-1.5 py-1">
+                              <ImageIcon className="w-4 h-4" />
+                              <span className="text-[9px]">Logo</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <input
+                            ref={logoInputRef}
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.svg,.webp"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 2 * 1024 * 1024) {
+                                toast.error("Imagem deve ter no máximo 2MB");
+                                return;
+                              }
+                              setUploadingLogo(true);
+                              try {
+                                const credorId = editing?.id || "new";
+                                const ext = file.name.split(".").pop();
+                                const path = `credor-logos/${credorId}/${Date.now()}.${ext}`;
+                                const { error: uploadError } = await supabase.storage
+                                  .from("avatars")
+                                  .upload(path, file, { upsert: true, contentType: file.type });
+                                if (uploadError) throw uploadError;
+                                const { data: urlData } = supabase.storage
+                                  .from("avatars")
+                                  .getPublicUrl(path);
+                                set("portal_logo_url", urlData.publicUrl);
+                                toast.success("Logo enviado com sucesso!");
+                              } catch (err: any) {
+                                console.error(err);
+                                toast.error(`Erro ao enviar logo: ${err.message || "Verifique o arquivo e tente novamente"}`);
+                              } finally {
+                                setUploadingLogo(false);
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              disabled={uploadingLogo}
+                              onClick={() => logoInputRef.current?.click()}
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              {uploadingLogo ? "Enviando..." : "Upload"}
+                            </Button>
+                            <Input
+                              value={form.portal_logo_url || ""}
+                              onChange={e => set("portal_logo_url", e.target.value)}
+                              placeholder="Ou cole a URL do logo..."
+                              className="text-xs flex-1"
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            PNG transparente · 400×120px · máx 2MB
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs shrink-0">Cor Primária</Label>
+                            <Input type="color" value={form.portal_primary_color || "#F97316"} onChange={e => set("portal_primary_color", e.target.value)} className="w-10 h-8 p-0.5 cursor-pointer" />
+                            <Input value={form.portal_primary_color || ""} onChange={e => set("portal_primary_color", e.target.value)} placeholder="#F97316" className="flex-1 text-xs" />
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Label className="text-xs shrink-0">Cor Primária</Label>
-                        <Input type="color" value={form.portal_primary_color || "#F97316"} onChange={e => set("portal_primary_color", e.target.value)} className="w-10 h-8 p-0.5 cursor-pointer" />
-                        <Input value={form.portal_primary_color || ""} onChange={e => set("portal_primary_color", e.target.value)} placeholder="#F97316" className="flex-1 text-xs" />
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <Label className="text-xs">Título do Hero</Label>
-                      <Input value={form.portal_hero_title || ""} onChange={e => set("portal_hero_title", e.target.value)} placeholder="Ex: Negocie suas dívidas com até 90% de desconto" className="text-xs" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Subtítulo do Hero</Label>
-                      <Input value={form.portal_hero_subtitle || ""} onChange={e => set("portal_hero_subtitle", e.target.value)} placeholder="Consulte suas pendências e encontre as melhores condições" className="text-xs" />
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <Label className="text-xs">Título do Hero</Label>
+                          <Input value={form.portal_hero_title || ""} onChange={e => set("portal_hero_title", e.target.value)} placeholder="Ex: Negocie suas dívidas com até 90% de desconto" className="text-xs" />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Subtítulo do Hero</Label>
+                          <Input value={form.portal_hero_subtitle || ""} onChange={e => set("portal_hero_subtitle", e.target.value)} placeholder="Consulte suas pendências e encontre as melhores condições" className="text-xs" />
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="modelos" className="mt-4">
+                      {editing?.id ? (
+                        <CredorAgreementTemplates
+                          credorId={editing.id}
+                          allowCustomProposal={form.portal_allow_custom_proposal ?? true}
+                          onToggleCustomProposal={(v) => set("portal_allow_custom_proposal", v)}
+                        />
+                      ) : (
+                        <Card className="p-6 text-center bg-muted/30 border-dashed">
+                          <p className="text-sm text-muted-foreground">
+                            Salve o credor primeiro para cadastrar os modelos de acordo.
+                          </p>
+                        </Card>
+                      )}
+                    </TabsContent>
+                  </Tabs>
                 </div>
               )}
             </div>
