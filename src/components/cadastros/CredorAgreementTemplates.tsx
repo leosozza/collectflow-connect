@@ -340,7 +340,14 @@ const CredorAgreementTemplates = ({ credorId, allowCustomProposal, onToggleCusto
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
-            <Button onClick={() => editing && upsert.mutate(editing)} disabled={upsert.isPending || !editing?.nome}>
+            <Button onClick={() => {
+              if (!editing) return;
+              if (editing.aging_min_days != null && editing.aging_max_days != null && editing.aging_min_days > editing.aging_max_days) {
+                toast.error("Aging 'De' não pode ser maior que 'Até'");
+                return;
+              }
+              upsert.mutate(editing);
+            }} disabled={upsert.isPending || !editing?.nome}>
               {upsert.isPending ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
