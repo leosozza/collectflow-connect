@@ -234,12 +234,6 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
             )}
           </div>
 
-          {status?.last_test_at && (
-            <p className="text-[10px] text-muted-foreground italic">
-              Último teste: {new Date(status.last_test_at).toLocaleString("pt-BR")} —{" "}
-              {status.last_test_ok ? "✓" : "✗"} {status.last_test_message}
-            </p>
-          )}
         </div>
       </Card>
 
