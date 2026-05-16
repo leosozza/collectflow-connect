@@ -35,6 +35,8 @@ interface Template {
   destaque: boolean;
   ordem: number;
   descricao: string | null;
+  aging_min_days: number | null;
+  aging_max_days: number | null;
 }
 
 const EMPTY: Partial<Template> = {
@@ -48,6 +50,24 @@ const EMPTY: Partial<Template> = {
   destaque: false,
   ordem: 0,
   descricao: "",
+  aging_min_days: null,
+  aging_max_days: null,
+};
+
+const AGING_PRESETS: { label: string; min: number | null; max: number | null }[] = [
+  { label: "Qualquer", min: null, max: null },
+  { label: "0–30", min: 0, max: 30 },
+  { label: "31–90", min: 31, max: 90 },
+  { label: "91–180", min: 91, max: 180 },
+  { label: "181–360", min: 181, max: 360 },
+  { label: "360+", min: 361, max: null },
+];
+
+const formatAging = (min: number | null | undefined, max: number | null | undefined) => {
+  if (min == null && max == null) return "Qualquer aging";
+  if (min != null && max != null) return `${min}–${max} dias`;
+  if (min != null) return `${min}+ dias`;
+  return `até ${max} dias`;
 };
 
 const SAMPLE = 1000;
