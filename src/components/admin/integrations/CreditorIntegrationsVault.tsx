@@ -132,12 +132,10 @@ export const CreditorIntegrationsVault = ({ tenantId, creditorId }: CreditorInte
 
   return (
     <div className="space-y-4">
-      <Card className="p-4 border-primary/20 bg-primary/5">
+      <Card className="p-4 border-border bg-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-primary/10 rounded-lg">
-              <Zap className="w-4 h-4 text-primary" />
-            </div>
+            <Zap className="w-4 h-4 text-primary" />
             <div>
               <h4 className="text-sm font-semibold">Configuração Negociarie</h4>
               <p className="text-[10px] text-muted-foreground">Credenciais exclusivas para este credor</p>

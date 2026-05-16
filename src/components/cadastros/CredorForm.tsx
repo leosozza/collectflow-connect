@@ -375,13 +375,13 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
+      <SheetContent className="w-full sm:max-w-3xl overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
         <SheetHeader>
           <SheetTitle>{editing ? "Editar Credor" : "Novo Credor"}</SheetTitle>
         </SheetHeader>
 
         <Tabs value={activeSection} onValueChange={handleSectionChange} className="mt-4">
-        <TabsList className="w-full flex-wrap">
+        <TabsList className="w-full">
             <TabsTrigger value="dados" className="flex-1">Dados</TabsTrigger>
             <TabsTrigger value="bancario" className="flex-1">Bancário</TabsTrigger>
             <TabsTrigger value="negociacao" className="flex-1">Negociação</TabsTrigger>
@@ -521,7 +521,7 @@ const CredorForm = ({ open, onOpenChange, editing }: CredorFormProps) => {
 
           {/* ABA 2 - BANCÁRIO / GATEWAY */}
           <TabsContent value="bancario" className="space-y-6 mt-4">
-            <Card className="p-4 border-border bg-muted/20">
+            <Card className="p-4 border-border bg-card">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Banknote className="w-5 h-5 text-primary" />
