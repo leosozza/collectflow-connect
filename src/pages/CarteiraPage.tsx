@@ -410,7 +410,11 @@ const CarteiraPage = () => {
       toast.success("Clientes importados com sucesso!");
       setImportOpen(false);
     },
-    onError: () => toast.error("Erro ao importar clientes"),
+    onError: (err: any) => {
+      const msg = err?.message || "Erro ao importar clientes";
+      const [first, ...rest] = msg.split("\n");
+      toast.error(first, { description: rest.join("\n") || undefined, duration: 8000 });
+    },
   });
 
   const handleEdit = (client: Client) => {
@@ -445,14 +449,29 @@ const CarteiraPage = () => {
     return <Clock className="w-5 h-5 text-warning mx-auto" />;
   };
 
-  const downloadTemplate = () => {
-    const templateData = [
-      ["Credor", "Nome Completo", "CPF", "Parcela", "Valor Entrada", "Valor Parcela", "Valor Pago", "Total Parcelas", "Data Vencimento", "ID Externo"],
-      ["Empresa Exemplo", "João da Silva", "123.456.789-00", 1, 600.00, 500.00, 0, 12, "10/03/2026", "CRM-001"],
-      ["Empresa Exemplo", "Maria Souza", "987.654.321-00", 1, 400.00, 350.00, 350.00, 6, "10/03/2026", ""],
-    ];
+  const downloadTemplate = async () => {
+    const baseHeaders = ["Credor", "Nome Completo", "CPF/CNPJ", "Parcela", "Valor Entrada", "Valor Parcela", "Valor Pago", "Total Parcelas", "Data Vencimento", "ID Externo"];
+    const baseRow1 = ["Empresa Exemplo", "João da Silva", "123.456.789-00", 1, 600.00, 500.00, 0, 12, "10/03/2026", "CRM-001"];
+    const baseRow2 = ["Empresa Exemplo", "Empresa LTDA", "12.345.678/0001-90", 1, 400.00, 350.00, 350.00, 6, "10/03/2026", ""];
+
+    let customHeaders: string[] = [];
+    if (tenant?.id) {
+      try {
+        const { fetchCustomFields } = await import("@/services/customFieldsService");
+        const fields = await fetchCustomFields(tenant.id);
+        customHeaders = fields.filter((f) => f.is_active).map((f) => f.field_label);
+      } catch (e) {
+        // non-fatal — template still works without custom columns
+      }
+    }
+
+    const headers = [...baseHeaders, ...customHeaders];
+    const row1 = [...baseRow1, ...customHeaders.map(() => "")];
+    const row2 = [...baseRow2, ...customHeaders.map(() => "")];
+    const templateData = [headers, row1, row2];
+
     const ws = XLSX.utils.aoa_to_sheet(templateData);
-    ws["!cols"] = [{ wch: 12 }, { wch: 20 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    ws["!cols"] = headers.map(() => ({ wch: 16 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Modelo");
     XLSX.writeFile(wb, "modelo_importacao.xlsx");

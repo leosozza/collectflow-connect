@@ -8,7 +8,11 @@ export const clientSchema = z.object({
   cpf: z
     .string()
     .trim()
-    .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, "CPF inválido (formato: 000.000.000-00)"),
+    .regex(
+      /^(\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})$/,
+      "CPF/CNPJ inválido (use 000.000.000-00 ou 00.000.000/0000-00)"
+    ),
+  custom_data: z.record(z.any()).optional().nullable(),
   numero_parcela: z.number().int("Parcela deve ser inteiro").min(1, "Parcela mínima é 1").max(9999, "Parcela máxima é 9999").optional().default(1),
   total_parcelas: z.number().int("Total de parcelas deve ser inteiro").min(1, "Mínimo 1 parcela").max(9999, "Máximo 9999 parcelas").optional(),
   valor_entrada: z.number().min(0, "Valor não pode ser negativo").max(99999999.99, "Valor muito alto").optional().default(0),

@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -118,6 +118,9 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
           "NOME": "nome_completo",
           "CNPJ_CPF": "cpf",
           "CPF": "cpf",
+          "CPF/CNPJ": "cpf",
+          "CPF_CNPJ": "cpf",
+          "CNPJ": "cpf",
           "COD_DEVEDOR": "external_id",
           "COD DEVEDOR": "external_id",
           "COD_CONTRATO": "cod_contrato",
@@ -314,8 +317,8 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                 </div>
               )}
 
-              <ScrollArea className="flex-1 border border-border rounded-lg">
-                <Table>
+              <div className="flex-1 border border-border rounded-lg overflow-auto">
+                <Table className="min-w-[700px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead>Coluna da Planilha</TableHead>
@@ -328,10 +331,9 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                     {rawHeaders.map((header) => {
                       const upperHeader = header.toUpperCase().trim();
                       const mapped = columnMapping[upperHeader];
-                      const fieldInfo = SYSTEM_FIELDS.find((f) => f.value === mapped);
                       return (
                         <TableRow key={header}>
-                          <TableCell className="font-mono text-sm">{header}</TableCell>
+                          <TableCell className="font-mono text-sm whitespace-nowrap">{header}</TableCell>
                           <TableCell>
                             <ArrowRight className="w-4 h-4 text-muted-foreground" />
                           </TableCell>
@@ -375,7 +377,7 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                     })}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
             </>
           )}
 
@@ -387,43 +389,65 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                 {rows.length} registros encontrados
               </div>
 
-              <ScrollArea className="flex-1 border border-border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead>Credor</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>CPF</TableHead>
-                      <TableHead className="text-center">Parcela</TableHead>
-                      <TableHead className="text-right">Entrada</TableHead>
-                      <TableHead className="text-right">Parcela</TableHead>
-                      <TableHead className="text-right">Pago</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.slice(0, 50).map((row, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-muted-foreground">{row.credor}</TableCell>
-                        <TableCell className="font-medium">{row.nome_completo}</TableCell>
-                        <TableCell className="text-muted-foreground">{row.cpf}</TableCell>
-                        <TableCell className="text-center">{row.numero_parcela}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(row.valor_entrada)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(row.valor_parcela)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(row.valor_pago)}</TableCell>
-                        <TableCell>{row.data_vencimento ? formatDate(row.data_vencimento) : "-"}</TableCell>
-                        <TableCell className="capitalize">{row.status}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {rows.length > 50 && (
-                  <p className="text-xs text-muted-foreground text-center py-2">
-                    Mostrando 50 de {rows.length} registros
-                  </p>
-                )}
-              </ScrollArea>
+              {(() => {
+                const customKeys = Array.from(
+                  rows.reduce((set, r) => {
+                    if (r.custom_data) Object.keys(r.custom_data).forEach((k) => set.add(k));
+                    return set;
+                  }, new Set<string>())
+                );
+                const customLabels = customKeys.map((k) => {
+                  const cf = customFields.find((c) => c.field_key === k);
+                  return { key: k, label: cf?.field_label || k };
+                });
+                return (
+                  <div className="flex-1 border border-border rounded-lg overflow-auto">
+                    <Table className="min-w-[1100px]">
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="whitespace-nowrap">Credor</TableHead>
+                          <TableHead className="whitespace-nowrap">Nome</TableHead>
+                          <TableHead className="whitespace-nowrap">CPF/CNPJ</TableHead>
+                          <TableHead className="text-center whitespace-nowrap">Parcela</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Entrada</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Parcela</TableHead>
+                          <TableHead className="text-right whitespace-nowrap">Pago</TableHead>
+                          <TableHead className="whitespace-nowrap">Vencimento</TableHead>
+                          <TableHead className="whitespace-nowrap">Status</TableHead>
+                          {customLabels.map((c) => (
+                            <TableHead key={c.key} className="whitespace-nowrap text-primary">{c.label}</TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rows.slice(0, 50).map((row, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="text-muted-foreground whitespace-nowrap">{row.credor}</TableCell>
+                            <TableCell className="font-medium whitespace-nowrap">{row.nome_completo}</TableCell>
+                            <TableCell className="text-muted-foreground whitespace-nowrap">{row.cpf}</TableCell>
+                            <TableCell className="text-center">{row.numero_parcela}</TableCell>
+                            <TableCell className="text-right whitespace-nowrap">{formatCurrency(row.valor_entrada)}</TableCell>
+                            <TableCell className="text-right whitespace-nowrap">{formatCurrency(row.valor_parcela)}</TableCell>
+                            <TableCell className="text-right whitespace-nowrap">{formatCurrency(row.valor_pago)}</TableCell>
+                            <TableCell className="whitespace-nowrap">{row.data_vencimento ? formatDate(row.data_vencimento) : "-"}</TableCell>
+                            <TableCell className="capitalize whitespace-nowrap">{row.status}</TableCell>
+                            {customLabels.map((c) => (
+                              <TableCell key={c.key} className="whitespace-nowrap text-xs">
+                                {row.custom_data?.[c.key] != null ? String(row.custom_data[c.key]) : "—"}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {rows.length > 50 && (
+                      <p className="text-xs text-muted-foreground text-center py-2">
+                        Mostrando 50 de {rows.length} registros
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           )}
 

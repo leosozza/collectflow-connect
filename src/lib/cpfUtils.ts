@@ -23,6 +23,29 @@ export const formatCPFDisplay = (cpf: string): string => {
   return cpf;
 };
 
+/** Validate CNPJ checksum (mod-11 algorithm) */
+export const isValidCNPJ = (cnpj: string): boolean => {
+  const nums = cnpj.replace(/\D/g, "");
+  if (nums.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(nums)) return false;
+  const calc = (len: number) => {
+    const weights = len === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2];
+    let sum = 0;
+    for (let i = 0; i < len; i++) sum += parseInt(nums[i]) * weights[i];
+    const rest = sum % 11;
+    return rest < 2 ? 0 : 11 - rest;
+  };
+  return calc(12) === parseInt(nums[12]) && calc(13) === parseInt(nums[13]);
+};
+
+/** Accepts a CPF (11 digits) or CNPJ (14 digits), with or without punctuation */
+export const isValidCpfOrCnpj = (value: string): boolean => {
+  const nums = String(value || "").replace(/\D/g, "");
+  if (nums.length === 11) return isValidCPF(nums);
+  if (nums.length === 14) return isValidCNPJ(nums);
+  return false;
+};
+
 /** Validate CPF checksum (mod-11 algorithm) */
 export const isValidCPF = (cpf: string): boolean => {
   const nums = cpf.replace(/\D/g, "");
