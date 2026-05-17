@@ -1,74 +1,79 @@
-# Correção do módulo de Personalização + Importação de Carteira
+# Auditoria 360 das correções de Importação + Personalização
 
-## Diagnóstico
+## O que foi verificado
 
-Investigando o fluxo (Cadastros → Personalização → Custom Fields, Carteira → Importar Planilha, `importService.ts`, `clientService.ts`, `validations.ts`) encontrei **5 bugs** que se combinam para causar o erro relatado pela Candy Gloss:
+| Área | Resultado |
+|---|---|
+| `cpfUtils.isValidCNPJ` / `isValidCpfOrCnpj` | OK, mod-11 padrão Receita Federal. |
+| `validations.clientSchema.cpf` aceita CPF e CNPJ | OK, regex `^(\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})$`. |
+| `validations.clientSchema.custom_data` permitido (não stripado) | OK. |
+| `importService.parseRows` coleta `custom:{key}` para `custom_data` | OK, só no caminho `isCustomMapping=true`. |
+| `ImportDialog` scroll horizontal (mapping + preview) | OK, `overflow-auto` + `min-w-[700px]/[1100px]`. |
+| `ImportDialog` aceita header `CNPJ`/`CPF/CNPJ` no auto-detect | OK. |
+| `CarteiraPage.downloadTemplate` injeta colunas custom do tenant | OK, dynamic import de `fetchCustomFields`. |
+| `CarteiraPage` toast de erro mostra mensagem real do `bulkCreateClients` | OK. |
+| Edge functions (logs últimas 30 min) | Sem erros relacionados; cron `dispatch-scheduled-campaigns` segue logando ruído antigo (`utf-8-validate`, não relacionado). |
+| RLS policies de `clients` | `INSERT WITH CHECK (tenant_id = get_my_tenant_id())` — exige `tenant_id` no payload. |
 
-1. **Template "Baixar Modelo" é hardcoded** (`CarteiraPage.tsx:448`). Não busca `custom_fields` do tenant, então campos personalizados nunca aparecem na planilha modelo.
-2. **Campos personalizados são perdidos no parsing**. `ImportDialog` permite mapear colunas para `custom:field_key`, mas `parseRows` (importService.ts) só copia campos do sistema — o `custom:*` é descartado antes de chegar no banco.
-3. **CPF/CNPJ — validação rejeita CNPJ.** `clientSchema.cpf` exige regex `^\d{3}\.\d{3}\.\d{3}-\d{2}$` (validations.ts:11). Tenants com PJ falham no `validateImportRows` → erro silencioso ("Erro ao importar clientes" sem detalhe).
-4. **Toast genérico esconde a causa.** `onError: () => toast.error("Erro ao importar clientes")` (CarteiraPage.tsx:413) descarta a `Error.message` real do `bulkCreateClients` (que já vem formatada com "Linha X: ...").
-5. **Tabela do Preview sem scroll horizontal.** O `<ScrollArea>` da etapa Preview (ImportDialog.tsx) não tem `orientation="horizontal"` nem `<ScrollBar orientation="horizontal" />`, e a `<Table>` não tem `min-w` — por isso as colunas ficam cortadas ("Pendent...") na tela da Candy Gloss.
+## Bug crítico encontrado durante auditoria
 
-## Mudanças
+**`bulkCreateClients` NUNCA preenche `tenant_id` nos registros.**
 
-### 1. `src/lib/cpfUtils.ts` — validação CPF/CNPJ
-- Adicionar `isValidCNPJ(value)` (mod-11 dos 14 dígitos).
-- Adicionar helper `isValidCpfOrCnpj(value)` que aceita 11 ou 14 dígitos.
-- `formatCPFDisplay` já formata ambos — manter.
+- `clients.tenant_id` é `NOT NULL` (confirmado via `information_schema`).
+- Não há trigger BEFORE INSERT que injete `tenant_id` (verificado em `pg_trigger`).
+- A política RLS exige `tenant_id = get_my_tenant_id()`.
+- `import_logs` mostra **zero** imports do tipo `source='spreadsheet'` em 30 dias (todos imports da Y.BRASIL são `source='maxlist'`, que vai por outra edge function que já injeta `tenant_id` corretamente).
+- `clientSchema` (zod) faz strip de chaves desconhecidas, então mesmo que a UI tentasse mandar `tenant_id`, seria descartado.
+- Conclusão: o erro "Erro ao importar clientes" da Candy Gloss é, em última instância, NOT NULL violation / RLS denied — **não** apenas o custom field perdido.
 
-### 2. `src/lib/validations.ts` — schema aceita CPF e CNPJ
-- Trocar regex do campo `cpf` por validação refinada:
-  ```ts
-  cpf: z.string().trim().refine(v => /^(\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})$/.test(v),
-    "CPF/CNPJ inválido")
-  ```
-- Permitir `custom_data: z.record(z.any()).optional().nullable()` no `clientSchema` para que não seja stripado.
+Sem essa correção, todas as outras melhorias não resolvem o sintoma do print.
 
-### 3. `src/services/importService.ts` — preservar custom fields
-- Em `parseRows`, após popular campos do sistema, varrer `colMap` por chaves que começam com `custom:` e montar `custom_data: { [field_key]: valor }` no row retornado.
-- Adicionar `custom_data?: Record<string, any>` em `ImportedRow`.
-- `cleanCPF` (cpfUtils) já aceita 14 dígitos — manter.
+## Ajustes adicionais a aplicar
 
-### 4. `src/services/clientService.ts` — persistir custom_data
-- Em `bulkCreateClients`, preservar `custom_data` no `records.map` (hoje o spread `...rest` já leva, mas como o schema strip-ava, ficava perdido). Após o fix no schema (passo 2), ele chega íntegro.
-- Em `fieldsToCompare` do log de update, **não** incluir `custom_data` (evita logs ruidosos; é tratado como overwrite).
+### A. `src/services/clientService.ts` — injetar `tenant_id`
+- Antes do `valid.map(...)`, buscar `profiles.tenant_id` pelo `operatorId` (mesma lógica de `createClient` linhas 162–170).
+- Lançar erro claro: `"Operador sem empresa vinculada"` se vier null.
+- `records.map` passa a colocar `tenant_id` em cada registro.
+- Usar `tenantId` na consulta de `existingMap` (`.eq("tenant_id", tenantId).in("external_id", ...)` e idem para CPF) para evitar colisão cross-tenant em ambientes com CPFs repetidos entre tenants — proteção defensiva mesmo com RLS.
+- `upsert` com `onConflict: "external_id,tenant_id"` já está correto; manter.
 
-### 5. `src/pages/CarteiraPage.tsx` — template dinâmico + erro real
-- `downloadTemplate` vira `async`: carregar `fetchCustomFields(tenant.id)` (sem `credor_id` = campos globais do tenant) e anexar uma coluna por campo ativo após as colunas padrão. Linhas-exemplo recebem `""` nas novas colunas.
-- Mudar `onError: (err) => toast.error(err?.message || "Erro ao importar clientes")` com `description` longa quando vier multi-linha.
-- Header da coluna no template muda de `"CPF"` para `"CPF/CNPJ"`.
+### B. `src/lib/validations.ts` — aceitar tenant_id no schema
+- Adicionar `tenant_id: z.string().uuid().optional()` ao `clientSchema` para evitar que zod descarte (defesa em profundidade — o serviço também injeta).
 
-### 6. `src/components/clients/ImportDialog.tsx` — scroll horizontal + UX
-- Envolver a `<Table>` do Preview num wrapper com `overflow-x-auto` (ou usar `ScrollArea` com `<ScrollBar orientation="horizontal" />` da shadcn).
-- Adicionar `className="min-w-[1100px]"` na `<Table>` do Preview, garantindo barra de rolagem quando há muitas colunas.
-- Mesmo tratamento para a `<Table>` do Mapeamento.
-- Renomear label do campo CPF para "CPF/CNPJ" na coluna Status do preview.
-- Quando houver custom fields mapeados, mostrar colunas adicionais no preview (renderizar `row.custom_data` se existir).
+### C. `src/services/importService.ts` — endurecer cleanCPF para CNPJ no parsing
+- `cleanCPF` em `cpfUtils.ts` já tolera 14 dígitos, mas `padStart(11, "0")` ainda pode mascarar lixo curto. Verificar no `parseRows`: se `rawCpf.length` ∉ {11,14}, pular linha (já é o caso — `if (!rawCpf) continue`). OK, sem mudança.
 
-### 7. `src/services/fieldMappingService.ts`
-- Já tem label `"CPF/CNPJ"` (linha 17). Apenas confirmar que auto-detect aceita header `CNPJ` isolado: acrescentar `"CNPJ": "cpf"` no `builtinMap` do ImportDialog.
+### D. `src/components/clients/ClientForm.tsx` — UI manual aceitar CNPJ (escopo secundário)
+- Trocar `maxLength={14}` por `maxLength={18}`.
+- Usar `formatCPFDisplay` no onChange (já formata os dois).
+- Label: `"CPF/CNPJ"`.
+- Sem afetar fluxo de import.
 
-## Garantias de não-regressão (Y.BRASIL)
+### E. Nada toca em edge functions
+- `maxlist-import` tem lógica própria (CPF padding); fora do escopo, mantida.
+- `portal-lookup` exige CPF 11 dígitos (linha 106): fora do escopo (PJ não negocia via portal hoje).
 
-- **Tenants sem custom_fields**: `fetchCustomFields` retorna `[]` → template idêntico ao atual.
-- **Planilhas sem CNPJ**: regex CPF antigo continua válido dentro do novo refine.
-- **Mapeamentos salvos antigos** (`field_mappings`): não referenciam `custom:*`, então comportamento preserva.
-- **`bulkCreateClients` mantém assinatura** — Y.BRASIL e demais tenants não notam diferença até cadastrarem custom fields.
-- **Trigger DB** que injeta `tenant_id` em `clients` continua funcionando (não tocamos no SQL).
-- Nada no fluxo de **acordos/portal/Negociarie** é tocado.
+## Plano de validação (executar após approval)
 
-## Detalhes técnicos
+1. **DB inspect**: rodar `SELECT count(*), max(created_at) FROM clients WHERE custom_data <> '{}'::jsonb GROUP BY tenant_id` antes/depois do teste para confirmar persistência.
+2. **Tenant Candy Gloss**:
+   - Baixar modelo → conferir colunas custom presentes.
+   - Importar a planilha do print (10 linhas) → esperar sucesso, `import_logs` com `source='spreadsheet'`, `inserted=10`.
+   - Verificar `clients.custom_data` populado.
+3. **Tenant Y.BRASIL**:
+   - Importar 2–3 linhas sintéticas (CPFs novos) → sucesso.
+   - Confirmar que imports `maxlist` antigos (que dominam o tenant) seguem funcionando — nenhum código de maxlist foi tocado.
+4. **CNPJ**:
+   - Linha com `12.345.678/0001-90` → aceito; `clients.cpf` salvo limpo (14 dígitos).
+5. **CPF inválido**:
+   - `000.000.000-00` → recusado com mensagem `Linha N: CPF/CNPJ inválido` no toast (description).
+6. **Scroll horizontal**:
+   - Abrir Preview com Candy Gloss (10+ colunas) → barra de rolagem visível, botões `Cancelar / Importar` permanecem clicáveis sem sobreposição.
+7. **Cross-tenant safety**:
+   - Confirmar via `SELECT cpf, tenant_id, count(*) FROM clients GROUP BY 1,2 HAVING count(*) > 1` que upserts ficaram restritos ao tenant correto.
 
-- `custom_data` é coluna `jsonb` em `public.clients` (já existe nos types).
-- CNPJ regex aceita formato com pontuação: `00.000.000/0000-00`. `cleanCPF` retorna 14 dígitos válidos, e `formatCPFDisplay` já formata para CNPJ.
-- Não precisa migração SQL.
+## Riscos residuais (documentados, fora deste plano)
 
-## Plano de teste (a executar após aprovação)
-
-1. Tenant **Candy Gloss**: baixar modelo → deve trazer colunas custom configuradas.
-2. Importar 10 linhas (planilha do print) → deve concluir sem erro; verificar `clients.custom_data` populado via read_query.
-3. Tenant **Y.BRASIL**: baixar modelo (sem custom) → idêntico ao atual. Importar 1 planilha pequena → ok.
-4. Testar 1 linha com CNPJ (`12.345.678/0001-90`) → aceito.
-5. Testar 1 linha com CPF inválido (`111.111.111-11`) → erro claro no toast com nº da linha.
-6. Conferir scroll horizontal abrindo o Preview com >10 colunas.
+- `ClientForm` (criação avulsa) continuará rejeitando CNPJ visualmente até a alínea D ser aplicada.
+- `portal-lookup` rejeita CNPJ (devedores PJ não conseguirão acessar portal). Será endereçado em fluxo dedicado quando aparecer demanda.
+- `maxlist-import` força padding para 11 dígitos — só importa empresas que usam o sistema Maxlist (todos PF hoje na Y.BRASIL).
