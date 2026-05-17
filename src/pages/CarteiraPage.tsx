@@ -410,7 +410,11 @@ const CarteiraPage = () => {
       toast.success("Clientes importados com sucesso!");
       setImportOpen(false);
     },
-    onError: () => toast.error("Erro ao importar clientes"),
+    onError: (err: any) => {
+      const msg = err?.message || "Erro ao importar clientes";
+      const [first, ...rest] = msg.split("\n");
+      toast.error(first, { description: rest.join("\n") || undefined, duration: 8000 });
+    },
   });
 
   const handleEdit = (client: Client) => {
