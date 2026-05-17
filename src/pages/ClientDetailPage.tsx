@@ -652,6 +652,7 @@ const ClientDetailPage = () => {
                             </TableCell>
                           )}
                           <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                          <TableCell className="text-muted-foreground">{tipoDividaMap.get((c as any).tipo_divida_id) || "—"}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
                           {/* RIVO_FIX: Valor obrigatorio */}
