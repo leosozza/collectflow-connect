@@ -28,6 +28,7 @@ export const clientSchema = z.object({
   uf: z.string().trim().max(2).optional().nullable(),
   cep: z.string().trim().max(10).optional().nullable(),
   observacoes: z.string().trim().max(1000).optional().nullable(),
+  tenant_id: z.string().uuid().optional(),
 });
 
 export type ValidatedClientData = z.infer<typeof clientSchema>;

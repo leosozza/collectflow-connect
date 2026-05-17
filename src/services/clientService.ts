@@ -310,6 +310,15 @@ export const bulkCreateClients = async (
       throw new Error(`Dados inválidos encontrados:\n${firstErrors}${errors.length > 5 ? `\n... e mais ${errors.length - 5} erros` : ""}`);
     }
 
+    // Buscar tenant_id do operador para satisfazer RLS (clients.tenant_id é NOT NULL)
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", operatorId)
+      .single();
+    const tenantId = profileData?.tenant_id;
+    if (!tenantId) throw new Error("Operador sem empresa vinculada. Faça login novamente.");
+
     const today = new Date().toISOString().slice(0, 10);
     const records = valid.map((c) => {
       const { status_raw, ...rest } = c as any;
@@ -318,6 +327,7 @@ export const bulkCreateClients = async (
         cpf: cleanCPF(rest.cpf),
         data_vencimento: rest.data_vencimento || today,
         operator_id: operatorId,
+        tenant_id: tenantId,
       };
     });
 
@@ -330,6 +340,7 @@ export const bulkCreateClients = async (
       const { data: existing } = await supabase
         .from("clients")
         .select("*")
+        .eq("tenant_id", tenantId)
         .in("external_id", externalIds)
         .limit(5000);
       (existing || []).forEach((e: any) => {
@@ -342,6 +353,7 @@ export const bulkCreateClients = async (
         const { data: existing } = await supabase
           .from("clients")
           .select("*")
+          .eq("tenant_id", tenantId)
           .in("cpf", batch)
           .limit(5000);
         (existing || []).forEach((e: any) => {

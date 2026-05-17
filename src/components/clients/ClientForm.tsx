@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { ClientFormData } from "@/services/clientService";
-import { formatCPF, formatCEP } from "@/lib/formatters";
+import { formatCEP } from "@/lib/formatters";
+import { formatCPFDisplay } from "@/lib/cpfUtils";
 import { clientSchema } from "@/lib/validations";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -139,8 +140,8 @@ const ClientForm = ({ defaultValues, onSubmit, submitting }: ClientFormProps) =>
             <Input value={nomeCompleto} onChange={(e) => setNomeCompleto(e.target.value)} placeholder="Nome do cliente" required maxLength={200} />
           </div>
           <div className="space-y-1.5">
-            <Label>CPF <span className="text-destructive">*</span></Label>
-            <Input value={cpf} onChange={(e) => setCpf(formatCPF(e.target.value))} placeholder="000.000.000-00" maxLength={14} required />
+            <Label>CPF/CNPJ <span className="text-destructive">*</span></Label>
+            <Input value={cpf} onChange={(e) => setCpf(formatCPFDisplay(e.target.value))} placeholder="000.000.000-00 ou 00.000.000/0000-00" maxLength={18} required />
           </div>
           <div className="space-y-1.5">
             <Label>Telefone (WhatsApp)</Label>
