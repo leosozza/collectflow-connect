@@ -572,48 +572,65 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="pt-2 pb-1 border-t border-border mt-2 space-y-2">
-              {/* Identificação */}
+              {/* 1. Valores */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
-                <InlineEditableField
-                  label="Cod. Devedor"
-                  value={client.external_id}
-                  onSave={(v) => updateSingleField("external_id", v)}
-                />
-                <InlineEditableField
-                  label="Cod. Contrato"
-                  value={client.cod_contrato}
-                  onSave={(v) => updateSingleField("cod_contrato", v)}
-                />
-                <InfoItem label="Modelo" value={modelNames} />
-                <InfoItem label="Credor" value={client.credor} />
+                <InfoItem label="Total Pago" value={<span className="text-success">{formatCurrency(totalPago)}</span>} />
+                <InfoItem label="Saldo Devedor" value={<span className="text-destructive">{formatCurrency(totalAberto)}</span>} />
+                <InfoItem label="Status do Cliente" value={statusCobrancaNome} />
+                <InfoItem label="Data Quitação" value={client.data_quitacao ? formatDate(client.data_quitacao) : null} />
               </div>
 
-              {/* Telefones + Email */}
-              <div className="pt-2 border-t border-border">
-                <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
-                  {tenant?.id && client?.cpf && client?.credor && (
-                    <PhoneList
-                      tenantId={tenant.id}
-                      cpf={client.cpf}
-                      credor={client.credor}
-                      phone={client.phone}
-                      phone2={client.phone2}
-                      phone3={client.phone3}
+              {/* 2. Campos do credor — oculto se todos vazios */}
+              {(client.external_id || client.cod_contrato || modelNames !== "—" || client.data_devolucao || client.data_pagamento) && (
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Campos do credor</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
+                    <InlineEditableField
+                      label="Cod. Devedor"
+                      value={client.external_id}
+                      onSave={(v) => updateSingleField("external_id", v)}
                     />
-                  )}
-                  <div className="min-w-0 max-w-full">
-                    <EmailList
-                      emails={(clients || []).map((c: any) => c?.email).concat([client.email])}
-                      tenantId={tenant?.id}
-                      cpf={client.cpf}
-                      credor={client.credor}
-                      currentEmail={client.email}
+                    <InlineEditableField
+                      label="Cod. Contrato"
+                      value={client.cod_contrato}
+                      onSave={(v) => updateSingleField("cod_contrato", v)}
                     />
+                    <InfoItem label="Modelo" value={modelNames !== "—" ? modelNames : null} />
+                    <InfoItem label="Data Devolução" value={client.data_devolucao ? formatDate(client.data_devolucao) : null} />
+                    <InfoItem label="Data Pagamento" value={client.data_pagamento ? formatDate(client.data_pagamento) : null} />
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Endereço */}
+              {/* 3. Campos personalizados do tenant — oculto se vazio */}
+              {(() => {
+                // Aliases: custom fields que já são exibidos via colunas diretas
+                const CUSTOM_FIELD_ALIASES = new Set(["nome_do_modelo"]);
+                const customData = (client.custom_data || {}) as Record<string, any>;
+                const visibleFields = (customFieldsDefs || [])
+                  .filter((cf: any) => cf.is_active !== false)
+                  .filter((cf: any) => !CUSTOM_FIELD_ALIASES.has(cf.field_key));
+                if (visibleFields.length === 0) return null;
+                const hasAnyValue = visibleFields.some((cf: any) => {
+                  const v = customData[cf.field_key];
+                  return v !== undefined && v !== null && String(v).trim() !== "";
+                });
+                if (!hasAnyValue) return null;
+                return (
+                  <div className="pt-2 border-t border-border">
+                    <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Campos personalizados</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
+                      {visibleFields.map((cf: any) => {
+                        const raw = customData[cf.field_key];
+                        const value = raw !== undefined && raw !== null && String(raw).trim() !== "" ? String(raw) : null;
+                        return <InfoItem key={cf.id} label={cf.field_label} value={value} />;
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 4. Endereço */}
               <div className="pt-2 border-t border-border">
                 <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Endereço</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
@@ -656,29 +673,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                 </div>
               </div>
 
-              {/* Valores */}
-              <div className="grid grid-cols-3 gap-x-6 gap-y-2 pt-2 border-t border-border">
-                <InfoItem label="Total Pago" value={<span className="text-success">{formatCurrency(totalPago)}</span>} />
-                <InfoItem label="Valor Atualizado" value={<span className="font-semibold">{formatCurrency(totalAtualizado)}</span>} />
-                <InfoItem label="Saldo Devedor" value={<span className="text-destructive">{formatCurrency(totalAberto)}</span>} />
-              </div>
-
-              {/* Datas */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 pt-2 border-t border-border">
-                <InfoItem label="Data Pagamento" value={client.data_pagamento ? formatDate(client.data_pagamento) : null} />
-                <InfoItem label="Data Quitação" value={client.data_quitacao ? formatDate(client.data_quitacao) : null} />
-                <InfoItem label="Data Devolução" value={client.data_devolucao ? formatDate(client.data_devolucao) : null} />
-              </div>
-
-              {/* Classificações */}
-              <div className="pt-2 border-t border-border">
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2">
-                  <InfoItem label="Tipo de Dívida" value={tipoDividaNome} />
-                  <InfoItem label="Status do Cliente" value={statusCobrancaNome} />
-                </div>
-              </div>
-
-              {/* Observações */}
+              {/* 5. Observações */}
               {client.observacoes && (
                 <div className="pt-3 border-t border-border">
                   <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Observações</p>
