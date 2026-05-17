@@ -1,0 +1,1 @@
+DELETE FROM public.credor_agreement_templates WHERE nome ILIKE 'TESTE %';
