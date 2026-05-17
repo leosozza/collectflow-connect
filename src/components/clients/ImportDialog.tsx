@@ -317,8 +317,8 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                 </div>
               )}
 
-              <ScrollArea className="flex-1 border border-border rounded-lg">
-                <Table>
+              <div className="flex-1 border border-border rounded-lg overflow-auto">
+                <Table className="min-w-[700px]">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead>Coluna da Planilha</TableHead>
@@ -331,10 +331,9 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                     {rawHeaders.map((header) => {
                       const upperHeader = header.toUpperCase().trim();
                       const mapped = columnMapping[upperHeader];
-                      const fieldInfo = SYSTEM_FIELDS.find((f) => f.value === mapped);
                       return (
                         <TableRow key={header}>
-                          <TableCell className="font-mono text-sm">{header}</TableCell>
+                          <TableCell className="font-mono text-sm whitespace-nowrap">{header}</TableCell>
                           <TableCell>
                             <ArrowRight className="w-4 h-4 text-muted-foreground" />
                           </TableCell>
