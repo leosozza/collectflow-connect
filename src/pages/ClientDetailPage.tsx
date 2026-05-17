@@ -100,6 +100,18 @@ const ClientDetailPage = () => {
   const [reopeningParcelas, setReopeningParcelas] = useState(false);
   const [expandedAgreements, setExpandedAgreements] = useState<Set<string>>(new Set());
 
+  const { data: tiposDivida = [] } = useQuery({
+    queryKey: ["tipos_divida", tenant?.id],
+    queryFn: () => fetchTiposDivida(tenant!.id),
+    enabled: !!tenant?.id,
+    staleTime: 10 * 60 * 1000,
+  });
+  const tipoDividaMap = useMemo(() => {
+    const m = new Map<string, string>();
+    (tiposDivida as any[]).forEach((t) => m.set(t.id, t.nome));
+    return m;
+  }, [tiposDivida]);
+
 
 
   const handleTogglePagoSelection = (id: string) => {
