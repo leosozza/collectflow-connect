@@ -41,6 +41,7 @@ import AgreementInstallments from "@/components/client-detail/AgreementInstallme
 import { cancelAgreement, updateAgreement, reopenAgreement, AgreementFormData } from "@/services/agreementService";
 import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { useTenant } from "@/hooks/useTenant";
+import { fetchTiposDivida } from "@/services/cadastrosService";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const statusLabelsMap: Record<string, string> = {
