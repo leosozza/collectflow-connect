@@ -41,6 +41,7 @@ import AgreementInstallments from "@/components/client-detail/AgreementInstallme
 import { cancelAgreement, updateAgreement, reopenAgreement, AgreementFormData } from "@/services/agreementService";
 import { getEffectiveAgreementSummary } from "@/lib/installmentUtils";
 import { useTenant } from "@/hooks/useTenant";
+import { fetchTiposDivida } from "@/services/cadastrosService";
 import { usePermissions } from "@/hooks/usePermissions";
 
 const statusLabelsMap: Record<string, string> = {
@@ -98,6 +99,18 @@ const ClientDetailPage = () => {
   const [showReopenParcelasDialog, setShowReopenParcelasDialog] = useState(false);
   const [reopeningParcelas, setReopeningParcelas] = useState(false);
   const [expandedAgreements, setExpandedAgreements] = useState<Set<string>>(new Set());
+
+  const { data: tiposDivida = [] } = useQuery({
+    queryKey: ["tipos_divida", tenant?.id],
+    queryFn: () => fetchTiposDivida(tenant!.id),
+    enabled: !!tenant?.id,
+    staleTime: 10 * 60 * 1000,
+  });
+  const tipoDividaMap = useMemo(() => {
+    const m = new Map<string, string>();
+    (tiposDivida as any[]).forEach((t) => m.set(t.id, t.nome));
+    return m;
+  }, [tiposDivida]);
 
 
 
@@ -592,6 +605,7 @@ const ClientDetailPage = () => {
                     <TableRow className="bg-muted/50">
                       {canReopenParcelas && pagoClients.length > 0 && <TableHead className="w-10"></TableHead>}
                       <TableHead>Parcela</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Devolução</TableHead>
                       {/* RIVO_FIX: Coluna obrigatoria */}
@@ -638,6 +652,7 @@ const ClientDetailPage = () => {
                             </TableCell>
                           )}
                           <TableCell>{c.numero_parcela}/{c.total_parcelas}</TableCell>
+                          <TableCell className="text-muted-foreground">{tipoDividaMap.get((c as any).tipo_divida_id) || "—"}</TableCell>
                           <TableCell>{formatDate(c.data_vencimento)}</TableCell>
                           <TableCell>{hasDevolucao ? formatDate((c as any).data_devolucao) : "—"}</TableCell>
                           {/* RIVO_FIX: Valor obrigatorio */}
