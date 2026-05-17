@@ -193,6 +193,13 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
     enabled: !!tenant?.id,
   });
 
+  const { data: customFieldsDefs = [] } = useQuery({
+    queryKey: ["custom-fields", tenant?.id],
+    queryFn: () => fetchCustomFields(tenant!.id),
+    enabled: !!tenant?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const cleanCpf = cpf?.replace(/\D/g, "") || "";
   const { data: allClientPhones = [] } = useQuery({
     queryKey: ["client_phones", tenant?.id, cleanCpf],
