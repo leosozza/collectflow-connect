@@ -377,7 +377,7 @@ const ImportDialog = ({ open, onClose, onConfirm, submitting }: ImportDialogProp
                     })}
                   </TableBody>
                 </Table>
-              </ScrollArea>
+              </div>
             </>
           )}
 
