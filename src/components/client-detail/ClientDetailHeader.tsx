@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useTenant } from "@/hooks/useTenant";
 import { useModules } from "@/hooks/useModules";
 import { fetchTiposDevedor, fetchTiposDivida, fetchTiposStatus } from "@/services/cadastrosService";
+import { fetchCustomFields } from "@/services/customFieldsService";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMonths } from "date-fns";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
