@@ -1,79 +1,55 @@
-# Auditoria 360 das correções de Importação + Personalização
+## Reorganizar bloco colapsável do perfil do cliente
 
-## O que foi verificado
+Bloco superior (CPF • Telefone • Email • Credor • Saldo Devedor) e ações no topo **permanecem idênticos**. Identidade visual, cards, divisores e tipografia mantidos — só muda a ordem e o agrupamento dentro do colapsável "Mais informações do devedor".
 
-| Área | Resultado |
-|---|---|
-| `cpfUtils.isValidCNPJ` / `isValidCpfOrCnpj` | OK, mod-11 padrão Receita Federal. |
-| `validations.clientSchema.cpf` aceita CPF e CNPJ | OK, regex `^(\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})$`. |
-| `validations.clientSchema.custom_data` permitido (não stripado) | OK. |
-| `importService.parseRows` coleta `custom:{key}` para `custom_data` | OK, só no caminho `isCustomMapping=true`. |
-| `ImportDialog` scroll horizontal (mapping + preview) | OK, `overflow-auto` + `min-w-[700px]/[1100px]`. |
-| `ImportDialog` aceita header `CNPJ`/`CPF/CNPJ` no auto-detect | OK. |
-| `CarteiraPage.downloadTemplate` injeta colunas custom do tenant | OK, dynamic import de `fetchCustomFields`. |
-| `CarteiraPage` toast de erro mostra mensagem real do `bulkCreateClients` | OK. |
-| Edge functions (logs últimas 30 min) | Sem erros relacionados; cron `dispatch-scheduled-campaigns` segue logando ruído antigo (`utf-8-validate`, não relacionado). |
-| RLS policies de `clients` | `INSERT WITH CHECK (tenant_id = get_my_tenant_id())` — exige `tenant_id` no payload. |
+### Nova ordem do colapsável (`ClientDetailHeader.tsx`, linhas 565–680)
 
-## Bug crítico encontrado durante auditoria
+1. **Valores** (1ª linha)
+   - `grid-cols-2 md:grid-cols-4`
+   - Total Pago • Saldo Devedor • Status do Cliente • Data Quitação
+   - **Remover** Valor Atualizado (e o cálculo `totalAtualizado`, `credorData`, query `credor-juros-multa` ficam órfãos — manter por enquanto, apenas não renderizar; evita quebrar outras dependências caso a query seja reaproveitada futuramente).
 
-**`bulkCreateClients` NUNCA preenche `tenant_id` nos registros.**
+2. **Campos do credor** (cabeçalho cinza opcional, oculto se todos vazios)
+   - Cod. Devedor • Cod. Contrato • Modelo • Data Devolução
+   - Cada item via `InfoItem`/`InlineEditableField` como hoje. Para Y.BRASIL todos esses campos seguem aparecendo (não muda dado, só layout).
 
-- `clients.tenant_id` é `NOT NULL` (confirmado via `information_schema`).
-- Não há trigger BEFORE INSERT que injete `tenant_id` (verificado em `pg_trigger`).
-- A política RLS exige `tenant_id = get_my_tenant_id()`.
-- `import_logs` mostra **zero** imports do tipo `source='spreadsheet'` em 30 dias (todos imports da Y.BRASIL são `source='maxlist'`, que vai por outra edge function que já injeta `tenant_id` corretamente).
-- `clientSchema` (zod) faz strip de chaves desconhecidas, então mesmo que a UI tentasse mandar `tenant_id`, seria descartado.
-- Conclusão: o erro "Erro ao importar clientes" da Candy Gloss é, em última instância, NOT NULL violation / RLS denied — **não** apenas o custom field perdido.
+3. **Campos personalizados** (dinâmico, novo bloco, oculto se vazio)
+   - Lista `custom_fields` ativos do tenant (já buscados via `fetchCustomFields`).
+   - Filtra os que têm alias para colunas diretas (ex.: `nome_do_modelo` → já mostrado em "Modelo" no bloco 2) — usa o mesmo `CUSTOM_FIELD_ALIASES` que `ClientHeader.tsx` (atendimento) já implementa, para não duplicar.
+   - Renderiza valor de `client.custom_data[field_key]` em grid igual aos outros blocos. Sem editor inline neste momento (read-only).
 
-Sem essa correção, todas as outras melhorias não resolvem o sintoma do print.
+4. **Endereço** (último)
+   - Rua • Bairro • Cidade • UF • CEP (igual ao layout atual).
 
-## Ajustes adicionais a aplicar
+5. **Observações** — mantém como está, no fim.
 
-### A. `src/services/clientService.ts` — injetar `tenant_id`
-- Antes do `valid.map(...)`, buscar `profiles.tenant_id` pelo `operatorId` (mesma lógica de `createClient` linhas 162–170).
-- Lançar erro claro: `"Operador sem empresa vinculada"` se vier null.
-- `records.map` passa a colocar `tenant_id` em cada registro.
-- Usar `tenantId` na consulta de `existingMap` (`.eq("tenant_id", tenantId).in("external_id", ...)` e idem para CPF) para evitar colisão cross-tenant em ambientes com CPFs repetidos entre tenants — proteção defensiva mesmo com RLS.
-- `upsert` com `onConflict: "external_id,tenant_id"` já está correto; manter.
+**Remover** do header:
+- Bloco antigo "Identificação" (Cod. Devedor/Contrato/Modelo/Credor) — Credor já está no card superior; os outros migram para "Campos do credor".
+- Bloco "Telefones + Email" — já estão no card superior; remover daqui evita duplicidade. (Telefones extras continuam acessíveis via `PhoneList` no atendimento; aqui o operador só consulta.)
+- Bloco "Classificações" (Tipo de Dívida + Status Cliente) — Status migra para "Valores", Tipo de Dívida some daqui.
 
-### B. `src/lib/validations.ts` — aceitar tenant_id no schema
-- Adicionar `tenant_id: z.string().uuid().optional()` ao `clientSchema` para evitar que zod descarte (defesa em profundidade — o serviço também injeta).
+### Mover "Tipo de Dívida" para a aba "Títulos em Aberto"
 
-### C. `src/services/importService.ts` — endurecer cleanCPF para CNPJ no parsing
-- `cleanCPF` em `cpfUtils.ts` já tolera 14 dígitos, mas `padStart(11, "0")` ainda pode mascarar lixo curto. Verificar no `parseRows`: se `rawCpf.length` ∉ {11,14}, pular linha (já é o caso — `if (!rawCpf) continue`). OK, sem mudança.
+`ClientDetailPage.tsx` (linhas 590–668), tabela da aba `titulos`:
 
-### D. `src/components/clients/ClientForm.tsx` — UI manual aceitar CNPJ (escopo secundário)
-- Trocar `maxLength={14}` por `maxLength={18}`.
-- Usar `formatCPFDisplay` no onChange (já formata os dois).
-- Label: `"CPF/CNPJ"`.
-- Sem afetar fluxo de import.
+- Adicionar coluna `<TableHead>Tipo</TableHead>` antes de "Vencimento".
+- Resolver nome via `tiposDivida` (já carregado em `cadastrosService`) usando `c.tipo_divida_id`. Fallback: `—`.
+- Mostra o que estiver cadastrado no `tipos_divida` do tenant (boleto, cheque, cartão, duplicata, etc.). Não cria novos tipos — usa os já existentes em Cadastros → Tipos de Dívida.
 
-### E. Nada toca em edge functions
-- `maxlist-import` tem lógica própria (CPF padding); fora do escopo, mantida.
-- `portal-lookup` exige CPF 11 dígitos (linha 106): fora do escopo (PJ não negocia via portal hoje).
+### Impacto Y.BRASIL (validado)
 
-## Plano de validação (executar após approval)
+- `totalAtualizado` não é consumido fora deste componente (`rg` confirma). Remover apenas a renderização não quebra dashboards, relatórios nem Maxlist.
+- Y.BRASIL não tem nada em `tenants.custom_fields` que sobreponha "Modelo" — o campo `model_name` (coluna direta) continua exibido no bloco 2.
+- Nenhum `tipos_divida` adicional é exigido — a coluna nova só lê `tipo_divida_id` quando presente; se Y.BRASIL não preenche, a célula mostra `—` (não trava import nem cálculo de saldo).
 
-1. **DB inspect**: rodar `SELECT count(*), max(created_at) FROM clients WHERE custom_data <> '{}'::jsonb GROUP BY tenant_id` antes/depois do teste para confirmar persistência.
-2. **Tenant Candy Gloss**:
-   - Baixar modelo → conferir colunas custom presentes.
-   - Importar a planilha do print (10 linhas) → esperar sucesso, `import_logs` com `source='spreadsheet'`, `inserted=10`.
-   - Verificar `clients.custom_data` populado.
-3. **Tenant Y.BRASIL**:
-   - Importar 2–3 linhas sintéticas (CPFs novos) → sucesso.
-   - Confirmar que imports `maxlist` antigos (que dominam o tenant) seguem funcionando — nenhum código de maxlist foi tocado.
-4. **CNPJ**:
-   - Linha com `12.345.678/0001-90` → aceito; `clients.cpf` salvo limpo (14 dígitos).
-5. **CPF inválido**:
-   - `000.000.000-00` → recusado com mensagem `Linha N: CPF/CNPJ inválido` no toast (description).
-6. **Scroll horizontal**:
-   - Abrir Preview com Candy Gloss (10+ colunas) → barra de rolagem visível, botões `Cancelar / Importar` permanecem clicáveis sem sobreposição.
-7. **Cross-tenant safety**:
-   - Confirmar via `SELECT cpf, tenant_id, count(*) FROM clients GROUP BY 1,2 HAVING count(*) > 1` que upserts ficaram restritos ao tenant correto.
+### Arquivos tocados
 
-## Riscos residuais (documentados, fora deste plano)
+1. `src/components/client-detail/ClientDetailHeader.tsx` — reordenar blocos dentro do `CollapsibleContent` (566–680).
+2. `src/pages/ClientDetailPage.tsx` — adicionar coluna "Tipo" na tabela de Títulos em Aberto.
 
-- `ClientForm` (criação avulsa) continuará rejeitando CNPJ visualmente até a alínea D ser aplicada.
-- `portal-lookup` rejeita CNPJ (devedores PJ não conseguirão acessar portal). Será endereçado em fluxo dedicado quando aparecer demanda.
-- `maxlist-import` força padding para 11 dígitos — só importa empresas que usam o sistema Maxlist (todos PF hoje na Y.BRASIL).
+### Fora de escopo
+
+- Edição inline dos campos personalizados (atual feature request é só exibição).
+- Mudar o card superior (CPF/Telefone/Email/Credor/Saldo).
+- Tornar `tipos_divida` obrigatório no import.
+- Migrar `valor_atualizado` para fora de `clients` (continua existindo no banco e em outras telas).
