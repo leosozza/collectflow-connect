@@ -127,9 +127,18 @@ const PortalPage = () => {
         },
       });
       if (error) throw error;
+      if (data?.auto_approved && data?.checkout_token) {
+        toast({
+          title: "Acordo confirmado!",
+          description: "Redirecionando para o pagamento...",
+        });
+        // Navigate to checkout with the generated token
+        window.location.href = `/portal/${tenantSlug}/checkout/${data.checkout_token}`;
+        return;
+      }
       toast({
         title: "Proposta enviada!",
-        description: "Sua proposta será analisada. Você receberá o link de pagamento após aprovação.",
+        description: "Sua proposta será analisada em até 24h. Você receberá o link de pagamento por e-mail/WhatsApp.",
       });
       setView("hero");
     } catch (err: any) {

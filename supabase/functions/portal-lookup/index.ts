@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
             .in("cpf", [cleanCpfA, formattedCpfA])
             .eq("tenant_id", tenantRow.id)
             .eq("credor", credor)
-            .eq("status", "pendente")
+            .in("status", ["pendente", "vencido"])
             .order("data_vencimento", { ascending: true })
             .limit(1);
           const dv = oldest?.[0]?.data_vencimento;
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
         });
       }
       const allowCustom = data && data.length > 0 ? Boolean(data[0].allow_custom_proposal) : true;
-      return new Response(JSON.stringify({ templates: data || [], allow_custom_proposal: allowCustom }), {
+      return new Response(JSON.stringify({ templates: data || [], allow_custom_proposal: allowCustom, aging_days: agingDays }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -142,9 +142,48 @@ Deno.serve(async (req) => {
       const clientName = clientDebts?.[0]?.nome_completo || "Cliente";
       const checkoutToken = crypto.randomUUID();
 
+      // Anti-tampering: if template_id provided, validate against DB
+      let autoApprove = false;
+      let validatedTotal = Number(proposed_total) || 0;
+      let validatedInstallments = Number(new_installments) || 1;
+      let validatedInstallmentValue = Number(new_installment_value) || validatedTotal;
+
+      if (template_id) {
+        const { data: tpl } = await supabase
+          .from("credor_agreement_templates")
+          .select("id, ativo, desconto_percent, parcelas, credor_id, tenant_id, credores!inner(razao_social)")
+          .eq("id", template_id)
+          .eq("tenant_id", tenantId)
+          .eq("ativo", true)
+          .maybeSingle();
+
+        if (!tpl) {
+          return new Response(JSON.stringify({ error: "Modelo de acordo inválido ou inativo" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Recompute canonical values from template
+        const orig = Number(original_total) || 0;
+        const tplTotal = orig * (1 - Number(tpl.desconto_percent) / 100);
+        const tplParcelas = Math.max(1, tpl.parcelas);
+        const tplInstValue = tplTotal / tplParcelas;
+
+        // Tolerance 1 cent
+        if (Math.abs(tplTotal - validatedTotal) > 0.05 || tplParcelas !== validatedInstallments) {
+          // Override with canonical template values (don't trust client)
+          validatedTotal = tplTotal;
+          validatedInstallments = tplParcelas;
+          validatedInstallmentValue = tplInstValue;
+        }
+        autoApprove = true;
+      }
+
       const discountPercent = original_total > 0
-        ? Math.round((1 - proposed_total / original_total) * 100)
+        ? Math.round((1 - validatedTotal / original_total) * 100)
         : 0;
+
+      const insertStatus = autoApprove ? "approved" : "pending";
 
       const { data: agreement, error: insertError } = await supabase.from("agreements").insert({
         tenant_id: tenantId,
@@ -152,12 +191,12 @@ Deno.serve(async (req) => {
         client_name: clientName,
         credor: credor || "N/A",
         original_total: original_total || 0,
-        proposed_total: proposed_total || 0,
-        new_installments: new_installments || 1,
-        new_installment_value: new_installment_value || proposed_total || 0,
+        proposed_total: validatedTotal,
+        new_installments: validatedInstallments,
+        new_installment_value: validatedInstallmentValue,
         first_due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
         discount_percent: discountPercent > 0 ? discountPercent : null,
-        status: "pending",
+        status: insertStatus,
         portal_origin: true,
         checkout_token: checkoutToken,
         created_by: "00000000-0000-0000-0000-000000000000",
@@ -166,7 +205,35 @@ Deno.serve(async (req) => {
 
       if (insertError) throw insertError;
 
-      return new Response(JSON.stringify({ success: true, checkout_token: checkoutToken }), {
+      let boletoUrl: string | null = null;
+
+      // Auto-generate boletos for template-based agreements
+      if (autoApprove && agreement) {
+        try {
+          const { data: boletoRes } = await supabase.functions.invoke("generate-agreement-boletos", {
+            body: { agreement_id: agreement.id },
+          });
+          // try get first installment boleto link
+          const { data: firstInst } = await supabase
+            .from("agreement_installments")
+            .select("boleto_url, pix_qrcode")
+            .eq("agreement_id", agreement.id)
+            .order("installment_key", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          boletoUrl = firstInst?.boleto_url || null;
+        } catch (e) {
+          console.error("[portal-lookup] auto boleto generation failed:", e);
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        checkout_token: checkoutToken,
+        auto_approved: autoApprove,
+        boleto_url: boletoUrl,
+        agreement_id: agreement?.id,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

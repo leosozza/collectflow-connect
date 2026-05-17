@@ -1,78 +1,65 @@
-## Objetivo
+## Correções
 
-Permitir que o credor defina **faixas de dias em atraso** (aging) em cada Modelo de Acordo do Portal, para que o devedor só veja a oferta cujo aging da dívida se encaixa na faixa. Ex: "À vista 80% off" só aparece para dívidas com 90+ dias; "Parcelado 30% off" para 0–30 dias.
+### Bug 1 — Aging ignora parcelas `vencido`
+**Arquivo:** `supabase/functions/portal-lookup/index.ts` (action `get-templates`)
 
-## Conceito (UX)
-
-No diálogo "Novo modelo de acordo", abaixo de Tipo, adicionar bloco **"Aplicabilidade por aging"** com 3 modos:
-
-1. **Qualquer aging** (default — comportamento atual, retrocompatível)
-2. **Faixa única** — dois campos: `De X dias` até `Até Y dias` (Y vazio = sem limite)
-3. **Presets rápidos** (chips clicáveis que preenchem a faixa):
-   - `0–30` (recém-vencido)
-   - `31–90` (curto prazo)
-   - `91–180` (médio)
-   - `181–360` (longo)
-   - `360+` (prescrição próxima)
-
-Recomendação visual: cada modelo na listagem ganha um **badge cinza** mostrando a faixa (ex: `91–180 dias`) ao lado dos badges de Destaque/Inativo, para o operador entender de relance qual oferta vai pra qual perfil.
-
-## Lógica de matching (Portal)
-
-- Aging = `floor((hoje - menor data_vencimento das dívidas em aberto do CPF naquele credor) / 1 dia)`.
-- Se `aging_min` é null e `aging_max` é null → modelo aparece sempre (modo "Qualquer aging").
-- Caso contrário: modelo aparece se `aging >= COALESCE(aging_min,0) AND aging <= COALESCE(aging_max, 99999)`.
-- Filtro aplicado server-side no RPC `get_portal_agreement_templates` (recebe `_aging_days` calculado pela edge `portal-lookup` antes da chamada).
-- Se nenhum modelo bater → fallback para geração dinâmica antiga (mantém compatibilidade).
-
-## Mudanças
-
-### 1. Migration
-
-```sql
-ALTER TABLE public.credor_agreement_templates
-  ADD COLUMN aging_min_days integer,
-  ADD COLUMN aging_max_days integer;
-
--- Atualizar RPC get_portal_agreement_templates para aceitar _aging_days
--- e filtrar: (aging_min_days IS NULL OR _aging_days >= aging_min_days)
---       AND (aging_max_days IS NULL OR _aging_days <= aging_max_days)
+Trocar:
+```ts
+.eq("status", "pendente")
+```
+por:
+```ts
+.in("status", ["pendente", "vencido"])
 ```
 
-Sem default → modelos existentes ficam `NULL/NULL` = "qualquer aging" (zero quebra).
+Motivo: hoje 91% da base aberta está como `vencido` (153k vs 15k `pendente`). Com o filtro atual, dívidas antigas vencidas são ignoradas e o portal escolhe a faixa errada (ex.: CPF com parcela de Jan/2026 vencida cai em "0–30" em vez de "91–180").
 
-### 2. `CredorAgreementTemplates.tsx`
+### Bug 2 — Auto-aprovação de acordos do Portal vindos de Template
+**Arquivos:**
+- `supabase/functions/portal-lookup/index.ts` (action `create-portal-agreement`)
+- Nova action auxiliar ou chamada direta ao mesmo fluxo do operador
 
-- Adicionar no formulário: select de modo (Qualquer / Faixa) + dois inputs `aging_min_days`, `aging_max_days` + linha de chips de preset.
-- Validação: se ambos preenchidos, `min <= max`.
-- Badge cinza na listagem: `0–30 dias`, `91+ dias`, `até 60 dias`, ou `Qualquer aging`.
-- Preview do card já existente: adicionar linha sutil "Visível para dívidas: <faixa>".
+**Regra:** se o acordo veio de um `template_id` válido (oferta pré-aprovada pelo credor), criar já com `status='active'` e disparar a geração de parcelas + boletos (mesmo caminho usado em `agreementService.createAgreement`/`finalizeAgreement`). Se for "Fazer minha proposta" (sem `template_id`), mantém `status='pending'` para revisão manual (comportamento atual).
 
-### 3. `portal-lookup/index.ts`
+**Implementação:**
+1. No edge function, ao receber `template_id`:
+   - Validar que o template existe, está ativo e pertence ao credor/tenant
+   - Validar que `proposed_total`/`new_installments` batem com o template (anti-tampering)
+   - Inserir `agreement` com `status='active'`, `portal_origin=true`
+   - Chamar RPC existente (ou replicar lógica) que gera `agreement_installments` + invoca geração Negociarie/boleto via `negociarie-create-cobranca` para a entrada/parcelas conforme `credor.gateway_pagamento`
+2. Atualizar `PortalNegotiation.tsx` para, no sucesso de template, mostrar tela "Acordo confirmado — boleto da entrada será enviado em instantes para seu e-mail/WhatsApp" + link direto se já houver `checkout_token`/`boleto_url`
+3. Custom proposal: tela "Aguardando aprovação — entraremos em contato em até 24h"
 
-- Na action `get-templates`: calcular `agingDays` a partir das parcelas em aberto do CPF/credor (`MIN(data_vencimento)` em `clients` filtrado) antes de chamar o RPC.
-- Passar `_aging_days` ao RPC.
-
-### 4. `PortalNegotiation.tsx`
-
-- Nenhuma mudança de lógica — o filtro acontece no servidor; o componente só consome a lista já filtrada. Mantém fallback dinâmico se a lista vier vazia.
-
-### 5. Memory
-
-Atualizar `mem://features/portal/agreement-templates.md` documentando os campos `aging_min_days/max_days` e regra de matching.
+### Cleanup
+Remover os 3 templates `TESTE *` criados no credor TESS durante testes (via migração `DELETE WHERE name ILIKE 'TESTE %'` ou direto via SQL admin).
 
 ## Garantias de não-regressão
+- Fluxo operador (`AgreementForm`) intacto — nenhuma mudança em `agreementService`
+- Templates sem `aging_min/max` continuam aparecendo para todos
+- Custom proposal continua `pending` (admin revisa)
+- Validação anti-tampering no edge impede cliente injetar valores fora do template
 
-- Templates antigos têm `aging_*` = NULL → continuam aparecendo para todos os agings.
-- Fluxo interno de acordos (AgreementForm/agreementService) **não toca** nesses campos — segue ignorando a tabela.
-- Edge function mantém fallback se RPC não devolver nada.
-- Rollback: `UPDATE credor_agreement_templates SET aging_min_days=NULL, aging_max_days=NULL`.
+## Explicação da faixa de aging (para a resposta após implementação)
+
+**Aging** = quantos dias estão em atraso desde o vencimento mais antigo em aberto do CPF naquele credor.
+
+**Fórmula:** `floor((hoje − MIN(data_vencimento das parcelas em aberto)) / 1 dia)`
+
+**Como funciona no Portal:**
+1. Devedor digita CPF → edge `portal-lookup` calcula o aging dele
+2. RPC filtra os modelos do credor: só mostra os que têm `aging_min ≤ aging_devedor ≤ aging_max`
+3. Modelos sem faixa (`NULL/NULL`) aparecem sempre
+
+**Estratégia comercial sugerida:**
+- `0–30 dias`: desconto pequeno (5–15%) + parcelado longo — devedor ainda "fresco", menos urgência de fechar
+- `31–90 dias`: desconto médio (20–40%) — começa a apertar
+- `91–180 dias`: desconto alto (40–60%) — risco de prescrição aumentando
+- `181–360 dias`: desconto muito alto (60–80%) à vista — recuperar é melhor que perder
+- `360+ dias`: melhor oferta possível (80–95%) — quase prescrito, qualquer recuperação vale
+
+O credor cadastra **N modelos** com faixas diferentes; o devedor vê **só os que se aplicam à idade da dívida dele**, evitando que ofereça desconto absurdo a quem acabou de atrasar.
 
 ## Arquivos tocados
-
-1. `supabase/migrations/<novo>.sql` — colunas + atualização do RPC.
-2. `src/components/cadastros/CredorAgreementTemplates.tsx` — UI form + badge.
-3. `supabase/functions/portal-lookup/index.ts` — cálculo do aging + parâmetro extra.
-4. `.lovable/memory/features/portal/agreement-templates.md` — atualização da regra.
-
-Posso seguir com a implementação?
+1. `supabase/functions/portal-lookup/index.ts` — fix aging query + auto-approve em template + chamada de geração de boleto
+2. `src/components/portal/PortalNegotiation.tsx` — UX pós-confirmação diferenciada (template vs custom)
+3. Migração SQL — cleanup dos templates `TESTE *`
