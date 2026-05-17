@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { ClientFormData } from "@/services/clientService";
-import { formatCPF, formatCEP } from "@/lib/formatters";
+import { formatCEP } from "@/lib/formatters";
+import { formatCPFDisplay } from "@/lib/cpfUtils";
 import { clientSchema } from "@/lib/validations";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
