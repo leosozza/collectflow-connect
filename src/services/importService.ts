@@ -19,6 +19,7 @@ export interface ImportedRow {
   uf?: string;
   cep?: string;
   observacoes?: string;
+  custom_data?: Record<string, any>;
 }
 
 const parseBRLCurrency = (value: any): number => {
