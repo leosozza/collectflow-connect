@@ -605,6 +605,7 @@ const ClientDetailPage = () => {
                     <TableRow className="bg-muted/50">
                       {canReopenParcelas && pagoClients.length > 0 && <TableHead className="w-10"></TableHead>}
                       <TableHead>Parcela</TableHead>
+                      <TableHead>Tipo</TableHead>
                       <TableHead>Vencimento</TableHead>
                       <TableHead>Devolução</TableHead>
                       {/* RIVO_FIX: Coluna obrigatoria */}
