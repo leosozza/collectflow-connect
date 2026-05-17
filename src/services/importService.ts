@@ -296,6 +296,21 @@ const parseRows = (
     const ufCol = isCustomMapping ? colMap["uf"] : colMap["estado"];
     const parcelaCol = isCustomMapping ? colMap["numero_parcela"] : colMap["parcela"];
 
+    // Collect custom fields (keys starting with "custom:")
+    let customData: Record<string, any> | undefined;
+    if (isCustomMapping) {
+      for (const [target, col] of Object.entries(colMap)) {
+        if (target.startsWith("custom:")) {
+          const key = target.slice(7);
+          const raw = getCell(col);
+          if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+            if (!customData) customData = {};
+            customData[key] = typeof raw === "number" ? raw : String(raw).trim();
+          }
+        }
+      }
+    }
+
     rows.push({
       credor: getCellStr(colMap["credor"]) || "",
       nome_completo: nome,
@@ -314,6 +329,7 @@ const parseRows = (
       uf: getCellStr(ufCol) || undefined,
       cep: getCellStr(colMap["cep"]) || undefined,
       observacoes: obsParts.length > 0 ? obsParts.join(" | ") : undefined,
+      custom_data: customData,
     });
   }
 
