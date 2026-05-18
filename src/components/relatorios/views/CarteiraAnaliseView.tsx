@@ -170,14 +170,14 @@ export const CarteiraAnaliseView = ({ onBack }: { onBack: () => void }) => {
                   label="CPFs Inadimplentes"
                   value={cpfsInad.toLocaleString("pt-BR")}
                   icon={Users}
-                  hint={`Clientes distintos com parcela vencida ou acordo quebrado. ${parcInad} parcelas em atraso no total.`}
+                  hint={`Clientes distintos com pelo menos um título original vencido e em aberto. ${parcInad.toLocaleString("pt-BR")} títulos vencidos no total.`}
                 />
                 <KpiTile
                   label="Saldo Inadimplente Real"
                   value={formatCurrency(saldoTotal)}
                   icon={Receipt}
                   valueClassName="text-destructive"
-                  hint={`Inclui parcelas vencidas em aberto + saldo de acordos quebrados/cancelados (${formatCurrency(saldoQuebra)}).`}
+                  hint="Soma do saldo em aberto de todos os títulos originais vencidos (status diferente de pago/quitado)."
                 />
                 <KpiTile
                   label="Ticket Médio"
@@ -185,6 +185,7 @@ export const CarteiraAnaliseView = ({ onBack }: { onBack: () => void }) => {
                   icon={Layers}
                   hint="Saldo Inadimplente Real ÷ CPFs Inadimplentes."
                 />
+
               </>
             )}
           </div>
@@ -241,14 +242,10 @@ export const CarteiraAnaliseView = ({ onBack }: { onBack: () => void }) => {
                 <div>
                   <h3 className="text-sm font-semibold">Aging dos Títulos em Atraso</h3>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Distribuição do saldo vencido por faixa de dias de atraso
+                    Distribuição do saldo vencido dos títulos originais por faixa de dias de atraso
                   </p>
                 </div>
-                {saldoQuebra > 0 && (
-                  <span className="text-[10px] inline-flex items-center gap-1 px-2 py-1 rounded-full bg-destructive/10 text-destructive font-semibold">
-                    <AlertTriangle className="w-3 h-3" /> Quebras: {formatCurrency(saldoQuebra)}
-                  </span>
-                )}
+
               </div>
               {overview.isLoading ? (
                 <Skeleton className="h-[240px] w-full" />
