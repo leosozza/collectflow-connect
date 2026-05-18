@@ -1155,10 +1155,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                       </TableCell>
 
                       {/* (alertas Maxlist agora são exibidos como banner no topo do acordo) */}
-                      {false && (
-                        <span />
-                      )}
-                      <TableCell className="hidden">{null}</TableCell>
+
+
 
 
                       {/* RIVO_FIX: Coluna obrigatoria */}
