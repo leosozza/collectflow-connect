@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { updateInstallmentDate, updateInstallmentValue, cancelInstallment, reactivateInstallment } from "@/services/agreementService";
 import { manualPaymentService } from "@/services/manualPaymentService";
 import { TEMPLATE_DEFAULTS } from "@/lib/documentDefaults";
@@ -82,7 +83,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [manualPaymentInst, setManualPaymentInst] = useState<{ number: number; value: number; key: string; label: string } | null>(null);
   const [unconfirmingIdx, setUnconfirmingIdx] = useState<number | null>(null);
   const [cancellingIdx, setCancellingIdx] = useState<number | null>(null);
-  const [cancelInstallmentDialog, setCancelInstallmentDialog] = useState<{ inst: any; idx: number } | null>(null);
+  const [cancelInstallmentDialog, setCancelInstallmentDialog] = useState<{ inst: any; idx: number; hasActiveBoleto: boolean } | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [cancellingInstallmentIdx, setCancellingInstallmentIdx] = useState<number | null>(null);
 
   // Boleto pendente states
@@ -754,10 +756,15 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
   const handleConfirmCancelInstallment = async () => {
     if (!cancelInstallmentDialog) return;
-    const { inst, idx } = cancelInstallmentDialog;
+    const { inst, idx, hasActiveBoleto } = cancelInstallmentDialog;
+    const reason = cancelReason.trim();
+    if (reason.length < 5) {
+      toast({ title: "Motivo obrigatório", description: "Informe um motivo com no mínimo 5 caracteres.", variant: "destructive" });
+      return;
+    }
     setCancellingInstallmentIdx(idx);
     try {
-      await cancelInstallment(agreementId, inst.customKey);
+      await cancelInstallment(agreementId, inst.customKey, reason);
       try {
         await supabase.from("client_events").insert({
           tenant_id: tenantId,
@@ -771,17 +778,28 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
               ? (inst.entradaCount > 1 ? `Entrada ${inst.entradaIndex + 1}` : "Entrada")
               : `Parcela ${inst.displayNumber}/${totalInstallments}`,
             valor: Number(inst.value),
+            reason,
+            boleto_cancelled: hasActiveBoleto,
             cancelled_by: profile?.id,
           },
         } as any);
       } catch { }
-      toast({ title: "Parcela cancelada", description: "A parcela foi marcada como cancelada." });
+      toast({
+        title: "Parcela cancelada",
+        description: hasActiveBoleto
+          ? "Parcela e boleto cancelados com sucesso."
+          : "A parcela foi marcada como cancelada.",
+      });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       onRefresh?.();
       setCancelInstallmentDialog(null);
+      setCancelReason("");
     } catch (err: any) {
-      toast({ title: "Erro ao cancelar parcela", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao cancelar parcela", description: humanizeErrorMessage(err?.message), variant: "destructive" });
     } finally {
       setCancellingInstallmentIdx(null);
     }
@@ -807,9 +825,11 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       toast({ title: "Parcela reativada" });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       onRefresh?.();
     } catch (err: any) {
-      toast({ title: "Erro ao reativar parcela", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao reativar parcela", description: humanizeErrorMessage(err?.message), variant: "destructive" });
     } finally {
       setCancellingInstallmentIdx(null);
     }
@@ -997,9 +1017,10 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                   const canEdit = !isPaid && !isCancelled && inst.status !== "pending_confirmation";
                   const hasActiveBoleto = !!inst.cobranca && !["cancelado", "substituido", "estornado"].includes(inst.cobranca.status);
                   const isOnlyEntrada = inst.isEntrada && inst.entradaCount === 1;
+                  const agreementClosed = ["completed", "cancelled", "broken"].includes(String((agreement as any)?.status || ""));
+                  // RIVO: cancelamento agora cancela boleto no gateway automaticamente — não bloqueia mais por hasActiveBoleto.
                   const canCancel = !isPaid && !isCancelled && inst.status !== "pending_confirmation"
-                    && !hasActiveBoleto && !isOnlyEntrada
-                    && activeInstallmentsCount > 1;
+                    && !isOnlyEntrada && activeInstallmentsCount > 1 && !agreementClosed;
 
                   return (
                     <TableRow key={idx} className={cn(isCancelled && "opacity-60 [&_td]:line-through [&_td]:decoration-muted-foreground")}>
@@ -1307,7 +1328,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                                     size="sm"
                                     className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                     disabled={cancellingInstallmentIdx === idx}
-                                    onClick={() => setCancelInstallmentDialog({ inst, idx })}
+                                    onClick={() => setCancelInstallmentDialog({ inst, idx, hasActiveBoleto })}
                                   >
                                     {cancellingInstallmentIdx === idx ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1320,8 +1341,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                               </Tooltip>
                             )}
 
-                            {/* Reativar parcela cancelada */}
-                            {isCancelled && (
+                            {/* Reativar parcela cancelada (oculto se boleto foi cancelado no gateway) */}
+                            {isCancelled && !cancelledMap[inst.customKey]?.boleto_cancelled && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
@@ -1445,32 +1466,70 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       {/* Cancel Installment Confirmation */}
       <AlertDialog
         open={!!cancelInstallmentDialog}
-        onOpenChange={(o) => !o && setCancelInstallmentDialog(null)}
+        onOpenChange={(o) => { if (!o) { setCancelInstallmentDialog(null); setCancelReason(""); } }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar parcela?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {cancelInstallmentDialog && (
-                <>
-                  A parcela{" "}
-                  <b>
-                    {cancelInstallmentDialog.inst.isEntrada
-                      ? (cancelInstallmentDialog.inst.entradaCount > 1
-                        ? `Entrada ${cancelInstallmentDialog.inst.entradaIndex + 1}`
-                        : "Entrada")
-                      : `${cancelInstallmentDialog.inst.displayNumber}/${totalInstallments}`}
-                  </b>{" "}
-                  ({formatCurrency(Number(cancelInstallmentDialog.inst.value))}) será marcada como
-                  cancelada. Ela continuará visível na lista, com risco, e será desconsiderada do
-                  progresso e do dashboard "Parcelas Programadas". Você poderá reativá-la depois.
-                  <br /><br />
-                  <span className="text-xs text-muted-foreground">
-                    O valor original do acordo (proposed_total) é preservado para fins de histórico
-                    contratual.
-                  </span>
-                </>
-              )}
+            <AlertDialogDescription asChild>
+              {cancelInstallmentDialog ? (
+                <div className="space-y-3">
+                  <div>
+                    A parcela{" "}
+                    <b>
+                      {cancelInstallmentDialog.inst.isEntrada
+                        ? (cancelInstallmentDialog.inst.entradaCount > 1
+                          ? `Entrada ${cancelInstallmentDialog.inst.entradaIndex + 1}`
+                          : "Entrada")
+                        : `${cancelInstallmentDialog.inst.displayNumber}/${totalInstallments}`}
+                    </b>{" "}
+                    ({formatCurrency(Number(cancelInstallmentDialog.inst.value))}) será marcada como
+                    cancelada e desconsiderada do progresso do acordo.
+                  </div>
+
+                  {/* Impacto no total */}
+                  {(() => {
+                    const prev = Number((agreement as any)?.proposed_total || 0);
+                    const next = Math.max(0, prev - Number(cancelInstallmentDialog.inst.value || 0));
+                    return (
+                      <div className="text-xs bg-muted/50 rounded-md p-2 border border-border">
+                        Total do acordo: <b>{formatCurrency(prev)}</b> → <b>{formatCurrency(next)}</b>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Alerta de boleto ativo */}
+                  {cancelInstallmentDialog.hasActiveBoleto && (
+                    <Alert variant="destructive" className="py-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        Esta parcela tem boleto ativo no gateway. Ele será cancelado automaticamente e
+                        <b> não poderá ser restaurado</b> — para reabrir, será necessário gerar um novo
+                        boleto manualmente.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Motivo obrigatório */}
+                  <div className="space-y-1">
+                    <Label htmlFor="cancel-reason" className="text-xs font-medium">
+                      Motivo do cancelamento <span className="text-destructive">*</span>
+                    </Label>
+                    <Textarea
+                      id="cancel-reason"
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      placeholder="Ex: cliente solicitou exclusão dessa parcela do acordo"
+                      rows={3}
+                      maxLength={500}
+                      disabled={cancellingInstallmentIdx !== null}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Mínimo 5 caracteres. Ficará registrado na auditoria e na timeline do cliente.
+                    </p>
+                  </div>
+                </div>
+              ) : <div />}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1479,7 +1538,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmCancelInstallment}
-              disabled={cancellingInstallmentIdx !== null}
+              disabled={cancellingInstallmentIdx !== null || cancelReason.trim().length < 5}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {cancellingInstallmentIdx !== null && (

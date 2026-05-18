@@ -36,3 +36,11 @@ Tabela materializada via `rebuild_agreement_installments(uuid)` chamada por trig
 - Writes de pagamento manual / cancelamento / boleto invalidam também `["carteira-grouped"]`.
 
 Classifier JS (`agreementInstallmentClassifier.ts`) permanece como fallback, mas qualquer nova feature deve preferir SSOT.
+
+**Cancelar parcela individual (`cancelInstallment`):**
+- Exige `reason` (mín 5 chars). Bloqueia se acordo `completed/cancelled/broken`, parcela `paid`, `pending_confirmation` ou já cancelada.
+- Se há boleto ativo em `negociarie_cobrancas` (status ≠ PAGO/CANCELADO), chama edge `cancel-installment-boleto` (DELETE no Negociarie). Falha do gateway aborta tudo (transacional do ponto de vista do operador).
+- Persiste em `cancelled_installments[key] = { cancelled_at, cancelled_by, reason, amount (snapshot), boleto_cancelled, gateway }`.
+- Recalcula `proposed_total -= amount` (preserva `original_total` para histórico contratual). Trigger `rebuild_agreement_installments` propaga `cancelled=true` para SSOT.
+- Reativação (`reactivateInstallment`) bloqueada se `boleto_cancelled=true` (operador precisa gerar novo boleto). Restaura `proposed_total += amount` usando o snapshot.
+- Edge `cancel-installment-boleto`: auth dual (x-cron-secret OU service_role), body `{ cobranca_id, tenant_id, reason }`, idempotente para 404 e status já CANCELADO. Log em `audit_logs` com `action=cancel_installment_boleto`.

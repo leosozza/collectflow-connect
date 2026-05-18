@@ -1,55 +1,118 @@
-## Reorganizar bloco colapsável do perfil do cliente
+# Cancelar parcela de acordo — sem quebrar acordo
 
-Bloco superior (CPF • Telefone • Email • Credor • Saldo Devedor) e ações no topo **permanecem idênticos**. Identidade visual, cards, divisores e tipografia mantidos — só muda a ordem e o agrupamento dentro do colapsável "Mais informações do devedor".
+## Contexto
 
-### Nova ordem do colapsável (`ClientDetailHeader.tsx`, linhas 565–680)
+A base de cancelamento por parcela **já existe** (`agreementService.cancelInstallment`, dialog em `AgreementInstallments.tsx`, coluna `cancelled_installments` jsonb, propagação via trigger `rebuild_agreement_installments` para a SSOT `agreement_installments.cancelled`, classifier ignora canceladas, dashboard/`get_client_consolidated_status` também).
 
-1. **Valores** (1ª linha)
-   - `grid-cols-2 md:grid-cols-4`
-   - Total Pago • Saldo Devedor • Status do Cliente • Data Quitação
-   - **Remover** Valor Atualizado (e o cálculo `totalAtualizado`, `credorData`, query `credor-juros-multa` ficam órfãos — manter por enquanto, apenas não renderizar; evita quebrar outras dependências caso a query seja reaproveitada futuramente).
+Faltam 3 peças críticas pedidas:
 
-2. **Campos do credor** (cabeçalho cinza opcional, oculto se todos vazios)
-   - Cod. Devedor • Cod. Contrato • Modelo • Data Devolução
-   - Cada item via `InfoItem`/`InlineEditableField` como hoje. Para Y.BRASIL todos esses campos seguem aparecendo (não muda dado, só layout).
+1. **Cancelar o boleto da parcela no gateway** (Negociarie hoje, Asaas no futuro).
+2. **Recalcular `proposed_total`** descontando a parcela cancelada.
+3. **Bloqueios + motivo obrigatório + UX** consistentes.
 
-3. **Campos personalizados** (dinâmico, novo bloco, oculto se vazio)
-   - Lista `custom_fields` ativos do tenant (já buscados via `fetchCustomFields`).
-   - Filtra os que têm alias para colunas diretas (ex.: `nome_do_modelo` → já mostrado em "Modelo" no bloco 2) — usa o mesmo `CUSTOM_FIELD_ALIASES` que `ClientHeader.tsx` (atendimento) já implementa, para não duplicar.
-   - Renderiza valor de `client.custom_data[field_key]` em grid igual aos outros blocos. Sem editor inline neste momento (read-only).
+Nada do que existe será removido — só estendido. Reativação continua existindo mas com restrições.
 
-4. **Endereço** (último)
-   - Rua • Bairro • Cidade • UF • CEP (igual ao layout atual).
+## O que será feito
 
-5. **Observações** — mantém como está, no fim.
+### 1. Edge function `cancel-installment-boleto` (nova)
 
-**Remover** do header:
-- Bloco antigo "Identificação" (Cod. Devedor/Contrato/Modelo/Credor) — Credor já está no card superior; os outros migram para "Campos do credor".
-- Bloco "Telefones + Email" — já estão no card superior; remover daqui evita duplicidade. (Telefones extras continuam acessíveis via `PhoneList` no atendimento; aqui o operador só consulta.)
-- Bloco "Classificações" (Tipo de Dívida + Status Cliente) — Status migra para "Valores", Tipo de Dívida some daqui.
+Cancela **um único** boleto, identificado por `negociarie_cobrancas.id` (uuid interno). Reusa exatamente a mesma lógica de credenciais e DELETE da `cancel-agreement-boletos` (já trata 404 como idempotente). 
 
-### Mover "Tipo de Dívida" para a aba "Títulos em Aberto"
+- Auth: `x-cron-secret` OU service_role bearer (mesmo padrão da `cancel-agreement-boletos`).
+- Body: `{ cobranca_id: uuid, tenant_id: uuid, reason?: string }`.
+- Após sucesso: marca `negociarie_cobrancas.status='CANCELADO'`, registra em `audit_logs` com `action='cancel_installment_boleto'`.
+- Resposta inclui `{ ok, gateway: "negociarie", skipped_reason? }`.
 
-`ClientDetailPage.tsx` (linhas 590–668), tabela da aba `titulos`:
+Asaas fica preparado mas **não implementado nesta entrega** (stub que retorna `gateway_unsupported` — o cancelamento da parcela continua, só não cancela o boleto). Quando Asaas entrar como gateway de acordo, adicionamos o branch.
 
-- Adicionar coluna `<TableHead>Tipo</TableHead>` antes de "Vencimento".
-- Resolver nome via `tiposDivida` (já carregado em `cadastrosService`) usando `c.tipo_divida_id`. Fallback: `—`.
-- Mostra o que estiver cadastrado no `tipos_divida` do tenant (boleto, cheque, cartão, duplicata, etc.). Não cria novos tipos — usa os já existentes em Cadastros → Tipos de Dívida.
+### 2. `agreementService.cancelInstallment` — endurecer
 
-### Impacto Y.BRASIL (validado)
+Refatorar para:
 
-- `totalAtualizado` não é consumido fora deste componente (`rg` confirma). Remover apenas a renderização não quebra dashboards, relatórios nem Maxlist.
-- Y.BRASIL não tem nada em `tenants.custom_fields` que sobreponha "Modelo" — o campo `model_name` (coluna direta) continua exibido no bloco 2.
-- Nenhum `tipos_divida` adicional é exigido — a coluna nova só lê `tipo_divida_id` quando presente; se Y.BRASIL não preenche, a célula mostra `—` (não trava import nem cálculo de saldo).
+```text
+1. Carregar agreement + SSOT row da parcela (installment_key).
+2. Bloqueios (lançam erro amigável):
+   - agreement.status in ('completed','cancelled','broken')  → "Acordo já encerrado"
+   - SSOT.paid = true                                          → "Parcela já paga"
+   - SSOT.pending_confirmation = true                          → "Há pagamento aguardando confirmação"
+   - SSOT.cancelled = true                                     → "Parcela já está cancelada"
+3. Localizar boleto ativo: negociarie_cobrancas WHERE agreement_id, installment_key,
+   status NOT IN ('PAGO','CANCELADO').
+4. Se houver boleto → invocar edge cancel-installment-boleto.
+   Falha do gateway → ABORTA o cancelamento (não grava nada) e retorna erro claro.
+5. Atualizar agreements em uma única chamada:
+   - cancelled_installments[key] = { cancelled_at, cancelled_by, reason, boleto_cancelled, gateway }
+   - proposed_total = proposed_total - SSOT.amount
+   - (NÃO mexer em original_total — preserva histórico contratual)
+6. Trigger rebuild_agreement_installments já propaga cancelled=true e aggregates.
+7. Inserir client_events 'installment_cancelled' com metadata estendida.
+8. logAction (audit) com diff de proposed_total.
+```
 
-### Arquivos tocados
+### 3. Reativação — restringir
 
-1. `src/components/client-detail/ClientDetailHeader.tsx` — reordenar blocos dentro do `CollapsibleContent` (566–680).
-2. `src/pages/ClientDetailPage.tsx` — adicionar coluna "Tipo" na tabela de Títulos em Aberto.
+`reactivateInstallment` passa a:
 
-### Fora de escopo
+- Bloquear se `cancelled_installments[key].boleto_cancelled === true` (boleto Negociarie cancelado é destrutivo — não dá pra "descancelar"; operador precisa gerar nova parcela manualmente).
+- Restaurar `proposed_total += amount` da SSOT (ou do snapshot salvo no jsonb).
+- Auditoria + client_events 'installment_reactivated'.
 
-- Edição inline dos campos personalizados (atual feature request é só exibição).
-- Mudar o card superior (CPF/Telefone/Email/Credor/Saldo).
-- Tornar `tipos_divida` obrigatório no import.
-- Migrar `valor_atualizado` para fora de `clients` (continua existindo no banco e em outras telas).
+### 4. UI — `AgreementInstallments.tsx`
+
+- Dialog de cancelamento ganha:
+  - **Textarea "Motivo" obrigatório** (mínimo 5 chars).
+  - **Alerta** quando há boleto ativo: *"Esta parcela tem boleto ativo no Negociarie. Ele será cancelado automaticamente e não poderá ser restaurado."*
+  - **Linha de impacto**: *"O total do acordo será reduzido de R$ X para R$ Y."*
+- Botão "Cancelar parcela" desabilitado (com tooltip) quando bloqueios da seção 2 se aplicam — hoje só checa `isPaid && pending_confirmation`; adicionar checagem de status do acordo.
+- Botão "Reativar" some quando `boleto_cancelled`.
+
+### 5. Invalidações de cache (já existem, completar)
+
+Adicionar `["agreement-installments-ssot", agreementId]` e `["agreement-cobrancas", cpf, agreementId]` aos `invalidateQueries` do cancel/reactivate (hoje só invalidam `client-agreements` e `client-detail`).
+
+## Pontos analisados que NÃO quebram
+
+- **SSOT**: `rebuild_agreement_installments` já lê `cancelled_installments` jsonb e seta `cancelled` ao recriar. Mudar `proposed_total` não afeta a tabela de parcelas (campo não é input do rebuild).
+- **Status consolidado**: `get_client_consolidated_status` usa SSOT excluindo canceladas — convergente.
+- **Dashboard / Recebido**: lê UNION de pagamentos brutos — cancelar parcela nunca afeta valor recebido.
+- **Quebra de acordo (>15 dias atraso)**: parcelas canceladas são excluídas do classifier, então cancelar uma parcela vencida **não** mascara quebra real das demais.
+- **Trigger `trg_cancel_boletos_on_break`**: só dispara em mudança de status do acordo — não conflita.
+- **Aggregates Fase 4** (`paid_count`, `total_count`, etc.): `trg_agreement_installments_aggregate` já recalcula a partir da SSOT (que ignora canceladas).
+- **Carteira agrupada**: invalidação `["carteira-grouped"]` já inclusa.
+- **Cron Negociarie 12h**: re-sincroniza por `id_parcela`. Como marcamos `status='CANCELADO'` localmente E no gateway, o cron não vai "ressuscitar" a cobrança.
+
+## Edge cases tratados
+
+| Cenário | Comportamento |
+|---|---|
+| Parcela única do acordo | Cancelar reduz proposed_total a 0 → bloquear e sugerir "Quebrar acordo" |
+| Parcela é entrada | Permitido; reduz proposed_total e mantém `entrada_value` original para histórico |
+| Boleto vencido mas não pago | Cancela normalmente no gateway |
+| Gateway fora do ar | Erro 5xx → abortar, nada é gravado, toast pede retry |
+| Credor não tem Negociarie | Não há boleto a cancelar; segue só o lado local |
+| Acordo broken com janela de graça | Bloqueia (acordo já encerrado) |
+| Dois cancelamentos concorrentes | Update otimista falha no 2º; UI mostra "Parcela já cancelada" |
+
+## Permissões
+
+Mantém aberto a operador + admin **por enquanto** (não foi solicitada restrição). Fica registrado em audit_logs + client_events quem cancelou.
+
+## Arquivos afetados
+
+```text
+supabase/functions/cancel-installment-boleto/index.ts   (NOVO)
+src/services/agreementService.ts                        (cancelInstallment, reactivateInstallment)
+src/components/client-detail/AgreementInstallments.tsx  (dialog + bloqueios + alerts)
+.lovable/memory/logic/agreements/installment-key-canonical.md  (nota sobre cancel + gateway)
+```
+
+Nenhuma migração de schema necessária (campos já existem).
+
+## Como vou validar
+
+1. Cenário feliz: cancelar parcela mensal com boleto Negociarie → boleto vai a CANCELADO no gateway, SSOT marca cancelled, proposed_total reduz, classifier ignora.
+2. Tentar cancelar parcela paga → bloqueio claro.
+3. Tentar cancelar com pendência manual → bloqueio.
+4. Tentar reativar parcela com boleto já cancelado → bloqueio.
+5. Verificar via `cloud_status` + curl da nova edge function que retorno 200 quando idempotente (boleto 404).
+6. Confirmar que `get_client_consolidated_status` da carteira não muda para um cliente com só uma parcela cancelada.
