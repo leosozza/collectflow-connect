@@ -25,6 +25,7 @@ import ReconciliationAlertModal from "@/components/acordos/ReconciliationAlertMo
 import { useReconciliationAlerts } from "@/hooks/useReconciliationAlerts";
 import type { ReconciliationAlert } from "@/services/reconciliationAlertService";
 import { fetchSSOTInstallments, type SSOTInstallment } from "@/lib/agreementInstallmentsSSOT";
+import { extractFunctionError } from "@/lib/extractFunctionError";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
