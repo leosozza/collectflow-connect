@@ -1384,13 +1384,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
             <ReconciliationAlertModal
               open={!!openAlert}
               onOpenChange={(open) => !open && setOpenAlert(null)}
-              alert={openAlert.alert}
-              installmentNumber={openAlert.inst.number}
-              installmentKey={openAlert.inst.customKey}
-              installmentLabel={openAlert.inst.isEntrada
-                ? (openAlert.inst.entradaCount > 1 ? `Entrada ${openAlert.inst.displayNumber}` : "Entrada")
-                : `Parcela ${openAlert.inst.displayNumber}/${totalInstallments}`}
-              installmentValue={Number(openAlert.inst.value)}
+              alert={openAlert}
               tenantId={tenantId}
               profileId={profile.id}
               agreementId={agreementId}
