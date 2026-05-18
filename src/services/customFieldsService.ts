@@ -29,6 +29,21 @@ export const fetchCustomFields = async (tenantId: string, credorId?: string): Pr
   return (data || []) as unknown as CustomField[];
 };
 
+/**
+ * Retorna TODOS os campos personalizados ativos do tenant
+ * (globais com credor_id NULL + por-credor). Usado no modelo de importação.
+ */
+export const fetchAllTenantCustomFields = async (tenantId: string): Promise<CustomField[]> => {
+  const { data, error } = await (supabase
+    .from("custom_fields")
+    .select("*") as any)
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .order("field_label");
+  if (error) throw error;
+  return (data || []) as unknown as CustomField[];
+};
+
 export const createCustomField = async (field: {
   tenant_id: string;
   credor_id?: string;
