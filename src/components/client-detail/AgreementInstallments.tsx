@@ -1341,8 +1341,8 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                               </Tooltip>
                             )}
 
-                            {/* Reativar parcela cancelada */}
-                            {isCancelled && (
+                            {/* Reativar parcela cancelada (oculto se boleto foi cancelado no gateway) */}
+                            {isCancelled && !cancelledMap[inst.customKey]?.boleto_cancelled && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
