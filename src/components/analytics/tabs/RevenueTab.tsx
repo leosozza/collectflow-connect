@@ -35,18 +35,31 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
     },
   });
 
-  // Mês de referência = mês do _date_to (ou hoje)
-  const anchorDate = useMemo(() => {
-    return params._date_to ? new Date(`${params._date_to}T00:00:00`) : new Date();
-  }, [params._date_to]);
+  // Mês atual = mês real corrente (não usa filtros globais de data)
+  const today = useMemo(() => new Date(), []);
+  const currentStart = useMemo(() => startOfMonth(today), [today]);
+  const currentEnd = useMemo(() => endOfMonth(today), [today]);
 
-  const selectedStart = useMemo(() => startOfMonth(anchorDate), [anchorDate]);
-  const selectedEnd = useMemo(() => {
-    const today = new Date();
-    return isSameMonth(selectedStart, today) ? today : endOfMonth(selectedStart);
-  }, [selectedStart]);
-  const previousStart = useMemo(() => startOfMonth(subMonths(selectedStart, 1)), [selectedStart]);
-  const previousEnd = useMemo(() => endOfMonth(previousStart), [previousStart]);
+  // Opções de mês para o seletor (últimos 12 meses excluindo o atual)
+  const monthOptions = useMemo(() => {
+    return Array.from({ length: 12 }).map((_, i) => {
+      const d = startOfMonth(subMonths(today, i + 1));
+      return {
+        value: format(d, "yyyy-MM"),
+        label: format(d, "MMM/yyyy", { locale: ptBR }),
+      };
+    });
+  }, [today]);
+
+  const [comparisonMonth, setComparisonMonth] = useState<string>(monthOptions[0]?.value ?? format(subMonths(today, 1), "yyyy-MM"));
+
+  const comparisonStart = useMemo(() => {
+    const [y, m] = comparisonMonth.split("-").map(Number);
+    return startOfMonth(new Date(y, (m ?? 1) - 1, 1));
+  }, [comparisonMonth]);
+  const comparisonEnd = useMemo(() => endOfMonth(comparisonStart), [comparisonStart]);
+  const comparisonLabel = useMemo(() => format(comparisonStart, "MMM/yyyy", { locale: ptBR }), [comparisonStart]);
+  const currentLabel = useMemo(() => format(currentStart, "MMM/yyyy", { locale: ptBR }), [currentStart]);
 
   const projectionBase = useMemo(() => ({
     _tenant_id: params._tenant_id,
@@ -55,36 +68,36 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
   }), [params._tenant_id, params._credor, params._operator_ids]);
 
   const projectedCurrent = useQuery({
-    queryKey: ["bi-projected-current", projectionBase, format(selectedStart, "yyyy-MM")],
+    queryKey: ["bi-projected-current", projectionBase, format(currentStart, "yyyy-MM")],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_bi_projected_by_day" as any, {
         ...projectionBase,
-        _date_from: format(selectedStart, "yyyy-MM-dd"),
-        _date_to: format(endOfMonth(selectedStart), "yyyy-MM-dd"),
+        _date_from: format(currentStart, "yyyy-MM-dd"),
+        _date_to: format(currentEnd, "yyyy-MM-dd"),
       } as any);
       if (error) throw error;
-      return (data || []) as Array<{ due_date: string; total_projetado: number }>;
+      return (data || []) as Array<{ ref_date: string; total_projetado: number }>;
     },
   });
 
   const projectedPrev = useQuery({
-    queryKey: ["bi-projected-prev", projectionBase, format(previousStart, "yyyy-MM")],
+    queryKey: ["bi-projected-comparison", projectionBase, comparisonMonth],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_bi_projected_by_day" as any, {
         ...projectionBase,
-        _date_from: format(previousStart, "yyyy-MM-dd"),
-        _date_to: format(previousEnd, "yyyy-MM-dd"),
+        _date_from: format(comparisonStart, "yyyy-MM-dd"),
+        _date_to: format(comparisonEnd, "yyyy-MM-dd"),
       } as any);
       if (error) throw error;
-      return (data || []) as Array<{ due_date: string; total_projetado: number }>;
+      return (data || []) as Array<{ ref_date: string; total_projetado: number }>;
     },
   });
 
   const projectedSeries = useMemo(() => {
-    const bucketize = (rows: Array<{ due_date: string; total_projetado: number }>) => {
+    const bucketize = (rows: Array<{ ref_date: string; total_projetado: number }>) => {
       const m: Record<number, number> = {};
       rows.forEach((r) => {
-        const day = new Date(`${r.due_date}T00:00:00`).getDate();
+        const day = new Date(`${r.ref_date}T00:00:00`).getDate();
         m[day] = (m[day] || 0) + Number(r.total_projetado || 0);
       });
       return m;
@@ -92,12 +105,11 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
     const curMap = bucketize(projectedCurrent.data || []);
     const prevMap = bucketize(projectedPrev.data || []);
 
-    const curDaysInMonth = getDaysInMonth(selectedStart);
-    const prevDaysInMonth = getDaysInMonth(previousStart);
+    const curDaysInMonth = getDaysInMonth(currentStart);
+    const prevDaysInMonth = getDaysInMonth(comparisonStart);
     const totalDays = Math.max(curDaysInMonth, prevDaysInMonth);
 
-    const isCurrent = isSameMonth(selectedStart, new Date());
-    const cutoffCurrent = isCurrent ? getDate(new Date()) : curDaysInMonth;
+    const cutoffCurrent = getDate(today);
 
     const points: Array<{ day: number; label: string; current: number | null; previous: number | null }> = [];
     let accCur = 0;
@@ -113,7 +125,7 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
       });
     }
     return points;
-  }, [projectedCurrent.data, projectedPrev.data, selectedStart, previousStart]);
+  }, [projectedCurrent.data, projectedPrev.data, currentStart, comparisonStart, today]);
 
   const isProjectionLoading = projectedCurrent.isLoading || projectedPrev.isLoading;
   const projectionEmpty = projectedSeries.every((p) => !p.current && !p.previous);
