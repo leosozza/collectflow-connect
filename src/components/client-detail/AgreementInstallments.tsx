@@ -101,13 +101,12 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
   const [selectedDateForEdit, setSelectedDateForEdit] = useState<Date | undefined>(undefined);
   const [savingDate, setSavingDate] = useState(false);
 
-  // Reconciliation alert state
-  const [openAlert, setOpenAlert] = useState<{ alert: ReconciliationAlert; inst: any } | null>(null);
+  // Reconciliation alert state (agreement-level, no installment binding)
+  const [openAlert, setOpenAlert] = useState<ReconciliationAlert | null>(null);
   const { data: reconAlerts = [], refetch: refetchAlerts } = useReconciliationAlerts(agreementId, tenantId);
-  const alertByInstallmentKey = new Map<string, ReconciliationAlert>();
-  for (const a of reconAlerts) {
-    if (a.installment_key) alertByInstallmentKey.set(a.installment_key, a);
-  }
+  const pendingAgreementAlerts = reconAlerts.filter(
+    (a) => a.status === "pending" || a.status === "pending_admin_approval"
+  );
 
   const { data: cobrancas = [], refetch: refetchCobrancas } = useQuery({
     queryKey: ["agreement-cobrancas", cpf, agreementId],
@@ -997,7 +996,46 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
         <CollapsibleContent>
 
+          {pendingAgreementAlerts.length > 0 && (
+            <div className="mb-2 rounded-md border border-orange-500/40 bg-orange-500/5 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-orange-700">
+                <AlertTriangle className="w-4 h-4" />
+                {pendingAgreementAlerts.length === 1
+                  ? "1 pagamento detectado no Maxsystem para este cliente"
+                  : `${pendingAgreementAlerts.length} pagamentos detectados no Maxsystem para este cliente`}
+              </div>
+              <div className="space-y-1">
+                {pendingAgreementAlerts.map((a) => {
+                  const isAwaiting = a.status === "pending_admin_approval";
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setOpenAlert(a)}
+                      className={cn(
+                        "w-full text-left text-xs rounded border px-2 py-1.5 transition-colors flex items-center justify-between gap-2",
+                        isAwaiting
+                          ? "bg-blue-500/10 border-blue-500/30 text-blue-700 hover:bg-blue-500/20"
+                          : "bg-background border-orange-500/30 text-orange-800 hover:bg-orange-500/10"
+                      )}
+                    >
+                      <span>
+                        {formatCurrency(a.maxlist_payment_value)} em {a.maxlist_payment_date ? new Date(a.maxlist_payment_date + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
+                        {a.maxlist_source_meta?.cod_contrato ? ` · contrato ${a.maxlist_source_meta.cod_contrato}` : ""}
+                        {a.maxlist_source_meta?.numero_parcela ? ` · parcela ${a.maxlist_source_meta.numero_parcela}` : ""}
+                      </span>
+                      <span className="font-medium">
+                        {isAwaiting ? "Aguardando admin" : "Analisar"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="max-h-[400px] overflow-y-auto border border-border rounded-md">
+
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
@@ -1114,28 +1152,12 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                             {inst.status === "pago" ? "Pago" : inst.status === "vencido" ? "Vencido" : inst.status === "pending_confirmation" ? "Aguardando" : "Em Aberto"}
                           </Badge>
                         )}
-                        {(() => {
-                          const reconAlert = inst.customKey ? alertByInstallmentKey.get(inst.customKey) : null;
-                          if (!reconAlert) return null;
-                          const isAwaiting = reconAlert.status === "pending_admin_approval";
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => setOpenAlert({ alert: reconAlert, inst })}
-                              className={cn(
-                                "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border transition-colors",
-                                isAwaiting
-                                  ? "bg-blue-500/10 text-blue-700 border-blue-500/30 hover:bg-blue-500/20"
-                                  : "bg-orange-500/10 text-orange-700 border-orange-500/40 hover:bg-orange-500/20 animate-pulse"
-                              )}
-                              title={isAwaiting ? "Conciliação aguardando aprovação do admin" : "Conciliação Maxlist pendente — clique para resolver"}
-                            >
-                              <AlertTriangle className="w-3 h-3" />
-                              {isAwaiting ? "Aguardando admin" : "Conciliar Maxlist"}
-                            </button>
-                          );
-                        })()}
                       </TableCell>
+
+                      {/* (alertas Maxlist agora são exibidos como banner no topo do acordo) */}
+
+
+
 
                       {/* RIVO_FIX: Coluna obrigatoria */}
                       <TableCell className="text-center text-xs text-muted-foreground font-medium">
@@ -1399,13 +1421,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
             <ReconciliationAlertModal
               open={!!openAlert}
               onOpenChange={(open) => !open && setOpenAlert(null)}
-              alert={openAlert.alert}
-              installmentNumber={openAlert.inst.number}
-              installmentKey={openAlert.inst.customKey}
-              installmentLabel={openAlert.inst.isEntrada
-                ? (openAlert.inst.entradaCount > 1 ? `Entrada ${openAlert.inst.displayNumber}` : "Entrada")
-                : `Parcela ${openAlert.inst.displayNumber}/${totalInstallments}`}
-              installmentValue={Number(openAlert.inst.value)}
+              alert={openAlert}
               tenantId={tenantId}
               profileId={profile.id}
               agreementId={agreementId}

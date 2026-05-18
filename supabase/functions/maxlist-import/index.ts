@@ -673,20 +673,27 @@ Deno.serve(async (req) => {
             for (const p of pendingUpdateChanges) {
               if (p.isPaidStatusChange) {
                 paid++;
-                // Captura para criar alerta de conciliação no acordo (se houver acordo ativo)
-                paidPaymentsForReconciliation.push({
-                  cpf: p.rec.cpf,
-                  credor: p.rec.credor,
-                  valor_pago: p.rec.valor_pago ?? p.rec.valor_parcela ?? 0,
-                  data_pagamento: p.rec.data_pagamento || null,
-                  source_ref: p.rec.id,
-                  meta: {
-                    cod_contrato: p.rec.cod_contrato,
-                    numero_parcela: p.rec.numero_parcela,
-                    external_id: p.rec.external_id,
-                    nome: p.existing?.nome_completo || p.rec.nome_completo,
-                  },
-                });
+                // Só gera alerta de conciliação se o status anterior era "pendente" ou "vencido".
+                // Transições saindo de "em_acordo" são apenas reflexo da baixa do Rivo no Maxsystem
+                // (registro manual de "Temis Cobrança"), portanto NÃO devem virar alerta.
+                const prevStatus = String(p.changes?.status?.old ?? "").toLowerCase();
+                const isRealBoletoPayment = prevStatus === "pendente" || prevStatus === "vencido";
+                if (isRealBoletoPayment) {
+                  paidPaymentsForReconciliation.push({
+                    cpf: p.rec.cpf,
+                    credor: p.rec.credor,
+                    valor_pago: p.rec.valor_pago ?? p.rec.valor_parcela ?? 0,
+                    data_pagamento: p.rec.data_pagamento || null,
+                    source_ref: p.rec.id,
+                    meta: {
+                      cod_contrato: p.rec.cod_contrato,
+                      numero_parcela: p.rec.numero_parcela,
+                      external_id: p.rec.external_id,
+                      nome: p.existing?.nome_completo || p.rec.nome_completo,
+                      prev_status: prevStatus,
+                    },
+                  });
+                }
               }
               if (p.isCancelledStatusChange) cancelledMaxlist++;
 
