@@ -606,7 +606,7 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
               </div>
 
               {/* 2. Campos do credor — oculto se todos vazios */}
-              {(client.external_id || client.cod_contrato || modelNames !== "—" || client.data_devolucao || client.data_pagamento) && (
+              {(client.external_id || client.cod_contrato || modelNames !== "—" || client.data_devolucao) && (
                 <div className="pt-2 border-t border-border">
                   <p className="text-xs text-muted-foreground uppercase font-medium mb-2">Campos do credor</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2">
@@ -622,7 +622,6 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                     />
                     <InfoItem label="Modelo" value={modelNames !== "—" ? modelNames : null} />
                     <InfoItem label="Data Devolução" value={client.data_devolucao ? formatDate(client.data_devolucao) : null} />
-                    <InfoItem label="Data Pagamento" value={client.data_pagamento ? formatDate(client.data_pagamento) : null} />
                   </div>
                 </div>
               )}
