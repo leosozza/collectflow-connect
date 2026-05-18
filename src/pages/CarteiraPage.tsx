@@ -531,6 +531,7 @@ const CarteiraPage = () => {
       [],
       ["Campos personalizados:"],
       ["As colunas após 'Observações' são os campos personalizados ativos do seu tenant."],
+      ["Colunas com prefixo 'NomeDoCredor — ' só devem ser preenchidas em linhas daquele credor."],
       ["Para adicionar/remover, acesse Cadastros → Campos Personalizados antes de baixar o modelo novamente."],
       [],
       ["Dicas:"],
