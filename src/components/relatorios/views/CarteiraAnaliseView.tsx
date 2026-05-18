@@ -242,14 +242,10 @@ export const CarteiraAnaliseView = ({ onBack }: { onBack: () => void }) => {
                 <div>
                   <h3 className="text-sm font-semibold">Aging dos Títulos em Atraso</h3>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Distribuição do saldo vencido por faixa de dias de atraso
+                    Distribuição do saldo vencido dos títulos originais por faixa de dias de atraso
                   </p>
                 </div>
-                {saldoQuebra > 0 && (
-                  <span className="text-[10px] inline-flex items-center gap-1 px-2 py-1 rounded-full bg-destructive/10 text-destructive font-semibold">
-                    <AlertTriangle className="w-3 h-3" /> Quebras: {formatCurrency(saldoQuebra)}
-                  </span>
-                )}
+
               </div>
               {overview.isLoading ? (
                 <Skeleton className="h-[240px] w-full" />
