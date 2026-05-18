@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, getDate, getDaysInMonth, isSameMonth } from "date-fns";
 import { TrendingUp, TrendingDown, Handshake, AlertTriangle, Award, DollarSign } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from "recharts";
 import { formatCurrency } from "@/lib/formatters";
@@ -10,8 +11,6 @@ import { KpiTile } from "../KpiTile";
 import { EmptyBlock } from "../EmptyBlock";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
 import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
-
-const fmt = (d: string) => format(parseISO(d), "dd/MM");
 
 const METRIC_LABELS: Record<string, string> = {
   total_recebido: "Recebido",
