@@ -1309,7 +1309,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                                     size="sm"
                                     className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                     disabled={cancellingInstallmentIdx === idx}
-                                    onClick={() => setCancelInstallmentDialog({ inst, idx })}
+                                    onClick={() => setCancelInstallmentDialog({ inst, idx, hasActiveBoleto })}
                                   >
                                     {cancellingInstallmentIdx === idx ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
