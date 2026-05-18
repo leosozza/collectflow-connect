@@ -1,6 +1,7 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/hooks/useTenant";
@@ -34,18 +35,23 @@ export const ReportFiltersBar = ({
 }: ReportFiltersBarProps) => {
   const { tenant } = useTenant();
 
-  const { data: credores = [] } = useQuery({
+  const credoresQuery = useQuery({
     queryKey: ["report-credores", tenant?.id],
     enabled: !!tenant?.id && !!showCredor,
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("credores" as any)
         .select("id, nome")
         .eq("tenant_id", tenant!.id)
         .order("nome");
-      return ((data || []) as any[]).map((c) => c.nome).filter(Boolean);
+      if (error) throw error;
+      return ((data || []) as any[])
+        .map((c) => (c?.nome ? String(c.nome).trim() : ""))
+        .filter((n) => n.length > 0);
     },
   });
+  const credores = credoresQuery.data || [];
 
   const { data: operators = [] } = useQuery({
     queryKey: ["report-operators", tenant?.id],
@@ -74,19 +80,36 @@ export const ReportFiltersBar = ({
           <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
             Credor {credorRequired && <span className="text-destructive">*</span>}
           </Label>
-          <Select value={credor || ""} onValueChange={(v) => onCredor?.(v)}>
-            <SelectTrigger>
-              <SelectValue placeholder={credorRequired ? "Selecione um credor" : "Todos"} />
-            </SelectTrigger>
-            <SelectContent>
-              {!credorRequired && <SelectItem value="__all__">Todos</SelectItem>}
-              {credores.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {credoresQuery.isLoading ? (
+            <Skeleton className="h-10 w-full rounded-md" />
+          ) : (
+            <Select
+              key={`credor-select-${credores.length}`}
+              value={credor && credor.length > 0 ? credor : undefined}
+              onValueChange={(v) => onCredor?.(v)}
+              disabled={credores.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    credores.length === 0
+                      ? "Nenhum credor cadastrado"
+                      : credorRequired
+                      ? "Selecione um credor"
+                      : "Todos"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent className="max-h-[320px]">
+                {!credorRequired && <SelectItem value="__all__">Todos</SelectItem>}
+                {credores.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       )}
       {showOperator && (

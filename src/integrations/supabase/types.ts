@@ -7936,6 +7936,28 @@ export type Database = {
           valor_total: number
         }[]
       }
+      get_carteira_overview: {
+        Args: { _credor?: string; _tenant_id: string }
+        Returns: {
+          aging_0_30_qtd: number
+          aging_0_30_valor: number
+          aging_181_365_qtd: number
+          aging_181_365_valor: number
+          aging_31_90_qtd: number
+          aging_31_90_valor: number
+          aging_366_qtd: number
+          aging_366_valor: number
+          aging_91_180_qtd: number
+          aging_91_180_valor: number
+          cpfs_inadimplentes: number
+          parcelas_inadimplentes: number
+          saldo_inadimplente_clients: number
+          saldo_quebra_acordos: number
+          saldo_total: number
+          ticket_medio: number
+          total_cpfs_base: number
+        }[]
+      }
       get_client_consolidated_status: {
         Args: {
           _atraso_quebra_dias?: number

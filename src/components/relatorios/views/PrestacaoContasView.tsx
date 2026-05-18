@@ -22,7 +22,7 @@ export const PrestacaoContasView = ({ onBack }: { onBack: () => void }) => {
   const { tenant } = useTenant();
   const [dateFrom, setDateFrom] = useState(monthStart());
   const [dateTo, setDateTo] = useState(today());
-  const [credor, setCredor] = useState<string>("");
+  const [credor, setCredor] = useState<string | undefined>(undefined);
 
   const hasCredor = !!credor && credor !== "__all__";
 
@@ -64,8 +64,22 @@ export const PrestacaoContasView = ({ onBack }: { onBack: () => void }) => {
     queryKey: ["report-prestacao-clients", tenant?.id, credor],
     enabled: !!tenant?.id && hasCredor,
     queryFn: async () => {
-      const r = await fetchClients(tenant!.id, { credor }, { page: 1, pageSize: 200 });
+      const r = await fetchClients(tenant!.id, { credor: credor! }, { page: 1, pageSize: 500 });
       return r.data;
+    },
+  });
+
+  const overview = useQuery({
+    queryKey: ["report-prestacao-overview", tenant?.id, credor],
+    enabled: !!tenant?.id && hasCredor,
+    retry: 1,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_carteira_overview" as any, {
+        _tenant_id: tenant!.id,
+        _credor: credor!,
+      });
+      if (error) throw error;
+      return ((data || []) as any[])[0] as any;
     },
   });
 
@@ -75,7 +89,7 @@ export const PrestacaoContasView = ({ onBack }: { onBack: () => void }) => {
   const s = summary.data;
   const recebido = Number(s?.total_recebido || 0);
   const negociado = Number(s?.total_negociado || 0);
-  const pendente = Number(s?.total_pendente || 0);
+  const pendente = Number(overview.data?.saldo_total || s?.total_pendente || 0);
   const taxa = recebido + valorQuebra > 0 ? (recebido / (recebido + valorQuebra)) * 100 : 0;
 
   const handleExcel = () => {
