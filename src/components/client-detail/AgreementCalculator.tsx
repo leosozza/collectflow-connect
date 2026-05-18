@@ -695,10 +695,11 @@ const AgreementCalculator = ({ clients, cpf, clientName, credor, onAgreementCrea
         toast.info("Gerando boletos em segundo plano…");
         supabase.functions
           .invoke("generate-agreement-boletos", { body: { agreement_id: agreement.id } })
-          .then(({ data: boletoResult, error: boletoError }) => {
-            if (boletoError) {
-              console.error("Boleto generation error:", boletoError);
-              toast.error("Falha ao gerar boletos automaticamente. Use 'Reemitir boletos' na aba Acordos.");
+          .then(async ({ data: boletoResult, error: boletoError }) => {
+            if (boletoError || boletoResult?.error) {
+              const msg = await extractFunctionError(boletoError, boletoResult, "Erro ao gerar boletos");
+              console.error("Boleto generation error:", msg);
+              toast.error(`Falha ao gerar boletos: ${msg}`);
               return;
             }
             if (boletoResult?.boleto_pendente) {
