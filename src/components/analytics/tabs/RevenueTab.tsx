@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, getDate, getDaysInMonth, isSameMonth } from "date-fns";
 import { TrendingUp, TrendingDown, Handshake, AlertTriangle, Award, DollarSign } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ResponsiveContainer, Legend } from "recharts";
 import { formatCurrency } from "@/lib/formatters";
@@ -10,8 +11,6 @@ import { KpiTile } from "../KpiTile";
 import { EmptyBlock } from "../EmptyBlock";
 import { AnalyticsRpcParams } from "@/hooks/useAnalyticsFilters";
 import { AnalyticsCardHeader } from "../AnalyticsCardHeader";
-
-const fmt = (d: string) => format(parseISO(d), "dd/MM");
 
 const METRIC_LABELS: Record<string, string> = {
   total_recebido: "Recebido",
@@ -34,14 +33,88 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
     },
   });
 
-  const byPeriod = useQuery({
-    queryKey: ["bi-revenue-period", params, granularity],
+  // Mês de referência = mês do _date_to (ou hoje)
+  const anchorDate = useMemo(() => {
+    return params._date_to ? new Date(`${params._date_to}T00:00:00`) : new Date();
+  }, [params._date_to]);
+
+  const selectedStart = useMemo(() => startOfMonth(anchorDate), [anchorDate]);
+  const selectedEnd = useMemo(() => {
+    const today = new Date();
+    return isSameMonth(selectedStart, today) ? today : endOfMonth(selectedStart);
+  }, [selectedStart]);
+  const previousStart = useMemo(() => startOfMonth(subMonths(selectedStart, 1)), [selectedStart]);
+  const previousEnd = useMemo(() => endOfMonth(previousStart), [previousStart]);
+
+  const projectionBase = useMemo(() => ({
+    _tenant_id: params._tenant_id,
+    _credor: params._credor,
+    _operator_ids: params._operator_ids,
+  }), [params._tenant_id, params._credor, params._operator_ids]);
+
+  const projectedCurrent = useQuery({
+    queryKey: ["bi-projected-current", projectionBase, format(selectedStart, "yyyy-MM")],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_bi_revenue_by_period", { ...params, _granularity: granularity } as any);
+      const { data, error } = await supabase.rpc("get_bi_projected_by_day" as any, {
+        ...projectionBase,
+        _date_from: format(selectedStart, "yyyy-MM-dd"),
+        _date_to: format(endOfMonth(selectedStart), "yyyy-MM-dd"),
+      } as any);
       if (error) throw error;
-      return (data || []) as any[];
+      return (data || []) as Array<{ due_date: string; total_projetado: number }>;
     },
   });
+
+  const projectedPrev = useQuery({
+    queryKey: ["bi-projected-prev", projectionBase, format(previousStart, "yyyy-MM")],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_bi_projected_by_day" as any, {
+        ...projectionBase,
+        _date_from: format(previousStart, "yyyy-MM-dd"),
+        _date_to: format(previousEnd, "yyyy-MM-dd"),
+      } as any);
+      if (error) throw error;
+      return (data || []) as Array<{ due_date: string; total_projetado: number }>;
+    },
+  });
+
+  const projectedSeries = useMemo(() => {
+    const bucketize = (rows: Array<{ due_date: string; total_projetado: number }>) => {
+      const m: Record<number, number> = {};
+      rows.forEach((r) => {
+        const day = new Date(`${r.due_date}T00:00:00`).getDate();
+        m[day] = (m[day] || 0) + Number(r.total_projetado || 0);
+      });
+      return m;
+    };
+    const curMap = bucketize(projectedCurrent.data || []);
+    const prevMap = bucketize(projectedPrev.data || []);
+
+    const curDaysInMonth = getDaysInMonth(selectedStart);
+    const prevDaysInMonth = getDaysInMonth(previousStart);
+    const totalDays = Math.max(curDaysInMonth, prevDaysInMonth);
+
+    const isCurrent = isSameMonth(selectedStart, new Date());
+    const cutoffCurrent = isCurrent ? getDate(new Date()) : curDaysInMonth;
+
+    const points: Array<{ day: number; label: string; current: number | null; previous: number | null }> = [];
+    let accCur = 0;
+    let accPrev = 0;
+    for (let d = 1; d <= totalDays; d++) {
+      accCur += curMap[d] || 0;
+      accPrev += prevMap[d] || 0;
+      points.push({
+        day: d,
+        label: String(d).padStart(2, "0"),
+        current: d <= cutoffCurrent && d <= curDaysInMonth ? accCur : null,
+        previous: d <= prevDaysInMonth ? accPrev : null,
+      });
+    }
+    return points;
+  }, [projectedCurrent.data, projectedPrev.data, selectedStart, previousStart]);
+
+  const isProjectionLoading = projectedCurrent.isLoading || projectedPrev.isLoading;
+  const projectionEmpty = projectedSeries.every((p) => !p.current && !p.previous);
 
   const byCredor = useQuery({
     queryKey: ["bi-revenue-credor", params],
@@ -83,24 +156,33 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-card rounded-xl border border-border shadow-sm p-4">
-          <AnalyticsCardHeader 
-            title="Evolução do Período" 
-            description="Gráfico de linha comparando o volume financeiro negociado (prometido) versus o recebido (pago) ao longo do período selecionado."
+          <AnalyticsCardHeader
+            title="Projeção do Período"
+            description="Acumulado projetado (soma das parcelas de acordo com vencimento no período) — mês selecionado sobreposto ao mesmo intervalo do mês anterior."
           />
-          {byPeriod.isLoading ? (
+          {isProjectionLoading ? (
             <Skeleton className="h-[260px] w-full" />
-          ) : (byPeriod.data || []).length === 0 ? (
+          ) : projectionEmpty ? (
             <EmptyBlock />
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={(byPeriod.data || []).map((r) => ({ ...r, label: typeof r.period === "string" ? fmt(r.period) : r.period }))}>
+              <LineChart data={projectedSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11 }}
+                  stroke="hsl(var(--muted-foreground))"
+                  interval={Math.max(0, Math.ceil(projectedSeries.length / 10) - 1)}
+                />
                 <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <RTooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} />
+                <RTooltip
+                  formatter={(v: number, name: string) => [formatCurrency(Number(v || 0)), name]}
+                  labelFormatter={(l: string) => `Dia ${l}`}
+                  contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
+                />
                 <Legend />
-                <Line type="monotone" dataKey="total_negociado" name="Negociado" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
-                <Line type="monotone" dataKey="total_recebido" name="Recebido" stroke="hsl(142, 71%, 45%)" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="previous" name="Projetado (mês anterior)" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="current" name="Projetado (atual)" stroke="hsl(217, 91%, 60%)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
