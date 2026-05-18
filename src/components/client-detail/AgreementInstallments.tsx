@@ -1466,32 +1466,70 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       {/* Cancel Installment Confirmation */}
       <AlertDialog
         open={!!cancelInstallmentDialog}
-        onOpenChange={(o) => !o && setCancelInstallmentDialog(null)}
+        onOpenChange={(o) => { if (!o) { setCancelInstallmentDialog(null); setCancelReason(""); } }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar parcela?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {cancelInstallmentDialog && (
-                <>
-                  A parcela{" "}
-                  <b>
-                    {cancelInstallmentDialog.inst.isEntrada
-                      ? (cancelInstallmentDialog.inst.entradaCount > 1
-                        ? `Entrada ${cancelInstallmentDialog.inst.entradaIndex + 1}`
-                        : "Entrada")
-                      : `${cancelInstallmentDialog.inst.displayNumber}/${totalInstallments}`}
-                  </b>{" "}
-                  ({formatCurrency(Number(cancelInstallmentDialog.inst.value))}) será marcada como
-                  cancelada. Ela continuará visível na lista, com risco, e será desconsiderada do
-                  progresso e do dashboard "Parcelas Programadas". Você poderá reativá-la depois.
-                  <br /><br />
-                  <span className="text-xs text-muted-foreground">
-                    O valor original do acordo (proposed_total) é preservado para fins de histórico
-                    contratual.
-                  </span>
-                </>
-              )}
+            <AlertDialogDescription asChild>
+              {cancelInstallmentDialog ? (
+                <div className="space-y-3">
+                  <div>
+                    A parcela{" "}
+                    <b>
+                      {cancelInstallmentDialog.inst.isEntrada
+                        ? (cancelInstallmentDialog.inst.entradaCount > 1
+                          ? `Entrada ${cancelInstallmentDialog.inst.entradaIndex + 1}`
+                          : "Entrada")
+                        : `${cancelInstallmentDialog.inst.displayNumber}/${totalInstallments}`}
+                    </b>{" "}
+                    ({formatCurrency(Number(cancelInstallmentDialog.inst.value))}) será marcada como
+                    cancelada e desconsiderada do progresso do acordo.
+                  </div>
+
+                  {/* Impacto no total */}
+                  {(() => {
+                    const prev = Number((agreement as any)?.proposed_total || 0);
+                    const next = Math.max(0, prev - Number(cancelInstallmentDialog.inst.value || 0));
+                    return (
+                      <div className="text-xs bg-muted/50 rounded-md p-2 border border-border">
+                        Total do acordo: <b>{formatCurrency(prev)}</b> → <b>{formatCurrency(next)}</b>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Alerta de boleto ativo */}
+                  {cancelInstallmentDialog.hasActiveBoleto && (
+                    <Alert variant="destructive" className="py-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        Esta parcela tem boleto ativo no gateway. Ele será cancelado automaticamente e
+                        <b> não poderá ser restaurado</b> — para reabrir, será necessário gerar um novo
+                        boleto manualmente.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Motivo obrigatório */}
+                  <div className="space-y-1">
+                    <Label htmlFor="cancel-reason" className="text-xs font-medium">
+                      Motivo do cancelamento <span className="text-destructive">*</span>
+                    </Label>
+                    <Textarea
+                      id="cancel-reason"
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      placeholder="Ex: cliente solicitou exclusão dessa parcela do acordo"
+                      rows={3}
+                      maxLength={500}
+                      disabled={cancellingInstallmentIdx !== null}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Mínimo 5 caracteres. Ficará registrado na auditoria e na timeline do cliente.
+                    </p>
+                  </div>
+                </div>
+              ) : <div />}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1500,7 +1538,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmCancelInstallment}
-              disabled={cancellingInstallmentIdx !== null}
+              disabled={cancellingInstallmentIdx !== null || cancelReason.trim().length < 5}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {cancellingInstallmentIdx !== null && (
