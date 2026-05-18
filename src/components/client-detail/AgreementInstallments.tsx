@@ -824,9 +824,11 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       toast({ title: "Parcela reativada" });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       onRefresh?.();
     } catch (err: any) {
-      toast({ title: "Erro ao reativar parcela", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao reativar parcela", description: humanizeErrorMessage(err?.message), variant: "destructive" });
     } finally {
       setCancellingInstallmentIdx(null);
     }
