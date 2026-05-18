@@ -40,6 +40,7 @@ import { fetchCredorRules, type CredorRulesResult } from "@/services/cadastrosSe
 import SimpleCalculator from "./SimpleCalculator";
 import { useSessionStorage } from "@/hooks/useSessionStorage";
 import { RotateCcw, X as XIcon } from "lucide-react";
+import { extractFunctionError } from "@/lib/extractFunctionError";
 
 interface AgreementCalculatorProps {
   clients: any[];
