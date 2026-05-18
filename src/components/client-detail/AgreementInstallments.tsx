@@ -997,9 +997,10 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                   const canEdit = !isPaid && !isCancelled && inst.status !== "pending_confirmation";
                   const hasActiveBoleto = !!inst.cobranca && !["cancelado", "substituido", "estornado"].includes(inst.cobranca.status);
                   const isOnlyEntrada = inst.isEntrada && inst.entradaCount === 1;
+                  const agreementClosed = ["completed", "cancelled", "broken"].includes(String((agreement as any)?.status || ""));
+                  // RIVO: cancelamento agora cancela boleto no gateway automaticamente — não bloqueia mais por hasActiveBoleto.
                   const canCancel = !isPaid && !isCancelled && inst.status !== "pending_confirmation"
-                    && !hasActiveBoleto && !isOnlyEntrada
-                    && activeInstallmentsCount > 1;
+                    && !isOnlyEntrada && activeInstallmentsCount > 1 && !agreementClosed;
 
                   return (
                     <TableRow key={idx} className={cn(isCancelled && "opacity-60 [&_td]:line-through [&_td]:decoration-muted-foreground")}>
