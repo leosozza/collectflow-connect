@@ -367,9 +367,8 @@ export async function deleteConversation(id: string) {
   if (error) throw error;
 }
 
-// Re-export para callers existentes deste módulo
-export { extractFunctionError } from "@/lib/extractFunctionError";
 import { extractFunctionError } from "@/lib/extractFunctionError";
+export { extractFunctionError };
 
 export async function deleteChatMessageForRecipient(messageId: string): Promise<void> {
   const { data, error } = await supabase.functions.invoke("manage-chat-message", {
