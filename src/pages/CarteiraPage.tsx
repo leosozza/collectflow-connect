@@ -450,9 +450,28 @@ const CarteiraPage = () => {
   };
 
   const downloadTemplate = async () => {
-    const baseHeaders = ["Credor", "Nome Completo", "CPF/CNPJ", "Parcela", "Valor Entrada", "Valor Parcela", "Valor Pago", "Total Parcelas", "Data Vencimento", "ID Externo"];
-    const baseRow1 = ["Empresa Exemplo", "João da Silva", "123.456.789-00", 1, 600.00, 500.00, 0, 12, "10/03/2026", "CRM-001"];
-    const baseRow2 = ["Empresa Exemplo", "Empresa LTDA", "12.345.678/0001-90", 1, 400.00, 350.00, 350.00, 6, "10/03/2026", ""];
+    // Bloco 1 — Identificação
+    // Bloco 2 — Contato
+    // Bloco 3 — Endereço
+    // Bloco 4 — Parcela / dívida
+    const baseHeaders = [
+      "Credor", "Nome Completo", "CPF/CNPJ", "ID Externo", "Cod Contrato", "Cod Titulo",
+      "Telefone 1", "Telefone 2", "Telefone 3", "E-mail",
+      "CEP", "Endereço", "Número", "Complemento", "Bairro", "Cidade", "UF",
+      "Parcela", "Total Parcelas", "Valor Entrada", "Valor Parcela", "Valor Saldo", "Valor Pago", "Data Vencimento", "Data Pagamento", "Observações",
+    ];
+    const baseRow1 = [
+      "Empresa Exemplo", "João da Silva", "123.456.789-00", "CRM-001", "CTR-2025-001", "TIT-001",
+      "11987654321", "1133224455", "", "joao@exemplo.com",
+      "01310-100", "Av Paulista", "1000", "Apto 52", "Bela Vista", "São Paulo", "SP",
+      1, 12, 600.00, 500.00, 5500.00, 0, "10/03/2026", "", "Cliente promete pagar dia 15",
+    ];
+    const baseRow2 = [
+      "Empresa Exemplo", "Empresa LTDA", "12.345.678/0001-90", "", "CTR-2025-002", "TIT-002",
+      "11999998888", "", "", "financeiro@empresa.com",
+      "04567-000", "Rua das Flores", "250", "", "Vila Mariana", "São Paulo", "SP",
+      1, 6, 400.00, 350.00, 1750.00, 350.00, "10/03/2026", "10/03/2026", "",
+    ];
 
     let customHeaders: string[] = [];
     if (tenant?.id) {
@@ -471,9 +490,45 @@ const CarteiraPage = () => {
     const templateData = [headers, row1, row2];
 
     const ws = XLSX.utils.aoa_to_sheet(templateData);
-    ws["!cols"] = headers.map(() => ({ wch: 16 }));
+    const wideCols = new Set(["Endereço", "Complemento", "Bairro", "Cidade", "E-mail", "Observações"]);
+    ws["!cols"] = headers.map((h) => ({ wch: wideCols.has(h) ? 24 : 16 }));
+
+    // Aba Instruções
+    const instructions = [
+      ["RIVO CONNECT — Modelo de Importação de Carteira"],
+      [],
+      ["Campos obrigatórios:"],
+      ["• Credor", "Nome do credor cadastrado no sistema"],
+      ["• Nome Completo", "Nome do devedor (PF) ou razão social (PJ)"],
+      ["• CPF/CNPJ", "Aceita CPF (11 dígitos) ou CNPJ (14 dígitos), com ou sem máscara"],
+      ["• Valor Parcela", "Valor numérico da parcela em R$"],
+      ["• Data Vencimento", "Formato DD/MM/AAAA"],
+      [],
+      ["Campos opcionais — recomendados:"],
+      ["• Telefone 1/2/3", "Apenas dígitos com DDD (ex: 11987654321). Normalizado para E.164 (+55…) automaticamente"],
+      ["• E-mail", "Email válido do devedor"],
+      ["• CEP / Endereço / Número / Complemento / Bairro / Cidade / UF", "Endereço completo do devedor"],
+      ["• ID Externo", "Identificador do devedor no seu CRM/sistema de origem"],
+      ["• Cod Contrato / Cod Titulo", "Identificadores do contrato e do título/parcela"],
+      ["• Parcela / Total Parcelas", "Número da parcela atual e total de parcelas do contrato"],
+      ["• Valor Entrada / Valor Saldo / Valor Pago", "Valores em R$ relacionados à dívida"],
+      ["• Data Pagamento", "DD/MM/AAAA — preencha apenas se a parcela já foi quitada"],
+      ["• Observações", "Texto livre por linha"],
+      [],
+      ["Campos personalizados:"],
+      ["As colunas após 'Observações' são os campos personalizados ativos do seu tenant."],
+      ["Para adicionar/remover, acesse Cadastros → Campos Personalizados antes de baixar o modelo novamente."],
+      [],
+      ["Dicas:"],
+      ["• Uma linha = uma parcela. Para parcelado, repita os dados do devedor variando 'Parcela' e 'Data Vencimento'."],
+      ["• Linhas duplicadas (mesmo Credor + CPF + Cod Contrato + Parcela) são ignoradas automaticamente."],
+    ];
+    const wsInstr = XLSX.utils.aoa_to_sheet(instructions);
+    wsInstr["!cols"] = [{ wch: 40 }, { wch: 80 }];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Modelo");
+    XLSX.utils.book_append_sheet(wb, wsInstr, "Instruções");
     XLSX.writeFile(wb, "modelo_importacao.xlsx");
   };
 
