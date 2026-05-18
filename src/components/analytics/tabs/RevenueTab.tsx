@@ -173,7 +173,7 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
           <div className="flex items-start justify-between gap-3 mb-2">
             <AnalyticsCardHeader
               title="Projeção por Mês"
-              description="Acumulado diário do valor de entrada (1ª parcela) dos acordos negociados no mês. Mês atual em azul, mês selecionado pontilhado para comparação."
+              description="Acumulado diário do valor provisionado (entrada ou 1ª parcela quando não há entrada) dos acordos negociados no mês — mesma regra do 'Provisionado no Mês' do Dashboard. Mês atual em azul, mês selecionado pontilhado para comparação."
             />
             <Select value={comparisonMonth} onValueChange={setComparisonMonth}>
               <SelectTrigger className="h-8 w-[140px] text-xs">
