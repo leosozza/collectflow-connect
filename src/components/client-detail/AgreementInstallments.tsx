@@ -996,7 +996,46 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
         <CollapsibleContent>
 
+          {pendingAgreementAlerts.length > 0 && (
+            <div className="mb-2 rounded-md border border-orange-500/40 bg-orange-500/5 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-orange-700">
+                <AlertTriangle className="w-4 h-4" />
+                {pendingAgreementAlerts.length === 1
+                  ? "1 pagamento detectado no Maxsystem para este cliente"
+                  : `${pendingAgreementAlerts.length} pagamentos detectados no Maxsystem para este cliente`}
+              </div>
+              <div className="space-y-1">
+                {pendingAgreementAlerts.map((a) => {
+                  const isAwaiting = a.status === "pending_admin_approval";
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setOpenAlert(a)}
+                      className={cn(
+                        "w-full text-left text-xs rounded border px-2 py-1.5 transition-colors flex items-center justify-between gap-2",
+                        isAwaiting
+                          ? "bg-blue-500/10 border-blue-500/30 text-blue-700 hover:bg-blue-500/20"
+                          : "bg-background border-orange-500/30 text-orange-800 hover:bg-orange-500/10"
+                      )}
+                    >
+                      <span>
+                        {formatCurrency(a.maxlist_payment_value)} em {a.maxlist_payment_date ? new Date(a.maxlist_payment_date + "T00:00:00").toLocaleDateString("pt-BR") : "—"}
+                        {a.maxlist_source_meta?.cod_contrato ? ` · contrato ${a.maxlist_source_meta.cod_contrato}` : ""}
+                        {a.maxlist_source_meta?.numero_parcela ? ` · parcela ${a.maxlist_source_meta.numero_parcela}` : ""}
+                      </span>
+                      <span className="font-medium">
+                        {isAwaiting ? "Aguardando admin" : "Analisar"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="max-h-[400px] overflow-y-auto border border-border rounded-md">
+
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
