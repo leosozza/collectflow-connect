@@ -2,14 +2,12 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle, HandCoins, EyeOff, Loader2, Info } from "lucide-react";
+import { AlertTriangle, HandCoins, CheckCheck, Loader2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ignoreAlert, type ReconciliationAlert } from "@/services/reconciliationAlertService";
 import ManualPaymentDialog from "@/components/acordos/ManualPaymentDialog";
-import { manualPaymentService } from "@/services/manualPaymentService";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/formatters";
 
@@ -17,10 +15,6 @@ interface ReconciliationAlertModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   alert: ReconciliationAlert;
-  installmentNumber: number;
-  installmentKey?: string;
-  installmentLabel: string;
-  installmentValue: number;
   tenantId: string;
   profileId: string;
   agreementId: string;
@@ -35,34 +29,28 @@ const formatDateBR = (iso?: string | null) => {
 };
 
 const ReconciliationAlertModal = ({
-  open, onOpenChange, alert, installmentNumber, installmentKey, installmentLabel,
-  installmentValue, tenantId, profileId, agreementId, onResolved,
+  open, onOpenChange, alert, tenantId, profileId, agreementId, onResolved,
 }: ReconciliationAlertModalProps) => {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [ignoreOpen, setIgnoreOpen] = useState(false);
-  const [ignoreNotes, setIgnoreNotes] = useState("");
+  const [ignoreNotes, setIgnoreNotes] = useState("Já reconhecido neste acordo.");
   const [ignoring, setIgnoring] = useState(false);
 
-  const diff = (alert.maxlist_payment_value || 0) - installmentValue;
   const isAwaiting = alert.status === "pending_admin_approval";
 
   const handlePaymentSuccess = async () => {
-    // Encontrar o último manual_payment criado para essa parcela e linkar ao alerta
     try {
-      let q = supabase
+      const { data: lastMp } = await supabase
         .from("manual_payments")
         .select("id")
         .eq("tenant_id", tenantId)
         .eq("agreement_id", agreementId)
         .eq("status", "pending_confirmation")
         .order("created_at", { ascending: false })
-        .limit(1);
-      q = installmentKey
-        ? q.eq("installment_key", installmentKey)
-        : q.eq("installment_number", installmentNumber);
-      const { data: lastMp } = await q.maybeSingle();
+        .limit(1)
+        .maybeSingle();
 
       if (lastMp?.id) {
         await supabase
@@ -88,25 +76,25 @@ const ReconciliationAlertModal = ({
       qc.invalidateQueries({ queryKey: ["reconciliation-alerts"] });
       onResolved();
       onOpenChange(false);
-    } catch (e: any) {
+    } catch {
       toast({ title: "Aviso", description: "Baixa criada, mas não foi possível vincular ao alerta automaticamente.", variant: "destructive" });
     }
   };
 
   const handleIgnore = async () => {
     if (!ignoreNotes.trim()) {
-      toast({ title: "Informe o motivo", description: "Descreva por que este alerta deve ser ignorado.", variant: "destructive" });
+      toast({ title: "Informe uma observação", description: "Descreva por que este aviso já está reconhecido.", variant: "destructive" });
       return;
     }
     setIgnoring(true);
     try {
       await ignoreAlert({ alertId: alert.id, notes: ignoreNotes.trim(), resolvedBy: profileId });
-      toast({ title: "Alerta ignorado", description: "Marcado como resolvido sem baixa." });
+      toast({ title: "Aviso resolvido", description: "Marcado como já reconhecido neste acordo." });
       qc.invalidateQueries({ queryKey: ["reconciliation-alerts"] });
       onResolved();
       onOpenChange(false);
     } catch (e: any) {
-      toast({ title: "Erro ao ignorar alerta", description: e.message, variant: "destructive" });
+      toast({ title: "Erro ao resolver aviso", description: e.message, variant: "destructive" });
     } finally {
       setIgnoring(false);
     }
@@ -119,61 +107,59 @@ const ReconciliationAlertModal = ({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-orange-500" />
-              Conciliação Pendente — {installmentLabel}
+              Pagamento detectado no Maxsystem
             </DialogTitle>
             <DialogDescription>
-              O Maxlist informou um pagamento que pode pertencer a este acordo. Analise e tome a ação adequada.
+              O Maxsystem registrou a liquidação de um boleto original do cliente. Verifique se ele já consta neste acordo.
             </DialogDescription>
           </DialogHeader>
 
           {isAwaiting && (
             <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-blue-700 flex gap-2 items-start">
               <Info className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>Já existe baixa registrada aguardando confirmação do administrador para este alerta.</span>
+              <span>Já existe baixa registrada aguardando confirmação do administrador para este aviso.</span>
             </div>
           )}
 
           <div className="space-y-3 text-sm">
-            <div className="grid grid-cols-2 gap-3 rounded-md border border-border p-3 bg-muted/30">
-              <div>
-                <Label className="text-[10px] uppercase text-muted-foreground">Maxlist informou</Label>
-                <p className="font-semibold">{formatCurrency(alert.maxlist_payment_value)}</p>
-                <p className="text-xs text-muted-foreground">em {formatDateBR(alert.maxlist_payment_date)}</p>
+            <div className="rounded-md border border-border p-3 bg-muted/30 space-y-1">
+              <div className="flex justify-between">
+                <Label className="text-[10px] uppercase text-muted-foreground">Valor pago</Label>
+                <span className="font-semibold">{formatCurrency(alert.maxlist_payment_value)}</span>
               </div>
-              <div>
-                <Label className="text-[10px] uppercase text-muted-foreground">Valor da parcela</Label>
-                <p className="font-semibold">{formatCurrency(installmentValue)}</p>
-                <p className={`text-xs ${Math.abs(diff) < 0.01 ? "text-green-600" : diff > 0 ? "text-blue-600" : "text-orange-600"}`}>
-                  {Math.abs(diff) < 0.01
-                    ? "Valor exato"
-                    : diff > 0
-                      ? `Pago R$ ${diff.toFixed(2)} a mais`
-                      : `Faltam R$ ${Math.abs(diff).toFixed(2)}`}
-                </p>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Data</span>
+                <span>{formatDateBR(alert.maxlist_payment_date)}</span>
+              </div>
+              {alert.maxlist_source_meta?.cod_contrato && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Contrato Maxlist</span>
+                  <span className="font-mono">{alert.maxlist_source_meta.cod_contrato}</span>
+                </div>
+              )}
+              {alert.maxlist_source_meta?.numero_parcela && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Parcela original</span>
+                  <span className="font-mono">{alert.maxlist_source_meta.numero_parcela}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Credor</span>
+                <span>{alert.credor}</span>
               </div>
             </div>
 
-            {alert.maxlist_source_meta && (
-              <div className="text-xs text-muted-foreground space-y-0.5">
-                {alert.maxlist_source_meta.cod_contrato && (
-                  <div>Contrato Maxlist: <span className="font-mono">{alert.maxlist_source_meta.cod_contrato}</span></div>
-                )}
-                {alert.maxlist_source_meta.numero_parcela && (
-                  <div>Parcela original: <span className="font-mono">{alert.maxlist_source_meta.numero_parcela}</span></div>
-                )}
-              </div>
-            )}
-
             <div className="rounded-md border border-orange-500/30 bg-orange-500/5 p-3 text-xs text-orange-700">
-              <strong>Como resolver:</strong> ajuste o acordo se necessário, cancele boletos Rivo desta parcela
-              e registre a baixa manual abaixo. O administrador receberá o pedido na fila de Confirmação de Pagamento.
+              Este pagamento <strong>não</strong> está vinculado a uma parcela específica deste acordo.
+              Se ele já foi recebido aqui (via Negociarie, portal ou baixa manual), marque como reconhecido.
+              Caso seja um pagamento novo a ser creditado neste acordo, registre a baixa manual.
             </div>
           </div>
 
           {!ignoreOpen ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-between pt-2">
               <Button variant="outline" size="sm" onClick={() => setIgnoreOpen(true)} disabled={isAwaiting}>
-                <EyeOff className="w-4 h-4 mr-2" /> Ignorar alerta
+                <CheckCheck className="w-4 h-4 mr-2" /> Já reconhecido neste acordo
               </Button>
               <Button size="sm" onClick={() => setPaymentDialogOpen(true)} disabled={isAwaiting}>
                 <HandCoins className="w-4 h-4 mr-2" /> Registrar baixa manual
@@ -181,20 +167,20 @@ const ReconciliationAlertModal = ({
             </div>
           ) : (
             <div className="space-y-2 pt-2">
-              <Label className="text-xs">Motivo para ignorar *</Label>
+              <Label className="text-xs">Observação *</Label>
               <Textarea
                 value={ignoreNotes}
                 onChange={(e) => setIgnoreNotes(e.target.value)}
                 rows={3}
-                placeholder="Ex.: pagamento Maxlist se refere a outro contrato; cliente já confirmado por outro canal..."
+                placeholder="Ex.: pagamento já recebido via Negociarie; cliente confirmou; etc."
               />
               <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => { setIgnoreOpen(false); setIgnoreNotes(""); }}>
+                <Button variant="ghost" size="sm" onClick={() => { setIgnoreOpen(false); }}>
                   Cancelar
                 </Button>
-                <Button size="sm" variant="destructive" onClick={handleIgnore} disabled={ignoring}>
+                <Button size="sm" onClick={handleIgnore} disabled={ignoring}>
                   {ignoring && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Confirmar ignorar
+                  Confirmar
                 </Button>
               </div>
             </div>
@@ -207,10 +193,9 @@ const ReconciliationAlertModal = ({
           open={paymentDialogOpen}
           onOpenChange={setPaymentDialogOpen}
           agreementId={agreementId}
-          installmentNumber={installmentNumber}
-          installmentKey={installmentKey}
-          installmentLabel={installmentLabel}
-          installmentValue={alert.maxlist_payment_value || installmentValue}
+          installmentNumber={0}
+          installmentLabel="Pagamento do Maxsystem"
+          installmentValue={alert.maxlist_payment_value || 0}
           tenantId={tenantId}
           profileId={profileId}
           onSuccess={handlePaymentSuccess}
