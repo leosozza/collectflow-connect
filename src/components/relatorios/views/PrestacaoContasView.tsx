@@ -22,7 +22,7 @@ export const PrestacaoContasView = ({ onBack }: { onBack: () => void }) => {
   const { tenant } = useTenant();
   const [dateFrom, setDateFrom] = useState(monthStart());
   const [dateTo, setDateTo] = useState(today());
-  const [credor, setCredor] = useState<string>("");
+  const [credor, setCredor] = useState<string | undefined>(undefined);
 
   const hasCredor = !!credor && credor !== "__all__";
 
