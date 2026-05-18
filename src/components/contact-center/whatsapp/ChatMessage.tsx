@@ -195,7 +195,7 @@ const ChatMessageBubble = ({ message, onReply, allMessages = [], isOfficialApi =
                 onClick={() => window.open(message.media_url!, "_blank")}
               />
             )}
-            {message.content && (
+            {message.content && !isOutbound && (
               <p className={`text-[14.2px] leading-[19px] whitespace-pre-wrap break-words ${deletedClass}`}>
                 {formatWhatsAppText(message.content)}
               </p>

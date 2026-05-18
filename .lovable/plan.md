@@ -1,14 +1,19 @@
-## Trocar ícone do botão "Cancelar Parcela"
+## Objetivo
+Não exibir nenhum texto/legenda no balão de mensagens de imagem enviadas pelo operador (outbound). Hoje, em alguns casos o nome do arquivo (ex.: "Ciliegie con fiocchetto bordeaux.png") aparece como caption abaixo da imagem.
 
-**Status atual:** O cancelamento de parcela já está 100% funcional e visível para operadores em `AgreementInstallments.tsx` (botão na linha de cada parcela ativa). Ele abre diálogo pedindo motivo, cancela o boleto na Negociarie automaticamente e recalcula o `proposed_total`.
+## Causa
+Em `src/components/contact-center/whatsapp/ChatMessage.tsx` (linhas 198-202), o `case "image"` renderiza um `<p>` com `message.content` sempre que ele existe. Quando o registro veio com o nome do arquivo gravado em `content` (histórico antigo ou normalização do backend), esse texto aparece no chat.
 
-**Mudança:** trocar o ícone `Trash2` (lixeira — sugere exclusão) pelo `Ban` (⊘ — círculo com risco diagonal, símbolo universal de cancelado).
+No envio atual (`sendMediaMessage` em `conversationService.ts`, linha 297) já mandamos `content: ""` para imagens, então a correção é apenas de renderização — sem mexer em backend nem em edge functions.
 
-### Arquivo
+## Mudança
+Arquivo: `src/components/contact-center/whatsapp/ChatMessage.tsx` (case `"image"`, ~linha 187-204)
 
-`src/components/client-detail/AgreementInstallments.tsx`
+- Remover o bloco `{message.content && (<p>...</p>)}` apenas para mensagens **outbound** de imagem.
+- Manter o caption para mensagens **inbound** (cliente pode mandar imagem com legenda real que queremos exibir).
 
-1. Adicionar `Ban` ao import do `lucide-react` (linha 35).
-2. Linha 1336: trocar `<Trash2 className="w-4 h-4" />` por `<Ban className="w-4 h-4" />`.
+Resultado: imagens enviadas pelo operador aparecem só com a thumbnail (e horário/ticks no rodapé já existentes), sem texto algum.
 
-Nada mais muda — cor destrutiva, tooltip "Cancelar Parcela", lógica e diálogo permanecem iguais. O ícone do botão de Reativar (linha ~1355, `RotateCcw`) também não muda.
+## Fora de escopo
+- Nenhuma alteração em `sendMediaMessage`, edge functions, schema, ou em outros tipos (`video`, `audio`, `document`).
+- Sem mudança em mensagens inbound.
