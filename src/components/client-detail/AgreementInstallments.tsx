@@ -755,10 +755,15 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
 
   const handleConfirmCancelInstallment = async () => {
     if (!cancelInstallmentDialog) return;
-    const { inst, idx } = cancelInstallmentDialog;
+    const { inst, idx, hasActiveBoleto } = cancelInstallmentDialog;
+    const reason = cancelReason.trim();
+    if (reason.length < 5) {
+      toast({ title: "Motivo obrigatório", description: "Informe um motivo com no mínimo 5 caracteres.", variant: "destructive" });
+      return;
+    }
     setCancellingInstallmentIdx(idx);
     try {
-      await cancelInstallment(agreementId, inst.customKey);
+      await cancelInstallment(agreementId, inst.customKey, reason);
       try {
         await supabase.from("client_events").insert({
           tenant_id: tenantId,
@@ -772,17 +777,28 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
               ? (inst.entradaCount > 1 ? `Entrada ${inst.entradaIndex + 1}` : "Entrada")
               : `Parcela ${inst.displayNumber}/${totalInstallments}`,
             valor: Number(inst.value),
+            reason,
+            boleto_cancelled: hasActiveBoleto,
             cancelled_by: profile?.id,
           },
         } as any);
       } catch { }
-      toast({ title: "Parcela cancelada", description: "A parcela foi marcada como cancelada." });
+      toast({
+        title: "Parcela cancelada",
+        description: hasActiveBoleto
+          ? "Parcela e boleto cancelados com sucesso."
+          : "A parcela foi marcada como cancelada.",
+      });
       queryClient.invalidateQueries({ queryKey: ["client-agreements", cpf] });
       queryClient.invalidateQueries({ queryKey: ["client-detail", cpf] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-installments-ssot", agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["agreement-cobrancas", cpf, agreementId] });
+      queryClient.invalidateQueries({ queryKey: ["carteira-grouped"] });
       onRefresh?.();
       setCancelInstallmentDialog(null);
+      setCancelReason("");
     } catch (err: any) {
-      toast({ title: "Erro ao cancelar parcela", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao cancelar parcela", description: humanizeErrorMessage(err?.message), variant: "destructive" });
     } finally {
       setCancellingInstallmentIdx(null);
     }
