@@ -476,9 +476,23 @@ const CarteiraPage = () => {
     let customHeaders: string[] = [];
     if (tenant?.id) {
       try {
-        const { fetchCustomFields } = await import("@/services/customFieldsService");
-        const fields = await fetchCustomFields(tenant.id);
-        customHeaders = fields.filter((f) => f.is_active).map((f) => f.field_label);
+        const { fetchAllTenantCustomFields } = await import("@/services/customFieldsService");
+        const fields = await fetchAllTenantCustomFields(tenant.id);
+
+        // Prefixa label com nome do credor quando o campo é por-credor (evita colisão entre credores)
+        const credorIds = Array.from(new Set(fields.map((f) => f.credor_id).filter(Boolean))) as string[];
+        let credorMap = new Map<string, string>();
+        if (credorIds.length) {
+          const { data: credors } = await supabase
+            .from("credores")
+            .select("id, nome")
+            .in("id", credorIds);
+          credorMap = new Map((credors || []).map((c: any) => [c.id, c.nome]));
+        }
+
+        customHeaders = fields.map((f) =>
+          f.credor_id ? `${credorMap.get(f.credor_id) ?? "Credor"} — ${f.field_label}` : f.field_label
+        );
       } catch (e) {
         // non-fatal — template still works without custom columns
       }
