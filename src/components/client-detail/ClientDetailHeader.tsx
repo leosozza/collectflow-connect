@@ -580,6 +580,31 @@ const ClientDetailHeader = ({ client, clients, cpf, agreements, onFormalizarAcor
                 <InfoItem label="Data Quitação" value={client.data_quitacao ? formatDate(client.data_quitacao) : null} />
               </div>
 
+              {/* Telefones + Email */}
+              <div className="pt-2 border-t border-border">
+                <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+                  {tenant?.id && client?.cpf && client?.credor && (
+                    <PhoneList
+                      tenantId={tenant.id}
+                      cpf={client.cpf}
+                      credor={client.credor}
+                      phone={client.phone}
+                      phone2={client.phone2}
+                      phone3={client.phone3}
+                    />
+                  )}
+                  <div className="min-w-0 max-w-full">
+                    <EmailList
+                      emails={(clients || []).map((c: any) => c?.email).concat([client.email])}
+                      tenantId={tenant?.id}
+                      cpf={client.cpf}
+                      credor={client.credor}
+                      currentEmail={client.email}
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* 2. Campos do credor — oculto se todos vazios */}
               {(client.external_id || client.cod_contrato || modelNames !== "—" || client.data_devolucao || client.data_pagamento) && (
                 <div className="pt-2 border-t border-border">
