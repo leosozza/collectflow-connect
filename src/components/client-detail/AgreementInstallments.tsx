@@ -1333,7 +1333,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                                     {cancellingInstallmentIdx === idx ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
                                     ) : (
-                                      <Trash2 className="w-4 h-4" />
+                                      <Ban className="w-4 h-4" />
                                     )}
                                   </Button>
                                 </TooltipTrigger>
