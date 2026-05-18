@@ -7719,7 +7719,7 @@ export type Database = {
           _tenant_id: string
         }
         Returns: {
-          due_date: string
+          ref_date: string
           total_projetado: number
         }[]
       }
