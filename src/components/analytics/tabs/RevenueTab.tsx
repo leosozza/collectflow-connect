@@ -170,10 +170,24 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-card rounded-xl border border-border shadow-sm p-4">
-          <AnalyticsCardHeader
-            title="Projeção do Período"
-            description="Acumulado projetado (soma das parcelas de acordo com vencimento no período) — mês selecionado sobreposto ao mesmo intervalo do mês anterior."
-          />
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <AnalyticsCardHeader
+              title="Projeção por Mês"
+              description="Acumulado diário do valor de entrada (1ª parcela) dos acordos negociados no mês. Mês atual em azul, mês selecionado pontilhado para comparação."
+            />
+            <Select value={comparisonMonth} onValueChange={setComparisonMonth}>
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <SelectValue placeholder="Comparar com..." />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs capitalize">
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {isProjectionLoading ? (
             <Skeleton className="h-[260px] w-full" />
           ) : projectionEmpty ? (
@@ -194,9 +208,9 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
                   labelFormatter={(l: string) => `Dia ${l}`}
                   contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
                 />
-                <Legend />
-                <Line type="monotone" dataKey="previous" name="Projetado (mês anterior)" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="current" name="Projetado (atual)" stroke="hsl(217, 91%, 60%)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
+                <Legend wrapperStyle={{ fontSize: 12, textTransform: "capitalize" }} />
+                <Line type="monotone" dataKey="previous" name={`Comparativo (${comparisonLabel})`} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" strokeWidth={2} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="current" name={`Mês atual (${currentLabel})`} stroke="hsl(217, 91%, 60%)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
