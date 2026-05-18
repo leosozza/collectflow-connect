@@ -773,41 +773,123 @@ export const cancelInstallment = async (
 ): Promise<Record<string, any>> => {
   try {
     if (!installmentKey) throw new Error("installment_key é obrigatório");
+    if (!reason || reason.trim().length < 5) {
+      throw new Error("Informe um motivo com no mínimo 5 caracteres para cancelar a parcela.");
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
     const { data: profile } = user
       ? await supabase.from("profiles").select("id").eq("user_id", user.id).maybeSingle()
       : { data: null };
 
+    // 1) Load agreement
     const { data: agreement, error: fetchErr } = await supabase
       .from("agreements")
-      .select("cancelled_installments")
+      .select("id, tenant_id, status, proposed_total, cancelled_installments")
       .eq("id", agreementId)
       .single();
     if (fetchErr) throw fetchErr;
 
+    const agStatus = String((agreement as any)?.status || "");
+    if (["completed", "cancelled", "broken"].includes(agStatus)) {
+      throw new Error("Acordo já encerrado: não é possível cancelar parcelas.");
+    }
+
     const current = ((agreement as any)?.cancelled_installments || {}) as Record<string, any>;
+    if (current[installmentKey]) {
+      throw new Error("Parcela já está cancelada.");
+    }
+
+    // 2) Load SSOT row for this installment
+    const { data: ssotRow, error: ssotErr } = await supabase
+      .from("agreement_installments" as any)
+      .select("amount, paid, pending_confirmation, cancelled")
+      .eq("agreement_id", agreementId)
+      .eq("installment_key", installmentKey)
+      .maybeSingle();
+    if (ssotErr) throw ssotErr;
+    if (!ssotRow) throw new Error("Parcela não encontrada no acordo.");
+    if ((ssotRow as any).paid) throw new Error("Esta parcela já está paga e não pode ser cancelada.");
+    if ((ssotRow as any).pending_confirmation) {
+      throw new Error("Há um pagamento aguardando confirmação para esta parcela. Resolva o pagamento antes de cancelar.");
+    }
+    if ((ssotRow as any).cancelled) throw new Error("Parcela já está cancelada.");
+
+    const installmentAmount = Number((ssotRow as any).amount || 0);
+
+    // 3) Find active boleto in Negociarie (if any)
+    const { data: cobrs } = await supabase
+      .from("negociarie_cobrancas")
+      .select("id, status")
+      .eq("agreement_id", agreementId)
+      .eq("installment_key", installmentKey);
+
+    const activeBoleto = (cobrs || []).find((c: any) => {
+      const s = String(c.status || "").toUpperCase();
+      return s !== "PAGO" && s !== "CANCELADO" && s !== "CANCELLED";
+    });
+
+    let boletoCancelled = false;
+    let boletoGateway: string | null = null;
+    if (activeBoleto) {
+      // Invoke edge function — abort cancellation if gateway fails
+      const { data: edgeResp, error: edgeErr } = await supabase.functions.invoke(
+        "cancel-installment-boleto",
+        {
+          body: {
+            cobranca_id: (activeBoleto as any).id,
+            tenant_id: (agreement as any).tenant_id,
+            reason: reason || null,
+          },
+        },
+      );
+      if (edgeErr || !edgeResp?.ok) {
+        const msg = edgeResp?.error || edgeResp?.skipped_reason || edgeErr?.message || "Falha ao cancelar boleto no gateway";
+        throw new Error(`Não foi possível cancelar o boleto: ${msg}`);
+      }
+      boletoCancelled = true;
+      boletoGateway = edgeResp?.gateway || "negociarie";
+    }
+
+    // 4) Update agreement: mark cancelled + reduce proposed_total (preserve amount snapshot for reactivation)
     const updated = {
       ...current,
       [installmentKey]: {
         cancelled_at: new Date().toISOString(),
         cancelled_by: profile?.id || null,
-        reason: reason || null,
+        reason: reason.trim(),
+        amount: installmentAmount,
+        boleto_cancelled: boletoCancelled,
+        gateway: boletoGateway,
       },
     };
 
+    const prevTotal = Number((agreement as any)?.proposed_total || 0);
+    const newTotal = Math.max(0, prevTotal - installmentAmount);
+
     const { error } = await supabase
       .from("agreements")
-      .update({ cancelled_installments: updated } as any)
+      .update({
+        cancelled_installments: updated,
+        proposed_total: newTotal,
+      } as any)
       .eq("id", agreementId);
     if (error) throw error;
 
-    logger.info(MODULE, "cancelInstallment", { agreementId, installmentKey });
+    logger.info(MODULE, "cancelInstallment", { agreementId, installmentKey, boletoCancelled, prevTotal, newTotal });
     logAction({
       action: "parcela_cancelada",
       entity_type: "agreement",
       entity_id: agreementId,
-      details: { installment_key: installmentKey, reason: reason || null },
+      details: {
+        installment_key: installmentKey,
+        reason: reason.trim(),
+        amount: installmentAmount,
+        proposed_total_before: prevTotal,
+        proposed_total_after: newTotal,
+        boleto_cancelled: boletoCancelled,
+        gateway: boletoGateway,
+      },
     });
     return updated;
   } catch (error) {
@@ -817,6 +899,11 @@ export const cancelInstallment = async (
 
 /**
  * Reativa uma parcela previamente cancelada.
+ *
+ * Bloqueada se o boleto Negociarie foi cancelado junto — esse cancelamento é
+ * destrutivo no gateway (o operador deve gerar um novo boleto manualmente).
+ * Restaura proposed_total somando de volta o valor da parcela (snapshot salvo
+ * em cancelled_installments[key].amount).
  */
 export const reactivateInstallment = async (
   agreementId: string,
@@ -827,26 +914,60 @@ export const reactivateInstallment = async (
 
     const { data: agreement, error: fetchErr } = await supabase
       .from("agreements")
-      .select("cancelled_installments")
+      .select("id, status, proposed_total, cancelled_installments")
       .eq("id", agreementId)
       .single();
     if (fetchErr) throw fetchErr;
 
+    const agStatus = String((agreement as any)?.status || "");
+    if (["completed", "cancelled", "broken"].includes(agStatus)) {
+      throw new Error("Acordo já encerrado: não é possível reativar parcelas.");
+    }
+
     const current = ((agreement as any)?.cancelled_installments || {}) as Record<string, any>;
+    const entry = current[installmentKey];
+    if (!entry) throw new Error("Parcela não está cancelada.");
+    if (entry.boleto_cancelled === true) {
+      throw new Error("Não é possível reativar: o boleto desta parcela foi cancelado no gateway. Gere uma nova parcela ou um novo boleto manualmente.");
+    }
+
     const { [installmentKey]: _removed, ...rest } = current;
+
+    // Restore proposed_total using snapshot if present; fallback to SSOT amount
+    let amountToRestore = Number(entry.amount || 0);
+    if (!amountToRestore) {
+      const { data: ssotRow } = await supabase
+        .from("agreement_installments" as any)
+        .select("amount")
+        .eq("agreement_id", agreementId)
+        .eq("installment_key", installmentKey)
+        .maybeSingle();
+      amountToRestore = Number((ssotRow as any)?.amount || 0);
+    }
+
+    const prevTotal = Number((agreement as any)?.proposed_total || 0);
+    const newTotal = prevTotal + amountToRestore;
 
     const { error } = await supabase
       .from("agreements")
-      .update({ cancelled_installments: rest } as any)
+      .update({
+        cancelled_installments: rest,
+        proposed_total: newTotal,
+      } as any)
       .eq("id", agreementId);
     if (error) throw error;
 
-    logger.info(MODULE, "reactivateInstallment", { agreementId, installmentKey });
+    logger.info(MODULE, "reactivateInstallment", { agreementId, installmentKey, prevTotal, newTotal });
     logAction({
       action: "parcela_reativada",
       entity_type: "agreement",
       entity_id: agreementId,
-      details: { installment_key: installmentKey },
+      details: {
+        installment_key: installmentKey,
+        amount_restored: amountToRestore,
+        proposed_total_before: prevTotal,
+        proposed_total_after: newTotal,
+      },
     });
     return rest;
   } catch (error) {
