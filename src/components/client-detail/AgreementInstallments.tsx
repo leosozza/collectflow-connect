@@ -32,7 +32,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ExternalLink, FileText, ClipboardCopy,
   CheckCircle2, Clock, AlertTriangle, Loader2, FileBarChart, DollarSign, Pencil, FileCheck, ChevronDown,
-  Trash2, RotateCcw, XCircle,
+  Trash2, RotateCcw, XCircle, Ban,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -1333,7 +1333,7 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
                                     {cancellingInstallmentIdx === idx ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
                                     ) : (
-                                      <Trash2 className="w-4 h-4" />
+                                      <Ban className="w-4 h-4" />
                                     )}
                                   </Button>
                                 </TooltipTrigger>
