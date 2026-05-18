@@ -1,25 +1,23 @@
 ## Objetivo
 
-Substituir o conteúdo do gráfico **Evolução do Período** (aba Receita do Analytics) por uma comparação de **valor projetado acumulado** entre o mês selecionado e o mês anterior, espelhando o mesmo dia.
+Substituir o gráfico atual ("Projeção do Período") por **"Projeção por Mês"**, que mostra o **acumulado diário das entradas/primeiras parcelas dos acordos negociados dentro do mês**, comparando o **mês atual** (linha azul sólida) com um **mês selecionável** (linha pontilhada), via seletor no topo do próprio gráfico.
 
-Exemplo: hoje é 18/05 → o gráfico mostra a linha do mês atual indo até 18/05 (acumulado projetado R$ 80k) sobreposta à linha do mês anterior indo até 18/04 (acumulado projetado R$ 100k). O usuário enxerga rapidamente se está projetando mais ou menos do que no mesmo ponto do mês passado.
+## Nova definição de "Projetado"
 
-## Definição de "Projetado"
+Projetado = **soma do valor da entrada (1ª parcela) dos acordos criados naquele dia**, acumulado ao longo do mês.
 
-Projetado = soma dos valores de **parcelas de acordo com vencimento naquele dia** (`agreement_installments.due_date`), considerando apenas acordos não cancelados.
-
-- Base: `agreement_installments` filtrada por `tenant_id`, `cancelled = false`, e `agreements.status <> 'cancelled'`.
-- Valor: `SUM(amount)` agrupado por `due_date`.
-- Inclui parcelas já pagas e em aberto (é a projeção original do acordo, não o realizado).
+- Base: `agreements` filtrada por `tenant_id`, `status <> 'cancelled'`.
+- Eixo X (dia): `DATE(agreements.created_at)` no fuso do tenant.
+- Valor: soma de `agreement_installments.amount` apenas para a **parcela de entrada** de cada acordo (ou seja, a parcela com menor `installment_number`/menor `due_date` daquele acordo — convenção canônica `installment-key-canonical`).
 - Respeita filtros existentes da aba: credor, operador (`agreements.created_by`).
+
+Isto difere do "Provisionado no mês" do Dashboard (que usa o valor total do acordo). Aqui pegamos só a entrada, alinhado à intenção de medir "quanto entra de fato como primeira parcela negociada".
 
 ## Mudanças
 
-### 1. Backend — nova RPC `get_bi_projected_by_day`
+### 1. Backend — substituir RPC `get_bi_projected_by_day`
 
-Retorna série diária do projetado para um intervalo arbitrário, permitindo o frontend buscar mês atual e mês anterior separadamente.
-
-Assinatura (espelhando padrão das demais `get_bi_*`):
+Reescrever a função para retornar série diária da **entrada negociada por dia de criação do acordo**:
 
 ```
 get_bi_projected_by_day(
@@ -28,43 +26,45 @@ get_bi_projected_by_day(
   _date_to date,
   _credor text[] default null,
   _operator_ids uuid[] default null
-) returns table(due_date date, total_projetado numeric)
+) returns table(ref_date date, total_projetado numeric)
 ```
 
-Implementação: `SELECT ai.due_date, SUM(ai.amount)` de `agreement_installments ai JOIN agreements a` com os filtros acima, agrupado por `due_date`. `SECURITY DEFINER`, `search_path=public`, guard via `can_access_tenant(_tenant_id)`.
+Implementação (resumo):
+- CTE `entrada` seleciona, para cada `agreement_id`, a parcela com `MIN(installment_number)` (fallback `MIN(due_date)`) de `agreement_installments` não canceladas.
+- JOIN com `agreements` filtrando `created_at::date BETWEEN _date_from AND _date_to`, `status <> 'cancelled'`, `tenant_id`, e filtros opcionais de credor/operador.
+- `GROUP BY created_at::date`, retornando `SUM(entrada.amount)`.
+- `SECURITY DEFINER`, `search_path=public`, guard `can_access_tenant(_tenant_id)`.
 
 ### 2. Frontend — `src/components/analytics/tabs/RevenueTab.tsx`
 
-Substituir a query `byPeriod` (que usa `get_bi_revenue_by_period` com granularidade) por duas queries chamando a nova RPC:
-
-- `projectedCurrent`: intervalo = primeiro dia até último dia do mês selecionado.
-- `projectedPrev`: intervalo = mesmo recorte do mês anterior.
-
-Construir série única indexada por **dia do mês (1..31)** com dois campos:
-- `value` = acumulado projetado mês atual até aquele dia (null para dias > hoje, quando o mês selecionado é o corrente).
-- `prevValue` = acumulado projetado mês anterior até aquele dia.
-
-Padrão de acumulação e corte por "dia de hoje" segue o já implementado em `src/components/dashboard/TotalRecebidoCard.tsx` (mesma família visual).
-
-Atualizar:
-- Título do card: **"Projeção do Período"**.
-- Descrição (`AnalyticsCardHeader`): "Acumulado projetado (soma das parcelas com vencimento no período) — mês atual sobreposto ao mesmo intervalo do mês anterior."
-- Legenda: "Projetado (atual)" e "Projetado (mês anterior)".
-- Tooltip: formatar como moeda; label por dia.
+- **Renomear** card para **"Projeção por Mês"**.
+- **Descrição**: "Acumulado diário do valor de entrada (1ª parcela) dos acordos negociados no mês. Mês atual em azul, mês selecionado pontilhado para comparação."
+- **Adicionar seletor de mês** no topo direito do card (dentro do header do gráfico), usando `<Select>` shadcn com as últimas 12 opções de mês (formato "mai/2026"). Estado local `comparisonMonth` (default = mês anterior ao atual).
+- Substituir queries:
+  - `projectedCurrent`: intervalo do mês corrente (`startOfMonth(today)` → `endOfMonth(today)`).
+  - `projectedComparison`: intervalo do mês selecionado no novo seletor.
+- Manter lógica de acumulação por dia (1..N) com corte por "hoje" só para a linha do mês atual.
+- **Cores/estilos**:
+  - Linha atual: `hsl(217, 91%, 60%)` (azul), sólida, `strokeWidth=2.5`.
+  - Linha comparação: `hsl(var(--muted-foreground))`, **pontilhada** (`strokeDasharray="4 4"`), `strokeWidth=2`.
+- **Legenda** dinâmica refletindo o mês escolhido: "Mês atual (mai/2026)" e "Comparativo (abr/2026)".
+- Remover dependência do `_date_to` dos filtros globais para definir o "mês atual" — passa a ser sempre o mês corrente real (`new Date()`), conforme pedido.
 
 ### 3. Comportamento
 
-- Quando o mês selecionado **não** for o corrente, ambas as linhas vão até o último dia do mês (sem corte por "hoje").
-- Quando for o mês corrente, a linha atual para no dia de hoje e a anterior continua até o dia equivalente (igual lógica do `TotalRecebidoCard`).
-- Filtros da `AnalyticsFiltersBar` (credor, operador, período) continuam sendo aplicados.
+- Linha azul vai até **hoje** (dia atual).
+- Linha pontilhada vai até o último dia do mês selecionado.
+- Filtros globais de credor/operador continuam aplicados.
+- Trocar mês no seletor refaz só a query de comparação (cache por `yyyy-MM`).
 
 ## Fora de escopo
 
-- Não alterar `get_bi_revenue_by_period`, `get_bi_revenue_summary`, `get_bi_revenue_comparison`, `get_bi_revenue_by_credor` — continuam alimentando os KPIs e o ranking.
-- Não mexer no `TotalRecebidoCard` do dashboard.
-- Sem novos filtros ou novos cards.
+- Não alterar dashboard (`TotalRecebidoCard`, "Provisionado no mês").
+- Não mexer nos demais cards/KPIs da aba Receita.
+- Filtros globais de data da `AnalyticsFiltersBar` deixam de afetar este gráfico específico (mês atual é fixo); demais cards seguem usando.
 
 ## Validação
 
-- Checar que para 18/05 o acumulado bate com `SELECT SUM(amount) FROM agreement_installments WHERE due_date BETWEEN '2026-05-01' AND '2026-05-18' ...`.
-- Comparar com `SELECT SUM(amount) ... BETWEEN '2026-04-01' AND '2026-04-18'` para a linha do mês anterior no mesmo ponto.
+- Para 18/05: linha azul no dia 18 ≈ `SUM(entrada.amount)` de acordos criados entre 01/05 e 18/05.
+- Linha pontilhada (ex.: abr) no dia 30 ≈ total acumulado de entradas de abril.
+- Trocar comparativo recarrega só a segunda linha.
