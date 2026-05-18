@@ -156,24 +156,33 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-card rounded-xl border border-border shadow-sm p-4">
-          <AnalyticsCardHeader 
-            title="Evolução do Período" 
-            description="Gráfico de linha comparando o volume financeiro negociado (prometido) versus o recebido (pago) ao longo do período selecionado."
+          <AnalyticsCardHeader
+            title="Projeção do Período"
+            description="Acumulado projetado (soma das parcelas de acordo com vencimento no período) — mês selecionado sobreposto ao mesmo intervalo do mês anterior."
           />
-          {byPeriod.isLoading ? (
+          {isProjectionLoading ? (
             <Skeleton className="h-[260px] w-full" />
-          ) : (byPeriod.data || []).length === 0 ? (
+          ) : projectionEmpty ? (
             <EmptyBlock />
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={(byPeriod.data || []).map((r) => ({ ...r, label: typeof r.period === "string" ? fmt(r.period) : r.period }))}>
+              <LineChart data={projectedSeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11 }}
+                  stroke="hsl(var(--muted-foreground))"
+                  interval={Math.max(0, Math.ceil(projectedSeries.length / 10) - 1)}
+                />
                 <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <RTooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }} />
+                <RTooltip
+                  formatter={(v: number, name: string) => [formatCurrency(Number(v || 0)), name]}
+                  labelFormatter={(l: string) => `Dia ${l}`}
+                  contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
+                />
                 <Legend />
-                <Line type="monotone" dataKey="total_negociado" name="Negociado" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} />
-                <Line type="monotone" dataKey="total_recebido" name="Recebido" stroke="hsl(142, 71%, 45%)" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="previous" name="Projetado (mês anterior)" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1.5} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="current" name="Projetado (atual)" stroke="hsl(217, 91%, 60%)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
           )}
