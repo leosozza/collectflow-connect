@@ -40,15 +40,32 @@ export const ReportFiltersBar = ({
     enabled: !!tenant?.id && !!showCredor,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const nomes = new Set<string>();
+
+      // 1) Cadastros formais (tabela credores usa razao_social / nome_fantasia)
+      const { data: cadastrados, error: errCad } = await supabase
         .from("credores" as any)
-        .select("id, nome")
+        .select("razao_social, nome_fantasia")
+        .eq("tenant_id", tenant!.id);
+      if (errCad) throw errCad;
+      ((cadastrados || []) as any[]).forEach((c) => {
+        const n = (c?.nome_fantasia || c?.razao_social || "").toString().trim();
+        if (n) nomes.add(n);
+      });
+
+      // 2) Fallback: credores presentes na carteira importada (clients.credor)
+      const { data: distintos } = await supabase
+        .from("clients")
+        .select("credor")
         .eq("tenant_id", tenant!.id)
-        .order("nome");
-      if (error) throw error;
-      return ((data || []) as any[])
-        .map((c) => (c?.nome ? String(c.nome).trim() : ""))
-        .filter((n) => n.length > 0);
+        .not("credor", "is", null)
+        .limit(1000);
+      ((distintos || []) as any[]).forEach((c) => {
+        const n = (c?.credor || "").toString().trim();
+        if (n && n.toLowerCase() !== "default") nomes.add(n);
+      });
+
+      return Array.from(nomes).sort((a, b) => a.localeCompare(b, "pt-BR"));
     },
   });
   const credores = credoresQuery.data || [];
