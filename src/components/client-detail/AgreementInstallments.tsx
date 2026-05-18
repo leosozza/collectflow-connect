@@ -32,7 +32,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ExternalLink, FileText, ClipboardCopy,
   CheckCircle2, Clock, AlertTriangle, Loader2, FileBarChart, DollarSign, Pencil, FileCheck, ChevronDown,
-  Trash2, RotateCcw, XCircle,
+  Trash2, RotateCcw, XCircle, Ban,
 } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
