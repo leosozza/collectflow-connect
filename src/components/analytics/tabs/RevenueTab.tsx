@@ -159,11 +159,15 @@ export const RevenueTab = ({ params, periodDays }: { params: AnalyticsRpcParams;
         ) : (
           <>
             <KpiTile label="Total Recebido" value={formatCurrency(Number(s?.total_recebido || 0))} icon={DollarSign}
-              valueClassName="text-success" hint="Valor recebido no período" />
-            <KpiTile label="Total Negociado" value={formatCurrency(Number(s?.total_negociado || 0))} icon={Handshake} />
+              valueClassName="text-success"
+              hint="Soma das baixas confirmadas no período (pagamentos manuais + portal + Negociarie), pela data do pagamento." />
+            <KpiTile label="Total Negociado" value={formatCurrency(Number(s?.total_negociado || 0))} icon={Handshake}
+              hint="Soma do valor total proposto de todos os acordos criados no período (inclui cancelados)." />
             <KpiTile label="Total Pendente" value={formatCurrency(Number(s?.total_pendente || 0))} icon={AlertTriangle}
-              valueClassName="text-destructive" />
-            <KpiTile label="Ticket Médio" value={formatCurrency(ticketMedio)} icon={Award} />
+              valueClassName="text-destructive"
+              hint="Saldo a receber: total negociado dos acordos vigentes menos o que já foi recebido (mínimo zero)." />
+            <KpiTile label="Ticket Médio" value={formatCurrency(ticketMedio)} icon={Award}
+              hint="Valor médio por acordo vigente no período (total negociado ÷ nº de acordos não cancelados)." />
           </>
         )}
       </div>
