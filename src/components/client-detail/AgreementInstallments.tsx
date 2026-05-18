@@ -25,6 +25,7 @@ import ReconciliationAlertModal from "@/components/acordos/ReconciliationAlertMo
 import { useReconciliationAlerts } from "@/hooks/useReconciliationAlerts";
 import type { ReconciliationAlert } from "@/services/reconciliationAlertService";
 import { fetchSSOTInstallments, type SSOTInstallment } from "@/lib/agreementInstallmentsSSOT";
+import { extractFunctionError } from "@/lib/extractFunctionError";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -471,8 +472,9 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       const { data, error } = await supabase.functions.invoke("generate-agreement-boletos", {
         body: { agreement_id: agreementId, installment_key: inst.customKey },
       });
-      if (error) throw new Error(error.message || "Erro ao gerar boleto");
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        throw new Error(await extractFunctionError(error, data, "Erro ao gerar boleto"));
+      }
       if ((data?.success ?? 0) === 0) {
         const detail = data?.errors?.[0] || data?.message || "Não foi possível gerar o boleto";
         throw new Error(detail);
@@ -881,8 +883,9 @@ const AgreementInstallments = ({ agreementId, agreement, cpf, tenantId, onRefres
       const { data, error } = await supabase.functions.invoke("generate-agreement-boletos", {
         body: { agreement_id: agreementId },
       });
-      if (error) throw new Error(error.message || "Erro ao gerar boletos");
-      if (data?.error) throw new Error(data.error);
+      if (error || data?.error) {
+        throw new Error(await extractFunctionError(error, data, "Erro ao gerar boletos"));
+      }
       const result = {
         success: data?.success ?? 0,
         failed: data?.failed ?? 0,

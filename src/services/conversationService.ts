@@ -367,68 +367,8 @@ export async function deleteConversation(id: string) {
   if (error) throw error;
 }
 
-/**
- * Extracts the real error message from a Supabase Functions invocation.
- * The SDK returns a generic "Edge Function returned a non-2xx status code"
- * for any HTTP error; the actual `{ error: "..." }` body is hidden inside
- * `error.context.response`. We read it and surface it to the user.
- */
-async function extractFunctionError(
-  error: any,
-  data: any,
-  fallback: string,
-): Promise<string> {
-  // 1) Sucesso parcial: data tem .error
-  if (data?.error) return String(data.error);
-
-  // 2) FunctionsHttpError do supabase-js: tentar ler o body da resposta
-  //    Pode estar em error.context (Response) ou error.context.response.
-  const ctx = error?.context;
-  const candidates: any[] = [];
-  if (ctx) candidates.push(ctx);
-  if (ctx?.response) candidates.push(ctx.response);
-
-  for (const resp of candidates) {
-    if (!resp || typeof resp !== "object") continue;
-    try {
-      // Se for Response, clonar antes de ler.
-      const cloned = typeof resp.clone === "function" ? resp.clone() : resp;
-      // tentar JSON
-      if (typeof cloned.json === "function") {
-        const body = await cloned.json().catch(() => null);
-        if (body?.error) {
-          // anexar status do provider quando disponível
-          const extra = body?.httpStatus ? ` (provider HTTP ${body.httpStatus})` : "";
-          return `${String(body.error)}${extra}`;
-        }
-        if (body?.message) return String(body.message);
-      }
-      // tentar texto
-      if (typeof cloned.text === "function") {
-        const cloned2 = typeof resp.clone === "function" ? resp.clone() : resp;
-        const text = await cloned2.text?.().catch(() => "");
-        if (text && text.length < 800) {
-          // pode ser JSON em string
-          try {
-            const parsed = JSON.parse(text);
-            if (parsed?.error) return String(parsed.error);
-            if (parsed?.message) return String(parsed.message);
-          } catch {
-            return text;
-          }
-        }
-      }
-    } catch {
-      // ignora e tenta próximo candidato
-    }
-  }
-
-  // 3) Mensagem padrão do erro (geralmente "Edge Function returned a non-2xx status code")
-  if (error?.message && error.message !== "Edge Function returned a non-2xx status code") {
-    return error.message;
-  }
-  return fallback;
-}
+import { extractFunctionError } from "@/lib/extractFunctionError";
+export { extractFunctionError };
 
 export async function deleteChatMessageForRecipient(messageId: string): Promise<void> {
   const { data, error } = await supabase.functions.invoke("manage-chat-message", {
