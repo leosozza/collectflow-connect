@@ -1,69 +1,79 @@
-## Diagnóstico
+## Objetivo
 
-O erro **"Edge Function returned a non-2xx status code"** é a mensagem genérica que o `supabase.functions.invoke` retorna sempre que a edge function devolve qualquer status diferente de 2xx. O problema **não é** no backend — a edge function `generate-agreement-boletos` está retornando o motivo real corretamente:
+Cada credor precisa ter suas próprias credenciais de API claramente vinculadas e gerenciáveis. O backend **já suporta** chaves escopadas por `credor_id` (coluna em `api_keys`, validada em `clients-api/index.ts` linhas 39–64 e usada para filtrar `credor_id` em todos os endpoints). O que falta é uma **interface dedicada** que organize isso por credor.
 
-Confirmado nos logs (function_edge_logs): todas as últimas chamadas devolveram **HTTP 400** com um JSON `{ "error": "<mensagem real>" }` no body. Os 400 com 555-620 ms duram tempo demais para serem validação de entrada — são erros vindos dos guards do meio do fluxo (parcela já paga, método ≠ BOLETO, parcela inexistente, ou repasse de erro da Negociarie).
+## O que existe hoje
 
-### Por que o operador vê só o texto genérico
+- `src/pages/ApiDocsPage.tsx` → aba **"API Keys"** com tabela única, listando todas as chaves e um seletor de credor dentro do diálogo "Nova Chave".
+- `src/services/apiKeyService.ts` → `fetchApiKeys`, `generateApiKey(tenantId, createdBy, label, credorId)`, `revokeApiKey`, `updateApiKeyLabel`. Tudo pronto.
+- Edge `clients-api` já valida e escopa por `credor_id` automaticamente.
 
-No `AgreementInstallments.tsx` o handler faz:
+Nada disso será alterado — preserva 100% do que está em produção (Y.brasil e demais).
 
-```ts
-const { data, error } = await supabase.functions.invoke("generate-agreement-boletos", {...});
-if (error) throw new Error(error.message || "...");   // ❌ pega "non-2xx status code"
-if (data?.error) throw new Error(data.error);          // ⚠️ não roda — data é null em 4xx/5xx
+## O que vamos adicionar
+
+### 1. Nova aba em `ApisPage.tsx`
+
+Adicionar uma terceira sub-aba ao lado de **"API REST"** e **"Servidor MCP"**:
+
+```text
+[ API REST ] [ Credenciais por Credor ] [ Servidor MCP ]
 ```
 
-Quando a edge devolve **status 4xx/5xx**, o supabase-js cria um `FunctionsHttpError` cujo `.message` é sempre o texto genérico. O body real (`{ error: "Parcela já paga — não é possível reemitir boleto" }`) fica escondido dentro de `error.context` (o `Response` original) — e `data` vem `null`. Por isso o `data?.error` nunca é alcançado.
+A nova aba renderiza um componente novo `CredorCredentialsPanel`.
 
-### Já tínhamos travado isso?
+### 2. Componente `src/components/api-docs/CredorCredentialsPanel.tsx` (novo)
 
-Sim, mas só no canal de conversation: `src/services/conversationService.ts` (linhas 370–425) já tem uma função `extractFunctionError` que lê `error.context.json()` / `.text()` e devolve a mensagem real. Essa correção **não foi propagada** para os fluxos de boleto.
+Layout:
 
-## Plano de correção (somente frontend)
+- Cabeçalho explicando: "Cada credor pode ter sua própria chave de API. A chave fica restrita aos dados daquele credor."
+- Campo de busca por nome do credor.
+- Lista (cards expansíveis) — **uma linha por credor ativo do tenant**, mais um card "Chaves globais (todos os credores)" no topo:
+  - Nome do credor + badge contando chaves ativas.
+  - Botão **"Gerar credencial"** (abre diálogo com label pré-preenchido `"<Nome do credor> — API"` e `credorId` já fixado, sem seletor).
+  - Tabela inline com as chaves daquele credor: label, prefixo, status, último uso, criado em, ação de revogar.
+  - Botão **"Copiar exemplo cURL"** que monta o snippet pronto com a URL base + `X-API-Key`.
+- Card final "URL Base" e link para a documentação completa (aba "API REST").
 
-### 1. Extrair `extractFunctionError` para util compartilhado
+### 3. Reuso de serviços
 
-Criar `src/lib/extractFunctionError.ts` contendo a função pública (cópia do helper que está em `conversationService.ts`, sem mudanças de comportamento). Refatorar `conversationService.ts` para importar dele em vez de manter cópia local.
+Usa exatamente `fetchApiKeys`, `generateApiKey`, `revokeApiKey`. Sem mudanças em serviços, em RLS ou em edge functions.
 
-### 2. Aplicar nos fluxos de boleto
-
-Trocar o padrão atual nos 3 chamadores de `generate-agreement-boletos`:
-
-| Arquivo | Linha | Função |
-|---|---|---|
-| `src/components/client-detail/AgreementInstallments.tsx` | 471 | Reemitir boleto único |
-| `src/components/client-detail/AgreementInstallments.tsx` | 881 | Gerar todos os boletos pendentes |
-| `src/components/client-detail/AgreementCalculator.tsx` | 696 | Gerar boletos ao aprovar acordo |
-
-Padrão novo:
+Agrupamento client-side:
 
 ```ts
-const { data, error } = await supabase.functions.invoke("generate-agreement-boletos", {...});
-if (error || data?.error) {
-  const real = await extractFunctionError(error, data, "Erro ao gerar boleto");
-  throw new Error(real);
-}
+const byCredor = new Map<string | "__global__", ApiKey[]>();
+apiKeys.forEach(k => {
+  const key = k.credor_id ?? "__global__";
+  if (!byCredor.has(key)) byCredor.set(key, []);
+  byCredor.get(key)!.push(k);
+});
 ```
 
-`humanizeErrorMessage` continua sendo aplicado no toast (já trata JSON aninhado da Negociarie).
+### 4. Aba "API Keys" antiga
 
-### 3. Resultado para o operador
+Mantida intacta na página `ApiDocsPage` (continua sendo a visão técnica/avançada com todas as chaves numa tabela única). Nada removido — apenas adicionamos a visão por credor.
 
-Ao invés de `"Edge Function returned a non-2xx status code"` o toast passará a mostrar mensagens como:
+## Diagrama
 
-- "Parcela já paga — não é possível reemitir boleto"
-- "Método da parcela é PIX — altere para BOLETO antes de reemitir"
-- "Negociarie rejeitou o cadastro do cliente (verifique CEP, endereço, e-mail e telefone)"
-- "Cobrança direta ativa para este credor mas credenciais Negociarie não cadastradas..."
-- "Dados cadastrais incompletos (cep, bairro). Boletos poderão ser gerados manualmente após correção."
+```text
+ApisPage
+├── API REST          → ApiDocsPage (existente, inalterado)
+├── Credenciais por   → CredorCredentialsPanel (novo)
+│   Credor              ├── Card: Chaves globais
+│                       ├── Card: Credor A  → [chaves do A] + Gerar
+│                       ├── Card: Credor B  → [chaves do B] + Gerar
+│                       └── ...
+└── Servidor MCP      → McpDocsPage (existente, inalterado)
+```
 
-## O que NÃO muda
+## Permissões
 
-- Nenhuma mudança em edge function, schema, RLS, fluxo de geração, Negociarie, ou regras de negócio.
-- Mantém `humanizeErrorMessage` (que desempacota JSON inline) — apenas garante que ele receba a mensagem real, não o texto genérico do SDK.
-- Os outros 2 callers em `src/services/agreementService.ts` (linhas 444 e 1163) podem ser revisados depois — não afetam o toast do operador na tela atual.
+Apenas `isTenantAdmin` vê o botão "Gerar credencial" e "Revogar" (mesmo gate já usado em `ApiDocsPage`).
 
-## Observação operacional
+## Arquivos tocados
 
-Após o deploy, na próxima tentativa do operador da Y.brasil veremos a causa real do 400 (provavelmente "Parcela já paga" ou método de pagamento ≠ BOLETO). Isso vai destravar a operação imediatamente.
+- `src/pages/ApisPage.tsx` — adicionar a 3ª aba e roteamento.
+- `src/components/api-docs/CredorCredentialsPanel.tsx` — **novo**.
+
+Sem migrations, sem mudança em edge functions, sem alteração em serviços. Zero risco para Y.brasil e demais tenants já operantes.

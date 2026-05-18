@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Code2, Server } from "lucide-react";
+import { Code2, Server, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ApiDocsPage from "./ApiDocsPage";
 import McpDocsPage from "./McpDocsPage";
+import CredorCredentialsPanel from "@/components/api-docs/CredorCredentialsPanel";
 
 const API_TABS = [
   { key: "rest", label: "API REST", icon: Code2 },
+  { key: "credenciais", label: "Credenciais por Credor", icon: KeyRound },
   { key: "mcp", label: "Servidor MCP", icon: Server },
 ];
 
@@ -39,6 +41,7 @@ const ApisPage = () => {
 
       <div>
         {activeTab === "rest" && <ApiDocsPage />}
+        {activeTab === "credenciais" && <CredorCredentialsPanel />}
         {activeTab === "mcp" && <McpDocsPage />}
       </div>
     </div>
