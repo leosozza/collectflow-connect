@@ -7710,6 +7710,19 @@ export type Database = {
           total_recebido: number
         }[]
       }
+      get_bi_projected_by_day: {
+        Args: {
+          _credor?: string[]
+          _date_from: string
+          _date_to: string
+          _operator_ids?: string[]
+          _tenant_id: string
+        }
+        Returns: {
+          due_date: string
+          total_projetado: number
+        }[]
+      }
       get_bi_recurrence_analysis: {
         Args: {
           _channel?: string[]

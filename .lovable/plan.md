@@ -1,77 +1,70 @@
-## Caso de referência
+## Objetivo
 
-Giselly Barbosa Xavier (CPF 559.821.528-46) — contrato Maxlist 763936:
-- Parcelas 1-9: pagas no Maxsystem (várias com "Temis Cobrança"), valores R$ 91,82.
-- Parcelas 10, 11, 12: ainda boleto em aberto.
-- Acordo Rivo `272f4eb9`: 3x R$ 133,32, parcela 1 paga via Negociarie.
+Substituir o conteúdo do gráfico **Evolução do Período** (aba Receita do Analytics) por uma comparação de **valor projetado acumulado** entre o mês selecionado e o mês anterior, espelhando o mesmo dia.
 
-O alerta veio porque a parcela 8 do Maxlist mudou para "pago" em 18/05. Mas no Maxsystem a parcela 8 já estava `em_acordo` antes — alguém só registrou a baixa manualmente, espelhando o que o Rivo já recebeu. Não é pagamento novo; não deveria virar alerta.
+Exemplo: hoje é 18/05 → o gráfico mostra a linha do mês atual indo até 18/05 (acumulado projetado R$ 80k) sobreposta à linha do mês anterior indo até 18/04 (acumulado projetado R$ 100k). O usuário enxerga rapidamente se está projetando mais ou menos do que no mesmo ponto do mês passado.
 
-## Regra de negócio (definição do usuário)
+## Definição de "Projetado"
 
-Só gerar aviso quando **as duas condições** forem verdadeiras:
+Projetado = soma dos valores de **parcelas de acordo com vencimento naquele dia** (`agreement_installments.due_date`), considerando apenas acordos não cancelados.
 
-1. O cliente pagou um **boleto real do Maxsystem** — parcela que estava em aberto (`pendente` ou `vencido`), com valor igual ao boleto original, mudou para `pago`. Baixas que partem de `em_acordo` (espelho do que o Rivo já recebeu) **não geram alerta**.
-2. O mesmo cliente tem **acordo ativo no Rivo** para o mesmo credor.
+- Base: `agreement_installments` filtrada por `tenant_id`, `cancelled = false`, e `agreements.status <> 'cancelled'`.
+- Valor: `SUM(amount)` agrupado por `due_date`.
+- Inclui parcelas já pagas e em aberto (é a projeção original do acordo, não o realizado).
+- Respeita filtros existentes da aba: credor, operador (`agreements.created_by`).
 
-O aviso é **informativo**, em nível de acordo — não vincula parcela a parcela. Mostra "Cliente pagou R$ X no Maxsystem em DD/MM — verifique se interfere neste acordo".
+## Mudanças
 
-## Plano de correção
+### 1. Backend — nova RPC `get_bi_projected_by_day`
 
-### 1. Endurecer o gatilho na importação Maxlist
+Retorna série diária do projetado para um intervalo arbitrário, permitindo o frontend buscar mês atual e mês anterior separadamente.
 
-`supabase/functions/maxlist-import/index.ts` — ao acumular `paidPaymentsForReconciliation` (linhas 672-690), filtrar pelo **status anterior** do registro:
+Assinatura (espelhando padrão das demais `get_bi_*`):
 
-- Push só quando `p.existing.status IN ('pendente','vencido')` **e** o novo `status='pago'`.
-- Pular quando `p.existing.status='em_acordo'` (é só espelho da baixa do Rivo no Maxsystem).
-- Pular quando `p.existing.status` já era `pago` (revalidação/reprocessamento).
+```
+get_bi_projected_by_day(
+  _tenant_id uuid,
+  _date_from date,
+  _date_to date,
+  _credor text[] default null,
+  _operator_ids uuid[] default null
+) returns table(due_date date, total_projetado numeric)
+```
 
-### 2. Reescrever `create_reconciliation_alerts_from_maxlist`
+Implementação: `SELECT ai.due_date, SUM(ai.amount)` de `agreement_installments ai JOIN agreements a` com os filtros acima, agrupado por `due_date`. `SECURITY DEFINER`, `search_path=public`, guard via `can_access_tenant(_tenant_id)`.
 
-Manter assinatura, mudar comportamento:
+### 2. Frontend — `src/components/analytics/tabs/RevenueTab.tsx`
 
-- Localizar acordo Rivo ativo (`approved` ou `overdue`) do par CPF + Credor — igual hoje.
-- **Não** procurar parcela específica nem vincular `installment_id`/`installment_key`. Salvar como `NULL`.
-- Idempotência continua por `(agreement_id, maxlist_source_ref)`.
-- Skip extra: se o valor do pagamento Maxlist é compatível (±R$ 1) com alguma parcela já paga do acordo Rivo nos últimos 7 dias via Negociarie/portal/manual confirmado → não criar alerta (a baixa espelho que escapou do filtro do passo 1 ainda fica coberta).
+Substituir a query `byPeriod` (que usa `get_bi_revenue_by_period` com granularidade) por duas queries chamando a nova RPC:
 
-### 3. UI — `ReconciliationAlertModal` vira aviso informativo
+- `projectedCurrent`: intervalo = primeiro dia até último dia do mês selecionado.
+- `projectedPrev`: intervalo = mesmo recorte do mês anterior.
 
-- Título: "Pagamento detectado no Maxsystem".
-- Remover bloco "Valor da parcela" e o cálculo "Faltam R$ X" — não há vínculo de parcela.
-- Mostrar: valor pago, data, contrato Maxlist (`cod_contrato`), parcela original (`numero_parcela`) e nome do credor.
-- Mensagem: "O Maxsystem registrou este pagamento como boleto liquidado. Verifique se ele já consta neste acordo (via Negociarie/portal/baixa manual). Se sim, marque como reconhecido. Se não, registre a baixa manual."
-- Duas ações:
-  - **"Já reconhecido neste acordo"** (substitui "Ignorar alerta") → marca `resolved_ignored`.
-  - **"Registrar baixa manual"** → abre `ManualPaymentDialog` (operador escolhe qual parcela do acordo receber a baixa).
+Construir série única indexada por **dia do mês (1..31)** com dois campos:
+- `value` = acumulado projetado mês atual até aquele dia (null para dias > hoje, quando o mês selecionado é o corrente).
+- `prevValue` = acumulado projetado mês anterior até aquele dia.
 
-Como o alerta deixa de ter `installment_id`/`installment_key`, ajustar onde aparece (`AgreementInstallments.tsx`) para exibir o aviso uma vez por acordo (badge no topo), e não dentro de uma parcela específica.
+Padrão de acumulação e corte por "dia de hoje" segue o já implementado em `src/components/dashboard/TotalRecebidoCard.tsx` (mesma família visual).
 
-### 4. Backfill — limpar alertas legados
+Atualizar:
+- Título do card: **"Projeção do Período"**.
+- Descrição (`AnalyticsCardHeader`): "Acumulado projetado (soma das parcelas com vencimento no período) — mês atual sobreposto ao mesmo intervalo do mês anterior."
+- Legenda: "Projetado (atual)" e "Projetado (mês anterior)".
+- Tooltip: formatar como moeda; label por dia.
 
-Migração com `UPDATE` único marcando `resolved_ignored` (notes='auto: regra atualizada — baixa espelho do Rivo no Maxsystem') todos alertas com status `pending`/`pending_admin_approval` onde o registro Maxlist de origem (`maxlist_source_ref` = `clients.id`) tinha status anterior `em_acordo`. Para fazer isso preciso de uma coluna ou heurística — como não armazenamos o status anterior, uso fallback: marcar resolvidos todos os alertas atualmente abertos cujo acordo já tenha pelo menos uma parcela paga via Negociarie/portal/manual confirmado nos ±7 dias do `maxlist_payment_date`.
+### 3. Comportamento
 
-O caso Giselly será limpo por essa regra.
+- Quando o mês selecionado **não** for o corrente, ambas as linhas vão até o último dia do mês (sem corte por "hoje").
+- Quando for o mês corrente, a linha atual para no dia de hoje e a anterior continua até o dia equivalente (igual lógica do `TotalRecebidoCard`).
+- Filtros da `AnalyticsFiltersBar` (credor, operador, período) continuam sendo aplicados.
 
-### 5. Memória
+## Fora de escopo
 
-Atualizar `mem://features/maxlist/reconciliation-alerts` com as novas condições (status anterior + acordo ativo, aviso em vez de vínculo parcela-a-parcela, novos rótulos da UI).
+- Não alterar `get_bi_revenue_by_period`, `get_bi_revenue_summary`, `get_bi_revenue_comparison`, `get_bi_revenue_by_credor` — continuam alimentando os KPIs e o ranking.
+- Não mexer no `TotalRecebidoCard` do dashboard.
+- Sem novos filtros ou novos cards.
 
-## Detalhes técnicos
+## Validação
 
-**Arquivos**
-- `supabase/functions/maxlist-import/index.ts` — adicionar filtro `existing.status IN ('pendente','vencido')` antes do push.
-- Migração: redefinir `create_reconciliation_alerts_from_maxlist` (sem vínculo de parcela + skip por baixa Rivo recente) + UPDATE de backfill.
-- `src/components/acordos/ReconciliationAlertModal.tsx` — novo título, sem cálculo de diferença, novos botões, novo texto.
-- `src/components/client-detail/AgreementInstallments.tsx` — mover o badge do alerta de "por parcela" para "por acordo" (topo da lista).
-- `src/services/reconciliationAlertService.ts` — sem mudanças funcionais.
-
-**Sem alterações**
-- RLS, tabela `agreement_reconciliation_alerts` (já aceita `installment_id` nullable), fluxo de `manual_payments`.
-
-## Validação após implementação
-
-1. Reimportar o lote do CPF 559.821.528-46 → nenhum alerta novo (parcela 8 partia de `em_acordo`).
-2. Simular cliente com acordo Rivo + boleto Maxlist real liquidado (parcela `pendente`→`pago`) → 1 alerta criado, sem vínculo de parcela.
-3. Modal: ações renomeadas, sem "Faltam R$ X".
-4. Backfill: alerta da Giselly aparece `resolved_ignored`.
+- Checar que para 18/05 o acumulado bate com `SELECT SUM(amount) FROM agreement_installments WHERE due_date BETWEEN '2026-05-01' AND '2026-05-18' ...`.
+- Comparar com `SELECT SUM(amount) ... BETWEEN '2026-04-01' AND '2026-04-18'` para a linha do mês anterior no mesmo ponto.
